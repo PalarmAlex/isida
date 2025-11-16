@@ -1612,7 +1612,7 @@ namespace ISIDA.Gomeostas
         _lock.ExitReadLock();
       }
     }
-
+    
     /// <summary>
     /// Добавляет новый параметр гомеостаза
     /// </summary>
@@ -2130,25 +2130,16 @@ namespace ISIDA.Gomeostas
         allActiveStyles[style.Id] = style;     
       }
 
-      var afterAntagonists = new List<BehaviorStyle>(allActiveStyles.Values);
       ApplyAntagonisms(allActiveStyles);
+      var afterAntagonists = new List<BehaviorStyle>(allActiveStyles.Values);
 
-     // Передаём параметры в ApplyLateralInhibition
-     var filteredStyles = _calculator.ApplyLateralInhibition(
+      var filteredStyles = _calculator.ApplySimpleStyleContrasting(
           allActiveStyles.Values.ToList(),
-          _agentState.BehaviorStyles,
-          _agentState.Parameters,
-          10,
-          0.1f,
-          _defaultKCompetition,
-          _defaultBaseThreshold);
+          _agentState.Parameters);
 
-      // Проверяем: если ни один стиль не прошёл фильтрацию
       if (filteredStyles == null || filteredStyles.Count == 0)
       {
-        // Пытаемся получить стиль по умолчанию
         if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var stuporStyle))
-          // Создаём новый список с одним стилем
           filteredStyles = new List<BehaviorStyle> { stuporStyle };
       }
       Array.Clear(ActiveStyles, 0, ActiveStyles.Length);
@@ -2160,7 +2151,6 @@ namespace ISIDA.Gomeostas
       }
 
       _researchLogger?.LogStylesActivationProcess(PulseCount, baseStyles, afterAntagonists, filteredStyles, activations);
-      // создаем образ стилей
       CreateBehaviorStyleImageFromActiveStyles();
     }
 
@@ -2256,20 +2246,28 @@ namespace ISIDA.Gomeostas
     {
       var stylesToRemove = new HashSet<int>();
 
-      // Сначала собираем ВСЕ стили, которые должны быть подавлены
       foreach (var style in activeStyles.Values)
       {
         foreach (int antagonistId in style.AntagonistStyles)
         {
-          // Если антагонист активен — он должен быть удалён
           if (activeStyles.ContainsKey(antagonistId))
           {
-            stylesToRemove.Add(antagonistId);
+            var antagonist = activeStyles[antagonistId];
+
+            if (style.Weight > antagonist.Weight)
+              stylesToRemove.Add(antagonistId);
+            else if (style.Weight < antagonist.Weight)
+              stylesToRemove.Add(style.Id);
+            else
+            {
+              // При равных весах удаляем антагониста
+              stylesToRemove.Add(antagonistId);
+            }
           }
         }
       }
 
-      // Удаляем все помеченные стили
+      // Удаляем проигравшие в конфликтах стили
       foreach (int id in stylesToRemove)
       {
         activeStyles.Remove(id);

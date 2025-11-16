@@ -453,81 +453,39 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Применяет латеральное торможение к активным стилям
+    /// Контрастирование стилей - отбор по весу с учетом веса параметра
     /// </summary>
-    public List<BehaviorStyle> ApplyLateralInhibition(
+    public List<BehaviorStyle> ApplySimpleStyleContrasting(
         List<BehaviorStyle> activeStyles,
-        Dictionary<int, BehaviorStyle> allStyles,
-        List<ParameterData> parameters,
-        int iterations = 10,
-        float decayRate = 0.1f,
-        float defaultKCompetition = 0.3f,
-        float defaultBaseThreshold = 0.2f)
+        List<ParameterData> parameters)
     {
-      if (activeStyles.Count == 0) return activeStyles;
+      if (activeStyles.Count <= 3)
+        return activeStyles;
 
-      var activity = activeStyles.ToDictionary(s => s.Id, s => (float)s.Weight);
-      var thresholds = new Dictionary<int, float>();
-      var kValues = new Dictionary<int, float>();
+      var styleScores = new Dictionary<int, float>();
 
-      // Расчёт k и threshold для каждого стиля
       foreach (var style in activeStyles)
       {
-        var linkedParams = parameters.Where(p =>
-            p.StyleActivations.Any(a => a.Value.Contains(style.Id) || a.Value.Contains(-style.Id))).ToList();
+        float totalScore = style.Weight;
 
-        float totalK = 0f, totalThreshold = 0f, weightSum = 0;
-        foreach (var param in linkedParams)
+        foreach (var param in parameters)
         {
-          var (k, threshold) = CalculateInhibitionCoefficients(param, defaultKCompetition, defaultBaseThreshold);
-          totalK += k * param.Weight;
-          totalThreshold += threshold * param.Weight;
-          weightSum += param.Weight;
-        }
-
-        kValues[style.Id] = weightSum > 0 ? totalK / weightSum : defaultKCompetition;
-        thresholds[style.Id] = weightSum > 0 ? totalThreshold / weightSum : defaultBaseThreshold;
-      }
-
-      // Итерации конкуренции
-      for (int i = 0; i < iterations; i++)
-      {
-        var newActivity = new Dictionary<int, float>(activity);
-
-        foreach (var style in activeStyles)
-        {
-          if (!activity.ContainsKey(style.Id)) continue;
-
-          float inhibition = 0f;
-          foreach (var other in activeStyles)
+          foreach (var activation in param.StyleActivations.Values)
           {
-            if (other.Id == style.Id || !activity.ContainsKey(other.Id)) continue;
-            if (AreAntagonists(style, other, allStyles)) continue; // антагонисты уже удалены
-
-            inhibition += activity[other.Id] * kValues[other.Id];
+            if (activation.Contains(style.Id) || activation.Contains(-style.Id))
+            {
+              // Учитываем вес параметра в оценке стиля
+              totalScore += param.Weight * 0.1f; // Коэффициент влияния веса параметра
+              break;
+            }
           }
-
-          float netInput = activity[style.Id] - inhibition;
-          float decayed = netInput * (1 - decayRate);
-          newActivity[style.Id] = Math.Max(thresholds[style.Id], decayed);
         }
 
-        activity = newActivity;
-
-        // Удаление стилей, упавших ниже порога
-        var toRemove = activity.Where(kv => kv.Value < thresholds[kv.Key]).Select(kv => kv.Key).ToList();
-        foreach (var id in toRemove)
-        {
-          activity.Remove(id);
-        }
-
-        // Ранняя остановка, если осталось ≤3
-        if (activity.Count <= 3) break;
+        styleScores[style.Id] = totalScore;
       }
 
-      return activity
-          .Select(kv => allStyles[kv.Key])
-          .OrderByDescending(s => activity[s.Id])
+      return activeStyles
+          .OrderByDescending(s => styleScores[s.Id])
           .Take(3)
           .ToList();
     }
@@ -548,31 +506,6 @@ namespace ISIDA.Gomeostas
     private float CalculateDeviation(float value, float normaWell, float speed) =>
         speed < 0 ? (value < normaWell ? normaWell - value : value - normaWell)
                  : (value > normaWell ? value - normaWell : normaWell - value);
-
-    private (float k_competition, float base_threshold) CalculateInhibitionCoefficients(
-      ParameterData param, 
-      float defaultKCompetition, 
-      float defaultBaseThreshold)
-    {
-      if (param == null) return (defaultKCompetition, defaultBaseThreshold);
-
-      float positiveSum = 0, negativeSum = 0;
-      foreach (var v in param.WellStateInfluence.Values) if (v > 0) positiveSum += v;
-      foreach (var v in param.BadStateInfluence.Values) if (v < 0) negativeSum += Math.Abs(v);
-
-      return (
-          defaultKCompetition / (1 + positiveSum), // K уменьшается при положительных влияния
-          defaultBaseThreshold * (1 + negativeSum) // Порог растет при отрицательных влияниях
-      );
-    }
-
-    private bool AreAntagonists(BehaviorStyle style1, BehaviorStyle style2, Dictionary<int, BehaviorStyle> allStyles)
-    {
-      return allStyles.TryGetValue(style1.Id, out var fullStyle1) &&
-             allStyles.TryGetValue(style2.Id, out var fullStyle2) &&
-             (fullStyle1.AntagonistStyles.Contains(style2.Id) ||
-              fullStyle2.AntagonistStyles.Contains(style1.Id));
-    }
     
     #endregion
   }

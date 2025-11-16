@@ -46,15 +46,15 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов и латерального торможения
+    /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов и упрощенного контрастирования
     /// </summary>
     /// <param name="maxCombinationSize">Максимальный размер комбинации (минимум 1)</param>
-    /// <param name="includeLateralInhibition">Включать ли применение латерального торможения</param>
+    /// <param name="includeStyleContrasting">Включать ли применение упрощенного контрастирования</param>
     /// <param name="forceRegenerate">Принудительная генерация новых комбинаций</param>
     /// <returns>Список валидных комбинаций стилей</returns>
     public List<List<GomeostasSystem.BehaviorStyle>> GenerateStyleCombinations(
         int maxCombinationSize = 3,
-        bool includeLateralInhibition = true,
+        bool includeStyleContrasting = true, // переименованный параметр
         bool forceRegenerate = false)
     {
       if (maxCombinationSize < 1)
@@ -83,7 +83,7 @@ namespace ISIDA.Gomeostas
       }
 
       // Генерируем новые комбинации
-      var validCombinations = GenerateCombinationsInternal(allStyles, maxCombinationSize, includeLateralInhibition);
+      var validCombinations = GenerateCombinationsInternal(allStyles, maxCombinationSize, includeStyleContrasting);
 
       // Сохраняем сгенерированные комбинации
       var saveResult = SaveStyleCombinations(validCombinations);
@@ -239,21 +239,14 @@ namespace ISIDA.Gomeostas
     private List<List<GomeostasSystem.BehaviorStyle>> GenerateCombinationsInternal(
         List<GomeostasSystem.BehaviorStyle> allStyles,
         int maxCombinationSize,
-        bool includeLateralInhibition)
+        bool includeStyleContrasting)
     {
       var validCombinations = new List<List<GomeostasSystem.BehaviorStyle>>();
 
-      // Сначала добавляем все одиночные стили (они всегда валидны)
-      foreach (var style in allStyles)
-      {
-        validCombinations.Add(new List<GomeostasSystem.BehaviorStyle> { style });
-      }
-
-      // Затем генерируем комбинации из 2+ стилей
-      for (int size = 2; size <= maxCombinationSize; size++)
+      for (int size = 1; size <= maxCombinationSize; size++)
       {
         GenerateCombinationsRecursive(allStyles, new List<GomeostasSystem.BehaviorStyle>(), 0, size,
-            validCombinations, includeLateralInhibition);
+            validCombinations, includeStyleContrasting);
       }
 
       return validCombinations;
@@ -261,38 +254,80 @@ namespace ISIDA.Gomeostas
 
     private void GenerateCombinationsRecursive(List<GomeostasSystem.BehaviorStyle> allStyles,
         List<GomeostasSystem.BehaviorStyle> currentCombination, int startIndex, int targetSize,
-        List<List<GomeostasSystem.BehaviorStyle>> validCombinations, bool applyLateralInhibition)
+        List<List<GomeostasSystem.BehaviorStyle>> validCombinations, bool applyStyleContrasting)
     {
+      // Если достигли нужного размера комбинации
       if (currentCombination.Count == targetSize)
       {
         if (IsValidStyleCombination(currentCombination))
         {
-          var finalCombination = applyLateralInhibition
-              ? ApplyLateralInhibitionToCombination(currentCombination)
+          var finalCombination = applyStyleContrasting && currentCombination.Count > 1
+              ? ApplyStyleContrastingToCombination(currentCombination)
               : new List<GomeostasSystem.BehaviorStyle>(currentCombination);
 
-          if (finalCombination.Any())
+          if (finalCombination.Any() && finalCombination.Count <= 3) // Убедимся, что не больше 3
           {
-            validCombinations.Add(finalCombination);
+            // Убедимся, что комбинация уникальна (отсортирована по ID)
+            var sortedCombination = finalCombination.OrderBy(s => s.Id).ToList();
+            if (!validCombinations.Any(existing =>
+                existing.Count == sortedCombination.Count &&
+                existing.Select(s => s.Id).SequenceEqual(sortedCombination.Select(s => s.Id))))
+            {
+              validCombinations.Add(sortedCombination);
+            }
           }
         }
         return;
       }
 
+      // Рекурсивно добавляем стили в комбинацию
       for (int i = startIndex; i < allStyles.Count; i++)
       {
         var style = allStyles[i];
 
+        // Проверяем, можно ли добавить этот стиль в текущую комбинацию
         if (CanAddStyleToCombination(style, currentCombination))
         {
           currentCombination.Add(style);
-          GenerateCombinationsRecursive(allStyles, currentCombination, i + 1,
-              targetSize, validCombinations, applyLateralInhibition);
+
+          // Проверяем, не превысили ли мы максимальный размер 3
+          if (currentCombination.Count <= 3)
+          {
+            GenerateCombinationsRecursive(allStyles, currentCombination, i + 1,
+                targetSize, validCombinations, applyStyleContrasting);
+          }
+
           currentCombination.RemoveAt(currentCombination.Count - 1);
         }
       }
     }
 
+    private List<GomeostasSystem.BehaviorStyle> ApplyStyleContrastingToCombination(List<GomeostasSystem.BehaviorStyle> combination)
+    {
+      if (combination.Count <= 3) return combination;
+
+      try
+      {
+        _lock.EnterReadLock();
+        try
+        {
+          var parameters = GetAllParameters();
+          var calculator = GetCalculator();
+
+          // Используем упрощенное контрастирование и ограничиваем до 3 стилей
+          var contrastedStyles = calculator.ApplySimpleStyleContrasting(combination, parameters);
+          return contrastedStyles;
+        }
+        finally
+        {
+          _lock.ExitReadLock();
+        }
+      }
+      catch
+      {
+        return combination.Take(3).ToList(); // fallback: просто берем первые 3
+      }
+    }
     private bool CanAddStyleToCombination(GomeostasSystem.BehaviorStyle style, List<GomeostasSystem.BehaviorStyle> currentCombination)
     {
       foreach (var existingStyle in currentCombination)
@@ -325,38 +360,6 @@ namespace ISIDA.Gomeostas
         }
       }
       return true;
-    }
-
-    private List<GomeostasSystem.BehaviorStyle> ApplyLateralInhibitionToCombination(List<GomeostasSystem.BehaviorStyle> combination)
-    {
-      if (combination.Count <= 1) return combination;
-
-      try
-      {
-        _lock.EnterReadLock();
-        try
-        {
-          var allStylesDict = GetAllBehaviorStyles();
-          var parameters = GetAllParameters();
-          var calculator = GetCalculator();
-
-          // Преобразуем ReadOnlyDictionary в Dictionary для совместимости
-          var stylesDictionary = allStylesDict.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-          var inhibitedStyles = calculator.ApplyLateralInhibition(
-              combination, stylesDictionary, parameters);
-
-          return inhibitedStyles;
-        }
-        finally
-        {
-          _lock.ExitReadLock();
-        }
-      }
-      catch
-      {
-        return combination;
-      }
     }
 
     #endregion
