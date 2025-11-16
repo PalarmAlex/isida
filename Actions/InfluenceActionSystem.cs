@@ -60,38 +60,27 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
     /// <param name="actionsFolderPath">Путь к папке с данными действий. Если null — используется путь по умолчанию</param>
-    /// <param name="actionsTemplateFolderPath">Путь к папке с шаблонами действий. Если null — используется путь по умолчанию.</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        string actionsTemplateFolderPath = null)
+        string actionsFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("AdaptiveActionsSystem уже инициализирован.");
 
-      _instance = new InfluenceActionSystem(gomeostas, actionsFolderPath, actionsTemplateFolderPath);
+      _instance = new InfluenceActionSystem(gomeostas, actionsFolderPath);
     }
 
-    private InfluenceActionSystem(
-        GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        string actionsTemplateFolderPath = null)
+    private InfluenceActionSystem(GomeostasSystem gomeostas, string actionsFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Установка путей
       _influenceActionsFolderPath = string.IsNullOrWhiteSpace(actionsFolderPath)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Actions")
-            : actionsFolderPath;
-
-      _influenceActionsTemplateFolderPath = string.IsNullOrWhiteSpace(actionsTemplateFolderPath)
-          ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Templates", "Actions")
-          : actionsTemplateFolderPath;
-
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Actions")
+        : actionsFolderPath;
       try
       {
-        EnsureTemplateDirectory();
         EnsureDataDirectory();
         LoadInfluenceActions();
       }
@@ -107,10 +96,7 @@ namespace ISIDA.Actions
     #region Константы и структуры
 
     private const string InfluenceActionsFileName = "InfluenceActions";
-    private const string DefaultInfluenceActionsFileName = "DefaultInfluenceActions";
-
     private readonly string _influenceActionsFolderPath;
-    private readonly string _influenceActionsTemplateFolderPath;
 
     private string GetInfluenceActionsFilePath() =>
       Path.Combine(_influenceActionsFolderPath, $"{InfluenceActionsFileName}.dat");
@@ -558,17 +544,6 @@ namespace ISIDA.Actions
     #region Работа с файлами
 
     /// <summary>
-    /// Создает директорию для шаблонов, если ее нет
-    /// </summary>
-    private void EnsureTemplateDirectory()
-    {
-      if (!Directory.Exists(_influenceActionsTemplateFolderPath))
-      {
-        Directory.CreateDirectory(_influenceActionsTemplateFolderPath);
-      }
-    }
-
-    /// <summary>
     /// Создает каталог параметров действий, если его нет
     /// </summary>
     private void EnsureDataDirectory()
@@ -635,89 +610,21 @@ namespace ISIDA.Actions
         }
         else
         {
-          InitializeDefaultInfluenceActions();
-          SaveInfluenceActions();
+          EnsureDataDirectory();
+          var lines = new List<string>
+          {
+            FileValidator.FileHeaders.InfluenceActionsFormat,
+            FileValidator.FileHeaders.InfluenceActionsBenefit,
+            FileValidator.FileHeaders.InfluenceAntagonists
+          };
+          File.WriteAllLines(path, lines);
+          _influenceActions.Clear();
+          _lastGomeoActionId = 0;
         }
       }
       catch
       {
         throw;
-      }
-    }
-
-    /// <summary>
-    /// Инициализирует гомеостатические воздействия по умолчанию, загружая их из шаблонного файла.
-    /// Если файл шаблона отсутствует — выбрасывает исключение.
-    /// </summary>
-    private void InitializeDefaultInfluenceActions()
-    {
-      var templatePath = Path.Combine(_influenceActionsTemplateFolderPath, $"{DefaultInfluenceActionsFileName}.tmp");
-
-      if (!File.Exists(templatePath))
-      {
-        const string errorMsg = "Не найден обязательный файл шаблона гомеостатических воздействий по умолчанию: " +
-                               "{0}. Создайте файл с примером конфигурации вручную.";
-        var formattedMsg = string.Format(errorMsg, templatePath);
-        throw new FileNotFoundException(formattedMsg, templatePath);
-      }
-
-      try
-      {
-        _influenceActions.Clear();
-        _influenceActiveActions.Clear();
-        _lastGomeoActionId = 0;
-
-        foreach (var line in File.ReadLines(templatePath))
-        {
-          var trimmedLine = line.Trim();
-          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-            continue;
-
-          var parts = trimmedLine.Split('|');
-          if (parts.Length < 5)
-          {
-            continue;
-          }
-
-          if (!int.TryParse(parts[0], out int id))
-          {
-            continue;
-          }
-
-          var action = new GomeostasisInfluenceAction
-          {
-            Id = id,
-            Name = parts[1].Trim(),
-            Description = parts[2].Trim(),
-            Influences = ParseInfluences(parts[3])
-          };
-
-          // Антагонисты
-          if (parts.Length >= 4)
-          {
-            action.AntagonistInfluences = parts[4]
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s =>
-                {
-                  if (int.TryParse(s.Trim(), out int aid)) return aid;
-
-                  return 0;
-                })
-                .Where(aid => aid != 0)
-                .ToList();
-          }
-
-
-          _influenceActions.Add(action.Id, action);
-          if (action.Id > _lastGomeoActionId)
-            _lastGomeoActionId = action.Id;
-        }
-
-      }
-      catch (Exception ex)
-      {
-        throw new InvalidOperationException($"Не удалось загрузить гомеостатические воздействия из шаблона: {templatePath}", ex);
       }
     }
 

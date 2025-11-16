@@ -97,12 +97,10 @@ namespace ISIDA.Reflexes
     /// </summary>
     /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
     /// <param name="reflexesFolderPath">Путь к папке с данными рефлексов. Если null — используется путь по умолчанию </param>
-    /// <param name="reflexesTemplateFolderPath">Путь к папке с шаблонами рефлексов. Если null — используется путь по умолчанию.</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
-        string reflexesFolderPath = null,
-        string reflexesTemplateFolderPath = null)
+        string reflexesFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("GeneticReflexesSystem уже инициализирован.");
@@ -116,14 +114,13 @@ namespace ISIDA.Reflexes
       if (!SensorySystem.IsInitialized)
         throw new InvalidOperationException("SensorySystem должен быть инициализирован перед GeneticReflexesSystem для работы с WordId");
 
-      _instance = new GeneticReflexesSystem(gomeostas, reflexesFolderPath, reflexesTemplateFolderPath);
+      _instance = new GeneticReflexesSystem(gomeostas, reflexesFolderPath);
     }
 
     private readonly GomeostasSystem _gomeostas;
     private GeneticReflexesSystem(
         GomeostasSystem gomeostas,
-        string reflexesFolderPath = null,
-        string reflexesTemplateFolderPath = null)
+        string reflexesFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _influenceActionSystem = InfluenceActionSystem.Instance;
@@ -134,10 +131,6 @@ namespace ISIDA.Reflexes
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Reflexes")
             : reflexesFolderPath;
 
-      _reflexesTemplateFolderPath = string.IsNullOrWhiteSpace(reflexesTemplateFolderPath)
-          ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Templates", "Reflexes")
-          : reflexesTemplateFolderPath;
-
       // Подписываемся на события удаления стилей и воздействий
       _gomeostas.StyleDeleted += OnStyleDeleted;
       _influenceActionSystem.InfluenceActionDeleted += OnInfluenceActionDeleted;
@@ -145,7 +138,6 @@ namespace ISIDA.Reflexes
 
       try
       {
-        EnsureTemplateDirectory();
         EnsureDataDirectory();
         LoadGeneticReflexes();
       }
@@ -161,9 +153,7 @@ namespace ISIDA.Reflexes
     #region Константы и структуры
 
     private const string GeneticReflexesFileName = "GeneticReflexes";
-    private const string DefaultGeneticReflexesFileName = "DefaultGeneticReflexes";
     private readonly string _reflexesFolderPath;
-    private readonly string _reflexesTemplateFolderPath;
 
     /// <summary>
     /// Получить каталог рефлексов
@@ -646,17 +636,6 @@ namespace ISIDA.Reflexes
     #region Работа с файлами
 
     /// <summary>
-    /// Создает директорию для шаблонов безусловных рефлексов, если ее нет
-    /// </summary>
-    private void EnsureTemplateDirectory()
-    {
-      if (!Directory.Exists(_reflexesTemplateFolderPath))
-      {
-        Directory.CreateDirectory(_reflexesTemplateFolderPath);
-      }
-    }
-
-    /// <summary>
     /// Создает каталог параметров безусловных рефлексов, если его нет
     /// </summary>
     private void EnsureDataDirectory()
@@ -723,81 +702,25 @@ namespace ISIDA.Reflexes
         }
         else
         {
-          InitializeDefaultGeneticReflexes();
-          SaveGeneticReflexes();
-        }
-      }
-      catch
-      {
-        throw;
-      }
-    }
-
-    /// <summary>
-    /// Инициализирует безусловные рефлексы по умолчанию, загружая их из шаблонного файла.
-    /// Если файл шаблона отсутствует — выбрасывает исключение.
-    /// </summary>
-    private void InitializeDefaultGeneticReflexes()
-    {
-      var templatePath = Path.Combine(_reflexesTemplateFolderPath, $"{DefaultGeneticReflexesFileName}.tmp");
-
-      if (!File.Exists(templatePath))
-      {
-        const string errorMsg = "Не найден обязательный файл шаблона безусловных рефлексов по умолчанию: " +
-                               "{0}. Создайте файл с примером конфигурации вручную.";
-        var formattedMsg = string.Format(errorMsg, templatePath);
-        throw new FileNotFoundException(formattedMsg, templatePath);
-      }
-
-      try
-      {
-        _geneticReflexes.Clear();
-        _activeGeneticReflexes.Clear();
-        _lastGeneticReflexId = 0;
-
-        foreach (var line in File.ReadLines(templatePath))
-        {
-          var trimmedLine = line.Trim();
-          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-            continue;
-
-          var parts = trimmedLine.Split('|');
-          if (parts.Length < 5)
-            continue;
-
-          if (!int.TryParse(parts[0], out int id))
-            continue;
-
-          if (!int.TryParse(parts[1].Trim(), out int level1))
-            continue;
-
-          // Парсим остальные поля
-          var level2 = ParseIntList(parts[2]);
-          var level3 = ParseIntList(parts[3]);
-          var adaptiveActions = ParseIntList(parts[4]);
-
-          // ВАЛИДАЦИЯ - используем общий метод проверки
-          var validationResult = ValidateGeneticReflexParameters(level1, level2, level3, adaptiveActions);
-          if (!validationResult.IsValid)
-            continue;
-
-          var reflex = new GeneticReflex
+          EnsureDataDirectory();
+          var lines = new List<string>
           {
-            Id = id,
-            Level1 = level1,
-            Level2 = level2,
-            Level3 = level3,
-            AdaptiveActions = adaptiveActions
+            FileHeaders.GeneticReflexesFormat,
+            FileHeaders.GeneticReflexesLevel1,
+            FileHeaders.GeneticReflexesLevel2,
+            FileHeaders.GeneticReflexesLevel3,
+            FileHeaders.GeneticReflexesActions
           };
+          File.WriteAllLines(path, lines);
 
-          _geneticReflexes.Add(reflex.Id, reflex);
-          if (reflex.Id > _lastGeneticReflexId)
-            _lastGeneticReflexId = reflex.Id;
+          _geneticReflexes.Clear();
+          _activeGeneticReflexes.Clear();
+          _lastGeneticReflexId = 0;
         }
       }
       catch (Exception ex)
       {
-        throw new InvalidOperationException($"Не удалось загрузить безусловные рефлексы из шаблона: {templatePath}", ex);
+        LogError($"LoadGeneticReflexes: Ошибка при загрузке рефлексов: {ex.Message}");
       }
     }
 
@@ -838,11 +761,11 @@ namespace ISIDA.Reflexes
 
         var lines = new List<string>
         {
-            FileHeaders.GeneticReflexesFormat,
-            FileHeaders.GeneticReflexesLevel1,
-            FileHeaders.GeneticReflexesLevel2,
-            FileHeaders.GeneticReflexesLevel3,
-            FileHeaders.GeneticReflexesActions
+          FileHeaders.GeneticReflexesFormat,
+          FileHeaders.GeneticReflexesLevel1,
+          FileHeaders.GeneticReflexesLevel2,
+          FileHeaders.GeneticReflexesLevel3,
+          FileHeaders.GeneticReflexesActions
         };
 
         foreach (var reflex in _geneticReflexes.Values.OrderBy(r => r.Id))
@@ -853,15 +776,15 @@ namespace ISIDA.Reflexes
                    $"{string.Join(",", reflex.AdaptiveActions)}");
         }
 
-        var linCount = 5;
-        if (lines.Count == 4)
-          linCount = 4; // для случая очистки всего кроме шапки
+        var linCount = 5; // Минимум: шапка + 1 рефлекс
+        if (lines.Count == 5)
+          linCount = 5; // только шапка
 
         var result = SafeSaveFile(
             GetGeneticReflexesFilePath(),
             lines,
             content => IsValidGeneticReflexesFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: linCount, // заголовки + мин. 1 строка
+            minLinesCount: linCount,
             fileDescription: "безусловных рефлексов");
 
         return result;

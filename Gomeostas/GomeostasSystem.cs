@@ -44,7 +44,7 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
-    public GomeostasSystem(string gomeostasFolderPath = null, string gomeostasTemplateFolderPath = null)
+    public GomeostasSystem(string gomeostasFolderPath = null)
     {
       try
       {
@@ -52,10 +52,6 @@ namespace ISIDA.Gomeostas
         GomeostasFolderPath = gomeostasFolderPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "ISIDA", "Data", "Gomeostas");
-
-        GomeostasTemplateFolderPath = gomeostasTemplateFolderPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "ISIDA", "Templates", "Gomeostas");
 
         // Инициализируем словари
         _styleAntagonistsIndex = new Dictionary<int, List<BehaviorStyle>>();
@@ -66,9 +62,7 @@ namespace ISIDA.Gomeostas
         _previousActiveStyleIds = new List<int>();
         _isNewConditions = false;
 
-        EnsureTemplateDirectory();
         EnsureDataDirectory();
-        InitializeDefaultParameters();
         LoadAgentData();
 
         _calculator = new HomeostasisCalculator();
@@ -108,13 +102,12 @@ namespace ISIDA.Gomeostas
     /// Должен быть вызван один раз при старте приложения.
     /// </summary>
     /// <param name="gomeostasFolderPath">Путь к каталогу данных гомеостаза. Если null, используется путь по умолчанию.</param>
-    /// <param name="gomeostasTemplateFolderPath">Путь к каталогу шаблонов гомеостаза. Если null, используется путь по умолчанию.</param>
-    public static void InitializeInstance(string gomeostasFolderPath = null, string gomeostasTemplateFolderPath = null)
+    public static void InitializeInstance(string gomeostasFolderPath = null)
     {
       if (Instance != null)
         throw new InvalidOperationException("Instance уже инициализирован.");
 
-      Instance = new GomeostasSystem(gomeostasFolderPath, gomeostasTemplateFolderPath);
+      Instance = new GomeostasSystem(gomeostasFolderPath);
     }
 
     #endregion
@@ -455,8 +448,6 @@ namespace ISIDA.Gomeostas
     private const string StylesFileName = "BehaviorStyles";
     private const string AgentParametersFileName = "VitalParameters";
     private const string AgentPropertiesFileName = "AgentProperties";
-    private const string DefaultAgentParametersFileName = "DefaultVitalParameters";
-    private const string DefaultStylesFileName = "DefaultBehaviorStyles";
     private const string DefaultAgentName = "Агент";
     private const string DefaultAgentDescription = "Простой агент";
     private string GomeostasTemplateFolderPath;
@@ -1280,7 +1271,6 @@ namespace ISIDA.Gomeostas
 
     private readonly HomeostasisCalculator _calculator;
     private readonly AgentState _agentState = new AgentState();
-    private readonly Dictionary<int, ParameterData> _defaultParameters = new Dictionary<int, ParameterData>();
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
 
@@ -1438,17 +1428,6 @@ namespace ISIDA.Gomeostas
     #region Инициализация параметров гомеостаза
 
     /// <summary>
-    /// Создает директорию для шаблонов, если ее нет
-    /// </summary>
-    private void EnsureTemplateDirectory()
-    {
-      if (!Directory.Exists(GomeostasTemplateFolderPath))
-      {
-        Directory.CreateDirectory(GomeostasTemplateFolderPath);
-      }
-    }
-
-    /// <summary>
     /// каталог параметров гомеостаза
     /// </summary>
     private void EnsureDataDirectory()
@@ -1456,116 +1435,6 @@ namespace ISIDA.Gomeostas
       if (!Directory.Exists(GomeostasFolderPath))
       {
         Directory.CreateDirectory(GomeostasFolderPath);
-      }
-    }
-
-    /// <summary>
-    /// Параметры гомеостаза по умолчанию
-    /// </summary>
-    /// <summary>
-    /// Инициализация параметров гомеостаза из шаблона по умолчанию.
-    /// Выбрасывает исключение, если файл шаблона не найден.
-    /// </summary>
-    private void InitializeDefaultParameters()
-    {
-      var templatePath = Path.Combine(GomeostasTemplateFolderPath, $"{DefaultAgentParametersFileName}.tmp");
-
-      // Проверяем существование файла
-      if (!File.Exists(templatePath))
-      {
-        string errorMsg = $"Файл шаблона параметров по умолчанию не найден: {templatePath}. " +
-                         "Создайте файл с необходимыми параметрами вручную.";
-        LogError("InitializeDefaultParameters: {errorMsg}");
-        throw new FileNotFoundException(errorMsg);
-      }
-
-      try
-      {
-        // Очищаем словарь с параметрами по умолчанию
-        _defaultParameters.Clear();
-        // Загружаем данные из файла
-        LoadParametersFromFile(templatePath, _defaultParameters);
-
-        // Загружаем активации стилей из файла (они уже должны быть в файле)
-        // Нам больше не нужно парсить строку DefaultParametersContent
-      }
-      catch (Exception ex)
-      {
-        string errorMsg = $"Ошибка загрузки параметров из шаблона '{templatePath}': {ex.Message}";
-        LogError($"InitializeDefaultParameters: {errorMsg}");
-        throw new InvalidOperationException("Не удалось загрузить параметры из шаблона", ex);
-      }
-    }
-
-    /// <summary>
-    /// Инициализация системных стилей по умолчанию
-    /// </summary>
-    /// <summary>
-    /// Инициализация стилей поведения из шаблона по умолчанию.
-    /// Выбрасывает исключение, если файл шаблона не найден.
-    /// </summary>
-    private void InitializeDefaultStyles()
-    {
-      var templatePath = Path.Combine(GomeostasTemplateFolderPath, $"{DefaultStylesFileName}.tmp");
-
-      // Проверяем существование файла
-      if (!File.Exists(templatePath))
-      {
-        string errorMsg = $"Файл шаблона стилей поведения по умолчанию не найден: {templatePath}. " +
-                         "Создайте файл с необходимыми стилями вручную.";
-        LogError($"InitializeDefaultParameters: {errorMsg}");
-        throw new FileNotFoundException(errorMsg);
-      }
-
-      try
-      {
-        // Очищаем словарь со стилями
-        _agentState.BehaviorStyles.Clear();
-        // Загружаем данные из файла
-        LoadStylesFromFile(templatePath, _agentState.BehaviorStyles);
-      }
-      catch (Exception ex)
-      {
-        string errorMsg = $"Ошибка загрузки стилей из шаблона '{templatePath}': {ex.Message}";
-        LogError($"InitializeDefaultParameters: {errorMsg}");
-        throw new InvalidOperationException("Не удалось загрузить стили поведения из шаблона", ex);
-      }
-    }
-
-    private void InitializeDefaultAgentParameters()
-    {
-      try
-      {
-        _agentState.Parameters.Clear();
-
-        foreach (var param in _defaultParameters.Values)
-        {
-          var newParam = new ParameterData(
-              id: param.Id,
-              name: param.Name,
-              description: param.Description,
-              value: param.Value,
-              weight: param.Weight,
-              normaWell: param.NormaWell,
-              speed: param.Speed,
-              isVital:param.IsVital,
-              criticalMinValue: param.CriticalMinValue,
-              criticalMaxValue: param.CriticalMaxValue
-              )
-          {
-            BadStateInfluence = new Dictionary<int, float>(param.BadStateInfluence),
-            WellStateInfluence = new Dictionary<int, float>(param.WellStateInfluence),
-            StyleActivations = new Dictionary<int, List<int>>(param.StyleActivations)
-          };
-
-          _agentState.Parameters.Add(newParam);
-          if (param.Id > _agentState.LastParameterId)
-            _agentState.LastParameterId = param.Id;
-        }
-      }
-      catch (Exception ex)
-      {
-        LogError($"InitializeDefaultAgentParameters: Ошибка инициализации параметров по умолчанию: {ex.Message}");
       }
     }
 
@@ -1869,14 +1738,6 @@ namespace ISIDA.Gomeostas
       {
         _lock.ExitReadLock();
       }
-    }
-
-    /// <summary>
-    /// Получение параметров по умолчанию (только для чтения)
-    /// </summary>
-    public ReadOnlyDictionary<int, ParameterData> GetDefaultParameters()
-    {
-      return new ReadOnlyDictionary<int, ParameterData>(_defaultParameters);
     }
 
     #endregion
@@ -2577,73 +2438,6 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Загружает параметры из файла в указанный словарь
-    /// </summary>
-    private void LoadParametersFromFile(string filePath, Dictionary<int, ParameterData> targetDictionary)
-    {
-      try
-      {
-        foreach (var line in File.ReadLines(filePath))
-        {
-          if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
-            continue;
-
-          var parts = line.Split('|');
-          if (parts.Length < 13) // Проверяем минимальное количество частей
-          {
-            LogError($"LoadParametersFromFile: Неверный формат строки: {line}");
-            continue;
-          }
-          try
-          {
-            // Парсим speed сначала как float с InvariantCulture
-            float speedFloat = float.Parse(parts[6].Trim(), CultureInfo.InvariantCulture);
-            bool IsVital = parts.Length > 10 ? bool.Parse(parts[10].Trim()) : false;
-            float CriticalMinValue = parts.Length > 11 ? float.Parse(parts[11].Trim(), CultureInfo.InvariantCulture) : 0f;
-            float CriticalMaxValue = parts.Length > 12 ? float.Parse(parts[12].Trim(), CultureInfo.InvariantCulture) : 100f;
-
-            // Округляем speed в целое:
-            // для положительных чисел - в большую сторону (Ceiling),
-            // для отрицательных - вниз (Floor)
-            int speedInt = speedFloat >= 0
-                ? (int)Math.Ceiling(speedFloat)
-                : (int)Math.Floor(speedFloat);
-
-            var param = new ParameterData(
-                id: int.Parse(parts[0].Trim()),
-                name: parts[1].Trim(),
-                description: parts[2].Trim(),
-                value: float.Parse(parts[3].Trim(), CultureInfo.InvariantCulture),
-                weight: int.Parse(parts[4].Trim()),
-                normaWell: int.Parse(parts[5].Trim()),
-                speed: speedInt,
-                isVital: IsVital,
-                criticalMinValue: CriticalMinValue,
-                criticalMaxValue: CriticalMaxValue)
-            {
-              BadStateInfluence = parts.Length > 7 ? StrToDict(parts[7]) : new Dictionary<int, float>(),
-              WellStateInfluence = parts.Length > 8 ? StrToDict(parts[8]) : new Dictionary<int, float>(),
-              StyleActivations = parts.Length > 9 ? ParseStyleActivations(parts[9]) : new Dictionary<int, List<int>>()
-            };
-
-            targetDictionary[param.Id] = param;
-          }
-          catch (FormatException ex)
-          {
-            LogError($"LoadParametersFromFile: Ошибка парсинга строки '{line}': {ex.Message}");
-            // Пропускаем некорректную строку и продолжаем обработку
-            continue;
-          }
-        }
-      }
-      catch (Exception ex)
-      {
-        LogError($"LoadParametersFromFile: Ошибка загрузки файла {filePath}: {ex.Message}");
-        throw;
-      }
-    }
-
-    /// <summary>
     /// Загружает стили из файла в указанный словарь
     /// </summary>
     private void LoadStylesFromFile(string filePath, Dictionary<int, BehaviorStyle> targetDictionary)
@@ -2795,13 +2589,22 @@ namespace ISIDA.Gomeostas
 
       try
       {
+        _agentState.Parameters.Clear();
+
         if (!IsValidAgentParametersFile(path))
         {
-          InitializeDefaultAgentParameters();
+          EnsureDataDirectory();
+          var lines = new List<string>
+            {
+                FileHeaders.ParametersFormat,
+                FileHeaders.ParametersBadInfluence,
+                FileHeaders.ParametersWellInfluence,
+                FileHeaders.ParametersActivations
+            };
+
+          File.WriteAllLines(path, lines);
           return;
         }
-
-        _agentState.Parameters.Clear();
 
         foreach (var line in File.ReadLines(path))
         {
@@ -2860,31 +2663,33 @@ namespace ISIDA.Gomeostas
         if (File.Exists(path))
         {
           var lines = File.ReadAllLines(path);
-          if (File.Exists(path) && FileValidator.IsValidStyleFile(path))
+          if (IsValidStyleFile(path))
           {
             _agentState.BehaviorStyles.Clear();
             LoadStylesFromFile(path, _agentState.BehaviorStyles);
             BuildStyleIndexes();
-
             return;
           }
         }
+        else
+        {
+          EnsureDataDirectory();
+          var lines = new List<string>
+            {
+              FileHeaders.StylesFormat,
+              FileHeaders.StylesActionInfluence,
+              FileHeaders.StylesAntagonis
+            };
 
-        InitializeDefaultStyles();
-        SaveAgentBehaviorStyles();
-        BuildStyleIndexes();
+          File.WriteAllLines(path, lines);
+          _agentState.BehaviorStyles.Clear();
+          BuildStyleIndexes();
+          return;
+        }
       }
-      catch
+      catch (Exception initEx)
       {
-        try
-        {
-          InitializeDefaultStyles();
-          SaveAgentBehaviorStyles();
-        }
-        catch (Exception initEx)
-        {
-          throw new InvalidOperationException("Не удалось инициализировать стили по умолчанию", initEx);
-        }
+        throw new InvalidOperationException("Ошибка при загрузке стилей реагирования агента", initEx);
       }
     }
 

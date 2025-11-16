@@ -48,24 +48,21 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
     /// <param name="actionsFolderPath">Путь к папке с данными действий. Если null — используется путь по умолчанию </param>
-    /// <param name="actionsTemplateFolderPath">Путь к папке с шаблонами действий. Если null — используется путь по умолчанию.</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        string actionsTemplateFolderPath = null)
+        string actionsFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("AdaptiveActionsSystem уже инициализирован.");
 
-      _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath, actionsTemplateFolderPath);
+      _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath);
     }
 
     private readonly GomeostasSystem _gomeostas;
     private AdaptiveActionsSystem(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        string actionsTemplateFolderPath = null)
+        string actionsFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
@@ -73,33 +70,24 @@ namespace ISIDA.Actions
       _actionsFolderPath = string.IsNullOrWhiteSpace(actionsFolderPath)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Actions")
             : actionsFolderPath;
-
-        _actionsTemplateFolderPath = string.IsNullOrWhiteSpace(actionsTemplateFolderPath)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Templates", "Actions")
-            : actionsTemplateFolderPath;
-
-        try
-        {
-          EnsureTemplateDirectory();
-          EnsureDataDirectory();
-          LoadActions();
-        }
-        catch (Exception ex)
-        {
-          LogError($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
-          throw;
-        }
+      try
+      {
+        EnsureDataDirectory();
+        LoadActions();
       }
+      catch (Exception ex)
+      {
+        LogError($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+        throw;
+      }
+     }
 
     #endregion
 
     #region Константы и структуры
 
     private const string ActionsFileName = "AdaptiveActions";
-    private const string DefaultActionsFileName = "DefaultAdaptiveActions";
-
     private readonly string _actionsFolderPath;
-    private readonly string _actionsTemplateFolderPath;
 
     private string GetActionsFilePath() =>
         Path.Combine(_actionsFolderPath, $"{ActionsFileName}.dat");
@@ -862,17 +850,6 @@ namespace ISIDA.Actions
     #region Работа с файлами
 
     /// <summary>
-    /// Создает директорию для шаблонов, если ее нет
-    /// </summary>
-    private void EnsureTemplateDirectory()
-    {
-      if (!Directory.Exists(_actionsTemplateFolderPath))
-      {
-        Directory.CreateDirectory(_actionsTemplateFolderPath);
-      }
-    }
-
-    /// <summary>
     /// Создает каталог параметров действий, если его нет
     /// </summary>
     private void EnsureDataDirectory()
@@ -959,99 +936,23 @@ namespace ISIDA.Actions
         }
         else
         {
-          InitializeDefaultActions();
-          SaveActions();
-        }
-      }
-      catch
-      {
-        throw;
-      }
-    }
+          EnsureDataDirectory();
+          var lines = new List<string>
+            {
+              FileHeaders.ActionsFormat,
+              FileHeaders.ActionsCost,
+              FileHeaders.ActionsAntagonists
+            };
+          File.WriteAllLines(path, lines);
 
-    /// <summary>
-    /// Инициализирует действия по умолчанию
-    /// </summary>
-    private void InitializeDefaultActions()
-    {
-      var templatePath = Path.Combine(_actionsTemplateFolderPath, $"{DefaultActionsFileName}.tmp");
-
-      if (!File.Exists(templatePath))
-      {
-        const string errorMsg = "Не найден обязательный файл шаблона действий по умолчанию: " +
-                               "{0}. Создайте файл с примером конфигурации вручную.";
-        var formattedMsg = string.Format(errorMsg, templatePath);
-        throw new FileNotFoundException(formattedMsg, templatePath);
-      }
-
-      try
-      {
-        _actions.Clear();
-        _activeActions.Clear();
-        _lastActionId = 0;
-
-        foreach (var line in File.ReadLines(templatePath))
-        {
-          var trimmedLine = line.Trim();
-          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-            continue;
-
-          var parts = trimmedLine.Split('|');
-          if (!int.TryParse(parts[0], out int id))
-            continue;
-
-          if (parts.Length < 3)
-            continue;
-
-          // Парсим интенсивность
-          int vigor = 5;
-          if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
-          {
-            int.TryParse(parts[3].Trim(), out vigor);
-            vigor = ClampInt(vigor, 1, 10);
-          }
-
-          // Парсим затраты
-          Dictionary<int, int> costs = new Dictionary<int, int>();
-          if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
-          {
-            costs = ParseCosts(parts[4]);
-          }
-
-          var action = new AdaptiveAction
-          {
-            Id = id,
-            Name = parts[1].Trim(),
-            Description = parts[2].Trim(),
-            Vigor = vigor,
-            Costs = costs,
-            ActionsSystem = this
-          };
-
-          // Антагонисты
-          if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
-          {
-            action.AntagonistActions = parts[5]
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s =>
-                {
-                  if (int.TryParse(s.Trim(), out int aid))
-                    return aid;
-                  return 0;
-                })
-                .Where(aid => aid != 0)
-                .ToList();
-          }
-
-          _actions.Add(action.Id, action);
-          if (action.Id > _lastActionId)
-            _lastActionId = action.Id;
+          _actions.Clear();
+          _activeActions.Clear();
+          _lastActionId = 0;
         }
       }
       catch (Exception ex)
       {
-        throw new InvalidOperationException($"Не удалось загрузить действия из шаблона: {templatePath}", ex);
+        LogError($"LoadActions: Ошибка при загрузке адаптивных действий агента: {ex.Message}");
       }
     }
 
@@ -1084,9 +985,7 @@ namespace ISIDA.Actions
               return (false, warnings);
           }
         }
-
         EnsureDataDirectory();
-
         var lines = new List<string>
         {
             FileHeaders.ActionsFormat,
@@ -1102,9 +1001,9 @@ namespace ISIDA.Actions
                    $"{string.Join(",", action.AntagonistActions)}");
         }
 
-        var linCount = 5;
-        if (lines.Count == 4)
-          linCount = 4; // для случая очистки всего кроме шапки
+        var linCount = 4; // Минимум: шапка + 1 действие
+        if (lines.Count == 3)
+          linCount = 3; // только шапка
 
         var result = SafeSaveFile(
             GetActionsFilePath(),

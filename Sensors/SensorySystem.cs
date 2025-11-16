@@ -45,7 +45,6 @@ namespace ISIDA.Sensors
     public const string VerbalChannelFolder = "";
 
     private readonly string _sensorsFolderPath;
-    private readonly string _sensorsTemplateFolderPath;
 
     /// <summary>
     /// Устанавливает или получает авторитарный режим вербального канала
@@ -114,42 +113,34 @@ namespace ISIDA.Sensors
     /// </summary>
     /// <param name="gomeostasSystem">Ссылка на класс гомеостаза</param>
     /// <param name="sensorsFolderPath">Путь к директории сенсоров (если null - используется путь по умолчанию)</param>
-    /// <param name="sensorsTemplateFolderPath">Путь к директории шаблонов (если null - используется путь по умолчанию)</param>
     /// <exception cref="InvalidOperationException">Выбрасывается если система уже инициализирована</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostasSystem,
-        string sensorsFolderPath = null,
-        string sensorsTemplateFolderPath = null)
+        string sensorsFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("SensorySystem уже инициализирован");
 
-      _instance = new SensorySystem(gomeostasSystem, sensorsFolderPath, sensorsTemplateFolderPath);
+      _instance = new SensorySystem(gomeostasSystem, sensorsFolderPath);
     }
 
     private SensorySystem(
       GomeostasSystem gomeostasSystem,
-      string sensorsFolderPath, 
-      string sensorsTemplateFolderPath)
+      string sensorsFolderPath)
     {
       _sensorsFolderPath = string.IsNullOrWhiteSpace(sensorsFolderPath)
           ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Sensors")
           : sensorsFolderPath;
-
-      _sensorsTemplateFolderPath = string.IsNullOrWhiteSpace(sensorsTemplateFolderPath)
-          ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Templates", "Sensors")
-          : sensorsTemplateFolderPath;
 
       _gomeostas = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
 
       SubscribeToEvents();
       try
       {
-        EnsureTemplateDirectory();
         EnsureDataDirectory();
 
         // Загружаем первичные сенсоры и инициализируем вербальный канал
-        var primarySensorsPath = Path.Combine(_sensorsTemplateFolderPath,
+        var primarySensorsPath = Path.Combine(_sensorsFolderPath,
             $"{DefaultVerbalPrimariesFileName}.tmp");
 
         VerbalChannel = new VerbalSensorChannel(
@@ -164,12 +155,6 @@ namespace ISIDA.Sensors
         LogError($"Ошибка инициализации: {ex.Message}");
         throw;
       }
-    }
-
-    private void EnsureTemplateDirectory()
-    {
-      if (!Directory.Exists(_sensorsTemplateFolderPath))
-        Directory.CreateDirectory(_sensorsTemplateFolderPath);
     }
 
     private void EnsureDataDirectory()
