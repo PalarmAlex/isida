@@ -1,0 +1,886 @@
+﻿using ISIDA.Common;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+
+namespace ISIDA.Reflexes
+{
+  /// <summary>
+  /// Дерево рефлексов - безусловных и условных
+  /// </summary>
+  public sealed class ReflexTreeSystem : IDisposable
+  {
+    private readonly GeneticReflexesSystem _geneticReflexesSystem;
+    private readonly PerceptionImagesSystem _perceptionImagesSystem;
+    private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    private bool _disposed = false;
+
+    #region Инициализация
+
+    private static ReflexTreeSystem _instance;
+
+    /// <summary>
+    /// Глобальный экземпляр системы дерева рефлексов
+    /// </summary>
+    public static ReflexTreeSystem Instance => _instance ??
+        throw new InvalidOperationException("ReflexTreeSystem не инициализирован. Вызовите InitializeInstance().");
+
+    /// <summary>
+    /// Флаг инициализации класса
+    /// </summary>
+    public static bool IsInitialized => _instance != null;
+
+    /// <summary>
+    /// Инициализирует глобальный экземпляр системы дерева рефлексов
+    /// </summary>
+    public static void InitializeInstance(GeneticReflexesSystem geneticReflexesSystem, PerceptionImagesSystem perceptionImagesSystem)
+    {
+      if (_instance != null)
+        throw new InvalidOperationException("ReflexTreeSystem уже инициализирован.");
+
+      _instance = new ReflexTreeSystem(geneticReflexesSystem, perceptionImagesSystem);
+    }
+
+    private ReflexTreeSystem(GeneticReflexesSystem geneticReflexesSystem, PerceptionImagesSystem perceptionImagesSystem)
+    {
+      try
+      {
+        _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
+        _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+        _geneticReflexesSystem.GeneticReflexDeleted += OnGeneticReflexDeleted;
+        _geneticReflexesSystem.MultipleGeneticReflexesDeleted += OnMultipleGeneticReflexesDeleted;
+        _geneticReflexesSystem.GeneticReflexCreated += OnGeneticReflexCreated;
+
+        EnsureDataDirectory();
+        LoadReflexTree();
+        if (ReflexTree.Children.Count == 0)
+          CreateBasicReflexTree();
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка инициализации ReflexTreeSystem: {ex.Message}");
+        throw;
+      }
+    }
+
+    private void OnGeneticReflexDeleted(int reflexId)
+    {
+      RemoveGeneticReflexReferencesOptimized(reflexId);
+    }
+
+    private void OnMultipleGeneticReflexesDeleted(List<int> reflexIds)
+    {
+      RemoveMultipleGeneticReflexReferences(reflexIds);
+    }
+
+    private void OnGeneticReflexCreated(GeneticReflexesSystem.GeneticReflexCreatedEventArgs e)
+    {
+      try
+      {
+        int styleImageId = 0;
+        int actionImageId = 0;
+
+        if (PerceptionImagesSystem.IsInitialized)
+        {
+          if (e.Level2 != null && e.Level2.Any())
+            styleImageId = _perceptionImagesSystem.AddBehaviorStyleImage(e.Level2);
+
+          if (e.Level3 != null && e.Level3.Any())
+            // фразу не передаем - рефлексы не учитывают вербальное воздействие
+            actionImageId = _perceptionImagesSystem.AddPerceptionImage(e.Level3, new List<int>());
+        }
+
+        int[] conditionArr = new int[] { e.Level1, styleImageId, actionImageId };
+        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, e.ReflexId);
+
+        if (treeNodeId > 0)
+          LogError($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка привязки рефлекса {e.ReflexId} к дереву: {ex.Message}");
+      }
+    }
+
+    #endregion
+
+    #region Константы и структуры
+
+    private const string ReflexTreeFileName = "ReflexTree";
+
+    /// <summary>
+    /// Узел дерева рефлексов
+    /// Формат: ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex
+    /// </summary>
+    public class ReflexNode
+    {
+      /// <summary>
+      /// Уникальный идентификатор узла
+      /// </summary>
+      public int ID { get; set; }
+
+      /// <summary>
+      /// Базовое состояние (-1: Плохо, 0: Норма, 1: Хорошо)
+      /// </summary>
+      public int BaseID { get; set; }
+
+      /// <summary>
+      /// ID образа стилей поведения - сочетание активностей Базовых контекстов
+      /// </summary>
+      public int StyleID { get; set; }
+
+      /// <summary>
+      /// ID образа пусковых стимулов - сочетание воздействий
+      /// </summary>
+      public int ActionID { get; set; }
+
+      /// <summary>
+      /// ID безусловного рефлекса
+      /// </summary>
+      public int GeneticReflexID { get; set; }
+
+      /// <summary>
+      /// ID условного рефлекса (если есть, блокирует GeneticReflexID)
+      /// </summary>
+      public int ConditionedReflex { get; set; }
+
+      /// <summary>
+      /// Дочерние узлы
+      /// </summary>
+      public List<ReflexNode> Children { get; set; } = new List<ReflexNode>();
+
+      /// <summary>
+      /// ID родительского узла
+      /// </summary>
+      public int ParentID { get; set; }
+
+      /// <summary>
+      /// Ссылка на родительский узел
+      /// </summary>
+      public ReflexNode ParentNode { get; set; }
+    }
+
+    #endregion
+
+    #region Поля и свойства
+
+    private readonly ReflexNode ReflexTree = new ReflexNode();
+    private readonly List<ReflexNode> ReflexTreeFromID = new List<ReflexNode>();
+    private int _lastReflexNodeID = 0;
+    private int _detectedLastNodeID = 0;
+
+    /// <summary>
+    /// Текущий последний распознанный узел дерева - результат распознавания
+    /// </summary>
+    public int DetectedLastNodeID => _detectedLastNodeID;
+
+    #endregion
+
+    #region Управление деревом рефлексов
+
+    /// <summary>
+    /// Создает новый узел дерева рефлексов
+    /// </summary>
+    public (int ID, ReflexNode Node) CreateNewReflexNode(ReflexNode parent, int id, int baseID,
+        int styleID, int actionID, int geneticReflexID, int conditionedReflex, bool checkUnicum)
+    {
+      if (checkUnicum)
+      {
+        var (oldID, oldNode) = FindReflexTreeNodeFromCondition(baseID, styleID, actionID);
+        if (oldID > 0) return (oldID, oldNode);
+      }
+
+      if (id == 0)
+      {
+        _lastReflexNodeID++;
+        id = _lastReflexNodeID;
+      }
+      else
+      {
+        if (_lastReflexNodeID < id)
+          _lastReflexNodeID = id;
+      }
+
+      var node = new ReflexNode
+      {
+        ID = id,
+        ParentNode = parent,
+        ParentID = parent?.ID ?? 0,
+        BaseID = baseID,
+        StyleID = styleID,
+        ActionID = actionID,
+        GeneticReflexID = geneticReflexID,
+        ConditionedReflex = conditionedReflex
+      };
+
+      parent?.Children.Add(node);
+      WriteReflexTreeFromID(id, node);
+
+      return (id, node);
+    }
+
+    /// <summary>
+    /// Находит узел по ID
+    /// </summary>
+    public ReflexNode FindNodeByID(int id)
+    {
+      if (id < 0 || id >= ReflexTreeFromID.Count)
+        return null;
+
+      var node = ReflexTreeFromID[id];
+
+      return node?.ID == id ? node : null;
+    }
+
+    /// <summary>
+    /// Записывает узел в массив по ID
+    /// </summary>
+    private void WriteReflexTreeFromID(int index, ReflexNode value)
+    {
+      if (index >= ReflexTreeFromID.Count)
+      {
+        int newSize = Math.Max(index + 1, ReflexTreeFromID.Count * 2);
+        while (ReflexTreeFromID.Count <= newSize)
+          ReflexTreeFromID.Add(null);
+      }
+      ReflexTreeFromID[index] = value;
+    }
+
+    /// <summary>
+    /// Находит конечный узел по условиям
+    /// </summary>
+    public (int ID, ReflexNode Node) FindReflexTreeNodeFromCondition(int baseID, int styleID, int actionID)
+    {
+      foreach (var node in ReflexTreeFromID)
+      {
+        if (node != null && node.BaseID == baseID && node.StyleID == styleID && node.ActionID == actionID)
+          return (node.ID, node);
+      }
+      return (0, null);
+    }
+
+    /// <summary>
+    /// Распознавание условий в дереве рефлексов
+    /// </summary>
+    /// <param name="conditionArr">Массив условий [baseID, styleID, actionID]</param>
+    public void ConditionsDetection(int[] conditionArr)
+    {
+      _detectedLastNodeID = 0;
+
+      foreach (var node in ReflexTree.Children)
+      {
+        if (conditionArr[0] == node.BaseID)
+        {
+          _detectedLastNodeID = node.ID;
+          var remainingConditions = conditionArr.Skip(1).ToArray();
+          GetReflexTreeNode(1, remainingConditions, node);
+          break; // только одно из Базовых состояний
+        }
+      }
+    }
+
+    private void GetReflexTreeNode(int level, int[] conditions, ReflexNode node)
+    {
+      if (conditions.Length == 0) return;
+
+      var remainingConditions = conditions.Skip(1).ToArray();
+
+      foreach (var child in node.Children)
+      {
+        int levelID;
+        switch (level)
+        {
+          case 1:
+            levelID = child.StyleID;
+            break;
+          case 2:
+            levelID = child.ActionID;
+            break;
+          default:
+            levelID = 0;
+            break;
+        }
+
+        if (conditions[0] != levelID) continue;
+
+        _detectedLastNodeID = child.ID;
+        GetReflexTreeNode(level + 1, remainingConditions, child);
+      }
+    }
+
+    /// <summary>
+    /// Создает новую ветку с новым рефлексом
+    /// </summary>
+    public int CreateNewReflexToTreeFromNodes(int level, int[] conditions, ReflexNode node)
+    {
+      if (node == null || level >= conditions.Length)
+        return node?.ID ?? 0;
+
+      int id;
+      switch (level)
+      {
+        case 0: // Базовое состояние
+          (id, _) = CreateNewReflexNode(node, 0, conditions[0], 0, 0, 0, 0, true);
+          break;
+        case 1: // Стиль поведения
+          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, conditions[1], 0, 0, 0, true);
+          break;
+        case 2: // Пусковой стимул
+          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, node.StyleID, conditions[2], 0, 0, true);
+          break;
+        default:
+          return node.ID;
+      }
+
+      var newNode = FindNodeByID(id);
+      if (newNode != null)
+        return CreateNewReflexToTreeFromNodes(level + 1, conditions, newNode);
+
+      return id;
+    }
+
+    /// <summary>
+    /// Находит или создает узел дерева для указанных условий и привязывает рефлекс
+    /// </summary>
+    public int FindOrCreateNodeForReflex(int[] conditionArr, int geneticReflexId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        // Проверяем валидность входных данных
+        if (conditionArr == null || conditionArr.Length < 3)
+        {
+          LogError("Недопустимый массив условий в FindOrCreateNodeForReflex");
+          return 0;
+        }
+
+        int baseID = conditionArr[0];
+        int styleID = conditionArr[1];
+        int actionID = conditionArr[2];
+
+        // Ищем существующий узел по условиям
+        var (existingId, existingNode) = FindReflexTreeNodeFromCondition(baseID, styleID, actionID);
+
+        if (existingId > 0 && existingNode != null)
+        {
+          // Узел существует - привязываем рефлекс
+          existingNode.GeneticReflexID = geneticReflexId;
+          SaveReflexTreeInternal();
+          return existingId;
+        }
+
+        // Если узел не найден - создаем новую ветку
+        // Активируем дерево для поиска подходящего места
+        ConditionsDetection(conditionArr);
+        int detectedNodeId = DetectedLastNodeID;
+
+        if (detectedNodeId > 0)
+        {
+          // Находим уровень найденного узла
+          int level = GetLevelFromNodeID(detectedNodeId);
+          var detectedNode = FindNodeByID(detectedNodeId);
+
+          if (detectedNode != null)
+          {
+            // Проверяем, что найденный узел имеет правильное базовое состояние
+            if (detectedNode.BaseID != baseID)
+            {
+              // Если базовое состояние не совпадает, начинаем с корня
+              detectedNode = ReflexTree;
+              level = 0;
+            }
+
+            // Создаем ветку от найденного узла
+            int lastNodeId = CreateNewReflexToTreeFromNodes(level, conditionArr, detectedNode);
+
+            var newNode = FindNodeByID(lastNodeId);
+            if (newNode != null)
+            {
+              newNode.GeneticReflexID = geneticReflexId;
+              SaveReflexTreeInternal();
+              return lastNodeId;
+            }
+          }
+        }
+
+        // Если не найден подходящий узел или detectedNodeId = 0, создаем с нуля от корня
+        int newNodeIdFromRoot = CreateNewReflexToTreeFromNodes(0, conditionArr, ReflexTree);
+        var newNodeFromRoot = FindNodeByID(newNodeIdFromRoot);
+
+        if (newNodeFromRoot != null)
+        {
+          newNodeFromRoot.GeneticReflexID = geneticReflexId;
+          SaveReflexTreeInternal();
+          return newNodeIdFromRoot;
+        }
+
+        LogError($"Не удалось создать узел для рефлекса {geneticReflexId} с условиями [{baseID}, {styleID}, {actionID}]");
+        return 0;
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка в FindOrCreateNodeForReflex: {ex.Message}");
+        return 0;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Находит уровень вложения узла в ветке
+    /// </summary>
+    private int GetLevelFromNodeID(int nodeId)
+    {
+      var node = FindNodeByID(nodeId);
+      if (node == null) return 0;
+
+      int level = 0;
+      var currentNode = node;
+      while (currentNode.ParentNode != null)
+      {
+        level++;
+        currentNode = currentNode.ParentNode;
+      }
+      return level;
+    }
+
+    #endregion
+
+    #region Очистка ссылок на удаленные рефлексы
+
+    /// <summary>
+    /// Удаляет ссылки на безусловный рефлекс из дерева рефлексов (оптимизированная версия)
+    /// </summary>
+    /// <param name="geneticReflexId">ID удаляемого безусловного рефлекса</param>
+    public void RemoveGeneticReflexReferencesOptimized(int geneticReflexId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (geneticReflexId <= 0) return;
+
+        int removedCount = 0;
+
+        // Используем рекурсивный обход дерева вместо полного перебора массива
+        RemoveReflexFromNode(ReflexTree, geneticReflexId, ref removedCount);
+
+        if (removedCount > 0)
+        {
+          SaveReflexTreeInternal();
+          LogError($"Удалено {removedCount} ссылок на безусловный рефлекс ID {geneticReflexId}");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка удаления ссылок на безусловный рефлекс: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Удаляет ссылки на несколько безусловных рефлексов из дерева
+    /// </summary>
+    /// <param name="geneticReflexIds">Список ID удаляемых безусловных рефлексов</param>
+    public void RemoveMultipleGeneticReflexReferences(IEnumerable<int> geneticReflexIds)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (geneticReflexIds == null) return;
+
+        var reflexIdsSet = new HashSet<int>(geneticReflexIds.Where(id => id > 0));
+        if (reflexIdsSet.Count == 0) return;
+
+        int removedCount = 0;
+
+        // Используем рекурсивный обход для массового удаления
+        RemoveMultipleReflexesFromNode(ReflexTree, reflexIdsSet, ref removedCount);
+
+        if (removedCount > 0)
+        {
+          SaveReflexTreeInternal();
+          LogError($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} безусловных рефлексов");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка удаления множественных ссылок на безусловные рефлексы: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно удаляет ссылки на рефлекс из узла и его дочерних узлов
+    /// </summary>
+    private void RemoveReflexFromNode(ReflexNode node, int geneticReflexId, ref int removedCount)
+    {
+      if (node == null) return;
+
+      // Проверяем текущий узел
+      if (node.GeneticReflexID == geneticReflexId)
+      {
+        node.GeneticReflexID = 0;
+        removedCount++;
+      }
+
+      // Рекурсивно проверяем дочерние узлы
+      foreach (var child in node.Children)
+      {
+        RemoveReflexFromNode(child, geneticReflexId, ref removedCount);
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно удаляет ссылки на несколько рефлексов из узла и его дочерних узлов
+    /// </summary>
+    private void RemoveMultipleReflexesFromNode(ReflexNode node, HashSet<int> geneticReflexIds, ref int removedCount)
+    {
+      if (node == null) return;
+
+      // Проверяем текущий узел
+      if (geneticReflexIds.Contains(node.GeneticReflexID))
+      {
+        node.GeneticReflexID = 0;
+        removedCount++;
+      }
+
+      // Рекурсивно проверяем дочерние узлы
+      foreach (var child in node.Children)
+      {
+        RemoveMultipleReflexesFromNode(child, geneticReflexIds, ref removedCount);
+      }
+    }
+
+    /// <summary>
+    /// Очищает все ссылки на безусловные рефлексы в дереве
+    /// </summary>
+    public void ClearAllGeneticReflexReferences()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        int clearedCount = 0;
+
+        // Используем рекурсивный обход для очистки всех ссылок
+        ClearAllReflexesFromNode(ReflexTree, ref clearedCount);
+
+        if (clearedCount > 0)
+        {
+          SaveReflexTreeInternal();
+          LogError($"Очищено {clearedCount} ссылок на безусловные рефлексы");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка очистки ссылок на безусловные рефлексы: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно очищает все ссылки на рефлексы из узла и его дочерних узлов
+    /// </summary>
+    private void ClearAllReflexesFromNode(ReflexNode node, ref int clearedCount)
+    {
+      if (node == null) return;
+
+      // Очищаем текущий узел
+      if (node.GeneticReflexID > 0)
+      {
+        node.GeneticReflexID = 0;
+        clearedCount++;
+      }
+
+      // Рекурсивно очищаем дочерние узлы
+      foreach (var child in node.Children)
+      {
+        ClearAllReflexesFromNode(child, ref clearedCount);
+      }
+    }
+
+    #endregion
+
+    #region Работа с файлами
+
+    /// <summary>
+    /// Создает каталог данных, если его нет
+    /// </summary>
+    private void EnsureDataDirectory()
+    {
+      string directory = Path.GetDirectoryName(GetReflexTreeFilePath());
+      if (!Directory.Exists(directory))
+      {
+        Directory.CreateDirectory(directory);
+      }
+    }
+    private string GetReflexTreeFilePath()
+    {
+      string reflexesPath = _geneticReflexesSystem.GetGeneticReflexesFilePath();
+      string directory = Path.GetDirectoryName(reflexesPath);
+      return Path.Combine(directory, $"{ReflexTreeFileName}.dat");
+    }
+
+    /// <summary>
+    /// Проверяет валидность файла дерева рефлексов
+    /// </summary>
+    private bool IsValidReflexTreeFile(string filePath)
+    {
+      if (!File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidReflexTreeFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла дерева рефлексов
+    /// </summary>
+    private bool IsValidReflexTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 7)
+          return false;
+
+        if (!int.TryParse(parts[0], out _))
+          return false;
+
+        return true;
+      }
+
+      return true;
+    }
+
+    /// <summary>
+    /// Загружает дерево рефлексов из файла
+    /// </summary>
+    private void LoadReflexTree()
+    {
+      string filePath = GetReflexTreeFilePath();
+
+      if (!IsValidReflexTreeFile(filePath))
+        return;
+
+      try
+      {
+        _lock.EnterWriteLock();
+        try
+        {
+          CreateNulLevelReflexTree();
+
+          foreach (var line in File.ReadLines(filePath))
+          {
+            var trimmedLine = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+              continue;
+
+            var parts = trimmedLine.Split('|');
+            if (parts.Length < 7)
+              continue;
+
+            if (!int.TryParse(parts[0], out int id) ||
+                !int.TryParse(parts[1], out int parentID) ||
+                !int.TryParse(parts[2], out int baseID) ||
+                !int.TryParse(parts[3], out int styleID) ||
+                !int.TryParse(parts[4], out int actionID) ||
+                !int.TryParse(parts[5], out int geneticReflexID) ||
+                !int.TryParse(parts[6], out int conditionedReflex))
+              continue;
+
+            var parentNode = FindNodeByID(parentID);
+            if (parentNode != null)
+            {
+              CreateNewReflexNode(parentNode, id, baseID, styleID, actionID,
+                  geneticReflexID, conditionedReflex, false);
+            }
+          }
+        }
+        finally
+        {
+          _lock.ExitWriteLock();
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Error loading reflex tree: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Создает нулевой уровень дерева рефлексов
+    /// </summary>
+    private void CreateNulLevelReflexTree()
+    {
+      ReflexTree.ID = 0;
+      WriteReflexTreeFromID(ReflexTree.ID, ReflexTree);
+    }
+
+    /// <summary>
+    /// Создает первые три ветки базовых состояний
+    /// </summary>
+    private void CreateBasicReflexTree()
+    {
+      CreateNewReflexNode(ReflexTree, 0, -1, 0, 0, 0, 0, false);
+      CreateNewReflexNode(ReflexTree, 0, 0, 0, 0, 0, 0, false);
+      CreateNewReflexNode(ReflexTree, 0, 1, 0, 0, 0, 0, false);
+
+      SaveReflexTreeInternal();
+    }
+
+    /// <summary>
+    /// Сохраняет дерево рефлексов в файл
+    /// </summary>
+
+    internal (bool Success, string ErrorMessage) SaveReflexTreeInternal()
+    {
+      try
+      {
+        var lines = new List<string>
+                {
+                  "# ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex",
+                  "# BaseID: -1: Плохо, 0: Норма, 1: Хорошо",
+                  "# StyleID: ID образа стилей поведения",
+                  "# ActionID: ID образа пусковых стимулов"
+                };
+
+        foreach (var child in ReflexTree.Children)
+        {
+          lines.AddRange(GetReflexNodeStrings(child));
+        }
+
+        var lineCount = 4;
+        if (lines.Count == 3)
+          lineCount = 3;
+
+        var result = FileValidator.SafeSaveFile(
+            GetReflexTreeFilePath(),
+            lines,
+            content => IsValidReflexTreeFile(string.Join(Environment.NewLine, content)),
+            minLinesCount: lineCount,
+            fileDescription: "дерева рефлексов");
+
+        return result;
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+    }
+
+    /// <summary>
+    /// Сохраняет дерево рефлексов в файл
+    /// </summary>
+    public (bool Success, string ErrorMessage) SaveReflexTree()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return SaveReflexTreeInternal();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает строки представления узла и его детей
+    /// </summary>
+    private List<string> GetReflexNodeStrings(ReflexNode node)
+    {
+      var lines = new List<string>();
+
+      lines.Add($"{node.ID}|{node.ParentID}|{node.BaseID}|{node.StyleID}|{node.ActionID}|{node.GeneticReflexID}|{node.ConditionedReflex}");
+
+      foreach (var child in node.Children)
+      {
+        lines.AddRange(GetReflexNodeStrings(child));
+      }
+
+      return lines;
+    }
+
+    /// <summary>
+    /// Сохраняет все атрибуты рефлексов
+    /// </summary>
+    public void SaveReflexesAttributes()
+    {
+      SaveReflexTreeInternal();
+    }
+
+    /// <summary>
+    /// Логирование ошибок
+    /// </summary>
+    private static void LogError(string message)
+    {
+      FileValidator.LogError(message);
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Освобождает ресурсы, используемые объектом ReflexTreeSystem
+    /// </summary>
+    public void Dispose()
+    {
+      if (_disposed) return;
+      try
+      {
+        // Отписываемся от событий GeneticReflexesSystem
+        if (_geneticReflexesSystem != null)
+        {
+          _geneticReflexesSystem.GeneticReflexDeleted -= OnGeneticReflexDeleted;
+          _geneticReflexesSystem.GeneticReflexCreated -= OnGeneticReflexCreated;
+          _geneticReflexesSystem.MultipleGeneticReflexesDeleted -= OnMultipleGeneticReflexesDeleted;
+        }
+
+        SaveReflexesAttributes();
+      }
+      catch (Exception ex)
+      {
+        LogError($"Error during disposal: {ex.Message}");
+      }
+      finally
+      {
+        _lock?.Dispose();
+        _disposed = true;
+      }
+    }
+
+    #endregion
+  }
+}

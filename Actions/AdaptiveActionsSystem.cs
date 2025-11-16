@@ -1,0 +1,1313 @@
+﻿using ISIDA.Common;
+using ISIDA.Gomeostas;
+using ISIDA.Sensors;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
+using System.Windows;
+using static ISIDA.Common.FileValidator;
+using static ISIDA.Gomeostas.GomeostasSystem;
+
+namespace ISIDA.Actions
+{
+  /// <summary>
+  /// Система управления адаптивными действиями агента
+  /// </summary>
+  public sealed class AdaptiveActionsSystem : IDisposable
+  {
+    private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    private bool _disposed = false;
+
+    #region Инициализация
+
+    private static AdaptiveActionsSystem _instance;
+
+    /// <summary>
+    /// Глобальный экземпляр системы адаптивных действий. Должен быть инициализирован через InitializeInstance()
+    /// </summary>
+    public static AdaptiveActionsSystem Instance => _instance ?? 
+      throw new InvalidOperationException("AdaptiveActionsSystem не инициализирован. Вызовите InitializeInstance() с путями.");
+
+    /// <summary>
+    /// Флаг инициализации класса
+    /// </summary>
+    public static bool IsInitialized => _instance != null;
+
+    /// <summary>
+    /// Инициализирует глобальный экземпляр системы адаптивных действий с указанными путями к данным и шаблонам, 
+    /// а также ссылкой на систему гомеостаза, на которую действия будут оказывать влияние
+    /// Должен быть вызван один раз при старте приложения, после инициализации GomeostasSystem.
+    /// </summary>
+    /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
+    /// <param name="actionsFolderPath">Путь к папке с данными действий. Если null — используется путь по умолчанию </param>
+    /// <param name="actionsTemplateFolderPath">Путь к папке с шаблонами действий. Если null — используется путь по умолчанию.</param>
+    /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
+    public static void InitializeInstance(
+        GomeostasSystem gomeostas,
+        string actionsFolderPath = null,
+        string actionsTemplateFolderPath = null)
+    {
+      if (_instance != null)
+        throw new InvalidOperationException("AdaptiveActionsSystem уже инициализирован.");
+
+      _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath, actionsTemplateFolderPath);
+    }
+
+    private readonly GomeostasSystem _gomeostas;
+    private AdaptiveActionsSystem(
+        GomeostasSystem gomeostas,
+        string actionsFolderPath = null,
+        string actionsTemplateFolderPath = null)
+    {
+      _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
+
+      // Установка путей
+      _actionsFolderPath = string.IsNullOrWhiteSpace(actionsFolderPath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Actions")
+            : actionsFolderPath;
+
+        _actionsTemplateFolderPath = string.IsNullOrWhiteSpace(actionsTemplateFolderPath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Templates", "Actions")
+            : actionsTemplateFolderPath;
+
+        try
+        {
+          EnsureTemplateDirectory();
+          EnsureDataDirectory();
+          LoadActions();
+        }
+        catch (Exception ex)
+        {
+          LogError($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+          throw;
+        }
+      }
+
+    #endregion
+
+    #region Константы и структуры
+
+    private const string ActionsFileName = "AdaptiveActions";
+    private const string DefaultActionsFileName = "DefaultAdaptiveActions";
+
+    private readonly string _actionsFolderPath;
+    private readonly string _actionsTemplateFolderPath;
+
+    private string GetActionsFilePath() =>
+        Path.Combine(_actionsFolderPath, $"{ActionsFileName}.dat");
+
+    /// <summary>
+    /// Представляет адаптивное действие агента
+    /// </summary>
+    public class AdaptiveAction
+    {
+      /// <summary>
+      /// Вызывает событие PropertyChanged при изменении свойства
+      /// </summary>
+      public event PropertyChangedEventHandler PropertyChanged;
+
+      /// <summary>
+      /// Событие, возникающее при изменении свойств объекта
+      /// </summary>
+      protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+      {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+      }
+
+      /// <summary>
+      /// Источник активации действия
+      /// </summary>
+      public ActionActivationSource ActivationSource { get; set; } = 0;
+
+      /// <summary>
+      /// Время активации действия в пульсах
+      /// </summary>
+      public int ActivationPulse { get; set; } = 0;
+
+      /// <summary>
+      /// Уникальный идентификатор действия
+      /// </summary>
+      public int Id { get; set; }
+
+      /// <summary>
+      /// Наименование действия
+      /// </summary>
+      public string Name { get; set; }
+
+      /// <summary>
+      /// Подробное описание действия
+      /// </summary>
+      public string Description { get; set; }
+
+      private Dictionary<int, int> _costs = new Dictionary<int, int>();
+
+      /// <summary>
+      /// Затраты действия на параметры гомеостаза (например, энергия, время, ресурсы)
+      /// </summary>
+      /// <remarks>
+      /// Ключ - ID параметра, значение - величина ухудшения (знак влияния зависит от типа параметра: дефицит или избыток ориентированный). Диапазон: -10..+10.
+      /// </remarks>
+      public Dictionary<int, int> Costs
+      {
+        get => _costs;
+        set
+        {
+          if (value == null)
+          {
+            _costs = new Dictionary<int, int>();
+            return;
+          }
+
+          foreach (var kvp in value)
+          {
+            var validation = SettingsValidator.ValidateCostsAction(kvp.Value);
+            if (!validation.isValid)
+              throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
+          }
+          _costs = new Dictionary<int, int>(value);
+        }
+      }
+
+      /// <summary>
+      /// Список ID действий-антагонистов, которые несовместимы с данным действием
+      /// </summary>
+      public List<int> AntagonistActions { get; set; } = new List<int>();
+
+      private int _vigor = 5;
+      /// <summary>
+      /// Интенсивность действия — уровень активности, скорости, физической нагрузки.
+      /// Диапазон: 1..10. Используется для модуляции силы реакции через поведенческие стили.
+      /// Не определяет тип действия, только его "масштаб".
+      /// </summary>
+      /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при присвоении значения вне диапазона [1,10]</exception>
+      public int Vigor
+      {
+        get => _vigor;
+        set
+        {
+          var validation = SettingsValidator.ValidateVigorAction(value);
+          if (!validation.isValid)
+            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
+
+          _vigor = value;
+        }
+      }
+
+      /// <summary>
+      /// Время последней активации действия (для расчета времени удержания действия)
+      /// </summary>
+      public DateTime LastActivated { get; set; } = DateTime.MinValue;
+
+      /// <summary>
+      /// Ссылка на систему действий (для доступа к модифицированной интенсивности)
+      /// </summary>
+      internal AdaptiveActionsSystem ActionsSystem { get; set; }
+
+      /// <summary>
+      /// Возвращает значимость действия — суммарную силу влияний по модулю.
+      /// Используется для визуализации (размер шрифта, цвет).
+      /// </summary>
+      /// <returns>Сумма абсолютных значений влияний с учетом интенсивности</returns>
+      public int GetSignificance()
+      {
+        int baseSignificance = Costs.Values.Sum(Math.Abs);
+
+        // Учитываем интенсивность в значимости
+        float vigorRatio = ActionsSystem != null
+            ? (float)ActionsSystem.GetModifiedVigor(Id) / 10f
+            : (float)Vigor / 10f;
+
+        // Логарифмическое масштабирование для лучшего визуального эффекта
+        float logBase = (float)Math.Log10(baseSignificance + 1);
+        float scaledSignificance = logBase * 20f;
+
+        float minMultiplier = 0.3f;
+        float multiplier = minMultiplier + (1 - minMultiplier) * vigorRatio;
+
+        return Math.Max(1, (int)(scaledSignificance * multiplier));
+      }
+    }
+
+    #endregion
+
+    #region Поля и свойства
+
+    /// <summary>
+    /// Тип источника активации действия
+    /// </summary>
+    public enum ActionActivationSource
+    {
+      /// <summary>
+      /// Действие от безусловного рефлекса
+      /// </summary>
+      GeneticReflex = 1,
+
+      /// <summary>
+      /// Действие от условного рефлекса
+      /// </summary>
+      ConditionedReflex = 2
+    }
+
+    private readonly Dictionary<int, AdaptiveAction> _actions = new Dictionary<int, AdaptiveAction>();
+    private readonly List<AdaptiveAction> _activeActions = new List<AdaptiveAction>();
+    private readonly Dictionary<int, int> _activeActionPhrases = new Dictionary<int, int>();
+
+    /// <summary>
+    /// Событие удаления адаптивного действия
+    /// </summary>
+    public event Action<int> AdaptiveActionDeleted;
+
+    private int _defaultAdaptiveActionId = 0;
+    /// <summary>
+    /// ID существующего адаптивного действия по умолчанию
+    /// </summary>
+    /// 
+    public int DefaultAdaptiveActionId
+    {
+      get => _defaultAdaptiveActionId;
+      set
+      {
+        _defaultAdaptiveActionId = value;
+      }
+    }
+    private int _lastActionId = 0;
+
+    // Время удержания рефлекторных действий для визуализации (пульсов)
+    private int _reflexActionDisplayDuration = 2;
+
+    /// <summary>
+    /// Время удержания рефлекторных действий для визуализации
+    /// </summary>
+    public int ReflexActionDisplayDuration
+    {
+      get => _reflexActionDisplayDuration;
+      set
+      {
+        if (value < 0)
+          throw new ArgumentOutOfRangeException(nameof(value), "Время удержания рефлекса не может быть отрицательным");
+
+        if(value >= _gomeostas.DynamicTime)
+          throw new ArgumentOutOfRangeException(nameof(value), "Время удержани рефлекса не может быть меньше или равно времени удержания состояния параметра");
+
+        _reflexActionDisplayDuration = Math.Max(1, value); // минимум 1 секунда
+      }
+    }
+
+    #endregion
+
+    #region Управление действиями
+
+    /// <summary>
+    /// (Internal) Возвращает список активных адаптивных действий.
+    /// </summary>
+    /// <returns>Копия списка активных адаптивных действий</returns>
+    internal List<AdaptiveAction> GetActiveAdaptiveActionsList()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new List<AdaptiveAction>(_activeActions);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает список текущих активных действий
+    /// </summary>
+    /// <returns>ReadOnlyCollection активных действий</returns>
+    public ReadOnlyCollection<AdaptiveAction> GetActiveAdaptiveActions()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new ReadOnlyCollection<AdaptiveAction>(_activeActions.ToList());
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// (Internal) Возвращает список всех адаптивных действий.
+    /// </summary>
+    /// <returns>Копия списка всех адаптивных действий</returns>
+    internal List<AdaptiveAction> GetAllAdaptiveActionsList()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _actions.Values.ToList();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает список всех адаптивных действий
+    /// </summary>
+    /// <returns>ReadOnlyCollection всех действий</returns>
+    public ReadOnlyCollection<AdaptiveAction> GetAllAdaptiveActions()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new ReadOnlyCollection<AdaptiveAction>(_actions.Values.ToList());
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает активные действия по источнику активации
+    /// </summary>
+    public ReadOnlyCollection<AdaptiveAction> GetActiveActionsBySource(ActionActivationSource source)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new ReadOnlyCollection<AdaptiveAction>(
+            _activeActions.Where(a => a.ActivationSource == source).ToList());
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает все активные действия сгруппированные по источнику
+    /// </summary>
+    public Dictionary<ActionActivationSource, List<AdaptiveAction>> GetActiveActionsGroupedBySource()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _activeActions
+            .GroupBy(a => a.ActivationSource)
+            .ToDictionary(g => g.Key, g => g.ToList());
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Добавляет новое адаптивное действие
+    /// </summary>
+    /// <param name="name">Наименование действия</param>
+    /// <param name="description">Описание действия</param>
+    /// <param name="costs">Словарь затрат действия на параметры гомеостаза (ID параметра -> величина ухудшения). Отражает издержки (например, расход энергии, рост стресса).</param>
+    /// <param name="antagonistActions">Список ID антагонистических действий, которые несовместимы с данным действием</param>
+    /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
+    /// <param name="Vigor">Интенсивность действия [1...10], по умолчанию = 5</param>
+    /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях в влияниях или затратах (вне диапазона -10..+10)</exception>
+    public (int ActionId, string[] Warnings) AddAction(
+        string name,
+        string description,
+        Dictionary<int, int> costs = null,
+        List<int> antagonistActions = null,
+        bool strictValidation = false,
+        int Vigor = 5)
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+
+      if (string.IsNullOrWhiteSpace(name))
+        throw new ArgumentException("Наименование действия не может быть пустым", nameof(name));
+
+      // Создаем временный объект для валидации
+      var tempAction = new AdaptiveAction
+      {
+        Id = 0, // Временный ID
+        Name = name,
+        Description = description,
+        Costs = costs ?? new Dictionary<int, int>(),
+        AntagonistActions = antagonistActions ?? new List<int>(),
+        Vigor = Vigor,
+        ActionsSystem = this
+      };
+
+      // Используем единую валидацию через вспомогательный метод
+      if (!ValidateSingleAction(tempAction, out string validationError, out string validationWarnings))
+      {
+        if (strictValidation)
+          throw new InvalidOperationException(validationError);
+
+        var warnings = validationWarnings.Split('\n').Where(s => !string.IsNullOrEmpty(s)).ToArray();
+        return (0, warnings);
+      }
+
+      // Если есть только предупреждения
+      var finalWarnings = validationWarnings.Split('\n').Where(s => !string.IsNullOrEmpty(s)).ToArray();
+
+      // Создаем действие после успешной валидации
+      _lock.EnterWriteLock();
+      try
+      {
+        int newId = ++_lastActionId;
+        var action = new AdaptiveAction
+        {
+          Id = newId,
+          Name = name,
+          Description = description,
+          Vigor = Vigor,
+          Costs = costs?.ToDictionary(kvp => kvp.Key, kvp => ClampInt(kvp.Value, -10, 10)) ?? new Dictionary<int, int>(),
+          AntagonistActions = antagonistActions ?? new List<int>()
+        };
+
+        _actions.Add(newId, action);
+        return (newId, finalWarnings);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Обновляет существующее адаптивное действие
+    /// </summary>
+    /// <param name="action">Обновляемое действие</param>
+    /// <param name="strictValidation">Флаг строгой проверки параметров</param>
+    /// <returns>Предупреждения (если есть)</returns>
+    /// <exception cref="ArgumentNullException">Выбрасывается при null действии</exception>
+    /// <exception cref="KeyNotFoundException">Выбрасывается если действие не найдено</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях</exception>
+    public string[] UpdateAction(AdaptiveAction action, bool strictValidation = false)
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+
+      if (action == null)
+        throw new ArgumentNullException(nameof(action));
+
+      var warnings = new List<string>();
+
+      foreach (var cost in action.Costs)
+      {
+        try
+        {
+          var parameter = _gomeostas.GetParameter(cost.Key);
+          if (parameter == null)
+          {
+            warnings.Add($"Не удалалось найти параметр с ID: {cost.Key}");
+            break;
+          }
+          bool isValidCost = (parameter.Speed < 0 && cost.Value < 0) ||
+                           (parameter.Speed > 0 && cost.Value > 0);
+
+          if (!isValidCost)
+          {
+            string paramType = parameter.Speed < 0 ? "дефицит-ориентированный" : "избыток-ориентированный";
+            string expectedSign = parameter.Speed < 0 ? "отрицательным" : "положительным";
+            string message = $"Затраты на {paramType} параметр '{parameter.Name}' должны быть {expectedSign} (текущие: {cost.Value})";
+
+            if (strictValidation)
+              throw new ArgumentOutOfRangeException(nameof(action.Costs), cost.Value, message);
+            warnings.Add(message);
+          }
+        }
+        catch (Exception ex)
+        {
+          string message = $"Не удалось проверить параметр {cost.Key}: {ex.Message}";
+          if (strictValidation)
+            throw new InvalidOperationException(message, ex);
+          warnings.Add(message);
+        }
+      }
+
+      // Проверка что действие не блокирует само себя в антагонистах
+      if (action.AntagonistActions?.Contains(action.Id) == true)
+      {
+        string selfAntagonistMessage = $"Действие '{action.Name}' (ID: {action.Id}) не может блокировать само себя в списке антагонистов";
+        if (strictValidation)
+          throw new InvalidOperationException(selfAntagonistMessage);
+        warnings.Add(selfAntagonistMessage);
+
+        // Удаляем само действие из списка антагонистов
+        action.AntagonistActions.Remove(action.Id);
+      }
+
+      // Проверка затрат
+      foreach (var cost in action.Costs)
+      {
+        if (cost.Value < -10 || cost.Value > 10)
+        {
+          string message = $"Затрата на параметр {cost.Key} скорректирована с {cost.Value} до " +
+                          $"{ClampInt(cost.Value, -10, 10)} " +
+                          "(допустимый диапазон: -10..+10)";
+          if (strictValidation)
+            throw new ArgumentOutOfRangeException(nameof(action.Costs), cost.Value, message);
+          warnings.Add(message);
+          action.Costs[cost.Key] = ClampInt(cost.Value, -10, 10);
+        }
+      }
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_actions.ContainsKey(action.Id))
+          throw new KeyNotFoundException($"Действие с ID {action.Id} не найдено");
+
+        _actions[action.Id] = action;
+        return warnings.ToArray();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Удаляет адаптивное действие по указанному ID
+    /// </summary>
+    /// <param name="actionId">ID удаляемого действия</param>
+    /// <returns>True, если действие было успешно удалено, иначе False</returns>
+    public bool RemoveAction(int actionId)
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+
+      if (!_actions.ContainsKey(actionId))
+        throw new InvalidOperationException($"Адаптивное действие c ID: {actionId} не найдено.");
+
+      if (actionId == _defaultAdaptiveActionId)
+        throw new InvalidOperationException($"Адаптивное действие {_actions[actionId].Name} задано действием по умолчанию и запрещёно для удаления.");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        // Удаляем действие из коллекции
+        bool removed = _actions.Remove(actionId);
+
+        // Удаляем из активных действий
+        _activeActions.RemoveAll(a => a.Id == actionId);
+        _activeActionPhrases.Remove(actionId);
+
+        // Удаляем ссылки на это действие как антагониста в других действиях
+        foreach (var action in _actions.Values)
+        {
+          if (action.AntagonistActions.Contains(actionId))
+          {
+            action.AntagonistActions.Remove(actionId);
+          }
+        }
+
+        // очистка ссылок на это действие как модулируемое из стилей реагирования
+        var allBehaviorStyles = _gomeostas.GetAllBehaviorStyles();
+        foreach (var style in allBehaviorStyles.Values)
+        {
+          if (style.StileActionInfluence.ContainsKey(actionId))
+          {
+            style.StileActionInfluence.Remove(actionId);
+          }
+        }
+
+        // Вызываем событие удаления действия
+        AdaptiveActionDeleted?.Invoke(actionId);
+
+        return removed;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Принудительная очистка активных действий
+    /// </summary>
+    internal void ClearActiveAction()
+    {
+      try
+      {
+        _activeActions.Clear();
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"Не удалось очистиь активные акции: {ex.Message}");
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Принудительная очистка активных слов
+    /// </summary>
+    internal void ClearActivePhrases()
+    {
+      try
+      {
+        _activeActionPhrases.Clear();
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"Не удалось очистиь активные слова: {ex.Message}");
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Очищает рефлекторные действия, которые отображались дольше заданного времени
+    /// </summary>
+    internal void CleanupExpiredReflexActions()
+    {
+      var now = DateTime.UtcNow;
+      var reflexActionsToRemove = _activeActions
+          .Where(a => a.ActivationPulse > 0)
+          .Where(a => (GlobalTimer.GlobalPulsCount - a.ActivationPulse) >= ReflexActionDisplayDuration)
+          .ToList();
+
+      foreach (var action in reflexActionsToRemove)
+      {
+        _activeActions.Remove(action);
+        _activeActionPhrases.Remove(action.Id);
+        action.ActivationSource = 0;
+        action.LastActivated = DateTime.MinValue;
+      }
+    }
+
+    /// <summary>
+    /// Применяет указанное действие
+    /// </summary>
+    /// <param name="actionId">ID применяемого действия</param>
+    /// <param name="phraseId">ID фразы, по умолчанию 0</param>
+    /// <returns>True, если действие было успешно применено</returns>
+    /// <exception cref="KeyNotFoundException">Выбрасывается если действие не найдено</exception>
+    public bool ApplyAction(int actionId, int phraseId = 0)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_actions.TryGetValue(actionId, out var action))
+          throw new KeyNotFoundException($"Действие с ID {actionId} не найдено");
+
+        // Получаем модифицированную интенсивность с учетом стилей
+        int modifiedVigor = GetModifiedVigor(actionId);
+
+        // Сила действия определяется базовой интенсивностью + модификация от стилей
+        int currentActionPower = modifiedVigor;
+
+        foreach (var activeAction in _activeActions.ToList())
+        {
+          if (action.AntagonistActions.Contains(activeAction.Id) ||
+              activeAction.AntagonistActions.Contains(action.Id))
+          {
+            // Для антагониста также получаем модифицированную интенсивность
+            int activeActionModifiedVigor = GetModifiedVigor(activeAction.Id);
+            int activeActionPower = activeActionModifiedVigor;
+
+            // Если текущее действие сильнее - удаляем антагониста
+            if (currentActionPower > activeActionPower)
+            {
+              _activeActions.Remove(activeAction);
+              _activeActionPhrases.Remove(activeAction.Id);
+            }
+            else
+            {
+              // Если антагонист сильнее или равен - блокируем применение
+              return false;
+            }
+          }
+        }
+
+        // Применяем ЗАТРАТЫ действия (без изменений, стили не влияют на затраты)
+        foreach (var cost in action.Costs)
+        {
+          try
+          {
+            var param = _gomeostas.GetParameter(cost.Key);
+            if (param != null)
+            {
+              float newValue = param.Value + cost.Value;
+              param.Value = ClampFloat(newValue, 0, 100);
+            }
+          }
+          catch (Exception ex)
+          {
+            Debug.WriteLine($"Action {actionId}, Cost {cost.Key}: {ex.Message}");
+            throw;
+          }
+        }
+
+        // Добавляем в активные действия для визуализации
+        if (!_activeActions.Any(a => a.Id == actionId))
+        {
+          _activeActions.Add(action);
+          _activeActionPhrases[actionId] = phraseId;
+          action.ActivationPulse = GlobalTimer.GlobalPulsCount;
+        }
+
+        return true;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Получить ID слова по ID действия
+    /// </summary>
+    public int GetPhraseIdForAction(int actionId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _activeActionPhrases.TryGetValue(actionId, out int phraseId) ? phraseId : 0;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает интенсивность действия с учетом модуляции от активных стилей
+    /// </summary>
+    /// <param name="actionId">ID действия</param>
+    /// <returns>Модифицированная интенсивность (1..10)</returns>
+    public int GetModifiedVigor(int actionId)
+    {
+      try
+      {
+        if (!_actions.TryGetValue(actionId, out var action))
+          return 5; // Значение по умолчанию
+
+        int baseVigor = action.Vigor;
+
+        // Рассчитываем модуляцию от стилей
+        int styleModulation = CalculateStyleModulation(actionId);
+
+        // Применяем модуляцию к интенсивности
+        int modifiedVigor = ClampInt(baseVigor + styleModulation, 1, 10);
+
+        return modifiedVigor;
+      }
+      catch
+      {
+        return 5;
+      }
+    }
+
+    /// <summary>
+    /// Получает информацию об интенсивности действия с учетом стилей
+    /// </summary>
+    /// <param name="actionId">ID действия</param>
+    /// <returns>Кортеж (базовая интенсивность, модификация от стилей, итоговая интенсивность)</returns>
+    public (int BaseVigor, int StyleModulation, int FinalVigor) GetActionVigorInfo(int actionId)
+    {
+      if (!_actions.TryGetValue(actionId, out var action))
+        return (5, 0, 5);
+
+      int baseVigor = action.Vigor;
+      int styleModulation = CalculateStyleModulation(actionId);
+      int finalVigor = ClampInt(baseVigor + styleModulation, 1, 10);
+
+      return (baseVigor, styleModulation, finalVigor);
+    }
+
+    /// <summary>
+    /// Вычисляет суммарную модуляцию действия от активных стилей поведения
+    /// </summary>
+    /// <param name="actionId">ID действия</param>
+    /// <returns>Суммарная модуляция интенсивности (-5..+5)</returns>
+    private int CalculateStyleModulation(int actionId)
+    {
+      try
+      {
+        var activeStyles = _gomeostas.GetActiveStyles();
+        if (!activeStyles.Any())
+          return 0;
+
+        int totalModulation = 0;
+
+        foreach (var style in activeStyles)
+        {
+          if (style?.StileActionInfluence != null &&
+              style.StileActionInfluence.TryGetValue(actionId, out int modulation))
+          {
+            totalModulation += modulation;
+          }
+        }
+
+        // Ограничиваем суммарную модуляцию диапазоном -5..+5
+        return ClampInt(totalModulation, -5, 5);
+      }
+      catch
+      {
+        return 0;
+      }
+    }
+
+    #endregion
+
+    #region Работа с файлами
+
+    /// <summary>
+    /// Создает директорию для шаблонов, если ее нет
+    /// </summary>
+    private void EnsureTemplateDirectory()
+    {
+      if (!Directory.Exists(_actionsTemplateFolderPath))
+      {
+        Directory.CreateDirectory(_actionsTemplateFolderPath);
+      }
+    }
+
+    /// <summary>
+    /// Создает каталог параметров действий, если его нет
+    /// </summary>
+    private void EnsureDataDirectory()
+    {
+      if (!Directory.Exists(_actionsFolderPath))
+      {
+        Directory.CreateDirectory(_actionsFolderPath);
+      }
+    }
+
+    /// <summary>
+    /// Загружает действия из файла
+    /// </summary>
+    private void LoadActions()
+    {
+      var path = GetActionsFilePath();
+
+      try
+      {
+        if (IsValidActionsFile(path))
+        {
+          _actions.Clear();
+          _activeActions.Clear();
+          _lastActionId = 0;
+
+          foreach (var line in File.ReadLines(path))
+          {
+            var trimmedLine = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+              continue;
+
+            var parts = trimmedLine.Split('|');
+
+            if (parts.Length < 3) // Минимум: ID|Name|Description
+              continue;
+
+            if (!int.TryParse(parts[0], out int id))
+              continue;
+
+            // Парсим интенсивность (по умолчанию 5)
+            int vigor = 5;
+            if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+            {
+              int.TryParse(parts[3].Trim(), out vigor);
+              vigor = ClampInt(vigor, 1, 10);
+            }
+
+            // Парсим затраты (часть 4)
+            Dictionary<int, int> costs = new Dictionary<int, int>();
+            if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
+            {
+              costs = ParseCosts(parts[4]);
+            }
+
+            var action = new AdaptiveAction
+            {
+              Id = id,
+              Name = parts[1].Trim(),
+              Description = parts[2].Trim(),
+              Vigor = vigor,
+              Costs = costs,
+              ActionsSystem = this
+            };
+
+            // Антагонисты (часть 5)
+            if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
+            {
+              action.AntagonistActions = parts[5]
+                  .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                  .Where(s => !string.IsNullOrWhiteSpace(s))
+                  .Select(s =>
+                  {
+                    if (int.TryParse(s.Trim(), out int aid)) return aid;
+                    return 0;
+                  })
+                  .Where(aid => aid != 0)
+                  .ToList();
+            }
+
+            _actions[action.Id] = action;
+            if (action.Id > _lastActionId)
+              _lastActionId = action.Id;
+          }
+        }
+        else
+        {
+          InitializeDefaultActions();
+          SaveActions();
+        }
+      }
+      catch
+      {
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Инициализирует действия по умолчанию
+    /// </summary>
+    private void InitializeDefaultActions()
+    {
+      var templatePath = Path.Combine(_actionsTemplateFolderPath, $"{DefaultActionsFileName}.tmp");
+
+      if (!File.Exists(templatePath))
+      {
+        const string errorMsg = "Не найден обязательный файл шаблона действий по умолчанию: " +
+                               "{0}. Создайте файл с примером конфигурации вручную.";
+        var formattedMsg = string.Format(errorMsg, templatePath);
+        throw new FileNotFoundException(formattedMsg, templatePath);
+      }
+
+      try
+      {
+        _actions.Clear();
+        _activeActions.Clear();
+        _lastActionId = 0;
+
+        foreach (var line in File.ReadLines(templatePath))
+        {
+          var trimmedLine = line.Trim();
+          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+            continue;
+
+          var parts = trimmedLine.Split('|');
+          if (!int.TryParse(parts[0], out int id))
+            continue;
+
+          if (parts.Length < 3)
+            continue;
+
+          // Парсим интенсивность
+          int vigor = 5;
+          if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+          {
+            int.TryParse(parts[3].Trim(), out vigor);
+            vigor = ClampInt(vigor, 1, 10);
+          }
+
+          // Парсим затраты
+          Dictionary<int, int> costs = new Dictionary<int, int>();
+          if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
+          {
+            costs = ParseCosts(parts[4]);
+          }
+
+          var action = new AdaptiveAction
+          {
+            Id = id,
+            Name = parts[1].Trim(),
+            Description = parts[2].Trim(),
+            Vigor = vigor,
+            Costs = costs,
+            ActionsSystem = this
+          };
+
+          // Антагонисты
+          if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
+          {
+            action.AntagonistActions = parts[5]
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s =>
+                {
+                  if (int.TryParse(s.Trim(), out int aid))
+                    return aid;
+                  return 0;
+                })
+                .Where(aid => aid != 0)
+                .ToList();
+          }
+
+          _actions.Add(action.Id, action);
+          if (action.Id > _lastActionId)
+            _lastActionId = action.Id;
+        }
+      }
+      catch (Exception ex)
+      {
+        throw new InvalidOperationException($"Не удалось загрузить действия из шаблона: {templatePath}", ex);
+      }
+    }
+
+    /// <summary>
+    /// Сохраняет все действия в файл
+    /// </summary>
+    public (bool Success, string ErrorMessage) SaveActions(bool IsValidate = true)
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (IsValidate)
+        {
+          var (isValid, errors, warnings) = ValidateAction(_actions.Values);
+          if (!isValid)
+            return (false, errors);
+
+          if (!string.IsNullOrEmpty(warnings))
+          {
+            var resultMsg = MessageBox.Show(
+                $"{warnings}\n\nПродолжить сохранение?",
+                "Предупреждения",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (resultMsg == MessageBoxResult.No)
+              return (false, warnings);
+          }
+        }
+
+        EnsureDataDirectory();
+
+        var lines = new List<string>
+        {
+            FileHeaders.ActionsFormat,
+            FileHeaders.ActionsCost,
+            FileHeaders.ActionsAntagonists
+        };
+
+        foreach (var action in _actions.Values.OrderBy(a => a.Id))
+        {
+          lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
+                   $"{action.Vigor}|" +
+                   $"{CostsToString(action.Costs)}|" +
+                   $"{string.Join(",", action.AntagonistActions)}");
+        }
+
+        var linCount = 5;
+        if (lines.Count == 4)
+          linCount = 4; // для случая очистки всего кроме шапки
+
+        var result = SafeSaveFile(
+            GetActionsFilePath(),
+            lines,
+            content => IsValidActionsFile(string.Join(Environment.NewLine, content)),
+            minLinesCount: linCount,
+            fileDescription: "адаптивных действий");
+
+        return result;
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Валидация адаптивных действий
+    /// </summary>
+    /// <param name="adaptiveActions">Список адаптивных действий</param>
+    /// <param name="isForDeletion">При установке True валидация удаления, по умолчанию False - валидация обновления</param>
+    /// <returns>True если валидация успешна, иначе False</returns>
+    public (bool IsValid, string Errors, string Warnings) ValidateAction(IEnumerable<AdaptiveAction> adaptiveActions, bool isForDeletion = false)
+    {
+      var errorMessage = string.Empty;
+      var existingIds = adaptiveActions.Select(p => p.Id).ToHashSet();
+      var allErrors = new List<string>();
+      var allWarnings = new List<string>();
+
+      foreach (var action in adaptiveActions)
+      {
+        if (isForDeletion)
+        {
+          if (!existingIds.Contains(action.Id))
+          {
+            errorMessage = $"Адаптивное действие c ID: {action.Id} не найдено";
+            return (false, errorMessage, "");
+          }
+
+          if (action.Id == _defaultAdaptiveActionId)
+          {
+            errorMessage = $"Адаптивное действие {_actions[action.Id].Name} задано действием по умолчанию и запрещёно для удаления";
+            return (false, errorMessage, "");
+          }
+        }
+        else
+        {
+          // Валидация отдельного действия
+          if (!ValidateSingleAction(action, out string singleError, out string singleWarnings))
+            allErrors.Add($"Действие '{action.Name}' (ID: {action.Id}): {singleError}");
+
+          if (!string.IsNullOrEmpty(singleWarnings))
+            allWarnings.Add($"Действие '{action.Name}' (ID: {action.Id}): {singleWarnings}");
+        }
+      }
+
+      string errorText = allErrors.Any() ? string.Join("\n\n", allErrors) : "";
+      string warningText = allWarnings.Any() ? string.Join("\n", allWarnings) : "";
+
+      return (!allErrors.Any(), errorText, warningText);
+    }
+
+    private bool ValidateSingleAction(AdaptiveAction action, out string errorMessage, out string warnings)
+    {
+      errorMessage = string.Empty;
+      warnings = string.Empty;
+      var errors = new List<string>();
+      var warningList = new List<string>();
+      bool isValidRequiresExternalResources = false;
+
+      // Проверка самоантагонистов
+      if (action.AntagonistActions?.Contains(action.Id) == true)
+        errors.Add("Действие блокирует само себя в списке антагонистов");
+
+      // Проверка знаков затрат
+      foreach (var cost in action.Costs)
+      {
+        try
+        {
+          var parameter = _gomeostas.GetParameter(cost.Key);
+          if(parameter == null)
+          {
+            errors.Add($"Не удалалось найти параметр с ID: {cost.Key}");
+            break;
+          }
+
+          bool isValidCost = (parameter.Speed < 0 && cost.Value < 0) ||
+                           (parameter.Speed > 0 && cost.Value > 0);
+
+          if (!isValidCost)
+          {
+            string paramType = parameter.Speed < 0 ? "дефицит-ориентированный" : "избыток-ориентированный";
+            string expectedSign = parameter.Speed < 0 ? "отрицательным" : "положительным";
+            errors.Add($"Затраты на {paramType} параметр '{parameter.Name}' должны быть {expectedSign} (текущие: {cost.Value})");
+          }
+        }
+        catch (Exception ex)
+        {
+          errors.Add($"Не удалось проверить параметр {cost.Key}: {ex.Message}");
+        }
+      }
+
+      // Проверка диапазонов затрат
+      foreach (var cost in action.Costs)
+      {
+        var parameter = _gomeostas.GetParameter(cost.Key);
+        if (parameter == null)
+        {
+          errors.Add($"Не удалалось найти параметр с ID: {cost.Key}");
+          break;
+        }
+        if (cost.Value < -10 || cost.Value > 10)
+          errors.Add($"Затрата на параметр '{parameter.Name}' вне допустимых пределов: {cost.Value} (допустимый диапазон: -10..+10)");
+      }
+
+      // зависимые параметры не проверяем
+      if (!isValidRequiresExternalResources)
+      {
+        // Проверка Vigor
+        if (action.Vigor < 1 || action.Vigor > 10)
+          errors.Add($"Интенсивность действия вне допустимых пределов: {action.Vigor} (допустимый диапазон: 1..10)");
+      }
+
+      // Проверка циклических зависимостей (только для обновления)
+      var parameters = _gomeostas.GetAllParameters();
+      if (!ValidationService.CheckActionCycles(new[] { action }, parameters, out string cycleError))
+        errors.Add(cycleError);
+
+      if (errors.Any())
+      {
+        errorMessage = string.Join("\n", errors);
+        if (warningList.Any())
+          warnings = string.Join("\n", warningList);
+
+        return false;
+      }
+
+      if (warningList.Any())
+        warnings = string.Join("\n", warningList);
+
+      return true;
+    }
+
+    /// <summary>
+    /// Парсит строку затрат в словарь
+    /// </summary>
+    private Dictionary<int, int> ParseCosts(string costsStr)
+    {
+      var costs = new Dictionary<int, int>();
+      if (string.IsNullOrWhiteSpace(costsStr)) return costs;
+
+      var pairs = costsStr.Split(';');
+      foreach (var pair in pairs)
+      {
+        var kv = pair.Split(':');
+        if (kv.Length == 2 &&
+            int.TryParse(kv[0], out int paramId) &&
+            int.TryParse(kv[1], out int cost))
+        {
+          costs[paramId] = ClampInt(cost, -10, 10);
+        }
+      }
+      return costs;
+    }
+
+    /// <summary>
+    /// Преобразует словарь затрат в строку
+    /// </summary>
+    private string CostsToString(Dictionary<int, int> costs)
+    {
+      return string.Join(";", costs.Select(kv => $"{kv.Key}:{kv.Value}"));
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Освобождает ресурсы, используемые объектом AdaptiveActionsSystem
+    /// </summary>
+    public void Dispose()
+    {
+      if (_disposed) return;
+      try
+      {
+        SaveActions();
+      }
+      catch (Exception ex)
+      {
+        LogError($"Error during disposal: {ex.Message}");
+      }
+      finally
+      {
+        _lock?.Dispose();
+        _disposed = true;
+      }
+    }
+
+    #endregion
+  }
+
+}
