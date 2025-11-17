@@ -453,41 +453,168 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Контрастирование стилей - отбор по весу с учетом веса параметра
+    /// Данные стиля с динамическим весом для логирования
     /// </summary>
-    public List<BehaviorStyle> ApplySimpleStyleContrasting(
-        List<BehaviorStyle> activeStyles,
+    public class StyleWithDynamicWeight
+    {
+      /// <summary>
+      /// Стиль
+      /// </summary>
+      public BehaviorStyle Style { get; set; }
+
+      /// <summary>
+      /// Рассчитанный вес с учетом зон
+      /// </summary>
+      public float DynamicWeight { get; set; }
+
+      /// <summary>
+      /// Базовый вес для обратной совместимости
+      /// </summary>
+      public float BaseWeight => Style.Weight;
+    }
+
+    /// <summary>
+    /// Контрастирование стилей с учетом зон параметров (все этапы)
+    /// </summary>
+    public (List<StyleWithDynamicWeight> resultStyles,
+            List<StyleWithDynamicWeight> afterAntagonists,
+            List<StyleWithDynamicWeight> baseStyles,
+            List<ResearchLogger.StyleActivationLog> activations)
+        ApplyEnhancedStyleContrasting(
+        List<BehaviorStyle> baseStyles,
         List<ParameterData> parameters)
     {
-      if (activeStyles.Count <= 3)
-        return activeStyles;
+      var activations = new List<ResearchLogger.StyleActivationLog>();
 
+      // Этап 1: Расчет весов стилей с учетом зон параметров
+      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations);
+
+      // Создаем список базовых стилей с динамическими весами
+      var baseStylesWithWeights = baseStyles.Select(style => new StyleWithDynamicWeight
+      {
+        Style = style,
+        DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
+      }).ToList();
+
+      // Этап 2: Применение антагонизмов с обновленными весами
+      var afterAntagonism = ApplyAntagonismWithWeightedStyles(baseStyles, styleScores, activations);
+
+      var afterAntagonistsWithWeights = afterAntagonism.Select(style => new StyleWithDynamicWeight
+      {
+        Style = style,
+        DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
+      }).ToList();
+
+      // Этап 3: Финальный отбор топ-3 стилей
+      var finalStyles = afterAntagonism
+          .OrderByDescending(s => styleScores[s.Id])
+          .Take(3)
+          .Select(style => new StyleWithDynamicWeight
+          {
+            Style = style,
+            DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
+          })
+          .ToList();
+
+      return (finalStyles, afterAntagonistsWithWeights, baseStylesWithWeights, activations);
+    }
+
+    /// <summary>
+    /// Расчет весов стилей с учетом зон параметров
+    /// </summary>
+    private Dictionary<int, float> CalculateStyleScoresWithZones(
+        List<BehaviorStyle> activeStyles,
+        List<ParameterData> parameters,
+        List<ResearchLogger.StyleActivationLog> activations)
+    {
       var styleScores = new Dictionary<int, float>();
+      var zoneCoefficients = new Dictionary<int, float>
+    {
+        { 2, 0.1f },  // Норма
+        { 3, 0.3f },  // Слабое отклонение
+        { 4, 0.6f },  // Умеренное отклонение  
+        { 5, 0.8f },  // Значительное отклонение
+        { 6, 1.0f }   // Сильное отклонение
+    };
 
       foreach (var style in activeStyles)
       {
-        float totalScore = style.Weight;
+        // Базовый вес стиля (нормализованный к [0,1])
+        float totalScore = style.Weight / 100f;
 
+        // Добавляем вклад от параметров, активирующих этот стиль
         foreach (var param in parameters)
         {
+          // Определяем зону параметра
+          var state = CalculateParameterState(param, 50, 0.5f);
+          var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
+
+          // Проверяем, активирует ли параметр этот стиль
+          bool isActivated = false;
           foreach (var activation in param.StyleActivations.Values)
           {
-            if (activation.Contains(style.Id) || activation.Contains(-style.Id))
+            if (activation.Contains(style.Id))
             {
-              // Учитываем вес параметра в оценке стиля
-              totalScore += param.Weight * 0.1f; // Коэффициент влияния веса параметра
+              isActivated = true;
               break;
             }
+          }
+
+          if (isActivated && zoneCoefficients.ContainsKey(zone))
+          {
+            // Вклад параметра = вес параметра × коэффициент зоны
+            float paramWeight = param.Weight / 100f;
+            float zoneCoefficient = zoneCoefficients[zone];
+            float paramContribution = paramWeight * zoneCoefficient;
+            totalScore += paramContribution;
           }
         }
 
         styleScores[style.Id] = totalScore;
       }
 
-      return activeStyles
-          .OrderByDescending(s => styleScores[s.Id])
-          .Take(3)
-          .ToList();
+      return styleScores;
+    }
+
+    /// <summary>
+    /// Применение антагонизмов с учетом взвешенных стилей
+    /// </summary>
+    private List<BehaviorStyle> ApplyAntagonismWithWeightedStyles(
+        List<BehaviorStyle> activeStyles,
+        Dictionary<int, float> styleScores,
+        List<ResearchLogger.StyleActivationLog> activations)
+    {
+      var remainingStyles = new List<BehaviorStyle>(activeStyles);
+      var stylesToRemove = new HashSet<int>();
+
+      foreach (var style in activeStyles)
+      {
+        if (stylesToRemove.Contains(style.Id)) continue;
+
+        foreach (int antagonistId in style.AntagonistStyles)
+        {
+          var antagonist = activeStyles.FirstOrDefault(s => s.Id == antagonistId);
+          if (antagonist != null && !stylesToRemove.Contains(antagonistId))
+          {
+            // Сравниваем взвешенные оценки вместо базовых весов
+            float styleScore = styleScores[style.Id];
+            float antagonistScore = styleScores[antagonistId];
+
+            if (styleScore > antagonistScore)
+              stylesToRemove.Add(antagonistId);
+            else if (styleScore < antagonistScore)
+            {
+              stylesToRemove.Add(style.Id);
+              break; // Выходим из цикла, так как текущий стиль удален
+            }
+            else
+              // При равных весах удаляем антагониста
+              stylesToRemove.Add(antagonistId);
+          }
+        }
+      }
+
+      return remainingStyles.Where(s => !stylesToRemove.Contains(s.Id)).ToList();
     }
 
     /// <summary>

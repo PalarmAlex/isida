@@ -2119,29 +2119,22 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Обновляет активные стили поведения на основе текущего состояния параметров
     /// </summary>
-    public void UpdateActiveStyles()
+    private void UpdateActiveStyles()
     {
       var (baseStyles, allStiles) = GetBaseActiveStyles();
-      var activations = new List<ResearchLogger.StyleActivationLog>();
-      var allActiveStyles = new Dictionary<int, BehaviorStyle>();
 
-      foreach (var style in baseStyles)
-      {
-        allActiveStyles[style.Id] = style;     
-      }
+      var (filteredStylesWithWeights, afterAntagonistsWithWeights, baseStylesWithWeights, activations) =
+          _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters);
 
-      ApplyAntagonisms(allActiveStyles);
-      var afterAntagonists = new List<BehaviorStyle>(allActiveStyles.Values);
-
-      var filteredStyles = _calculator.ApplySimpleStyleContrasting(
-          allActiveStyles.Values.ToList(),
-          _agentState.Parameters);
+      // Преобразуем обратно в обычные стили для ActiveStyles
+      var filteredStyles = filteredStylesWithWeights.Select(sw => sw.Style).ToList();
 
       if (filteredStyles == null || filteredStyles.Count == 0)
       {
         if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var stuporStyle))
           filteredStyles = new List<BehaviorStyle> { stuporStyle };
       }
+
       Array.Clear(ActiveStyles, 0, ActiveStyles.Length);
       int i = 0;
       foreach (var style in filteredStyles)
@@ -2150,7 +2143,29 @@ namespace ISIDA.Gomeostas
         ActiveStyles[i++] = style;
       }
 
-      _researchLogger?.LogStylesActivationProcess(PulseCount, baseStyles, afterAntagonists, filteredStyles, activations);
+      var baseStylesForLogs = baseStyles.Select(style => new BehaviorStyle
+      {
+        Id = style.Id,
+        Name = style.Name,
+        Weight = _agentState.BehaviorStyles[style.Id].Weight,
+        Description = style.Description
+      }).ToList();
+
+      var afterAntagonistsForLogs = afterAntagonistsWithWeights.Select(sw => new BehaviorStyle
+      {
+        Id = sw.Style.Id,
+        Name = sw.Style.Name,
+        Weight = (int)Math.Round(sw.DynamicWeight)
+      }).ToList();
+
+      var filteredStylesForLogs = filteredStylesWithWeights.Select(sw => new BehaviorStyle
+      {
+        Id = sw.Style.Id,
+        Name = sw.Style.Name,
+        Weight = (int)Math.Round(sw.DynamicWeight)
+      }).ToList();
+
+      _researchLogger?.LogStylesActivationProcess(PulseCount, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations);
       CreateBehaviorStyleImageFromActiveStyles();
     }
 
@@ -2240,38 +2255,6 @@ namespace ISIDA.Gomeostas
       }
 
       return (activeStyles, allStiles);
-    }
-
-    private void ApplyAntagonisms(Dictionary<int, BehaviorStyle> activeStyles)
-    {
-      var stylesToRemove = new HashSet<int>();
-
-      foreach (var style in activeStyles.Values)
-      {
-        foreach (int antagonistId in style.AntagonistStyles)
-        {
-          if (activeStyles.ContainsKey(antagonistId))
-          {
-            var antagonist = activeStyles[antagonistId];
-
-            if (style.Weight > antagonist.Weight)
-              stylesToRemove.Add(antagonistId);
-            else if (style.Weight < antagonist.Weight)
-              stylesToRemove.Add(style.Id);
-            else
-            {
-              // При равных весах удаляем антагониста
-              stylesToRemove.Add(antagonistId);
-            }
-          }
-        }
-      }
-
-      // Удаляем проигравшие в конфликтах стили
-      foreach (int id in stylesToRemove)
-      {
-        activeStyles.Remove(id);
-      }
     }
 
     private List<int> GetActivationRule(int paramId, int stateId)
