@@ -153,7 +153,6 @@ namespace ISIDA.Common
       public int Id { get; set; }
       public string Name { get; set; }
       public int Weight { get; set; }
-      public float Activity { get; set; }
     }
 
     /// <summary>
@@ -445,22 +444,19 @@ namespace ISIDA.Common
               {
                 Id = s.Id,
                 Name = s.Name,
-                Weight = s.Weight,
-                Activity = s.Weight
+                Weight = s.Weight
               }).ToList(),
               AfterAntagonists = afterAntagonists.Select(s => new StyleLogData
               {
                 Id = s.Id,
                 Name = s.Name,
-                Weight = s.Weight,
-                Activity = s.Weight
+                Weight = s.Weight
               }).ToList(),
               AfterInhibition = afterInhibition.Select(s => new StyleLogData
               {
                 Id = s.Id,
                 Name = s.Name,
-                Weight = s.Weight,
-                Activity = s.Weight
+                Weight = s.Weight
               }).ToList(),
               Activations = activations
             };
@@ -850,8 +846,7 @@ namespace ISIDA.Common
           stage,
           style.Id,
           style.Name,
-          style.Weight,
-          style.Activity
+          style.Weight
       );
 
       var logEntry = new Dictionary<string, object>
@@ -861,8 +856,7 @@ namespace ISIDA.Common
         ["Stage"] = stage,
         ["StyleId"] = style.Id.ToString(),
         ["StyleName"] = style.Name,
-        ["Weight"] = style.Weight.ToString(),
-        ["Activity"] = style.Activity.ToString("F2")
+        ["Weight"] = style.Weight.ToString()
       };
 
       // Записываем в JSONL (если выбран формат)

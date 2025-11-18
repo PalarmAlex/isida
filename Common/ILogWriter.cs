@@ -25,6 +25,6 @@ namespace ISIDA.Common
     /// Записывает лог стилей поведения
     /// </summary>
     void WriteStyleLog(int pulse, string stage, int styleId, string styleName,
-                      int weight, float activity);
+                      int weight);
   }
 }

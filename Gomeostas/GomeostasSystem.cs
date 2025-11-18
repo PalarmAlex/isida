@@ -277,6 +277,7 @@ namespace ISIDA.Gomeostas
     {
       errorMessage = string.Empty;
       var existingIds = styles.Select(p => p.Id).ToHashSet();
+      var styleList = styles.ToList();
 
       foreach (var style in styles)
       {
@@ -346,8 +347,89 @@ namespace ISIDA.Gomeostas
           }
         }
       }
-      // АНТАГОНИСТОВ НЕЛЬЗЯ ПРОВЕРЯТЬ НА КОНФЛИКТЫ МЕЖДУ СОБОЙ!!!! ОНИ ВЕДЬ ПРОСТО ГАСЯТСЯ
+
+      // Проверка антагонистических пар (только если не удаление)
+      if (!isForDeletion)
+      {
+        var unpairedStyles = FindUnpairedStylesForValidation(styleList);
+        if (unpairedStyles.Any())
+        {
+          var unpairedList = string.Join(", ", unpairedStyles.Select(s => $"{s.Name} (ID:{s.Id})"));
+          errorMessage = $"AsymmetricStyles: Обнаружены несимметричные антагонистические связи:\n{unpairedList}\n\n";
+          return false;
+        }
+      }
+
       return true;
+    }
+
+    // Поиск стилей с беспарными антагонистами
+    private List<BehaviorStyle> FindUnpairedStylesForValidation(List<BehaviorStyle> styles)
+    {
+      var unpaired = new List<BehaviorStyle>();
+      var styleDict = styles.ToDictionary(s => s.Id, s => s);
+
+      foreach (var style in styles)
+      {
+        foreach (var antagonistId in style.AntagonistStyles)
+        {
+          if (styleDict.ContainsKey(antagonistId))
+          {
+            var antagonist = styleDict[antagonistId];
+
+            // Если антагонист НЕ объявил обратную связь
+            if (!antagonist.AntagonistStyles.Contains(style.Id))
+            {
+              if (!unpaired.Contains(style))
+                unpaired.Add(style);
+
+              break; // Достаточно одного несимметричного антагониста
+            }
+          }
+        }
+      }
+
+      return unpaired;
+    }
+
+    /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи
+    /// </summary>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixAntagonistSymmetry()
+    {
+      int fixesCount = 0;
+      var styles = GetAllBehaviorStyles();
+      var styleList = styles.Values.ToList();
+
+      foreach (var style in styleList)
+      {
+        foreach (var antagonistId in style.AntagonistStyles.ToList()) // ToList() для копирования
+        {
+          if (styles.ContainsKey(antagonistId))
+          {
+            var antagonist = styles[antagonistId];
+
+            // Если антагонист не объявил обратную связь - добавляем
+            if (!antagonist.AntagonistStyles.Contains(style.Id))
+            {
+              antagonist.AntagonistStyles.Add(style.Id);
+              fixesCount++;
+            }
+          }
+        }
+      }
+
+      return fixesCount;
+    }
+
+    /// <summary>
+    /// Находит стили с асимметричными антагонистическими связями
+    /// </summary>
+    /// <returns>Список проблемных стилей</returns>
+    public List<BehaviorStyle> FindAsymmetricStyles(IEnumerable<BehaviorStyle> styles)
+    {
+      return FindUnpairedStylesForValidation(styles.ToList());
     }
 
     /// <summary>
