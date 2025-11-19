@@ -462,6 +462,7 @@ namespace ISIDA.Actions
         };
 
         _actions.Add(newId, action);
+
         return (newId, finalWarnings);
       }
       finally
@@ -847,6 +848,85 @@ namespace ISIDA.Actions
 
     #endregion
 
+    #region Валидация и коррекция антагонистов
+
+    /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий
+    /// </summary>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixActionAntagonistSymmetry()
+    {
+      int fixesCount = 0;
+      _lock.EnterWriteLock();
+      try
+      {
+        var actions = _actions.Values.ToList();
+
+        foreach (var action in actions)
+        {
+          foreach (var antagonistId in action.AntagonistActions.ToList())
+          {
+            if (_actions.ContainsKey(antagonistId))
+            {
+              var antagonist = _actions[antagonistId];
+
+              if (!antagonist.AntagonistActions.Contains(action.Id))
+              {
+                antagonist.AntagonistActions.Add(action.Id);
+                fixesCount++;
+              }
+            }
+          }
+        }
+
+        return fixesCount;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Находит адаптивные действия с асимметричными антагонистическими связями
+    /// </summary>
+    /// <returns>Список проблемных действий</returns>
+    public List<AdaptiveAction> FindAsymmetricActions(IEnumerable<AdaptiveAction> actions)
+    {
+      return FindUnpairedActionsForValidation(actions.ToList());
+    }
+
+    /// <summary>
+    /// Находит действия с несимметричными антагонистическими связями для валидации
+    /// </summary>
+    private List<AdaptiveAction> FindUnpairedActionsForValidation(List<AdaptiveAction> actions)
+    {
+      var unpaired = new List<AdaptiveAction>();
+      var actionDict = actions.ToDictionary(a => a.Id, a => a);
+
+      foreach (var action in actions)
+      {
+        foreach (var antagonistId in action.AntagonistActions)
+        {
+          if (actionDict.ContainsKey(antagonistId))
+          {
+            var antagonist = actionDict[antagonistId];
+            if (!antagonist.AntagonistActions.Contains(action.Id))
+            {
+              if (!unpaired.Contains(action))
+                unpaired.Add(action);
+
+              break;
+            }
+          }
+        }
+      }
+
+      return unpaired;
+    }
+
+    #endregion
+
     #region Работа с файлами
 
     /// <summary>
@@ -1037,6 +1117,15 @@ namespace ISIDA.Actions
       var allErrors = new List<string>();
       var allWarnings = new List<string>();
 
+      // Проверка асимметричных антагонистов
+      var unpairedActions = FindUnpairedActionsForValidation(adaptiveActions.ToList());
+      if (unpairedActions.Any())
+      {
+        var unpairedList = string.Join(", ", unpairedActions.Select(s => $"{s.Name} (ID:{s.Id})"));
+        errorMessage = $"AsymmetricAction: Обнаружены несимметричные антагонистические связи:\n{unpairedList}\n\n";
+        return (false, errorMessage, "");
+      }
+
       foreach (var action in adaptiveActions)
       {
         if (isForDeletion)
@@ -1055,7 +1144,6 @@ namespace ISIDA.Actions
         }
         else
         {
-          // Валидация отдельного действия
           if (!ValidateSingleAction(action, out string singleError, out string singleWarnings))
             allErrors.Add($"Действие '{action.Name}' (ID: {action.Id}): {singleError}");
 

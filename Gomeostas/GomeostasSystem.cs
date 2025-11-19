@@ -362,8 +362,7 @@ namespace ISIDA.Gomeostas
 
       return true;
     }
-
-    // Поиск стилей с беспарными антагонистами
+    
     private List<BehaviorStyle> FindUnpairedStylesForValidation(List<BehaviorStyle> styles)
     {
       var unpaired = new List<BehaviorStyle>();
@@ -376,14 +375,12 @@ namespace ISIDA.Gomeostas
           if (styleDict.ContainsKey(antagonistId))
           {
             var antagonist = styleDict[antagonistId];
-
-            // Если антагонист НЕ объявил обратную связь
             if (!antagonist.AntagonistStyles.Contains(style.Id))
             {
               if (!unpaired.Contains(style))
                 unpaired.Add(style);
 
-              break; // Достаточно одного несимметричного антагониста
+              break;
             }
           }
         }
@@ -404,13 +401,12 @@ namespace ISIDA.Gomeostas
 
       foreach (var style in styleList)
       {
-        foreach (var antagonistId in style.AntagonistStyles.ToList()) // ToList() для копирования
+        foreach (var antagonistId in style.AntagonistStyles.ToList())
         {
           if (styles.ContainsKey(antagonistId))
           {
             var antagonist = styles[antagonistId];
 
-            // Если антагонист не объявил обратную связь - добавляем
             if (!antagonist.AntagonistStyles.Contains(style.Id))
             {
               antagonist.AntagonistStyles.Add(style.Id);

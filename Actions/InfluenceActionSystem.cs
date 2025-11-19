@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Gomeostas.GomeostasSystem;
 
 namespace ISIDA.Actions
@@ -227,16 +228,7 @@ namespace ISIDA.Actions
           Influences = influences?.ToDictionary(kvp => kvp.Key, kvp => ClampInt(kvp.Value, -10, 10)) ?? new Dictionary<int, int>(),
           AntagonistInfluences = antagonistInfluence?.Where(id => id > 0).Distinct().ToList() ?? new List<int>()
         };
-
         _influenceActions.Add(newId, action);
-
-        // Валидация всех воздействий после добавления
-        if (!ValidateAllInfluenceActions(out string errorMessage))
-        {
-          // Откатываем добавление при провале валидации
-          _influenceActions.Remove(newId);
-          throw new InvalidOperationException($"Не удалось добавить воздействие: {errorMessage}");
-        }
 
         return (newId, warnings.ToArray());
       }
@@ -541,6 +533,85 @@ namespace ISIDA.Actions
 
     #endregion
 
+    #region Валидация и коррекция антагонистов
+
+    /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи для гомеостатических воздействий
+    /// </summary>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixInfluenceAntagonistSymmetry()
+    {
+      int fixesCount = 0;
+      _lock.EnterWriteLock();
+      try
+      {
+        var influences = _influenceActions.Values.ToList();
+
+        foreach (var influence in influences)
+        {
+          foreach (var antagonistId in influence.AntagonistInfluences.ToList())
+          {
+            if (_influenceActions.ContainsKey(antagonistId))
+            {
+              var antagonist = _influenceActions[antagonistId];
+
+              if (!antagonist.AntagonistInfluences.Contains(influence.Id))
+              {
+                antagonist.AntagonistInfluences.Add(influence.Id);
+                fixesCount++;
+              }
+            }
+          }
+        }
+
+        return fixesCount;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Находит гомеостатические воздействия с асимметричными антагонистическими связями
+    /// </summary>
+    /// <returns>Список проблемных воздействий</returns>
+    public List<GomeostasisInfluenceAction> FindAsymmetricInfluences(IEnumerable<GomeostasisInfluenceAction> influences)
+    {
+      return FindUnpairedInfluencesForValidation(influences.ToList());
+    }
+
+    /// <summary>
+    /// Находит воздействия с несимметричными антагонистическими связями для валидации
+    /// </summary>
+    private List<GomeostasisInfluenceAction> FindUnpairedInfluencesForValidation(List<GomeostasisInfluenceAction> influences)
+    {
+      var unpaired = new List<GomeostasisInfluenceAction>();
+      var influenceDict = influences.ToDictionary(i => i.Id, i => i);
+
+      foreach (var influence in influences)
+      {
+        foreach (var antagonistId in influence.AntagonistInfluences)
+        {
+          if (influenceDict.ContainsKey(antagonistId))
+          {
+            var antagonist = influenceDict[antagonistId];
+            if (!antagonist.AntagonistInfluences.Contains(influence.Id))
+            {
+              if (!unpaired.Contains(influence))
+                unpaired.Add(influence);
+
+              break;
+            }
+          }
+        }
+      }
+
+      return unpaired;
+    }
+
+    #endregion
+
     #region Работа с файлами
 
     /// <summary>
@@ -639,7 +710,7 @@ namespace ISIDA.Actions
       
       if (IsValidate)
       {
-        if (!ValidateAllInfluenceActions(out string errorMessage))
+        if (!ValidateAllInfluenceActions(_influenceActions.Values, out string errorMessage))
           return (false, errorMessage);
       }
       EnsureDataDirectory();
@@ -691,14 +762,15 @@ namespace ISIDA.Actions
     /// Выполняет комплексную валидацию всех гомеостатических воздействий.
     /// Проверяет: дубликаты ID, пустые имена, ссылки на несуществующие антагонисты и антагонистические конфликты.
     /// </summary>
+    /// <param name="influences">Список гомеостатических воздействий</param>
     /// <param name="errorMessage">Сообщение об ошибке, если валидация не прошла.</param>
     /// <returns>True, если валидация успешна, иначе false.</returns>
-    public bool ValidateAllInfluenceActions(out string errorMessage)
+    public bool ValidateAllInfluenceActions(IEnumerable<GomeostasisInfluenceAction> influences, out string errorMessage)
     {
       errorMessage = string.Empty;
       try
       {
-        var actions = _influenceActions.Values.ToList();
+        var actions = influences.ToList();
 
         if (!actions.Any())
         {
@@ -735,8 +807,17 @@ namespace ISIDA.Actions
             return false;
           }
         }
+
+        // Проверка асимметричных антагонистов
+        var unpairedInfluences = FindUnpairedInfluencesForValidation(actions);
+        if (unpairedInfluences.Any())
+        {
+          var unpairedList = string.Join(", ", unpairedInfluences.Select(s => $"{s.Name} (ID:{s.Id})"));
+          errorMessage = $"AsymmetricInfluences: Обнаружены несимметричные антагонистические связи:\n{unpairedList}\n\n";
+          return false;
+        }
+
         // Проверку в образах делать не надо, потому как эта валидация так же при обновлении используется
-        // АНТАГОНИСТОВ НЕЛЬЗЯ ПРОВЕРЯТЬ НА КОНФЛИКТЫ МЕЖДУ СОБОЙ!!!! ОНИ ВЕДЬ ПРОСТО ГАСЯТСЯ
         return true;
       }
       catch (Exception ex)
