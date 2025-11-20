@@ -528,7 +528,6 @@ namespace ISIDA.Gomeostas
     private const string AgentPropertiesFileName = "AgentProperties";
     private const string DefaultAgentName = "Агент";
     private const string DefaultAgentDescription = "Простой агент";
-    private string GomeostasTemplateFolderPath;
     internal string GomeostasFolderPath;
     private string GetAgentStylesFilePath() =>
       Path.Combine(GomeostasFolderPath, $"{StylesFileName}.dat");

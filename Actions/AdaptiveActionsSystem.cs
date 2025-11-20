@@ -135,35 +135,6 @@ namespace ISIDA.Actions
       /// </summary>
       public string Description { get; set; }
 
-      private Dictionary<int, int> _costs = new Dictionary<int, int>();
-
-      /// <summary>
-      /// Затраты действия на параметры гомеостаза (например, энергия, время, ресурсы)
-      /// </summary>
-      /// <remarks>
-      /// Ключ - ID параметра, значение - величина ухудшения (знак влияния зависит от типа параметра: дефицит или избыток ориентированный). Диапазон: -10..+10.
-      /// </remarks>
-      public Dictionary<int, int> Costs
-      {
-        get => _costs;
-        set
-        {
-          if (value == null)
-          {
-            _costs = new Dictionary<int, int>();
-            return;
-          }
-
-          foreach (var kvp in value)
-          {
-            var validation = SettingsValidator.ValidateCostsAction(kvp.Value);
-            if (!validation.isValid)
-              throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          }
-          _costs = new Dictionary<int, int>(value);
-        }
-      }
-
       /// <summary>
       /// Список ID действий-антагонистов, которые несовместимы с данным действием
       /// </summary>
@@ -206,7 +177,7 @@ namespace ISIDA.Actions
       /// <returns>Сумма абсолютных значений влияний с учетом интенсивности</returns>
       public int GetSignificance()
       {
-        int baseSignificance = Costs.Values.Sum(Math.Abs);
+        int baseSignificance = Vigor;
 
         // Учитываем интенсивность в значимости
         float vigorRatio = ActionsSystem != null
@@ -401,7 +372,6 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="name">Наименование действия</param>
     /// <param name="description">Описание действия</param>
-    /// <param name="costs">Словарь затрат действия на параметры гомеостаза (ID параметра -> величина ухудшения). Отражает издержки (например, расход энергии, рост стресса).</param>
     /// <param name="antagonistActions">Список ID антагонистических действий, которые несовместимы с данным действием</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <param name="Vigor">Интенсивность действия [1...10], по умолчанию = 5</param>
@@ -410,7 +380,6 @@ namespace ISIDA.Actions
     public (int ActionId, string[] Warnings) AddAction(
         string name,
         string description,
-        Dictionary<int, int> costs = null,
         List<int> antagonistActions = null,
         bool strictValidation = false,
         int Vigor = 5)
@@ -427,7 +396,6 @@ namespace ISIDA.Actions
         Id = 0, // Временный ID
         Name = name,
         Description = description,
-        Costs = costs ?? new Dictionary<int, int>(),
         AntagonistActions = antagonistActions ?? new List<int>(),
         Vigor = Vigor,
         ActionsSystem = this
@@ -457,7 +425,6 @@ namespace ISIDA.Actions
           Name = name,
           Description = description,
           Vigor = Vigor,
-          Costs = costs?.ToDictionary(kvp => kvp.Key, kvp => ClampInt(kvp.Value, -10, 10)) ?? new Dictionary<int, int>(),
           AntagonistActions = antagonistActions ?? new List<int>()
         };
 
@@ -490,39 +457,6 @@ namespace ISIDA.Actions
 
       var warnings = new List<string>();
 
-      foreach (var cost in action.Costs)
-      {
-        try
-        {
-          var parameter = _gomeostas.GetParameter(cost.Key);
-          if (parameter == null)
-          {
-            warnings.Add($"Не удалалось найти параметр с ID: {cost.Key}");
-            break;
-          }
-          bool isValidCost = (parameter.Speed < 0 && cost.Value < 0) ||
-                           (parameter.Speed > 0 && cost.Value > 0);
-
-          if (!isValidCost)
-          {
-            string paramType = parameter.Speed < 0 ? "дефицит-ориентированный" : "избыток-ориентированный";
-            string expectedSign = parameter.Speed < 0 ? "отрицательным" : "положительным";
-            string message = $"Затраты на {paramType} параметр '{parameter.Name}' должны быть {expectedSign} (текущие: {cost.Value})";
-
-            if (strictValidation)
-              throw new ArgumentOutOfRangeException(nameof(action.Costs), cost.Value, message);
-            warnings.Add(message);
-          }
-        }
-        catch (Exception ex)
-        {
-          string message = $"Не удалось проверить параметр {cost.Key}: {ex.Message}";
-          if (strictValidation)
-            throw new InvalidOperationException(message, ex);
-          warnings.Add(message);
-        }
-      }
-
       // Проверка что действие не блокирует само себя в антагонистах
       if (action.AntagonistActions?.Contains(action.Id) == true)
       {
@@ -533,21 +467,6 @@ namespace ISIDA.Actions
 
         // Удаляем само действие из списка антагонистов
         action.AntagonistActions.Remove(action.Id);
-      }
-
-      // Проверка затрат
-      foreach (var cost in action.Costs)
-      {
-        if (cost.Value < -10 || cost.Value > 10)
-        {
-          string message = $"Затрата на параметр {cost.Key} скорректирована с {cost.Value} до " +
-                          $"{ClampInt(cost.Value, -10, 10)} " +
-                          "(допустимый диапазон: -10..+10)";
-          if (strictValidation)
-            throw new ArgumentOutOfRangeException(nameof(action.Costs), cost.Value, message);
-          warnings.Add(message);
-          action.Costs[cost.Key] = ClampInt(cost.Value, -10, 10);
-        }
       }
 
       _lock.EnterWriteLock();
@@ -714,25 +633,6 @@ namespace ISIDA.Actions
               // Если антагонист сильнее или равен - блокируем применение
               return false;
             }
-          }
-        }
-
-        // Применяем ЗАТРАТЫ действия (без изменений, стили не влияют на затраты)
-        foreach (var cost in action.Costs)
-        {
-          try
-          {
-            var param = _gomeostas.GetParameter(cost.Key);
-            if (param != null)
-            {
-              float newValue = param.Value + cost.Value;
-              param.Value = ClampFloat(newValue, 0, 100);
-            }
-          }
-          catch (Exception ex)
-          {
-            Debug.WriteLine($"Action {actionId}, Cost {cost.Key}: {ex.Message}");
-            throw;
           }
         }
 
@@ -977,27 +877,19 @@ namespace ISIDA.Actions
               vigor = ClampInt(vigor, 1, 10);
             }
 
-            // Парсим затраты (часть 4)
-            Dictionary<int, int> costs = new Dictionary<int, int>();
-            if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
-            {
-              costs = ParseCosts(parts[4]);
-            }
-
             var action = new AdaptiveAction
             {
               Id = id,
               Name = parts[1].Trim(),
               Description = parts[2].Trim(),
               Vigor = vigor,
-              Costs = costs,
               ActionsSystem = this
             };
 
-            // Антагонисты (часть 5)
-            if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
+            // Антагонисты (теперь часть 4 вместо 5)
+            if (parts.Length >= 5 && !string.IsNullOrWhiteSpace(parts[4]))
             {
-              action.AntagonistActions = parts[5]
+              action.AntagonistActions = parts[4]
                   .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                   .Where(s => !string.IsNullOrWhiteSpace(s))
                   .Select(s =>
@@ -1019,9 +911,8 @@ namespace ISIDA.Actions
           EnsureDataDirectory();
           var lines = new List<string>
             {
-              FileHeaders.ActionsFormat,
-              FileHeaders.ActionsCost,
-              FileHeaders.ActionsAntagonists
+                FileHeaders.ActionsFormat,
+                FileHeaders.ActionsAntagonists
             };
           File.WriteAllLines(path, lines);
 
@@ -1069,7 +960,6 @@ namespace ISIDA.Actions
         var lines = new List<string>
         {
             FileHeaders.ActionsFormat,
-            FileHeaders.ActionsCost,
             FileHeaders.ActionsAntagonists
         };
 
@@ -1077,7 +967,6 @@ namespace ISIDA.Actions
         {
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
                    $"{action.Vigor}|" +
-                   $"{CostsToString(action.Costs)}|" +
                    $"{string.Join(",", action.AntagonistActions)}");
         }
 
@@ -1170,47 +1059,6 @@ namespace ISIDA.Actions
       if (action.AntagonistActions?.Contains(action.Id) == true)
         errors.Add("Действие блокирует само себя в списке антагонистов");
 
-      // Проверка знаков затрат
-      foreach (var cost in action.Costs)
-      {
-        try
-        {
-          var parameter = _gomeostas.GetParameter(cost.Key);
-          if(parameter == null)
-          {
-            errors.Add($"Не удалалось найти параметр с ID: {cost.Key}");
-            break;
-          }
-
-          bool isValidCost = (parameter.Speed < 0 && cost.Value < 0) ||
-                           (parameter.Speed > 0 && cost.Value > 0);
-
-          if (!isValidCost)
-          {
-            string paramType = parameter.Speed < 0 ? "дефицит-ориентированный" : "избыток-ориентированный";
-            string expectedSign = parameter.Speed < 0 ? "отрицательным" : "положительным";
-            errors.Add($"Затраты на {paramType} параметр '{parameter.Name}' должны быть {expectedSign} (текущие: {cost.Value})");
-          }
-        }
-        catch (Exception ex)
-        {
-          errors.Add($"Не удалось проверить параметр {cost.Key}: {ex.Message}");
-        }
-      }
-
-      // Проверка диапазонов затрат
-      foreach (var cost in action.Costs)
-      {
-        var parameter = _gomeostas.GetParameter(cost.Key);
-        if (parameter == null)
-        {
-          errors.Add($"Не удалалось найти параметр с ID: {cost.Key}");
-          break;
-        }
-        if (cost.Value < -10 || cost.Value > 10)
-          errors.Add($"Затрата на параметр '{parameter.Name}' вне допустимых пределов: {cost.Value} (допустимый диапазон: -10..+10)");
-      }
-
       // зависимые параметры не проверяем
       if (!isValidRequiresExternalResources)
       {
@@ -1219,54 +1067,10 @@ namespace ISIDA.Actions
           errors.Add($"Интенсивность действия вне допустимых пределов: {action.Vigor} (допустимый диапазон: 1..10)");
       }
 
-      // Проверка циклических зависимостей (только для обновления)
-      var parameters = _gomeostas.GetAllParameters();
-      if (!ValidationService.CheckActionCycles(new[] { action }, parameters, out string cycleError))
-        errors.Add(cycleError);
-
-      if (errors.Any())
-      {
-        errorMessage = string.Join("\n", errors);
-        if (warningList.Any())
-          warnings = string.Join("\n", warningList);
-
-        return false;
-      }
-
       if (warningList.Any())
         warnings = string.Join("\n", warningList);
 
       return true;
-    }
-
-    /// <summary>
-    /// Парсит строку затрат в словарь
-    /// </summary>
-    private Dictionary<int, int> ParseCosts(string costsStr)
-    {
-      var costs = new Dictionary<int, int>();
-      if (string.IsNullOrWhiteSpace(costsStr)) return costs;
-
-      var pairs = costsStr.Split(';');
-      foreach (var pair in pairs)
-      {
-        var kv = pair.Split(':');
-        if (kv.Length == 2 &&
-            int.TryParse(kv[0], out int paramId) &&
-            int.TryParse(kv[1], out int cost))
-        {
-          costs[paramId] = ClampInt(cost, -10, 10);
-        }
-      }
-      return costs;
-    }
-
-    /// <summary>
-    /// Преобразует словарь затрат в строку
-    /// </summary>
-    private string CostsToString(Dictionary<int, int> costs)
-    {
-      return string.Join(";", costs.Select(kv => $"{kv.Key}:{kv.Value}"));
     }
 
     #endregion

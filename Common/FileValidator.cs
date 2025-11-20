@@ -33,8 +33,7 @@ namespace ISIDA.Common
       public const string InfluenceAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Адаптивные действия
-      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Затраты|Антагонисты";
-      public const string ActionsCost = "# Затраты: paramId1:cost1;paramId2:cost2";
+      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Стили поведения

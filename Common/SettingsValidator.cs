@@ -331,28 +331,6 @@ namespace ISIDA.Common
     #endregion
 
     #region Адаптивные действия
-
-    /// <summary>
-    /// Валидация влияние действия на параметры гомеостаза
-    /// </summary>
-    /// <param name="value">Значение для валидации (int)</param>
-    public static (bool isValid, string errorMessage) ValidateInfluencesAction(int? value)
-    {
-      const string paramName = "Величина влияния на действие";
-      const string range = "[-10:10]";
-      return ValidateValueCustom(value, paramName, -10, 10, range);
-    }
-
-    /// <summary>
-    /// Валидация влияние затрат на параметры гомеостаза
-    /// </summary>
-    /// <param name="value">Значение для валидации (int)</param>
-    public static (bool isValid, string errorMessage) ValidateCostsAction(int? value)
-    {
-      const string paramName = "Величина затраты на действие";
-      const string range = "[-10:10]";
-      return ValidateValueCustom(value, paramName, -10, 10, range);
-    }
     
     /// <summary>
     /// Валидация значения интенсивности действия
