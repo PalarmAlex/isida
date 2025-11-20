@@ -395,7 +395,7 @@ namespace ISIDA.Common
           var currentState = CollectSystemState(currentPulse);
           var currentParametersState = CollectParametersState(currentPulse);
 
-          if (!IsDuplicateState(currentState))
+          if (IsDuplicateState(currentState))
           {
             WriteLogEntry(currentState);
             _lastState = currentState;
@@ -487,7 +487,7 @@ namespace ISIDA.Common
         CurrentGeneticReflexID = GetCurrentGeneticReflexID(),
         CurrentConditionReflexID = GetCurrentConditionedReflexID(),
         HasCriticalChanges = GetHasCriticalChanges()
-      }; ;
+      };
       return state;
     }
 
@@ -537,12 +537,12 @@ namespace ISIDA.Common
     /// </summary>
     private bool IsDuplicateState(SystemState current)
     {
-      return _lastState.CurrentBaseID == current.CurrentBaseID &&
-             _lastState.CurrentBaseStyleID == current.CurrentBaseStyleID &&
-             _lastState.CurrentTriggerStimulusID == current.CurrentTriggerStimulusID &&
-             _lastState.CurrentGeneticReflexID == current.CurrentGeneticReflexID &&
-             _lastState.CurrentConditionReflexID == current.CurrentConditionReflexID &&
-             _lastState.HasCriticalChanges == current.HasCriticalChanges;
+      return _lastState.CurrentBaseID != current.CurrentBaseID ||
+             _lastState.CurrentBaseStyleID != current.CurrentBaseStyleID ||
+             _lastState.CurrentTriggerStimulusID != current.CurrentTriggerStimulusID ||
+             _lastState.CurrentGeneticReflexID != current.CurrentGeneticReflexID ||
+             _lastState.CurrentConditionReflexID != current.CurrentConditionReflexID ||
+             _lastState.HasCriticalChanges != current.HasCriticalChanges;
     }
 
     /// <summary>

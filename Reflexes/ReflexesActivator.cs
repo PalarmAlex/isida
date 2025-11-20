@@ -21,6 +21,7 @@ namespace ISIDA.Reflexes
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
+    private ResearchLogger _researchLogger;
 
     #region Инициализация
 
@@ -95,6 +96,14 @@ namespace ISIDA.Reflexes
     private void OnPhraseStimulusActivated(int pulseCount)
     {
       ActiveFromPhrase(pulseCount);
+    }
+
+    /// <summary>
+    /// Установка логгера
+    /// </summary>
+    public void SetResearchLogger(ResearchLogger logger)
+    {
+      _researchLogger = logger;
     }
 
     #endregion
@@ -224,7 +233,7 @@ namespace ISIDA.Reflexes
       _activatedPulsCount = pulseCount;
       UpdateCurrentStates(ActivationType.ConditionChange);
       var conditions = GetCurrentGeneticConditionsArray();
-      _reflexTree.ConditionsDetection(conditions);
+      _reflexTree.ConditionsDetection(conditions);     
 
       _weitPulceCount = 0;
       bool psychicBlocked = false;
@@ -261,6 +270,14 @@ namespace ISIDA.Reflexes
         }
         _adaptiveActions.ClearActiveAction();
         ExecuteReflexes();
+
+        if(_activeGeneticReflexID != 0)
+        {
+          _researchLogger.LogSystemState(pulseCount);
+          // чтобы не попало в логи на следующем пульсе
+          _activeGlobalCurTriggerStimulusID = 0;
+          _activeGeneticReflexID = 0;
+        }
       }
       finally
       {
@@ -292,6 +309,14 @@ namespace ISIDA.Reflexes
         }
         _adaptiveActions.ClearActivePhrases();
         ExecuteReflexes();
+
+        if(_activeConditionReflexID != 0)
+        {
+          _researchLogger.LogSystemState(pulseCount);
+          // чтобы не попало в логи на следующем пульсе
+          _activeGlobalCurTriggerStimulusID = 0;
+          _activeConditionReflexID = 0;
+        }
       }
       finally
       {
@@ -320,8 +345,7 @@ namespace ISIDA.Reflexes
           foreach (var reflexId in _geneticReflexesToRun)
           {
             ExecuteGeneticReflex(reflexId);
-            _activeGeneticReflexID = reflexId;
-            _activeGlobalCurTriggerStimulusID = _activeCurReflexTriggerStimulusID;
+            _activeGeneticReflexID = reflexId;            
           }
         }
       }
@@ -363,6 +387,7 @@ namespace ISIDA.Reflexes
     {
       _activeCurTriggerStimulusID = _influenceActions.ActiveCurTriggerStimulusID;
       _activeCurReflexTriggerStimulusID = _influenceActions.ActiveCurReflexTriggerStimulusID;
+      _activeGlobalCurTriggerStimulusID = _activeCurReflexTriggerStimulusID;
 
       // Сохраняем предыдущий полный образ как причину
       SetOldTriggerStimulusValue(_activeCurTriggerStimulusID);

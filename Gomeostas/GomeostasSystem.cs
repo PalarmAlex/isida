@@ -2157,7 +2157,6 @@ namespace ISIDA.Gomeostas
         }
 
         // БЫСТРОЕ УДАЛЕНИЕ ЧЕРЕЗ ИНДЕКСЫ:
-
         // Удаляем из антагонистов других стилей
         if (_styleAntagonistsIndex.ContainsKey(styleId))
         {
@@ -2243,7 +2242,8 @@ namespace ISIDA.Gomeostas
         Weight = (int)Math.Round(sw.DynamicWeight)
       }).ToList();
 
-      _researchLogger?.LogStylesActivationProcess(PulseCount, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations);
+      // для согласованря по пульсам с логами параметров и системы пишем на следующий пульс, так как они считывают состояния после изменений стилей
+      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations);
       CreateBehaviorStyleImageFromActiveStyles();
     }
 

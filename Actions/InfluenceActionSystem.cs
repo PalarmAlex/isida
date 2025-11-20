@@ -418,7 +418,7 @@ namespace ISIDA.Actions
 
         if (phraseIdList?.Any() == true)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount);
-        else if (actionIdList?.Any() == true)
+        if (actionIdList?.Any() == true)
           TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount);
 
         // Применение воздействий (после вызова событий)
