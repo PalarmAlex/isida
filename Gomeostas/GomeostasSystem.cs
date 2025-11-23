@@ -2200,7 +2200,7 @@ namespace ISIDA.Gomeostas
       var (baseStyles, allStiles) = GetBaseActiveStyles();
 
       var (filteredStylesWithWeights, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations) =
-              _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters, _dynamicTime);
+              _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters, _dynamicTime, _difSensorPar);
 
       // Преобразуем обратно в обычные стили для ActiveStyles
       var filteredStyles = filteredStylesWithWeights.Select(sw => sw.Style).ToList();
@@ -2383,7 +2383,7 @@ namespace ISIDA.Gomeostas
         bool forceRegenerate = false)
     {
       return _styleCombinationsManager.GenerateStyleCombinations(
-          _dynamicTime, maxCombinationSize, includeLateralInhibition, forceRegenerate);
+          _dynamicTime, _difSensorPar, maxCombinationSize, includeLateralInhibition, forceRegenerate);
     }
 
     /// <summary>

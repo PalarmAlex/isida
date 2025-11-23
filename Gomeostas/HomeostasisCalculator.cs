@@ -484,13 +484,14 @@ namespace ISIDA.Gomeostas
         ApplyEnhancedStyleContrasting(
         List<BehaviorStyle> baseStyles,
         List<ParameterData> parameters,
-        int dynamicTime)
+        int dynamicTime,
+        float difSensorPar)
     {
       var activations = new List<ResearchLogger.StyleActivationLog>();
       var parameterActivations = new List<ResearchLogger.StyleParameterActivation>(); // ДОБАВЛЕНО
 
       // Этап 1: Расчет весов стилей с учетом зон параметров
-      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations, dynamicTime);
+      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations, dynamicTime, difSensorPar);
 
       // Создаем список базовых стилей с динамическими весами
       var baseStylesWithWeights = baseStyles.Select(style => new StyleWithDynamicWeight
@@ -519,65 +520,50 @@ namespace ISIDA.Gomeostas
           })
           .ToList();
 
-      // Собираем связи параметров и финальных стилей
-      CollectParameterStyleActivations(finalStyles, parameters, parameterActivations, dynamicTime);
+      // Собираем связи параметров и изначально активированных стилей
+      CollectParameterStyleActivations(baseStyles, parameters, parameterActivations, dynamicTime, difSensorPar);
 
       return (finalStyles, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations);
     }
 
     /// <summary>
-    /// Собирает связи между параметрами и финальными стилями
+    /// Собирает связи между параметрами и изначально активированными стилями
     /// </summary>
     private void CollectParameterStyleActivations(
-        List<StyleWithDynamicWeight> finalStyles,
+        List<BehaviorStyle> baseStyles,
         List<ParameterData> parameters,
         List<ResearchLogger.StyleParameterActivation> parameterActivations,
-        int dynamicTime)
+        int dynamicTime,
+        float difSensorPar)
     {
-      var finalStyleIds = finalStyles.Select(s => s.Style.Id).ToHashSet();
-
+      // Для каждого параметра находим, какие стили он активировал
       foreach (var param in parameters)
       {
-        var state = CalculateParameterState(param, dynamicTime, 0.5f);
+        var state = CalculateParameterState(param, dynamicTime, difSensorPar);
         var (currentZone, zoneDetails) = GetStateForStyleActivation(param, state.State);
 
-        // Для каждого финального стиля проверяем, активируется ли он этим параметром
-        foreach (var finalStyle in finalStyles)
+        if (param.StyleActivations.TryGetValue(currentZone, out var styleIds))
         {
-          var style = finalStyle.Style;
-          bool isActivatedByParam = false;
-          int activationZone = -1;
-
-          // Проверяем все зоны активации параметра
-          foreach (var activationEntry in param.StyleActivations)
+          foreach (var styleId in styleIds.Where(id => id > 0))
           {
-            int zoneId = activationEntry.Key;
-            var styleIds = activationEntry.Value;
-
-            if (styleIds.Contains(style.Id))
+            var baseStyle = baseStyles.FirstOrDefault(s => s.Id == styleId);
+            if (baseStyle != null)
             {
-              isActivatedByParam = true;
-              activationZone = zoneId;
-              break;
+              parameterActivations.Add(new ResearchLogger.StyleParameterActivation
+              {
+                Pulse = -1,
+                Time = DateTime.Now,
+                Stage = "ParameterActivation",
+                ParameterId = param.Id,
+                ParameterName = param.Name,
+                ZoneId = currentZone,
+                ZoneDescription = GetStateDescription(currentZone),
+                StyleId = styleId,
+                StyleName = baseStyle.Name,
+                Weight = baseStyle.Weight,
+                ActivationDetails = $"{param.Id}|{zoneDetails}|Zone{currentZone}"
+              });
             }
-          }
-
-          if (isActivatedByParam)
-          {
-            parameterActivations.Add(new ResearchLogger.StyleParameterActivation
-            {
-              Pulse = -1, // заполнится позже
-              Time = DateTime.Now,
-              Stage = "ParameterActivation",
-              ParameterId = param.Id,
-              ParameterName = param.Name,
-              ZoneId = activationZone,
-              ZoneDescription = GetStateDescription(activationZone),
-              StyleId = style.Id,
-              StyleName = style.Name,
-              Weight = (int)finalStyle.DynamicWeight,
-              ActivationDetails = $"{param.Id}|{zoneDetails}|Zone{activationZone}"
-            });
           }
         }
       }
@@ -619,12 +605,12 @@ namespace ISIDA.Gomeostas
         List<BehaviorStyle> activeStyles,
         List<ParameterData> parameters,
         List<ResearchLogger.StyleActivationLog> activations,
-        int dynamicTime)
+        int dynamicTime,
+        float difSensorPar)
     {
       var styleScores = new Dictionary<int, float>();
       var zoneCoefficients = new Dictionary<int, float>
     {
-        { 2, 0.05f },  // Норма
         { 3, 0.10f },  // Слабое отклонение
         { 4, 0.15f },  // Умеренное отклонение  
         { 5, 0.20f },  // Значительное отклонение
@@ -644,7 +630,7 @@ namespace ISIDA.Gomeostas
         foreach (var param in parameters)
         {
           // Определяем зону параметра
-          var state = CalculateParameterState(param, dynamicTime, 0.5f);
+          var state = CalculateParameterState(param, dynamicTime, difSensorPar);
           var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
 
           // Проверяем, активирует ли параметр этот стиль
