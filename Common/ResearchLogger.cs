@@ -143,6 +143,7 @@ namespace ISIDA.Common
       public List<StyleLogData> AfterAntagonists { get; set; } = new List<StyleLogData>();
       public List<StyleLogData> AfterInhibition { get; set; } = new List<StyleLogData>();
       public List<StyleActivationLog> Activations { get; set; } = new List<StyleActivationLog>();
+      public List<StyleParameterActivation> ParameterActivations { get; set; } = new List<StyleParameterActivation>();
     }
 
     /// <summary>
@@ -153,6 +154,67 @@ namespace ISIDA.Common
       public int Id { get; set; }
       public string Name { get; set; }
       public int Weight { get; set; }
+    }
+
+    /// <summary>
+    /// Данные активации стиля от параметра
+    /// </summary>
+    public class StyleParameterActivation
+    {
+      /// <summary>
+      /// Номер пульса
+      /// </summary>
+      public int Pulse { get; set; }
+
+      /// <summary>
+      /// Время активации
+      /// </summary>
+      public DateTime Time { get; set; }
+
+      /// <summary>
+      /// Стадия процесса
+      /// </summary>
+      public string Stage { get; set; }
+
+      /// <summary>
+      /// ID параметра
+      /// </summary>
+      public int ParameterId { get; set; }
+
+      /// <summary>
+      /// Имя параметра
+      /// </summary>
+      public string ParameterName { get; set; }
+
+      /// <summary>
+      /// ID зоны активации (0-6)
+      /// </summary>
+      public int ZoneId { get; set; }
+
+      /// <summary>
+      /// Описание зоны
+      /// </summary>
+      public string ZoneDescription { get; set; }
+
+      /// <summary>
+      /// ID стиля
+      /// </summary>
+      public int StyleId { get; set; }
+
+      /// <summary>
+      /// Имя стиля
+      /// </summary>
+      public string StyleName { get; set; }
+
+      /// <summary>
+      /// Вес стиля
+      /// </summary>
+      public int Weight { get; set; }
+
+      /// <summary>
+      /// Детали активации
+      /// </summary>
+      public string ActivationDetails { get; set; }
     }
 
     /// <summary>
@@ -418,11 +480,12 @@ namespace ISIDA.Common
     /// Логирует процесс определения активных стилей ТОЛЬКО при изменениях
     /// </summary>
     public void LogStylesActivationProcess(
-      int currentPulse,
-      List<BehaviorStyle> baseStyles,
-      List<BehaviorStyle> afterAntagonists,
-      List<BehaviorStyle> afterInhibition,
-      List<StyleActivationLog> activations)
+        int currentPulse,
+        List<BehaviorStyle> baseStyles,
+        List<BehaviorStyle> afterAntagonists,
+        List<BehaviorStyle> afterInhibition,
+        List<StyleActivationLog> activations,
+        List<StyleParameterActivation> parameterActivations)
     {
       if (!_enabled || _disposed) return;
 
@@ -458,7 +521,12 @@ namespace ISIDA.Common
                 Name = s.Name,
                 Weight = s.Weight
               }).ToList(),
-              Activations = activations
+              Activations = activations,
+              ParameterActivations = parameterActivations.Select(pa =>
+              {
+                pa.Pulse = currentPulse; // заполняем пульс
+                return pa;
+              }).ToList()
             };
 
             WriteStylesLogEntry(stylesState);
@@ -801,9 +869,54 @@ namespace ISIDA.Common
       }
     }
 
-    /// <summary>
-    /// Записывает лог стилей
-    /// </summary>
+    private void WriteParameterActivationEntry(StyleParameterActivation activation)
+    {
+      _memoryLogWriter?.WriteStyleParameterActivation(
+        activation.Pulse,
+        activation.Stage,
+        activation.ParameterId,
+        activation.ParameterName,
+        activation.ZoneId,
+        activation.ZoneDescription,
+        activation.StyleId,
+        activation.StyleName,
+        activation.Weight,
+        activation.ActivationDetails
+      );
+
+      var logEntry = new Dictionary<string, object>
+      {
+        ["Pulse"] = activation.Pulse.ToString(),
+        ["Time"] = activation.Time.ToString("yyyy-MM-dd HH:mm:ss"),
+        ["Stage"] = activation.Stage,
+        ["StyleId"] = activation.StyleId.ToString(),
+        ["StyleName"] = activation.StyleName,
+        ["Weight"] = activation.Weight.ToString(),
+        ["ParameterId"] = activation.ParameterId.ToString(),
+        ["ParameterName"] = activation.ParameterName,
+        ["ZoneId"] = activation.ZoneId.ToString(),
+        ["ZoneDescription"] = activation.ZoneDescription,
+        ["ActivationDetails"] = activation.ActivationDetails
+      };
+
+      // Записываем в JSONL (если выбран формат)
+      if (_currentFormat.HasFlag(LogFormat.JsonL) && _stylesJsonlWriter != null)
+      {
+        var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+        {
+          WriteIndented = false,
+          Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+        _stylesJsonlWriter.WriteLine(jsonLine);
+      }
+
+      // Записываем в CSV (если выбран формат)
+      if (_currentFormat.HasFlag(LogFormat.Csv) && _stylesCsvWriter != null)
+      {
+        WriteCsvLine(logEntry, _stylesCsvWriter, ref _stylesHeadersWritten, new HashSet<string>());
+      }
+    }
+
     private void WriteStylesLogEntry(StylesState state)
     {
       try
@@ -831,6 +944,12 @@ namespace ISIDA.Common
         {
           WriteActivationEntry(state.Pulse, activation);
         }
+
+        // Логируем связи параметров и стилей
+        foreach (var paramActivation in state.ParameterActivations)
+        {
+          WriteParameterActivationEntry(paramActivation);
+        }
       }
       catch (Exception ex)
       {
@@ -856,7 +975,12 @@ namespace ISIDA.Common
         ["Stage"] = stage,
         ["StyleId"] = style.Id.ToString(),
         ["StyleName"] = style.Name,
-        ["Weight"] = style.Weight.ToString()
+        ["Weight"] = style.Weight.ToString(),
+        ["ParameterId"] = "",
+        ["ParameterName"] = "",
+        ["ZoneId"] = "",
+        ["ZoneDescription"] = "",
+        ["ActivationDetails"] = ""
       };
 
       // Записываем в JSONL (если выбран формат)
@@ -884,11 +1008,13 @@ namespace ISIDA.Common
         ["Pulse"] = pulse.ToString(),
         ["Time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
         ["Stage"] = "Activation",
-        ["ParamId"] = activation.ParameterId.ToString(),
-        ["ParamName"] = activation.ParameterName,
-        ["StateId"] = activation.StateId.ToString(),
-        ["StateDescription"] = activation.StateDescription,
-        ["ActivatedStyles"] = string.Join(",", activation.ActivatedStyles),
+        ["StyleId"] = "",
+        ["StyleName"] = "",
+        ["Weight"] = "",
+        ["ParameterId"] = activation.ParameterId.ToString(),
+        ["ParameterName"] = activation.ParameterName,
+        ["ZoneId"] = activation.StateId.ToString(),
+        ["ZoneDescription"] = activation.StateDescription,
         ["ActivationDetails"] = activation.ActivationDetails
       };
 

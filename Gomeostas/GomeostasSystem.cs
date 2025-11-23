@@ -2199,8 +2199,8 @@ namespace ISIDA.Gomeostas
     {
       var (baseStyles, allStiles) = GetBaseActiveStyles();
 
-      var (filteredStylesWithWeights, afterAntagonistsWithWeights, baseStylesWithWeights, activations) =
-          _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters);
+      var (filteredStylesWithWeights, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations) =
+              _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters, _dynamicTime);
 
       // Преобразуем обратно в обычные стили для ActiveStyles
       var filteredStyles = filteredStylesWithWeights.Select(sw => sw.Style).ToList();
@@ -2223,7 +2223,7 @@ namespace ISIDA.Gomeostas
       {
         Id = style.Id,
         Name = style.Name,
-        Weight = _agentState.BehaviorStyles[style.Id].Weight,
+        Weight = ClampInt(_agentState.BehaviorStyles[style.Id].Weight, 0, 100),
         Description = style.Description
       }).ToList();
 
@@ -2231,18 +2231,18 @@ namespace ISIDA.Gomeostas
       {
         Id = sw.Style.Id,
         Name = sw.Style.Name,
-        Weight = (int)Math.Round(sw.DynamicWeight)
+        Weight = ClampInt((int)Math.Round(sw.DynamicWeight), 0, 100),
       }).ToList();
 
       var filteredStylesForLogs = filteredStylesWithWeights.Select(sw => new BehaviorStyle
       {
         Id = sw.Style.Id,
         Name = sw.Style.Name,
-        Weight = (int)Math.Round(sw.DynamicWeight)
+        Weight = ClampInt((int)Math.Round(sw.DynamicWeight), 0, 100),
       }).ToList();
 
       // для согласованря по пульсам с логами параметров и системы пишем на следующий пульс, так как они считывают состояния после изменений стилей
-      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations);
+      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations, parameterActivations);
       CreateBehaviorStyleImageFromActiveStyles();
     }
 
@@ -2383,7 +2383,7 @@ namespace ISIDA.Gomeostas
         bool forceRegenerate = false)
     {
       return _styleCombinationsManager.GenerateStyleCombinations(
-          maxCombinationSize, includeLateralInhibition, forceRegenerate);
+          _dynamicTime, maxCombinationSize, includeLateralInhibition, forceRegenerate);
     }
 
     /// <summary>

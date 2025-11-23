@@ -479,15 +479,18 @@ namespace ISIDA.Gomeostas
     public (List<StyleWithDynamicWeight> resultStyles,
             List<StyleWithDynamicWeight> afterAntagonists,
             List<StyleWithDynamicWeight> baseStyles,
-            List<ResearchLogger.StyleActivationLog> activations)
+            List<ResearchLogger.StyleActivationLog> activations,
+            List<ResearchLogger.StyleParameterActivation> parameterActivations)
         ApplyEnhancedStyleContrasting(
         List<BehaviorStyle> baseStyles,
-        List<ParameterData> parameters)
+        List<ParameterData> parameters,
+        int dynamicTime)
     {
       var activations = new List<ResearchLogger.StyleActivationLog>();
+      var parameterActivations = new List<ResearchLogger.StyleParameterActivation>(); // ДОБАВЛЕНО
 
       // Этап 1: Расчет весов стилей с учетом зон параметров
-      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations);
+      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations, dynamicTime);
 
       // Создаем список базовых стилей с динамическими весами
       var baseStylesWithWeights = baseStyles.Select(style => new StyleWithDynamicWeight
@@ -516,7 +519,97 @@ namespace ISIDA.Gomeostas
           })
           .ToList();
 
-      return (finalStyles, afterAntagonistsWithWeights, baseStylesWithWeights, activations);
+      // Собираем связи параметров и финальных стилей
+      CollectParameterStyleActivations(finalStyles, parameters, parameterActivations, dynamicTime);
+
+      return (finalStyles, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations);
+    }
+
+    /// <summary>
+    /// Собирает связи между параметрами и финальными стилями
+    /// </summary>
+    private void CollectParameterStyleActivations(
+        List<StyleWithDynamicWeight> finalStyles,
+        List<ParameterData> parameters,
+        List<ResearchLogger.StyleParameterActivation> parameterActivations,
+        int dynamicTime)
+    {
+      var finalStyleIds = finalStyles.Select(s => s.Style.Id).ToHashSet();
+
+      foreach (var param in parameters)
+      {
+        var state = CalculateParameterState(param, dynamicTime, 0.5f);
+        var (currentZone, zoneDetails) = GetStateForStyleActivation(param, state.State);
+
+        // Для каждого финального стиля проверяем, активируется ли он этим параметром
+        foreach (var finalStyle in finalStyles)
+        {
+          var style = finalStyle.Style;
+          bool isActivatedByParam = false;
+          int activationZone = -1;
+
+          // Проверяем все зоны активации параметра
+          foreach (var activationEntry in param.StyleActivations)
+          {
+            int zoneId = activationEntry.Key;
+            var styleIds = activationEntry.Value;
+
+            if (styleIds.Contains(style.Id))
+            {
+              isActivatedByParam = true;
+              activationZone = zoneId;
+              break;
+            }
+          }
+
+          if (isActivatedByParam)
+          {
+            parameterActivations.Add(new ResearchLogger.StyleParameterActivation
+            {
+              Pulse = -1, // заполнится позже
+              Time = DateTime.Now,
+              Stage = "ParameterActivation",
+              ParameterId = param.Id,
+              ParameterName = param.Name,
+              ZoneId = activationZone,
+              ZoneDescription = GetStateDescription(activationZone),
+              StyleId = style.Id,
+              StyleName = style.Name,
+              Weight = (int)finalStyle.DynamicWeight,
+              ActivationDetails = $"{param.Id}|{zoneDetails}|Zone{activationZone}"
+            });
+          }
+        }
+      }
+    }
+
+    /// <summary>
+    /// Получает текстовое описание состояния по ID
+    /// </summary>
+    private string GetStateDescription(int stateId)
+    {
+      string stateDescript = "";
+
+      switch (stateId)
+      {
+        case 0:
+          stateDescript = "Выход из нормы"; break;
+        case 1:
+          stateDescript = "Возврат в норму"; break;
+        case 2:
+          stateDescript = "Норма"; break;
+        case 3:
+          stateDescript = "Слабое отклонение"; break;
+        case 4:
+          stateDescript = "Умеренное отклонение"; break;
+        case 5:
+          stateDescript = "Значительное отклонение"; break;
+        case 6:
+          stateDescript = "Критическое отклонение"; break;
+        default:
+          stateDescript = "Неизвестное состояние"; break;
+      }
+      return stateDescript;
     }
 
     /// <summary>
@@ -525,28 +618,33 @@ namespace ISIDA.Gomeostas
     private Dictionary<int, float> CalculateStyleScoresWithZones(
         List<BehaviorStyle> activeStyles,
         List<ParameterData> parameters,
-        List<ResearchLogger.StyleActivationLog> activations)
+        List<ResearchLogger.StyleActivationLog> activations,
+        int dynamicTime)
     {
       var styleScores = new Dictionary<int, float>();
       var zoneCoefficients = new Dictionary<int, float>
     {
-        { 2, 0.1f },  // Норма
-        { 3, 0.3f },  // Слабое отклонение
-        { 4, 0.6f },  // Умеренное отклонение  
-        { 5, 0.8f },  // Значительное отклонение
-        { 6, 1.0f }   // Сильное отклонение
+        { 2, 0.05f },  // Норма
+        { 3, 0.10f },  // Слабое отклонение
+        { 4, 0.15f },  // Умеренное отклонение  
+        { 5, 0.20f },  // Значительное отклонение
+        { 6, 0.30f }   // Сильное отклонение
     };
+
+      // Максимальный дополнительный вклад от параметров
+      const float maxParamContribution = 0.5f;
 
       foreach (var style in activeStyles)
       {
         // Базовый вес стиля (нормализованный к [0,1])
-        float totalScore = style.Weight / 100f;
+        float baseWeight = style.Weight / 100f;
+        float paramContributionSum = 0f;
 
         // Добавляем вклад от параметров, активирующих этот стиль
         foreach (var param in parameters)
         {
           // Определяем зону параметра
-          var state = CalculateParameterState(param, 50, 0.5f);
+          var state = CalculateParameterState(param, dynamicTime, 0.5f);
           var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
 
           // Проверяем, активирует ли параметр этот стиль
@@ -566,11 +664,21 @@ namespace ISIDA.Gomeostas
             float paramWeight = param.Weight / 100f;
             float zoneCoefficient = zoneCoefficients[zone];
             float paramContribution = paramWeight * zoneCoefficient;
-            totalScore += paramContribution;
+
+            // Ограничиваем суммарный вклад параметров
+            if (paramContributionSum + paramContribution <= maxParamContribution)
+              paramContributionSum += paramContribution;
+            else
+            {
+              paramContributionSum = maxParamContribution;
+              break;
+            }
           }
         }
 
-        styleScores[style.Id] = totalScore;
+        // Итоговый вес = базовый + вклад параметров, но не более 1.0
+        float totalScore = baseWeight + paramContributionSum;
+        styleScores[style.Id] = Math.Min(totalScore, 1.0f);
       }
 
       return styleScores;
