@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+﻿﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -46,19 +46,17 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов и улучшенного контрастирования
+    /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов
     /// </summary>
     /// <param name="dynamicTime">Время в пульсах удержания состояний параметров</param>
     /// <param name="difSensorPar">Минимальное изменение параметра для детектирования</param>
     /// <param name="maxCombinationSize">Максимальный размер комбинации (минимум 1)</param>
-    /// <param name="includeEnhancedStyleContrasting">Включать ли применение улучшенного контрастирования</param>
     /// <param name="forceRegenerate">Принудительная генерация новых комбинаций</param>
     /// <returns>Список валидных комбинаций стилей</returns>
     public List<List<GomeostasSystem.BehaviorStyle>> GenerateStyleCombinations(
         int dynamicTime,
         float difSensorPar,
         int maxCombinationSize = 3,
-        bool includeEnhancedStyleContrasting = true, // переименованный параметр
         bool forceRegenerate = false)
     {
       if (maxCombinationSize < 1)
@@ -87,7 +85,7 @@ namespace ISIDA.Gomeostas
       }
 
       // Генерируем новые комбинации
-      var validCombinations = GenerateCombinationsInternal(allStyles, maxCombinationSize, includeEnhancedStyleContrasting, dynamicTime, difSensorPar);
+      var validCombinations = GenerateCombinationsInternal(allStyles, maxCombinationSize);
 
       // Сохраняем сгенерированные комбинации
       var saveResult = SaveStyleCombinations(validCombinations);
@@ -242,17 +240,13 @@ namespace ISIDA.Gomeostas
 
     private List<List<GomeostasSystem.BehaviorStyle>> GenerateCombinationsInternal(
         List<GomeostasSystem.BehaviorStyle> allStyles,
-        int maxCombinationSize,
-        bool includeEnhancedStyleContrasting,
-        int dynamicTime,
-        float difSensorPar)
+        int maxCombinationSize)
     {
       var validCombinations = new List<List<GomeostasSystem.BehaviorStyle>>();
 
       for (int size = 1; size <= maxCombinationSize; size++)
       {
-        GenerateCombinationsRecursive(allStyles, new List<GomeostasSystem.BehaviorStyle>(), 0, size,
-            validCombinations, includeEnhancedStyleContrasting, dynamicTime, difSensorPar);
+        GenerateCombinationsRecursive(allStyles, new List<GomeostasSystem.BehaviorStyle>(), 0, size, validCombinations);
       }
 
       return validCombinations;
@@ -260,27 +254,20 @@ namespace ISIDA.Gomeostas
 
     private void GenerateCombinationsRecursive(List<GomeostasSystem.BehaviorStyle> allStyles,
         List<GomeostasSystem.BehaviorStyle> currentCombination, int startIndex, int targetSize,
-        List<List<GomeostasSystem.BehaviorStyle>> validCombinations, bool applyEnhancedStyleContrasting, int dynamicTime, float difSensorPar)
+        List<List<GomeostasSystem.BehaviorStyle>> validCombinations)
     {
       // Если достигли нужного размера комбинации
       if (currentCombination.Count == targetSize)
       {
         if (IsValidStyleCombination(currentCombination))
         {
-          var finalCombination = applyEnhancedStyleContrasting && currentCombination.Count > 1
-              ? ApplyEnhancedStyleContrastingToCombination(currentCombination, dynamicTime, difSensorPar)
-              : new List<GomeostasSystem.BehaviorStyle>(currentCombination);
-
-          if (finalCombination.Any() && finalCombination.Count <= 3)
+          // Убедимся, что комбинация уникальна (отсортирована по ID)
+          var sortedCombination = currentCombination.OrderBy(s => s.Id).ToList();
+          if (!validCombinations.Any(existing =>
+              existing.Count == sortedCombination.Count &&
+              existing.Select(s => s.Id).SequenceEqual(sortedCombination.Select(s => s.Id))))
           {
-            // Убедимся, что комбинация уникальна (отсортирована по ID)
-            var sortedCombination = finalCombination.OrderBy(s => s.Id).ToList();
-            if (!validCombinations.Any(existing =>
-                existing.Count == sortedCombination.Count &&
-                existing.Select(s => s.Id).SequenceEqual(sortedCombination.Select(s => s.Id))))
-            {
-              validCombinations.Add(sortedCombination);
-            }
+            validCombinations.Add(sortedCombination);
           }
         }
         return;
@@ -299,8 +286,7 @@ namespace ISIDA.Gomeostas
           // Проверяем, не превысили ли мы максимальный размер 3
           if (currentCombination.Count <= 3)
           {
-            GenerateCombinationsRecursive(allStyles, currentCombination, i + 1,
-                targetSize, validCombinations, applyEnhancedStyleContrasting, dynamicTime, difSensorPar);
+            GenerateCombinationsRecursive(allStyles, currentCombination, i + 1, targetSize, validCombinations);
           }
 
           currentCombination.RemoveAt(currentCombination.Count - 1);
@@ -308,31 +294,6 @@ namespace ISIDA.Gomeostas
       }
     }
 
-    private List<GomeostasSystem.BehaviorStyle> ApplyEnhancedStyleContrastingToCombination(List<GomeostasSystem.BehaviorStyle> combination, int dynamicTime, float difSensorPar)
-    {
-      if (combination.Count <= 3) return combination;
-
-      try
-      {
-        _lock.EnterReadLock();
-        try
-        {
-          var parameters = GetAllParameters();
-          var calculator = GetCalculator();
-          var (resultStyles, afterAntagonists, baseStyles, activations, parameterActivations) = calculator.ApplyEnhancedStyleContrasting(combination, parameters, dynamicTime, difSensorPar);
-
-          return resultStyles.Select(sw => sw.Style).ToList();
-        }
-        finally
-        {
-          _lock.ExitReadLock();
-        }
-      }
-      catch
-      {
-        return combination.Take(3).ToList(); // fallback: просто берем первые 3
-      }
-    }
     private bool CanAddStyleToCombination(GomeostasSystem.BehaviorStyle style, List<GomeostasSystem.BehaviorStyle> currentCombination)
     {
       foreach (var existingStyle in currentCombination)

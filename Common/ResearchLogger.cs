@@ -139,8 +139,6 @@ namespace ISIDA.Common
     {
       public int Pulse { get; set; }
       public DateTime Time { get; set; }
-      public List<StyleLogData> BaseStyles { get; set; } = new List<StyleLogData>();
-      public List<StyleLogData> AfterAntagonists { get; set; } = new List<StyleLogData>();
       public List<StyleLogData> AfterInhibition { get; set; } = new List<StyleLogData>();
       public List<StyleActivationLog> Activations { get; set; } = new List<StyleActivationLog>();
       public List<StyleParameterActivation> ParameterActivations { get; set; } = new List<StyleParameterActivation>();
@@ -481,9 +479,7 @@ namespace ISIDA.Common
     /// </summary>
     public void LogStylesActivationProcess(
         int currentPulse,
-        List<BehaviorStyle> baseStyles,
-        List<BehaviorStyle> afterAntagonists,
-        List<BehaviorStyle> afterInhibition,
+        List<BehaviorStyle> finalStyles,
         List<StyleActivationLog> activations,
         List<StyleParameterActivation> parameterActivations)
     {
@@ -493,7 +489,7 @@ namespace ISIDA.Common
       {
         try
         {
-          var currentFinalStyleIds = afterInhibition.Select(s => s.Id).OrderBy(id => id).ToList();
+          var currentFinalStyleIds = finalStyles.Select(s => s.Id).OrderBy(id => id).ToList();
           var lastFinalStyleIds = _lastStylesState?.AfterInhibition.Select(s => s.Id).OrderBy(id => id).ToList() ?? new List<int>();
 
           // ЛОГИРУЕМ ТОЛЬКО ЕСЛИ ИЗМЕНИЛИСЬ ФИНАЛЬНЫЕ СТИЛИ
@@ -503,19 +499,7 @@ namespace ISIDA.Common
             {
               Pulse = currentPulse,
               Time = DateTime.Now,
-              BaseStyles = baseStyles.Select(s => new StyleLogData
-              {
-                Id = s.Id,
-                Name = s.Name,
-                Weight = s.Weight
-              }).ToList(),
-              AfterAntagonists = afterAntagonists.Select(s => new StyleLogData
-              {
-                Id = s.Id,
-                Name = s.Name,
-                Weight = s.Weight
-              }).ToList(),
-              AfterInhibition = afterInhibition.Select(s => new StyleLogData
+              AfterInhibition = finalStyles.Select(s => new StyleLogData
               {
                 Id = s.Id,
                 Name = s.Name,
@@ -921,18 +905,6 @@ namespace ISIDA.Common
     {
       try
       {
-        // Логируем базовые стили
-        foreach (var style in state.BaseStyles)
-        {
-          WriteStyleEntry(state.Pulse, "Base", style);
-        }
-
-        // Логируем стили после антагонистов
-        foreach (var style in state.AfterAntagonists)
-        {
-          WriteStyleEntry(state.Pulse, "AfterAntagonists", style);
-        }
-
         // Логируем финальные стили
         foreach (var style in state.AfterInhibition)
         {

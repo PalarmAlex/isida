@@ -200,53 +200,48 @@ namespace ISIDA.Gomeostas
 
       return (zone, $"{param.Id}|{deviation:F2}|{range}|{percent:F1}");
     }
-    
+
     /// <summary>
-    /// Вычисляет функцию потребности Ui для параметра на основе его типа (дефицит/избыток)
-    /// текущего значения, критического порога и веса
+    /// Вычисляет функцию потребности Ui для параметра (обновленная версия для логирования)
     /// </summary>
-    /// <param name="param">Данные параметра</param>
-    /// <returns>Значение функции потребности Ui ∈ [0, 1]</returns>
     public float CalculateUrgencyFunction(ParameterData param)
     {
       if (param == null)
-        throw new ArgumentNullException(nameof(param)); 
+        throw new ArgumentNullException(nameof(param));
+
+      var state = CalculateParameterState(param, 50, 0.5f); 
+      var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
 
       float value = param.Value;
       float threshold = param.NormaWell;
-      float weight = Math.Max(0f, Math.Min(1f, param.Weight/100f)); // Ограничение веса [0,1]
+      float weight = Math.Max(0f, Math.Min(1f, param.Weight / 100f));
 
-      // Определение типа параметра по знаку Speed
-      bool isDeficitOriented = param.Speed < 0; // Рост полезен → дефицит при P < T
-      bool isExcessOriented = !isDeficitOriented; // Падение полезно → избыток при P > T
-
+      bool isDeficitOriented = param.Speed < 0;
+      bool isExcessOriented = !isDeficitOriented;
       float urgency = 0f;
 
       if (isDeficitOriented)
       {
-        // Дефицит-ориентированный: критично, если значение ниже порога
         if (value >= threshold)
           urgency = 0f;
         else
         {
-          float denominator = threshold > 0 ? threshold : 1f; // защита от threshold ≤ 0
+          float denominator = threshold > 0 ? threshold : 1f;
           urgency = weight * (threshold - value) / denominator;
         }
       }
 
       if (isExcessOriented)
       {
-        // Избыток-ориентированный: критично, если значение выше порога
         if (value <= threshold)
           urgency = 0f;
         else
         {
-          float denominator = Math.Max(100f - threshold, 1f); // защита от threshold ≥ 100
+          float denominator = Math.Max(100f - threshold, 1f);
           urgency = weight * (value - threshold) / denominator;
         }
       }
 
-      // Ограничиваем результат [0, 1]
       return Math.Max(0f, Math.Min(1f, urgency));
     }
 
@@ -474,56 +469,43 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Контрастирование стилей с учетом зон параметров (все этапы)
+    /// Получает финальные активные стили на основе доминирующего параметра
     /// </summary>
-    public (List<StyleWithDynamicWeight> resultStyles,
-            List<StyleWithDynamicWeight> afterAntagonists,
-            List<StyleWithDynamicWeight> baseStyles,
+    public (List<StyleWithDynamicWeight> finalStyles,
             List<ResearchLogger.StyleActivationLog> activations,
-            List<ResearchLogger.StyleParameterActivation> parameterActivations)
-        ApplyEnhancedStyleContrasting(
+            List<ResearchLogger.StyleParameterActivation> parameterActivations,
+            ParameterData dominantParameter)
+        GetFinalActiveStyles(
         List<BehaviorStyle> baseStyles,
         List<ParameterData> parameters,
         int dynamicTime,
         float difSensorPar)
     {
       var activations = new List<ResearchLogger.StyleActivationLog>();
-      var parameterActivations = new List<ResearchLogger.StyleParameterActivation>(); // ДОБАВЛЕНО
+      var parameterActivations = new List<ResearchLogger.StyleParameterActivation>();
 
-      // Этап 1: Расчет весов стилей с учетом зон параметров
-      var styleScores = CalculateStyleScoresWithZones(baseStyles, parameters, activations, dynamicTime, difSensorPar);
+      // Находим доминирующий параметр
+      var (dominantParam, dominantZone, dominanceScore) = FindDominantParameter(parameters, dynamicTime, difSensorPar);
 
-      // Создаем список базовых стилей с динамическими весами
-      var baseStylesWithWeights = baseStyles.Select(style => new StyleWithDynamicWeight
-      {
-        Style = style,
-        DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
-      }).ToList();
-
-      // Этап 2: Применение антагонизмов с обновленными весами
-      var afterAntagonism = ApplyAntagonismWithWeightedStyles(baseStyles, styleScores, activations);
-
-      var afterAntagonistsWithWeights = afterAntagonism.Select(style => new StyleWithDynamicWeight
-      {
-        Style = style,
-        DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
-      }).ToList();
-
-      // Этап 3: Финальный отбор топ-3 стилей
-      var finalStyles = afterAntagonism
-          .OrderByDescending(s => styleScores[s.Id])
+      // Финальные стили - просто берем базовые стили и сортируем по весу
+      var finalStyles = baseStyles
+          .OrderByDescending(s => s.Weight)
           .Take(3)
           .Select(style => new StyleWithDynamicWeight
           {
             Style = style,
-            DynamicWeight = styleScores.ContainsKey(style.Id) ? styleScores[style.Id] * 100f : style.Weight
+            DynamicWeight = style.Weight
           })
           .ToList();
 
-      // Собираем связи параметров и изначально активированных стилей
-      CollectParameterStyleActivations(baseStyles, parameters, parameterActivations, dynamicTime, difSensorPar);
+      // Логируем активации от доминирующего параметра
+      if (dominantParam != null)
+      {
+        CollectParameterStyleActivations(baseStyles, new List<ParameterData> { dominantParam },
+            parameterActivations, dynamicTime, difSensorPar);
+      }
 
-      return (finalStyles, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations);
+      return (finalStyles, activations, parameterActivations, dominantParam);
     }
 
     /// <summary>
@@ -599,116 +581,102 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Расчет весов стилей с учетом зон параметров
+    /// Определяет доминирующий параметр для активации стилей
     /// </summary>
-    private Dictionary<int, float> CalculateStyleScoresWithZones(
-        List<BehaviorStyle> activeStyles,
+    public (ParameterData dominantParam, int zone, float dominanceScore) FindDominantParameter(
         List<ParameterData> parameters,
-        List<ResearchLogger.StyleActivationLog> activations,
         int dynamicTime,
         float difSensorPar)
     {
-      var styleScores = new Dictionary<int, float>();
-      var zoneCoefficients = new Dictionary<int, float>
-    {
-        { 3, 0.10f },  // Слабое отклонение
-        { 4, 0.15f },  // Умеренное отклонение  
-        { 5, 0.20f },  // Значительное отклонение
-        { 6, 0.30f }   // Сильное отклонение
-    };
+      ParameterData dominant = null;
+      int dominantZone = 0;
+      float maxScore = -1f; // Начинаем с -1 чтобы отсечь незначительные
 
-      // Максимальный дополнительный вклад от параметров
-      const float maxParamContribution = 0.5f;
-
-      foreach (var style in activeStyles)
+      foreach (var param in parameters)
       {
-        // Базовый вес стиля (нормализованный к [0,1])
-        float baseWeight = style.Weight / 100f;
-        float paramContributionSum = 0f;
+        var state = CalculateParameterState(param, dynamicTime, difSensorPar);
+        var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
 
-        // Добавляем вклад от параметров, активирующих этот стиль
-        foreach (var param in parameters)
+        // Пропускаем нормальные состояния если есть более критичные
+        if (zone == 2 && maxScore > difSensorPar) continue;
+
+        float significance = CalculateBidirectionalUrgency(param, zone);
+        float priority = param.Weight / 100f;
+
+        // Основной фактор - зона, затем значимость, затем приоритет
+        float zoneBaseScore = GetZoneBaseScore(zone);
+        float dominanceScore = zoneBaseScore * (1f + significance) * (1f + priority);
+
+        if (dominanceScore > maxScore)
         {
-          // Определяем зону параметра
-          var state = CalculateParameterState(param, dynamicTime, difSensorPar);
-          var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
-
-          // Проверяем, активирует ли параметр этот стиль
-          bool isActivated = false;
-          foreach (var activation in param.StyleActivations.Values)
-          {
-            if (activation.Contains(style.Id))
-            {
-              isActivated = true;
-              break;
-            }
-          }
-
-          if (isActivated && zoneCoefficients.ContainsKey(zone))
-          {
-            // Вклад параметра = вес параметра × коэффициент зоны
-            float paramWeight = param.Weight / 100f;
-            float zoneCoefficient = zoneCoefficients[zone];
-            float paramContribution = paramWeight * zoneCoefficient;
-
-            // Ограничиваем суммарный вклад параметров
-            if (paramContributionSum + paramContribution <= maxParamContribution)
-              paramContributionSum += paramContribution;
-            else
-            {
-              paramContributionSum = maxParamContribution;
-              break;
-            }
-          }
+          maxScore = dominanceScore;
+          dominant = param;
+          dominantZone = zone;
         }
-
-        // Итоговый вес = базовый + вклад параметров, но не более 1.0
-        float totalScore = baseWeight + paramContributionSum;
-        styleScores[style.Id] = Math.Min(totalScore, 1.0f);
       }
 
-      return styleScores;
+      // Если ничего не найдено, берем первый параметр в норме
+      if (dominant == null)
+      {
+        foreach (var param in parameters)
+        {
+          var state = CalculateParameterState(param, dynamicTime, difSensorPar);
+          var (zone, zoneDetails) = GetStateForStyleActivation(param, state.State);
+          if (zone == 2)
+          {
+            dominant = param;
+            dominantZone = zone;
+            maxScore = 0.1f;
+            break;
+          }
+        }
+      }
+
+      return (dominant, dominantZone, maxScore);
     }
 
     /// <summary>
-    /// Применение антагонизмов с учетом взвешенных стилей
+    /// Двусторонняя функция потребности - учитывает как негативные, так и позитивные отклонения
     /// </summary>
-    private List<BehaviorStyle> ApplyAntagonismWithWeightedStyles(
-        List<BehaviorStyle> activeStyles,
-        Dictionary<int, float> styleScores,
-        List<ResearchLogger.StyleActivationLog> activations)
+    private float CalculateBidirectionalUrgency(ParameterData param, int zone)
     {
-      var remainingStyles = new List<BehaviorStyle>(activeStyles);
-      var stylesToRemove = new HashSet<int>();
+      float value = param.Value;
+      float norma = param.NormaWell;
+      float weight = param.Weight / 100f;
 
-      foreach (var style in activeStyles)
+      if (param.Speed < 0) // Дефицит-ориентированный
       {
-        if (stylesToRemove.Contains(style.Id)) continue;
-
-        foreach (int antagonistId in style.AntagonistStyles)
-        {
-          var antagonist = activeStyles.FirstOrDefault(s => s.Id == antagonistId);
-          if (antagonist != null && !stylesToRemove.Contains(antagonistId))
-          {
-            // Сравниваем взвешенные оценки вместо базовых весов
-            float styleScore = styleScores[style.Id];
-            float antagonistScore = styleScores[antagonistId];
-
-            if (styleScore > antagonistScore)
-              stylesToRemove.Add(antagonistId);
-            else if (styleScore < antagonistScore)
-            {
-              stylesToRemove.Add(style.Id);
-              break; // Выходим из цикла, так как текущий стиль удален
-            }
-            else
-              // При равных весах удаляем антагониста
-              stylesToRemove.Add(antagonistId);
-          }
-        }
+        if (value < norma) // Хуже нормы - критично
+          return weight * (norma - value) / norma;
+        else // Лучше нормы - хорошо, но менее значимо
+          return weight * (value - norma) / (100 - norma) * 0.3f;
       }
+      else // Избыток-ориентированный
+      {
+        if (value > norma) // Хуже нормы - критично
+          return weight * (value - norma) / (100 - norma);
+        else // Лучше нормы - хорошо, но менее значимо
+          return weight * (norma - value) / norma * 0.3f;
+      }
+    }
 
-      return remainingStyles.Where(s => !stylesToRemove.Contains(s.Id)).ToList();
+    private float GetZoneBaseScore(int zone)
+    {
+      // Базовые очки по зонам - экспоненциальный рост
+      var zoneScores = new Dictionary<int, float>
+    {
+        { 0, 10f },   // Выход из нормы
+        { 1, 5f },    // Возврат в норму  
+        { 2, 1f },    // Норма
+        { 3, 20f },   // Слабое отклонение
+        { 4, 40f },   // Умеренное отклонение
+        { 5, 80f },   // Значительное отклонение
+        { 6, 160f }   // Критическое отклонение
+    };
+
+      if (zoneScores.TryGetValue(zone, out float score))
+        return score;
+      return 1f;
     }
 
     /// <summary>

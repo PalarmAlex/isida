@@ -651,6 +651,7 @@ namespace ISIDA.Gomeostas
       private int _speed;
       private ParameterState _previousState;
       private float _previousValue;
+      private bool _isDominant;
 
       /// <summary>
       /// Конструктор по умолчанию
@@ -671,6 +672,7 @@ namespace ISIDA.Gomeostas
         _previousValue = 50f;
         LastState = ParameterState.Normal;
         LastStateChangeTime = null;
+        _isDominant = false;
       }
 
       /// <summary>
@@ -866,6 +868,22 @@ namespace ISIDA.Gomeostas
 
           _criticalMaxValue = value;
           OnPropertyChanged(nameof(CriticalMaxValue));
+        }
+      }
+
+      /// <summary>
+      /// Флаг, указывающий что параметр является доминирующим в текущий момент
+      /// </summary>
+      public bool IsDominant
+      {
+        get => _isDominant;
+        set
+        {
+          if (_isDominant != value)
+          {
+            _isDominant = value;
+            OnPropertyChanged(nameof(IsDominant));
+          }
         }
       }
 
@@ -2197,44 +2215,34 @@ namespace ISIDA.Gomeostas
     /// </summary>
     private void UpdateActiveStyles()
     {
-      var (baseStyles, allStiles) = GetBaseActiveStyles();
+      var (dominant_param, dominantZone, dominanceScore) = _calculator.FindDominantParameter(
+        _agentState.Parameters, _dynamicTime, _difSensorPar);
 
-      var (filteredStylesWithWeights, afterAntagonistsWithWeights, baseStylesWithWeights, activations, parameterActivations) =
-              _calculator.ApplyEnhancedStyleContrasting(baseStyles, _agentState.Parameters, _dynamicTime, _difSensorPar);
+      var baseStyles = GetBaseActiveStyles(dominant_param, dominantZone);
+
+      var (finalStylesWithWeights, activations, parameterActivations, dominantParam) =
+              _calculator.GetFinalActiveStyles(baseStyles, _agentState.Parameters, _dynamicTime, _difSensorPar);
+
+      UpdateDominantParameter(dominantParam);
 
       // Преобразуем обратно в обычные стили для ActiveStyles
-      var filteredStyles = filteredStylesWithWeights.Select(sw => sw.Style).ToList();
+      var finalStyles = finalStylesWithWeights.Select(sw => sw.Style).ToList();
 
-      if (filteredStyles == null || filteredStyles.Count == 0)
+      if (finalStyles == null || finalStyles.Count == 0)
       {
         if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var stuporStyle))
-          filteredStyles = new List<BehaviorStyle> { stuporStyle };
+          finalStyles = new List<BehaviorStyle> { stuporStyle };
       }
 
       Array.Clear(ActiveStyles, 0, ActiveStyles.Length);
       int i = 0;
-      foreach (var style in filteredStyles)
+      foreach (var style in finalStyles)
       {
         if (i >= ActiveStyles.Length) break;
         ActiveStyles[i++] = style;
       }
 
-      var baseStylesForLogs = baseStyles.Select(style => new BehaviorStyle
-      {
-        Id = style.Id,
-        Name = style.Name,
-        Weight = ClampInt(_agentState.BehaviorStyles[style.Id].Weight, 0, 100),
-        Description = style.Description
-      }).ToList();
-
-      var afterAntagonistsForLogs = afterAntagonistsWithWeights.Select(sw => new BehaviorStyle
-      {
-        Id = sw.Style.Id,
-        Name = sw.Style.Name,
-        Weight = ClampInt((int)Math.Round(sw.DynamicWeight), 0, 100),
-      }).ToList();
-
-      var filteredStylesForLogs = filteredStylesWithWeights.Select(sw => new BehaviorStyle
+      var finalStylesForLogs = finalStylesWithWeights.Select(sw => new BehaviorStyle
       {
         Id = sw.Style.Id,
         Name = sw.Style.Name,
@@ -2242,8 +2250,27 @@ namespace ISIDA.Gomeostas
       }).ToList();
 
       // для согласованря по пульсам с логами параметров и системы пишем на следующий пульс, так как они считывают состояния после изменений стилей
-      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, baseStylesForLogs, afterAntagonistsForLogs, filteredStylesForLogs, activations, parameterActivations);
+      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, finalStylesForLogs, activations, parameterActivations);
       CreateBehaviorStyleImageFromActiveStyles();
+    }
+
+    /// <summary>
+    /// Обновляет флаги доминирующих параметров
+    /// </summary>
+    /// <param name="dominantParam">Текущий доминирующий параметр</param>
+    private void UpdateDominantParameter(ParameterData dominantParam)
+    {
+      // Сбрасываем все флаги
+      foreach (var param in _agentState.Parameters)
+      {
+        param.IsDominant = false;
+      }
+
+      // Устанавливаем флаг доминирующего параметра
+      if (dominantParam != null)
+      {
+        dominantParam.IsDominant = true;
+      }
     }
 
     /// <summary>
@@ -2312,26 +2339,26 @@ namespace ISIDA.Gomeostas
       }
     }
 
-    private (List<BehaviorStyle>, List<string>) GetBaseActiveStyles()
+    private List<BehaviorStyle> GetBaseActiveStyles(ParameterData dominantParam, int dominantZone)
     {
       var activeStyles = new List<BehaviorStyle>();
-      var allStiles = new List<string>();
+      var styleIds = new List<int>();
 
-      foreach (var param in _agentState.Parameters)
+      if (dominantParam != null)
       {
-        var state = _calculator.CalculateParameterState(param, _dynamicTime, _difSensorPar);
-        var (stateId, stileRange) = _calculator.GetStateForStyleActivation(param, state.State);
-        allStiles.Add(stileRange);
-
-        var styleIds = GetActivationRule(param.Id, stateId);
-
+        // Получаем стили только от доминирующего параметра
+        styleIds = GetActivationRule(dominantParam.Id, dominantZone);
         if (styleIds.Any())
-        {
           ApplyActivationRule(styleIds, activeStyles);
-        }
       }
 
-      return (activeStyles, allStiles);
+      if (dominantParam == null || !styleIds.Any())
+      {
+        if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var defaultStyle))
+          activeStyles.Add(defaultStyle);
+      }
+
+      return activeStyles;
     }
 
     private List<int> GetActivationRule(int paramId, int stateId)
@@ -2374,16 +2401,14 @@ namespace ISIDA.Gomeostas
     /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов и латерального торможения
     /// </summary>
     /// <param name="maxCombinationSize">Максимальный размер комбинации (1-3)</param>
-    /// <param name="includeLateralInhibition">Включать ли применение латерального торможения</param>
     /// <param name="forceRegenerate">Принудительная генерация новых комбинаций</param>
     /// <returns>Список валидных комбинаций стилей</returns>
     public List<List<BehaviorStyle>> GenerateStyleCombinations(
         int maxCombinationSize = 3,
-        bool includeLateralInhibition = true,
         bool forceRegenerate = false)
     {
       return _styleCombinationsManager.GenerateStyleCombinations(
-          _dynamicTime, _difSensorPar, maxCombinationSize, includeLateralInhibition, forceRegenerate);
+          _dynamicTime, _difSensorPar, maxCombinationSize, forceRegenerate);
     }
 
     /// <summary>
