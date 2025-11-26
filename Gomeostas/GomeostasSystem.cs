@@ -390,22 +390,23 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Автоматически исправляет асимметричные антагонистические связи
+    /// Автоматически исправляет асимметричные антагонистические связи в переданной коллекции стилей
     /// </summary>
+    /// <param name="styles">Коллекция стилей для исправления</param>
     /// <returns>Количество исправленных связей</returns>
-    public int FixAntagonistSymmetry()
+    public int FixAntagonistSymmetry(IEnumerable<BehaviorStyle> styles)
     {
       int fixesCount = 0;
-      var styles = GetAllBehaviorStyles();
-      var styleList = styles.Values.ToList();
+      var styleList = styles.ToList();
+      var styleDict = styleList.ToDictionary(s => s.Id, s => s);
 
       foreach (var style in styleList)
       {
         foreach (var antagonistId in style.AntagonistStyles.ToList())
         {
-          if (styles.ContainsKey(antagonistId))
+          if (styleDict.ContainsKey(antagonistId))
           {
-            var antagonist = styles[antagonistId];
+            var antagonist = styleDict[antagonistId];
 
             if (!antagonist.AntagonistStyles.Contains(style.Id))
             {
@@ -417,6 +418,32 @@ namespace ISIDA.Gomeostas
       }
 
       return fixesCount;
+    }
+
+    /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи в текущих данных гомеостаза
+    /// </summary>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixAntagonistSymmetry()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        var styles = _agentState.BehaviorStyles.Values.ToList();
+        int fixesCount = FixAntagonistSymmetry(styles);
+
+        if (fixesCount > 0)
+        {
+          // Обновляем индексы после исправления связей
+          BuildStyleIndexes();
+        }
+
+        return fixesCount;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     /// <summary>

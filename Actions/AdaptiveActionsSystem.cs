@@ -751,7 +751,38 @@ namespace ISIDA.Actions
     #region Валидация и коррекция антагонистов
 
     /// <summary>
-    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий
+    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий в переданной коллекции
+    /// </summary>
+    /// <param name="actions">Коллекция действий для исправления</param>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixActionAntagonistSymmetry(IEnumerable<AdaptiveAction> actions)
+    {
+      int fixesCount = 0;
+      var actionList = actions.ToList();
+      var actionDict = actionList.ToDictionary(a => a.Id, a => a);
+
+      foreach (var action in actionList)
+      {
+        foreach (var antagonistId in action.AntagonistActions.ToList())
+        {
+          if (actionDict.ContainsKey(antagonistId))
+          {
+            var antagonist = actionDict[antagonistId];
+
+            if (!antagonist.AntagonistActions.Contains(action.Id))
+            {
+              antagonist.AntagonistActions.Add(action.Id);
+              fixesCount++;
+            }
+          }
+        }
+      }
+
+      return fixesCount;
+    }
+
+    /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий в текущих данных
     /// </summary>
     /// <returns>Количество исправленных связей</returns>
     public int FixActionAntagonistSymmetry()
@@ -761,23 +792,7 @@ namespace ISIDA.Actions
       try
       {
         var actions = _actions.Values.ToList();
-
-        foreach (var action in actions)
-        {
-          foreach (var antagonistId in action.AntagonistActions.ToList())
-          {
-            if (_actions.ContainsKey(antagonistId))
-            {
-              var antagonist = _actions[antagonistId];
-
-              if (!antagonist.AntagonistActions.Contains(action.Id))
-              {
-                antagonist.AntagonistActions.Add(action.Id);
-                fixesCount++;
-              }
-            }
-          }
-        }
+        fixesCount = FixActionAntagonistSymmetry(actions);
 
         return fixesCount;
       }

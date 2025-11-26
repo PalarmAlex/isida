@@ -536,6 +536,37 @@ namespace ISIDA.Actions
     #region Валидация и коррекция антагонистов
 
     /// <summary>
+    /// Автоматически исправляет асимметричные антагонистические связи для гомеостатических воздействий в переданной коллекции
+    /// </summary>
+    /// <param name="influences">Коллекция воздействий для исправления</param>
+    /// <returns>Количество исправленных связей</returns>
+    public int FixInfluenceAntagonistSymmetry(IEnumerable<GomeostasisInfluenceAction> influences)
+    {
+      int fixesCount = 0;
+      var influenceList = influences.ToList();
+      var influenceDict = influenceList.ToDictionary(i => i.Id, i => i);
+
+      foreach (var influence in influenceList)
+      {
+        foreach (var antagonistId in influence.AntagonistInfluences.ToList())
+        {
+          if (influenceDict.ContainsKey(antagonistId))
+          {
+            var antagonist = influenceDict[antagonistId];
+
+            if (!antagonist.AntagonistInfluences.Contains(influence.Id))
+            {
+              antagonist.AntagonistInfluences.Add(influence.Id);
+              fixesCount++;
+            }
+          }
+        }
+      }
+
+      return fixesCount;
+    }
+
+    /// <summary>
     /// Автоматически исправляет асимметричные антагонистические связи для гомеостатических воздействий
     /// </summary>
     /// <returns>Количество исправленных связей</returns>
@@ -546,23 +577,7 @@ namespace ISIDA.Actions
       try
       {
         var influences = _influenceActions.Values.ToList();
-
-        foreach (var influence in influences)
-        {
-          foreach (var antagonistId in influence.AntagonistInfluences.ToList())
-          {
-            if (_influenceActions.ContainsKey(antagonistId))
-            {
-              var antagonist = _influenceActions[antagonistId];
-
-              if (!antagonist.AntagonistInfluences.Contains(influence.Id))
-              {
-                antagonist.AntagonistInfluences.Add(influence.Id);
-                fixesCount++;
-              }
-            }
-          }
-        }
+        fixesCount = FixInfluenceAntagonistSymmetry(influences);
 
         return fixesCount;
       }

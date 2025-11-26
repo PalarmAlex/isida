@@ -204,11 +204,6 @@ namespace ISIDA.Gomeostas
       return _getParametersFunc();
     }
 
-    private HomeostasisCalculator GetCalculator()
-    {
-      return _getCalculatorFunc();
-    }
-
     /// <summary>
     /// Генерирует комбинации стилей из привязок к зонам параметров
     /// </summary>
