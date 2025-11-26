@@ -2400,15 +2400,11 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов и латерального торможения
     /// </summary>
-    /// <param name="maxCombinationSize">Максимальный размер комбинации (1-3)</param>
     /// <param name="forceRegenerate">Принудительная генерация новых комбинаций</param>
     /// <returns>Список валидных комбинаций стилей</returns>
-    public List<List<BehaviorStyle>> GenerateStyleCombinations(
-        int maxCombinationSize = 3,
-        bool forceRegenerate = false)
+    public List<List<BehaviorStyle>> GenerateStyleCombinations(bool forceRegenerate = false)
     {
-      return _styleCombinationsManager.GenerateStyleCombinations(
-          _dynamicTime, _difSensorPar, maxCombinationSize, forceRegenerate);
+      return _styleCombinationsManager.GenerateStyleCombinations(forceRegenerate);
     }
 
     /// <summary>

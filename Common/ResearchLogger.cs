@@ -227,13 +227,11 @@ namespace ISIDA.Common
       /// <summary>
       /// Уникальный идентификатор параметра гомеостаза
       /// </summary>
-      /// <value>Целое число, соответствующее ID параметра в системе гомеостаза</value>
       public int ParameterId { get; set; }
 
       /// <summary>
       /// Наименование параметра гомеостаза
       /// </summary>
-      /// <value>Строка с человеко-читаемым названием параметра</value>
       public string ParameterName { get; set; }
 
       /// <summary>
@@ -256,31 +254,16 @@ namespace ISIDA.Common
       /// <summary>
       /// Текстовое описание состояния параметра
       /// </summary>
-      /// <value>Строка с описанием состояния (например, "Слабое отклонение")</value>
       public string StateDescription { get; set; }
 
       /// <summary>
       /// Список идентификаторов стилей поведения, активируемых данным состоянием параметра
       /// </summary>
-      /// <value>
-      /// Список целых чисел, где положительные значения означают активацию стиля,
-      /// а отрицательные - деактивацию
-      /// </value>
-      /// <example>
-      /// [1, 3, -2] - активирует стили с ID 1 и 3, деактивирует стиль с ID 2
-      /// </example>
       public List<int> ActivatedStyles { get; set; } = new List<int>();
 
       /// <summary>
       /// Детальная информация о процессе активации стилей
       /// </summary>
-      /// <value>
-      /// Строка с техническими деталями активации в формате: 
-      /// "ParamId|Deviation|Range|Percent|Zone"
-      /// </value>
-      /// <example>
-      /// "1|5.25|50.0|10.5|4" - параметр ID 1, отклонение 5.25, диапазон 50.0, процент 10.5%, зона 4
-      /// </example>
       public string ActivationDetails { get; set; }
     }
 

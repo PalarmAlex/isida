@@ -46,22 +46,12 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Генерирует все возможные комбинации стилей реагирования с учетом антагонистов
+    /// Получает все возможные комбинации стилей реагирования из привязок к зонам параметров
     /// </summary>
-    /// <param name="dynamicTime">Время в пульсах удержания состояний параметров</param>
-    /// <param name="difSensorPar">Минимальное изменение параметра для детектирования</param>
-    /// <param name="maxCombinationSize">Максимальный размер комбинации (минимум 1)</param>
     /// <param name="forceRegenerate">Принудительная генерация новых комбинаций</param>
     /// <returns>Список валидных комбинаций стилей</returns>
-    public List<List<GomeostasSystem.BehaviorStyle>> GenerateStyleCombinations(
-        int dynamicTime,
-        float difSensorPar,
-        int maxCombinationSize = 3,
-        bool forceRegenerate = false)
+    public List<List<GomeostasSystem.BehaviorStyle>> GenerateStyleCombinations(bool forceRegenerate = false)
     {
-      if (maxCombinationSize < 1)
-        throw new ArgumentOutOfRangeException(nameof(maxCombinationSize), "Размер комбинации должен быть не менее 1");
-
       // Пытаемся загрузить из файла, если не принудительная генерация
       if (!forceRegenerate)
       {
@@ -72,20 +62,8 @@ namespace ISIDA.Gomeostas
         }
       }
 
-      // Получаем все стили
-      List<GomeostasSystem.BehaviorStyle> allStyles;
-      _lock.EnterReadLock();
-      try
-      {
-        allStyles = GetAllBehaviorStyles().Values.ToList();
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-
-      // Генерируем новые комбинации
-      var validCombinations = GenerateCombinationsInternal(allStyles, maxCombinationSize);
+      // Генерируем новые комбинации из привязок параметров
+      var validCombinations = GenerateCombinationsFromParameterBindings();
 
       // Сохраняем сгенерированные комбинации
       var saveResult = SaveStyleCombinations(validCombinations);
@@ -175,26 +153,20 @@ namespace ISIDA.Gomeostas
             ""
         };
 
-        // Фильтруем пустые комбинации
-        var validCombinations = combinations.Where(c => c != null && c.Any()).ToList();
+        // Фильтруем пустые комбинации и удаляем дубликаты
+        var validCombinations = combinations
+            .Where(c => c != null && c.Any())
+            .Select(c => c.OrderBy(s => s.Id).ToList())
+            .Distinct(new StyleCombinationComparer())
+            .ToList();
 
-        // Добавляем сначала все одиночные стили (комбинации размером 1)
-        var singleStyles = validCombinations.Where(c => c.Count == 1).ToList();
-        foreach (var combination in singleStyles)
-        {
-          var style = combination[0];
-          lines.Add($"{style.Id}|{style.Name}");
-        }
+        // Сортируем по количеству стилей в комбинации (возрастание)
+        validCombinations = validCombinations
+            .OrderBy(c => c.Count)
+            .ThenBy(c => c.First().Id)
+            .ToList();
 
-        // Добавляем разделитель между одиночными и комбинированными стилями
-        if (singleStyles.Any() && validCombinations.Any(c => c.Count > 1))
-        {
-          lines.Add("");
-          lines.Add("# Комбинированные стили:");
-        }
-
-        // Добавляем комбинации из 2+ стилей
-        foreach (var combination in validCombinations.Where(c => c.Count > 1))
+        foreach (var combination in validCombinations)
         {
           var styleIds = combination.Select(s => s.Id).OrderBy(id => id).ToList();
           var styleNames = combination.Select(s => s.Name).ToList();
@@ -220,7 +192,6 @@ namespace ISIDA.Gomeostas
         return (false, ex.Message);
       }
     }
-
     #region Вспомогательные методы
 
     private ReadOnlyDictionary<int, GomeostasSystem.BehaviorStyle> GetAllBehaviorStyles()
@@ -238,94 +209,89 @@ namespace ISIDA.Gomeostas
       return _getCalculatorFunc();
     }
 
-    private List<List<GomeostasSystem.BehaviorStyle>> GenerateCombinationsInternal(
-        List<GomeostasSystem.BehaviorStyle> allStyles,
-        int maxCombinationSize)
+    /// <summary>
+    /// Генерирует комбинации стилей из привязок к зонам параметров
+    /// </summary>
+    private List<List<GomeostasSystem.BehaviorStyle>> GenerateCombinationsFromParameterBindings()
     {
-      var validCombinations = new List<List<GomeostasSystem.BehaviorStyle>>();
+      var allCombinations = new List<List<GomeostasSystem.BehaviorStyle>>();
+      var allStyles = GetAllBehaviorStyles();
+      var parameters = GetAllParameters();
 
-      for (int size = 1; size <= maxCombinationSize; size++)
+      // Собираем все уникальные комбинации стилей из привязок параметров
+      var uniqueCombinations = new HashSet<string>();
+
+      foreach (var param in parameters)
       {
-        GenerateCombinationsRecursive(allStyles, new List<GomeostasSystem.BehaviorStyle>(), 0, size, validCombinations);
-      }
-
-      return validCombinations;
-    }
-
-    private void GenerateCombinationsRecursive(List<GomeostasSystem.BehaviorStyle> allStyles,
-        List<GomeostasSystem.BehaviorStyle> currentCombination, int startIndex, int targetSize,
-        List<List<GomeostasSystem.BehaviorStyle>> validCombinations)
-    {
-      // Если достигли нужного размера комбинации
-      if (currentCombination.Count == targetSize)
-      {
-        if (IsValidStyleCombination(currentCombination))
+        foreach (var activation in param.StyleActivations.Values)
         {
-          // Убедимся, что комбинация уникальна (отсортирована по ID)
-          var sortedCombination = currentCombination.OrderBy(s => s.Id).ToList();
-          if (!validCombinations.Any(existing =>
-              existing.Count == sortedCombination.Count &&
-              existing.Select(s => s.Id).SequenceEqual(sortedCombination.Select(s => s.Id))))
+          if (activation != null && activation.Any())
           {
-            validCombinations.Add(sortedCombination);
-          }
-        }
-        return;
-      }
+            // Фильтруем только положительные ID (активации)
+            var styleIds = activation.Where(id => id > 0).ToList();
 
-      // Рекурсивно добавляем стили в комбинацию
-      for (int i = startIndex; i < allStyles.Count; i++)
-      {
-        var style = allStyles[i];
+            if (styleIds.Any())
+            {
+              // Создаем комбинацию из доступных стилей
+              var combination = new List<GomeostasSystem.BehaviorStyle>();
+              foreach (var styleId in styleIds)
+              {
+                if (allStyles.TryGetValue(styleId, out var style))
+                {
+                  combination.Add(style);
+                }
+              }
 
-        // Проверяем, можно ли добавить этот стиль в текущую комбинацию
-        if (CanAddStyleToCombination(style, currentCombination))
-        {
-          currentCombination.Add(style);
+              if (combination.Any())
+              {
+                // Добавляем только полную комбинацию (без отдельных стилей)
+                var sortedCombination = combination.OrderBy(s => s.Id).ToList();
+                var combinationKey = string.Join(",", sortedCombination.Select(s => s.Id).OrderBy(id => id));
 
-          // Проверяем, не превысили ли мы максимальный размер 3
-          if (currentCombination.Count <= 3)
-          {
-            GenerateCombinationsRecursive(allStyles, currentCombination, i + 1, targetSize, validCombinations);
-          }
-
-          currentCombination.RemoveAt(currentCombination.Count - 1);
-        }
-      }
-    }
-
-    private bool CanAddStyleToCombination(GomeostasSystem.BehaviorStyle style, List<GomeostasSystem.BehaviorStyle> currentCombination)
-    {
-      foreach (var existingStyle in currentCombination)
-      {
-        if (style.AntagonistStyles.Contains(existingStyle.Id) ||
-            existingStyle.AntagonistStyles.Contains(style.Id))
-        {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    private bool IsValidStyleCombination(List<GomeostasSystem.BehaviorStyle> combination)
-    {
-      if (!combination.Any()) return false;
-
-      for (int i = 0; i < combination.Count; i++)
-      {
-        for (int j = i + 1; j < combination.Count; j++)
-        {
-          var style1 = combination[i];
-          var style2 = combination[j];
-
-          if (style1.AntagonistStyles.Contains(style2.Id) ||
-              style2.AntagonistStyles.Contains(style1.Id))
-          {
-            return false;
+                if (!uniqueCombinations.Contains(combinationKey))
+                {
+                  uniqueCombinations.Add(combinationKey);
+                  allCombinations.Add(sortedCombination);
+                }
+              }
+            }
           }
         }
       }
-      return true;
+
+      // Сортируем по количеству стилей в комбинации (возрастание)
+      return allCombinations
+          .OrderBy(c => c.Count)
+          .ThenBy(c => c.First().Name)
+          .ToList();
+    }
+
+    /// <summary>
+    /// Компаратор для сравнения комбинаций стилей
+    /// </summary>
+    private class StyleCombinationComparer : IEqualityComparer<List<GomeostasSystem.BehaviorStyle>>
+    {
+      public bool Equals(List<GomeostasSystem.BehaviorStyle> x, List<GomeostasSystem.BehaviorStyle> y)
+      {
+        if (x == null && y == null) return true;
+        if (x == null || y == null) return false;
+        if (x.Count != y.Count) return false;
+
+        return x.Select(s => s.Id).OrderBy(id => id)
+            .SequenceEqual(y.Select(s => s.Id).OrderBy(id => id));
+      }
+
+      public int GetHashCode(List<GomeostasSystem.BehaviorStyle> obj)
+      {
+        if (obj == null) return 0;
+
+        int hash = 17;
+        foreach (var id in obj.Select(s => s.Id).OrderBy(id => id))
+        {
+          hash = hash * 31 + id.GetHashCode();
+        }
+        return hash;
+      }
     }
 
     #endregion

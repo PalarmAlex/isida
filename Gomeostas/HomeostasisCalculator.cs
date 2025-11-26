@@ -483,11 +483,7 @@ namespace ISIDA.Gomeostas
     {
       var activations = new List<ResearchLogger.StyleActivationLog>();
       var parameterActivations = new List<ResearchLogger.StyleParameterActivation>();
-
-      // Находим доминирующий параметр
       var (dominantParam, dominantZone, dominanceScore) = FindDominantParameter(parameters, dynamicTime, difSensorPar);
-
-      // Финальные стили - просто берем базовые стили и сортируем по весу
       var finalStyles = baseStyles
           .OrderByDescending(s => s.Weight)
           .Take(3)
@@ -498,7 +494,6 @@ namespace ISIDA.Gomeostas
           })
           .ToList();
 
-      // Логируем активации от доминирующего параметра
       if (dominantParam != null)
       {
         CollectParameterStyleActivations(baseStyles, new List<ParameterData> { dominantParam },
