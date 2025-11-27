@@ -22,6 +22,7 @@ namespace ISIDA.Reflexes
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
+    private readonly string _gomeostasFolderPath;
     private bool _disposed = false;
 
     #region Привязка к ReflexTreeSystem через события
@@ -123,6 +124,7 @@ namespace ISIDA.Reflexes
         string reflexesFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
+      _gomeostasFolderPath = Path.GetDirectoryName(gomeostas.GomeostasFolderPath);
       _influenceActionSystem = InfluenceActionSystem.Instance;
       _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
 
@@ -317,7 +319,7 @@ namespace ISIDA.Reflexes
 
         if (isDuplicate)
         {
-          string strErr = $"Безусловный рефлекс c указанными уровняим Level1, Level2, Level3, AdaptiveActions, WordId уже существует. Дублирование запрещено.";
+          string strErr = $"Безусловный рефлекс c указанными уровняим Level1, Level2, Level3, AdaptiveAction уже существует. Дублирование запрещено.";
           warnings.Add(strErr);
           throw new ArgumentException(strErr);
         }
@@ -631,6 +633,141 @@ namespace ISIDA.Reflexes
       }
     }
 
+    /// <summary>
+    /// Создает набор безусловных рефлексов по всем состояниям и комбинациям стилей
+    /// </summary>
+    /// <param name="gomeostasSystem">Система гомеостаза для получения комбинаций стилей</param>
+    /// <returns>Кортеж (успех, количество созданных рефлексов, сообщение об ошибке)</returns>
+    public (bool Success, int CreatedCount, string ErrorMessage) CreateGeneticReflexesForAllStatesAndStyles(GomeostasSystem gomeostasSystem)
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        return (false, 0, "Работа с безусловными рефлексами разрешена только в стадии 0");
+
+      if (gomeostasSystem == null)
+        return (false, 0, "Система гомеостаза не может быть null");
+
+      if (_adaptiveActionsSystem.DefaultAdaptiveActionId == 0)
+        return (false, 0, "Не задано адаптивное действие по умолчанию. Установите действие по умолчанию перед созданием рефлексов.");
+
+      var defaultAction = _adaptiveActionsSystem.GetAllAdaptiveActionsList()
+          .FirstOrDefault(a => a.Id == _adaptiveActionsSystem.DefaultAdaptiveActionId);
+
+      if (defaultAction == null)
+        return (false, 0, $"Адаптивное действие по умолчанию (ID: {_adaptiveActionsSystem.DefaultAdaptiveActionId}) не найдено");
+
+      try
+      {
+        string gomeostasFolderPath = Path.GetDirectoryName(gomeostasSystem.GomeostasFolderPath);
+
+        var styleCombinationsManager = new StyleCombinationsManager(
+            gomeostasFolderPath,
+            () => gomeostasSystem.GetAllBehaviorStyles(),
+            () => gomeostasSystem.GetAllParameters().ToList());
+
+        var styleCombinations = styleCombinationsManager.GenerateStyleCombinations(true);
+
+        if (!styleCombinations.Any())
+          return (false, 0, "Не удалось сгенерировать комбинации стилей");
+
+        var existingReflexes = GetAllGeneticReflexesList();
+        var existingReflexesSet = new HashSet<string>();
+
+        foreach (var reflex in existingReflexes)
+        {
+          var key = CreateReflexKey(reflex.Level1, reflex.Level2, reflex.Level3, reflex.AdaptiveActions);
+          existingReflexesSet.Add(key);
+        }
+
+        int createdCount = 0;
+        int skippedCount = 0;
+        var warnings = new List<string>();
+
+        int[] baseStates = { -1, 0, 1 };
+
+        foreach (int baseState in baseStates)
+        {
+          foreach (var styleCombination in styleCombinations)
+          {
+            try
+            {
+              var styleIds = styleCombination.Select(s => s.Id).ToList();
+              var level3 = new List<int>();
+              var adaptiveActions = new List<int> { _adaptiveActionsSystem.DefaultAdaptiveActionId };
+
+              var candidateKey = CreateReflexKey(baseState, styleIds, level3, adaptiveActions);
+              if (existingReflexesSet.Contains(candidateKey))
+              {
+                skippedCount++;
+                continue;
+              }
+
+              var (reflexId, reflexWarnings) = AddGeneticReflex(
+                  baseState,
+                  styleIds,
+                  level3,
+                  adaptiveActions);
+
+              if (reflexId > 0)
+              {
+                createdCount++;
+                existingReflexesSet.Add(candidateKey);
+                LogError($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действием по умолчанию (ID: {_adaptiveActionsSystem.DefaultAdaptiveActionId})");
+              }
+
+              if (reflexWarnings != null && reflexWarnings.Any())
+                warnings.AddRange(reflexWarnings);
+            }
+            catch (Exception ex)
+            {
+              warnings.Add($"Ошибка создания рефлекса для состояния {baseState} и стилей [{string.Join(",", styleCombination.Select(s => s.Id))}]: {ex.Message}");
+            }
+          }
+        }
+
+        var saveResult = SaveGeneticReflexes();
+        if (!saveResult.Success)
+        {
+          warnings.Add($"Ошибка сохранения рефлексов: {saveResult.ErrorMessage}");
+        }
+
+        string resultMessage;
+        if (createdCount > 0)
+        {
+          resultMessage = $"Создано {createdCount} новых рефлексов с действием по умолчанию '{defaultAction.Name}' (ID: {defaultAction.Id}).";
+          if (skippedCount > 0)
+            resultMessage += $" Пропущено {skippedCount} существующих рефлексов.";
+          if (warnings.Any())
+            resultMessage += $" Предупреждения: {string.Join("; ", warnings)}";
+        }
+        else
+        {
+          resultMessage = "Не создано новых рефлексов. ";
+          if (skippedCount > 0)
+            resultMessage += $"Все {skippedCount} возможных рефлексов уже существуют.";
+          if (warnings.Any())
+            resultMessage += string.Join("; ", warnings);
+        }
+
+        return (createdCount > 0, createdCount, resultMessage);
+      }
+      catch (Exception ex)
+      {
+        return (false, 0, $"Ошибка создания рефлексов: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Создает уникальный ключ для рефлекса на основе его параметров
+    /// </summary>
+    private string CreateReflexKey(int level1, List<int> level2, List<int> level3, List<int> adaptiveActions)
+    {
+      // Сортируем списки для обеспечения уникальности независимо от порядка элементов
+      var sortedLevel2 = level2?.OrderBy(x => x).ToList() ?? new List<int>();
+      var sortedLevel3 = level3?.OrderBy(x => x).ToList() ?? new List<int>();
+      var sortedAdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>();
+
+      return $"{level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedLevel3)}|{string.Join(",", sortedAdaptiveActions)}";
+    }
     #endregion
 
     #region Работа с файлами

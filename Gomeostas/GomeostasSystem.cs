@@ -69,8 +69,7 @@ namespace ISIDA.Gomeostas
         _styleCombinationsManager = new StyleCombinationsManager(
           GomeostasFolderPath,
           () => InternalBehaviorStyles,
-          () => GetAllParameters(),
-          () => Calculator);
+          () => GetAllParameters());
       }
       catch (Exception ex)
       {
@@ -360,6 +359,12 @@ namespace ISIDA.Gomeostas
         }
       }
 
+      if (!ValidateParameterStyleConflicts(_agentState.Parameters, out string errorMsg))
+      {
+        errorMessage = "Изменения антагонистов нарушило существующую матрицу связей параметры - стили. Возникли конфликты антагонистов:\n\n" + errorMsg;
+        return false;
+      }
+
       return true;
     }
     
@@ -543,7 +548,107 @@ namespace ISIDA.Gomeostas
       if (!CheckForInfluenceCycles(parameters, out errorMessage))
         return false;
 
+      if (!ValidateParameterStyleConflicts(_agentState.Parameters, out errorMessage))
+        return false;
+
       return true;
+    }
+
+    /// <summary>
+    /// Проверяет параметры гомеостаза на наличие конфликтующих стилей в активациях
+    /// </summary>
+    /// <param name="parameters">Список параметров для проверки</param>
+    /// <param name="errorMessage">Сообщение об ошибке с детализацией конфликтов</param>
+    /// <returns>True если конфликтов нет, иначе False</returns>
+    public bool ValidateParameterStyleConflicts(IEnumerable<ParameterData> parameters, out string errorMessage)
+    {
+      errorMessage = string.Empty;
+      var conflicts = new List<string>();
+
+      //_lock.EnterReadLock();
+      try
+      {
+        var allStyles = GetAllBehaviorStyles();
+
+        foreach (var param in parameters)
+        {
+          foreach (var activation in param.StyleActivations)
+          {
+            int zoneId = activation.Key;
+            var styleIds = activation.Value.Where(id => id > 0).ToList();
+
+            if (styleIds.Count < 2) continue; // Нет смысла проверять одиночные стили
+
+            var conflictResult = CheckStyleCombinationForConflicts(styleIds, allStyles);
+            if (!conflictResult.IsValid)
+            {
+              conflicts.Add($"Параметр '{param.Name}' (ID:{param.Id}), зона {zoneId}: {conflictResult.ErrorMessage}");
+            }
+          }
+        }
+
+        if (conflicts.Any())
+        {
+          errorMessage = "Обнаружены конфликты стилей в активациях параметров:\n" +
+                        string.Join("\n", conflicts);
+          return false;
+        }
+
+        return true;
+      }
+      finally
+      {
+        //_lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Проверяет комбинацию стилей на конфликты антагонистов
+    /// </summary>
+    private (bool IsValid, string ErrorMessage) CheckStyleCombinationForConflicts(List<int> styleIds, ReadOnlyDictionary<int, BehaviorStyle> allStyles)
+    {
+      var conflictingPairs = new List<string>();
+
+      // Проверяем все возможные пары стилей в комбинации
+      for (int i = 0; i < styleIds.Count; i++)
+      {
+        for (int j = i + 1; j < styleIds.Count; j++)
+        {
+          int styleId1 = styleIds[i];
+          int styleId2 = styleIds[j];
+
+          // Проверяем, являются ли стили антагонистами
+          if (AreStylesAntagonists(styleId1, styleId2, allStyles))
+          {
+            var style1 = allStyles[styleId1];
+            var style2 = allStyles[styleId2];
+            conflictingPairs.Add($"{style1.Name} (ID:{style1.Id}) ↔ {style2.Name} (ID:{style2.Id})");
+          }
+        }
+      }
+
+      if (conflictingPairs.Any())
+      {
+        return (false, $"Конфликтующие стили: {string.Join("; ", conflictingPairs)}");
+      }
+
+      return (true, string.Empty);
+    }
+
+    /// <summary>
+    /// Проверяет, являются ли два стиля антагонистами
+    /// </summary>
+    private bool AreStylesAntagonists(int styleId1, int styleId2, ReadOnlyDictionary<int, BehaviorStyle> allStyles)
+    {
+      if (!allStyles.ContainsKey(styleId1) || !allStyles.ContainsKey(styleId2))
+        return false;
+
+      var style1 = allStyles[styleId1];
+      var style2 = allStyles[styleId2];
+
+      // Проверяем двусторонние антагонистические связи
+      return (style1.AntagonistStyles.Contains(styleId2) ||
+              style2.AntagonistStyles.Contains(styleId1));
     }
 
     #endregion
@@ -2287,17 +2392,13 @@ namespace ISIDA.Gomeostas
     /// <param name="dominantParam">Текущий доминирующий параметр</param>
     private void UpdateDominantParameter(ParameterData dominantParam)
     {
-      // Сбрасываем все флаги
       foreach (var param in _agentState.Parameters)
       {
         param.IsDominant = false;
       }
 
-      // Устанавливаем флаг доминирующего параметра
       if (dominantParam != null)
-      {
         dominantParam.IsDominant = true;
-      }
     }
 
     /// <summary>
@@ -2848,7 +2949,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAgentParameters(bool IsValidate = true)
     {
-      // сохрание доступно на любой стадии - нужно ведь сохранять текущие значения
+      // сохранение доступно на любой стадии - нужно ведь сохранять текущие значения
       try
       {
         string errorMessage = string.Empty;
@@ -2882,7 +2983,7 @@ namespace ISIDA.Gomeostas
                    $"{param.IsVital}|" +
                    $"{param.CriticalMinValue.ToString(CultureInfo.InvariantCulture)}|" +
                    $"{param.CriticalMaxValue.ToString(CultureInfo.InvariantCulture)}");
-        }     
+        }
 
         var linCount = 6;
         if (lines.Count == 5)

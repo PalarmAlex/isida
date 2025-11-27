@@ -18,7 +18,6 @@ namespace ISIDA.Gomeostas
     private readonly string _gomeostasFolderPath;
     private readonly Func<ReadOnlyDictionary<int, GomeostasSystem.BehaviorStyle>> _getStylesFunc;
     private readonly Func<List<GomeostasSystem.ParameterData>> _getParametersFunc;
-    private readonly Func<HomeostasisCalculator> _getCalculatorFunc;
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
 
@@ -28,13 +27,11 @@ namespace ISIDA.Gomeostas
     public StyleCombinationsManager(
         string gomeostasFolderPath,
         Func<ReadOnlyDictionary<int, GomeostasSystem.BehaviorStyle>> getStylesFunc,
-        Func<List<GomeostasSystem.ParameterData>> getParametersFunc,
-        Func<HomeostasisCalculator> getCalculatorFunc)
+        Func<List<GomeostasSystem.ParameterData>> getParametersFunc)
     {
       _gomeostasFolderPath = gomeostasFolderPath ?? throw new ArgumentNullException(nameof(gomeostasFolderPath));
       _getStylesFunc = getStylesFunc ?? throw new ArgumentNullException(nameof(getStylesFunc));
       _getParametersFunc = getParametersFunc ?? throw new ArgumentNullException(nameof(getParametersFunc));
-      _getCalculatorFunc = getCalculatorFunc ?? throw new ArgumentNullException(nameof(getCalculatorFunc));
     }
 
     /// <summary>
