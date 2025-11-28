@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.FileValidator;
 
 namespace ISIDA.Reflexes
@@ -692,8 +693,7 @@ namespace ISIDA.Reflexes
             {
               var styleIds = styleCombination.Select(s => s.Id).ToList();
               var level3 = new List<int>();
-              var adaptiveActions = new List<int> { _adaptiveActionsSystem.DefaultAdaptiveActionId };
-
+              var adaptiveActions = SelectAdaptiveActionsForStyles(styleCombination, defaultAction);
               var candidateKey = CreateReflexKey(baseState, styleIds, level3, adaptiveActions);
               if (existingReflexesSet.Contains(candidateKey))
               {
@@ -711,7 +711,7 @@ namespace ISIDA.Reflexes
               {
                 createdCount++;
                 existingReflexesSet.Add(candidateKey);
-                LogError($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действием по умолчанию (ID: {_adaptiveActionsSystem.DefaultAdaptiveActionId})");
+                LogError($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действиями [{string.Join(",", adaptiveActions)}]");
               }
 
               if (reflexWarnings != null && reflexWarnings.Any())
@@ -733,7 +733,7 @@ namespace ISIDA.Reflexes
         string resultMessage;
         if (createdCount > 0)
         {
-          resultMessage = $"Создано {createdCount} новых рефлексов с действием по умолчанию '{defaultAction.Name}' (ID: {defaultAction.Id}).";
+          resultMessage = $"Создано {createdCount} новых рефлексов.";
           if (skippedCount > 0)
             resultMessage += $" Пропущено {skippedCount} существующих рефлексов.";
           if (warnings.Any())
@@ -757,6 +757,69 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Выбирает одно адаптивное действие на основе влияний стилей из комбинации
+    /// </summary>
+    /// <param name="styleCombination">Комбинация стилей</param>
+    /// <param name="defaultAction">Действие по умолчанию</param>
+    /// <returns>ID одного адаптивного действия</returns>
+    private List<int> SelectAdaptiveActionsForStyles(List<GomeostasSystem.BehaviorStyle> styleCombination, AdaptiveAction defaultAction)
+    {
+      var candidateActions = new Dictionary<int, (int ActionId, int StyleWeight, int Modulation)>();
+
+      // Собираем все действия с положительным влиянием от всех стилей в комбинации
+      foreach (var style in styleCombination)
+      {
+        if (style.StileActionInfluence != null && style.StileActionInfluence.Any())
+        {
+          foreach (var influence in style.StileActionInfluence)
+          {
+            int actionId = influence.Key;
+            int modulation = influence.Value;
+
+            // Учитываем только действия с положительным влиянием (модуляция > 0)
+            if (modulation > 0)
+            {
+              // Если действие уже есть в кандидатах, выбираем от стиля с наибольшим весом
+              if (!candidateActions.ContainsKey(actionId) ||
+                  style.Weight > candidateActions[actionId].StyleWeight)
+              {
+                candidateActions[actionId] = (actionId, style.Weight, modulation);
+              }
+              // Если веса стилей одинаковые, выбираем с наибольшей модуляцией
+              else if (style.Weight == candidateActions[actionId].StyleWeight &&
+                       modulation > candidateActions[actionId].Modulation)
+              {
+                candidateActions[actionId] = (actionId, style.Weight, modulation);
+              }
+            }
+          }
+        }
+      }
+
+      if (candidateActions.Any())
+      {
+        // Сначала ищем действие от стиля с максимальным весом
+        var maxWeight = candidateActions.Values.Max(ca => ca.StyleWeight);
+        var actionsWithMaxWeight = candidateActions.Values.Where(ca => ca.StyleWeight == maxWeight).ToList();
+
+        // Если несколько действий от стилей с максимальным весом, выбираем с максимальной модуляцией
+        if (actionsWithMaxWeight.Count > 1)
+        {
+          var maxModulation = actionsWithMaxWeight.Max(ca => ca.Modulation);
+          var bestAction = actionsWithMaxWeight.First(ca => ca.Modulation == maxModulation);
+          return new List<int> { bestAction.ActionId };
+        }
+        else
+        {
+          return new List<int> { actionsWithMaxWeight.First().ActionId };
+        }
+      }
+
+      // Если не нашли подходящих действий, используем действие по умолчанию
+      return new List<int> { defaultAction.Id };
+    }
+   
+    /// <summary>
     /// Создает уникальный ключ для рефлекса на основе его параметров
     /// </summary>
     private string CreateReflexKey(int level1, List<int> level2, List<int> level3, List<int> adaptiveActions)
@@ -768,6 +831,7 @@ namespace ISIDA.Reflexes
 
       return $"{level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedLevel3)}|{string.Join(",", sortedAdaptiveActions)}";
     }
+   
     #endregion
 
     #region Работа с файлами
