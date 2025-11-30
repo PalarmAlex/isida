@@ -1,9 +1,11 @@
 ﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using static ISIDA.Reflexes.ReflexTreeSystem;
 
 namespace ISIDA.Reflexes
 {
@@ -14,6 +16,7 @@ namespace ISIDA.Reflexes
   {
     private readonly GeneticReflexesSystem _geneticReflexesSystem;
     private readonly PerceptionImagesSystem _perceptionImagesSystem;
+    private readonly ReflexChainsSystem _reflexChainsSystem;
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
 
@@ -35,20 +38,28 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Инициализирует глобальный экземпляр системы дерева рефлексов
     /// </summary>
-    public static void InitializeInstance(GeneticReflexesSystem geneticReflexesSystem, PerceptionImagesSystem perceptionImagesSystem)
+    public static void InitializeInstance(
+      GeneticReflexesSystem geneticReflexesSystem, 
+      PerceptionImagesSystem perceptionImagesSystem,
+      ReflexChainsSystem reflexChainsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexTreeSystem уже инициализирован.");
 
-      _instance = new ReflexTreeSystem(geneticReflexesSystem, perceptionImagesSystem);
+      _instance = new ReflexTreeSystem(geneticReflexesSystem, perceptionImagesSystem, reflexChainsSystem);
     }
 
-    private ReflexTreeSystem(GeneticReflexesSystem geneticReflexesSystem, PerceptionImagesSystem perceptionImagesSystem)
+    private ReflexTreeSystem(
+      GeneticReflexesSystem geneticReflexesSystem, 
+      PerceptionImagesSystem perceptionImagesSystem,
+      ReflexChainsSystem reflexChainsSystem)
     {
       try
       {
         _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
         _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+        _reflexChainsSystem = reflexChainsSystem ?? throw new ArgumentNullException(nameof(reflexChainsSystem));
+
         _geneticReflexesSystem.GeneticReflexDeleted += OnGeneticReflexDeleted;
         _geneticReflexesSystem.MultipleGeneticReflexesDeleted += OnMultipleGeneticReflexesDeleted;
         _geneticReflexesSystem.GeneticReflexCreated += OnGeneticReflexCreated;
@@ -147,6 +158,21 @@ namespace ISIDA.Reflexes
       public int ConditionedReflex { get; set; }
 
       /// <summary>
+      /// ID цепочки рефлексов, связанной с узлом
+      /// </summary>
+      public int ReflexChainID { get; set; }
+
+      /// <summary>
+      /// ID стартового звена цепочки
+      /// </summary>
+      public int ChainStartLinkID { get; set; }
+
+      /// <summary>
+      /// Флаг, указывающий что узел содержит цепочку
+      /// </summary>
+      public bool IsChainNode => ReflexChainID > 0;
+
+      /// <summary>
       /// Дочерние узлы
       /// </summary>
       public List<ReflexNode> Children { get; set; } = new List<ReflexNode>();
@@ -162,12 +188,39 @@ namespace ISIDA.Reflexes
       public ReflexNode ParentNode { get; set; }
     }
 
+    /// <summary>
+    /// Активные цепочки рефлексов
+    /// </summary>
+    public class ActiveChain
+    {
+      /// <summary>
+      /// ID активной цепочки
+      /// </summary>
+      public int ChainID { get; set; }
+
+      /// <summary>
+      /// ID текущего активного звена
+      /// </summary>
+      public int CurrentLinkID { get; set; }
+
+      /// <summary>
+      /// Пульс начала выполнения цепочки
+      /// </summary>
+      public int StartPulse { get; set; }
+
+      /// <summary>
+      /// Текущий пульс выполнения цепочки
+      /// </summary>
+      public int CurrentPulse { get; set; }
+    }
+
     #endregion
 
     #region Поля и свойства
 
     private readonly ReflexNode ReflexTree = new ReflexNode();
     private readonly List<ReflexNode> ReflexTreeFromID = new List<ReflexNode>();
+    private readonly Dictionary<int, ActiveChain> _activeChains = new Dictionary<int, ActiveChain>();
     private int _lastReflexNodeID = 0;
     private int _detectedLastNodeID = 0;
 
@@ -446,6 +499,121 @@ namespace ISIDA.Reflexes
         currentNode = currentNode.ParentNode;
       }
       return level;
+    }
+
+    #endregion
+
+    #region Методы для работы с цепочками
+
+    /// <summary>Находит подходящую цепочку для текущих условий</summary>
+    /// <param name="baseID">Базовое состояние гомеостаза</param>
+    /// <param name="styleID">ID образа стилей поведения</param>
+    /// <param name="actionID">ID образа пусковых стимулов</param>
+    /// <returns>ID цепочки и стартового звена</returns>
+    public (int ChainID, int StartLinkID) FindSuitableChain(int baseID, int styleID, int actionID)
+    {
+      var (nodeID, node) = FindReflexTreeNodeFromCondition(baseID, styleID, actionID);
+
+      if (node != null && node.IsChainNode)
+      {
+        return (node.ReflexChainID, node.ChainStartLinkID);
+      }
+
+      return (0, 0);
+    }
+
+    /// <summary>Активирует цепочку рефлексов</summary>
+    /// <param name="chainID">ID цепочки</param>
+    /// <param name="startLinkID">ID стартового звена</param>
+    /// <param name="currentPulse">Текущий пульс активации</param>
+    /// <returns>True если цепочка активирована</returns>
+    public bool ActivateChain(int chainID, int startLinkID, int currentPulse)
+    {
+      var chainLinks = _reflexChainsSystem.GetChainLinks(chainID);
+      if (!chainLinks.Any())
+        return false;
+
+      var activeChain = new ActiveChain
+      {
+        ChainID = chainID,
+        CurrentLinkID = startLinkID,
+        StartPulse = currentPulse,
+        CurrentPulse = currentPulse
+      };
+
+      _activeChains[chainID] = activeChain;
+      return true;
+    }
+
+    /// <summary>Выполняет шаг активной цепочки</summary>
+    /// <param name="chainID">ID цепочки</param>
+    /// <param name="currentPulse">Текущий пульс выполнения</param>
+    /// <param name="previousStepSuccess">Результат предыдущего шага</param>
+    /// <returns>Результат выполнения шага</returns>
+    public (bool Success, bool ChainCompleted, int ExecutedReflexId, int NextLinkId)
+        ExecuteChainStep(int chainID, int currentPulse, bool previousStepSuccess)
+    {
+      if (!_activeChains.TryGetValue(chainID, out var activeChain))
+        return (false, true, 0, 0);
+
+      var chainLinks = _reflexChainsSystem.GetChainLinks(chainID);
+      var currentLink = chainLinks.FirstOrDefault(l => l.ID == activeChain.CurrentLinkID);
+
+      if (currentLink == null)
+      {
+        _activeChains.Remove(chainID);
+        return (false, true, 0, 0);
+      }
+
+      activeChain.CurrentPulse = currentPulse;
+      int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+
+      if (currentLink.IsTerminal || nextLinkId == 0)
+      {
+        _activeChains.Remove(chainID);
+        return (true, true, currentLink.ReflexID, 0);
+      }
+
+      activeChain.CurrentLinkID = nextLinkId;
+      return (true, false, currentLink.ReflexID, nextLinkId);
+    }
+
+    /// <summary>Деактивирует цепочку</summary>
+    /// <param name="chainID">ID цепочки для деактивации</param>
+    public void DeactivateChain(int chainID)
+    {
+      _activeChains.Remove(chainID);
+    }
+
+    /// <summary>Получает активные цепочки</summary>
+    /// <returns>Словарь активных цепочек</returns>
+    public ReadOnlyDictionary<int, ActiveChain> GetActiveChains()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new ReadOnlyDictionary<int, ActiveChain>(_activeChains);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>Проверяет, активна ли цепочка</summary>
+    /// <param name="chainID">ID цепочки</param>
+    /// <returns>True если цепочка активна</returns>
+    public bool IsChainActive(int chainID)
+    {
+      return _activeChains.ContainsKey(chainID);
+    }
+
+    /// <summary>Получает текущее звено активной цепочки</summary>
+    /// <param name="chainID">ID цепочки</param>
+    /// <returns>ID текущего звена или 0 если цепочка не активна</returns>
+    public int GetCurrentChainLink(int chainID)
+    {
+      return _activeChains.TryGetValue(chainID, out var chain) ? chain.CurrentLinkID : 0;
     }
 
     #endregion

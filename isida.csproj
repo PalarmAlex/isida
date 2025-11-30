@@ -100,6 +100,7 @@
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />
     <Compile Include="Reflexes\PerceptionImagesSystem.cs" />
+    <Compile Include="Reflexes\ReflexChainsSystem.cs" />
     <Compile Include="Reflexes\ReflexesActivator.cs" />
     <Compile Include="Reflexes\ReflexExecutionService.cs" />
     <Compile Include="Reflexes\ReflexTreeSystem.cs" />

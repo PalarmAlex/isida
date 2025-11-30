@@ -27,6 +27,19 @@ namespace ISIDA.Common
       public const string GeneticReflexesLevel3 = "# Level3: Гомеостатические воздействия: id1,id2,id3";
       public const string GeneticReflexesActions = "# Адаптивные действия: id1,id2,id3";
 
+      // Цепочки безусловных рефлексов
+      public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
+      public const string ReflexChainsChain = "# CHAIN|ID|Name|Description|Priority";
+      public const string ReflexChainsLink = "# LINK|LinkID|ReflexID|SuccessNext|FailureNext|IsTerminal|Description";
+      public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
+      public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
+      public const string ReflexChainsPriorityDesc = "# Priority: приоритет цепочки (выше = приоритетнее)";
+      public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
+      public const string ReflexChainsReflexDesc = "# ReflexID: ID рефлекса для выполнения";
+      public const string ReflexChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
+      public const string ReflexChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
+      public const string ReflexChainsTerminalDesc = "# IsTerminal: флаг конечного звена (true/false)";
+
       // Гомеостатические воздействия
       public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты";
       public const string InfluenceActionsBenefit = "# Воздействие: paramId1:effect1;paramId2:effect2";
@@ -129,6 +142,79 @@ namespace ISIDA.Common
     }
 
     // ======== ПЕРЕГРУЗКИ ВАЛИДАЦИЙ: по пути и по содержимому ========
+
+    #region IsValidReflexChainsFile
+
+    /// <summary>
+    /// Проверяет валидность файла цепочек рефлексов по пути
+    /// </summary>
+    public static bool IsValidReflexChainsFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidReflexChainsFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла цепочек рефлексов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidReflexChainsFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        // Проверяем строку CHAIN
+        if (parts.Length >= 5 && parts[0] == "CHAIN")
+        {
+          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0 ||
+              !int.TryParse(parts[4], out int priority))
+            return false;
+        }
+        // Проверяем строку LINK
+        else if (parts.Length >= 7 && parts[0] == "LINK")
+        {
+          if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
+              !int.TryParse(parts[2], out int reflexId) || reflexId <= 0 ||
+              !int.TryParse(parts[3], out int successNext) ||
+              !int.TryParse(parts[4], out int failureNext) ||
+              !bool.TryParse(parts[5], out _))
+            return false;
+        }
+        else
+        {
+          // Неизвестный формат строки
+          return false;
+        }
+
+        return true;
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
 
     #region IsValidGeneticReflexesFile
 
