@@ -54,9 +54,7 @@ namespace ISIDA.Common
       public const string StylesAntagonis = "# Антагонисты: id1,id2,id3";
 
       // Параметры гомеостаза
-      public const string ParametersFormat = "# Формат: ID|Название|Описание|Значение|Вес|Норма|Скорость|Влияние Плохо|Влияние Хорошо|Активации стилей|Критический|Мин.значение|Макс.значение";
-      public const string ParametersBadInfluence = "# Влияние Плохо: paramId1:effect1;paramId2:effect2";
-      public const string ParametersWellInfluence = "# Влияние Хорошо: paramId1:effect1;paramId2:effect2";
+      public const string ParametersFormat = "# Формат: ID|Название|Описание|Значение|Вес|Норма|Скорость|Активации стилей|Критический|Мин.значение|Макс.значение";
       public const string ParametersActivations = "# Активации стилей: id1,id2,id3";
 
       // Свойства агента

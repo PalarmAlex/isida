@@ -11,55 +11,10 @@ namespace ISIDA.Gomeostas
 {
   internal static class ValidationService
   {
-    internal static Dictionary<int, Dictionary<int, float>> BuildInfluenceGraph(IEnumerable<ParameterData> parameters)
-    {
-      var graph = new Dictionary<int, Dictionary<int, float>>();
-
-      foreach (var param in parameters)
-      {
-        var influences = new Dictionary<int, float>();
-
-        // Добавляем влияния из BadStateInfluence
-        foreach (var influence in param.BadStateInfluence.Where(x => x.Value != 0))
-        {
-          influences[influence.Key] = influence.Value;
-        }
-
-        // Добавляем влияния из WellStateInfluence
-        foreach (var influence in param.WellStateInfluence.Where(x => x.Value != 0))
-        {
-          influences[influence.Key] = influence.Value;
-        }
-
-        if (influences.Any())
-          graph[param.Id] = influences;
-      }
-
-      return graph;
-    }
-
     internal static string GetParameterName(int paramId, IEnumerable<ParameterData> parameters)
     {
       var param = parameters.FirstOrDefault(p => p.Id == paramId);
       return param != null ? $"{param.Name} (№{param.Id})" : $"№{paramId}";
-    }
-
-    /// <summary>
-    /// Проверяет параметры на циклические зависимости влияний
-    /// </summary>
-    internal static bool CheckForInfluenceCycles(IEnumerable<ParameterData> parameters, out string cycleMessage)
-    {
-      var graph = BuildInfluenceGraph(parameters);
-
-      // Преобразуем граф влияний в граф зависимостей для проверки циклов
-      var dependencyGraph = graph.ToDictionary(
-          g => g.Key,
-          g => g.Value.Keys.ToList());
-
-      return InfluenceCycleChecker.CheckForCycles(
-          dependencyGraph,
-          id => GetParameterName(id, parameters),
-          out cycleMessage);
     }
 
     /// <summary>

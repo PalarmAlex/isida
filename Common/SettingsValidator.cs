@@ -391,54 +391,6 @@ namespace ISIDA.Common
 
     #endregion
 
-    #region Стили реагирования
-
-    /// <summary>
-    /// Валидация порога гистерезиса для переключения активных стилей (в % шкал)
-    /// </summary>
-    /// <param name="value">Значение для валидации (int)</param>
-    public static (bool isValid, string errorMessage) ValidateHysteresisLimit(int? value)
-    {
-      const string paramName = "Порог гистерезиса";
-      const string range = "[1:99]";
-      return ValidateValueCustom(value, paramName, 1, 99, range);
-    }
-
-    /// <summary>
-    /// Валидация модуляции действия стилями реагирования
-    /// </summary>
-    /// <param name="value">Значение для валидации (int)</param>
-    public static (bool isValid, string errorMessage) ValidateStileActionInfluencet(int? value)
-    {
-      const string paramName = "Модуляция действия";
-      const string range = "[-5:5]";
-      return ValidateValueCustom(value, paramName, -5, 5, range);
-    }
-
-    /// <summary>
-    /// Валидация базового коэффициента конкурентного подавления для латерального торможения
-    /// </summary>
-    /// <param name="value">Значение для валидации (float)</param>
-    public static (bool isValid, string errorMessage) ValidateDefaultKCompetition(float? value)
-    {
-      const string paramName = "Величина коэффициента подавления латерального торможения";
-      const string range = "[0.0:1.0]";
-      return ValidateValueCustom(value, paramName, 0.0f, 1.0f, range);
-    }
-
-    /// <summary>
-    /// Валидация базового порога активации для фильтрации значимых стилей поведения
-    /// </summary>
-    /// <param name="value">Значение для валидации (float)</param>
-    public static (bool isValid, string errorMessage) ValidateDefaultBaseThreshold(float? value)
-    {
-      const string paramName = "Величина порога активации для фильтрации значимых стилей поведения";
-      const string range = "[0.0:1.0]";
-      return ValidateValueCustom(value, paramName, 0.0f, 1.0f, range);
-    }
-
-    #endregion
-
     #region Внешнее воздействие
 
     /// <summary>

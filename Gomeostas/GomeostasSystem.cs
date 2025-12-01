@@ -250,22 +250,6 @@ namespace ISIDA.Gomeostas
     #region Валидация параметров гомеостаза и стилей реагирования
 
     /// <summary>
-    /// Проверяет параметры на циклические зависимости влияний
-    /// </summary>
-    public bool CheckForInfluenceCycles(IEnumerable<ParameterData> parameters, out string cycleMessage)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return ValidationService.CheckForInfluenceCycles(parameters, out cycleMessage);
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
     /// Валидация стилей реагирования перед обновлением и удалением
     /// </summary>
     /// <param name="styles">Список стилей</param>
@@ -481,20 +465,6 @@ namespace ISIDA.Gomeostas
         if (!param.StyleActivations.Any(kv => kv.Value.Any()))
           errors.Add($"Параметр '{param.Name}': не заданы активации стилей реагирования для действий");
 
-        // Проверка BadStateInfluence
-        foreach (var influence in param.BadStateInfluence)
-        {
-          if (!existingIds.Contains(influence.Key))
-            errors.Add($"Параметр '{param.Name}' (ID:{param.Id}) содержит ссылку на несуществующий параметр (ID:{influence.Key}) в BadStateInfluence");
-        }
-
-        // Проверка WellStateInfluence
-        foreach (var influence in param.WellStateInfluence)
-        {
-          if (!existingIds.Contains(influence.Key))
-            errors.Add($"Параметр '{param.Name}' (ID:{param.Id}) содержит ссылку на несуществующий параметр (ID:{influence.Key}) в WellStateInfluence");
-        }
-
         // Проверка StyleActivations - все ID стилей должны существовать
         foreach (var activation in param.StyleActivations)
         {
@@ -516,10 +486,6 @@ namespace ISIDA.Gomeostas
         errorMessage = "Обнаружены ссылки на несуществующие элементы:\n" + string.Join("\n", errors);
         return false;
       }
-
-      // проверка на циклические зависимости влияний
-      if (!CheckForInfluenceCycles(parameters, out errorMessage))
-        return false;
 
       if (!ValidateParameterStyleConflicts(_agentState.Parameters, out errorMessage))
         return false;
@@ -767,7 +733,7 @@ namespace ISIDA.Gomeostas
                            bool isVital = false, float criticalMinValue = 0f, float criticalMaxValue = 100f,
                            ParameterState initialState = ParameterState.Normal)
       {
-        // строго в таком порядке! иначе ValidateCriticalMinMaxValueParamValue() не прпустит при загрузке
+        // строго в таком порядке! иначе ValidateCriticalMinMaxValueParamValue() не пропустит при загрузке
         Id = id;
         Name = name;
         Description = description;
@@ -968,49 +934,6 @@ namespace ISIDA.Gomeostas
             _isDominant = value;
             OnPropertyChanged(nameof(IsDominant));
           }
-        }
-      }
-
-      private Dictionary<int, float> badStateInfluence { get; set; } = new Dictionary<int, float>();
-
-      /// <summary>
-      /// Влияние на другие параметры при состоянии "Плохо"
-      /// </summary>
-      public Dictionary<int, float> BadStateInfluence
-      {
-        get => badStateInfluence;
-        set
-        {
-          foreach (var influence in value.Values)
-          {
-            var validation = SettingsValidator.ValidateBadWellStateInfluence(influence);
-            if (!validation.isValid)
-              throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          }
-
-          badStateInfluence = value;
-        }
-      }
-
-      private Dictionary<int, float> wellStateInfluence { get; set; } = new Dictionary<int, float>();
-
-      /// <summary>
-      /// Влияние на другие параметры при состоянии "Хорошо"
-      /// </summary>
-      /// 
-      public Dictionary<int, float> WellStateInfluence
-      {
-        get => wellStateInfluence;
-        set
-        {
-          foreach (var influence in value.Values)
-          {
-            var validation = SettingsValidator.ValidateBadWellStateInfluence(influence);
-            if (!validation.isValid)
-              throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          }
-
-          wellStateInfluence = value;
         }
       }
 
@@ -1299,9 +1222,6 @@ namespace ISIDA.Gomeostas
 
     #region Поля и свойства
 
-    private float _defaultKCompetition = 0.3f;
-    private float _defaultBaseThreshold = 0.2f;
-    private int _hysteresisLimit = 10;
     private int _dynamicTime = 50;
     private float _difSensorPar = 0.5f;
     private int _compareLevel = 100;
@@ -1356,22 +1276,6 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Порог гистерезиса для переключения активных стилей (в % шкал)
-    /// </summary>
-    public int HysteresisLimit
-    {
-      get => _hysteresisLimit;
-      set
-      {
-        var validation = SettingsValidator.ValidateHysteresisLimit(value);
-        if (!validation.isValid)
-          throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-        
-        _hysteresisLimit = value;
-      }
-    }
-
-    /// <summary>
     /// ID существующего стиля по умолчанию
     /// </summary>
     /// 
@@ -1381,60 +1285,6 @@ namespace ISIDA.Gomeostas
       set
       {
         _defaultStileId = value;
-      }
-    }
-
-    /// <summary>
-    /// Базовый коэффициент конкурентного подавления для латерального торвжения.
-    /// </summary>
-    /// <value>Значение типа float в диапазоне от 0.0 до 1.0 включительно</value>
-    /// <remarks>
-    /// <para>Диапазон: 0.0 - 1.0</para>
-    /// <para>- Меньшие значения (0.1-0.2): слабая конкуренция, позволяет сосуществовать большему количеству стилей</para>
-    /// <para>- Средние значения (0.3-0.4): умеренная конкуренция, баланс между разнообразием и отбором</para>
-    /// <para>- Большие значения (0.5-0.8): сильная конкуренция, быстрый отбор самых активных стилей</para>
-    /// <para>Влияет на:</para>
-    /// <para>- Скорость элиминации слабых стилей</para>
-    /// <para>- Жесткость конкурентной борьбы за ресурсы внимания</para>
-    /// <para>- Количество одновременно активных стилей</para>
-    /// </remarks>
-    public float DefaultKCompetition
-    {
-      get => _defaultKCompetition;
-      set
-      {
-        var validation = SettingsValidator.ValidateDefaultKCompetition(value);
-        if (!validation.isValid)
-          throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-
-        _defaultKCompetition = value;
-      }
-    }
-
-    /// <summary>
-    /// Базовый порог активации для фильтрации значимых стилей поведения.
-    /// </summary>
-    /// <value>Значение типа float в диапазоне от 0.0 до 1.0 включительно</value>
-    /// <remarks>
-    /// <para>Диапазон: 0.0 - 1.0</para>
-    /// <para>- Меньшие значения (0.1-0.15): высокая чувствительность, сохраняются слабые но потенциально полезные стили</para>
-    /// <para>- Средние значения (0.2-0.3): баланс между чувствительностью и избирательностью</para>
-    /// <para>- Большие значения (0.4-0.5): высокая избирательность, остаются только самые сильные стили</para>
-    /// <para>Влияет на:</para>
-    /// <para>- Порог значимости для активации стилей</para>
-    /// <para>- Защиту от фоновой активации слабых стилей</para>
-    /// <para>- Чувствительность системы к слабым сигналам</para>
-    /// </remarks>
-    public float DefaultBaseThreshold
-    {
-      get => _defaultBaseThreshold;
-      set
-      {
-        var validation = SettingsValidator.ValidateDefaultBaseThreshold(value);
-        if (!validation.isValid)
-          throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-
-        _defaultBaseThreshold = value;
       }
     }
 
@@ -2553,39 +2403,11 @@ namespace ISIDA.Gomeostas
       return result;
     }
 
-    private Dictionary<int, float> StrToDict(string str)
-    {
-      var dict = new Dictionary<int, float>();
-      if (string.IsNullOrWhiteSpace(str))
-        return dict;
-
-      var pairs = str.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-      foreach (var pair in pairs)
-      {
-        var kv = pair.Split(':');
-        if (kv.Length == 2 &&
-            int.TryParse(kv[0], out int key) &&
-            float.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
-        {
-          dict[key] = value;
-        }
-      }
-      return dict;
-    }
-
     private string StyleActivationsToStr(Dictionary<int, List<int>> activations)
     {
       return string.Join(";", activations
           .Where(kv => kv.Value.Any())
           .Select(kv => $"{kv.Key}:{string.Join(",", kv.Value)}"));
-    }
-
-    private string DictToStr(Dictionary<int, float> dict)
-    {
-      if (dict == null || dict.Count == 0)
-        return string.Empty;
-
-      return string.Join(";", dict.Select(kv => $"{kv.Key}:{kv.Value.ToString(CultureInfo.InvariantCulture)}"));
     }
 
     /// <summary>
@@ -2727,10 +2549,8 @@ namespace ISIDA.Gomeostas
           EnsureDataDirectory();
           var lines = new List<string>
             {
-                FileHeaders.ParametersFormat,
-                FileHeaders.ParametersBadInfluence,
-                FileHeaders.ParametersWellInfluence,
-                FileHeaders.ParametersActivations
+              FileHeaders.ParametersFormat,
+              FileHeaders.ParametersActivations
             };
 
           File.WriteAllLines(path, lines);
@@ -2743,7 +2563,7 @@ namespace ISIDA.Gomeostas
           if (line.StartsWith("#") && !line.StartsWith("# Формат:")) continue;
 
           var parts = line.Split('|');
-          if (parts.Length >= 13 && int.TryParse(parts[0], out int paramId))
+          if (parts.Length >= 11 && int.TryParse(parts[0], out int paramId))
           {
             var param = new ParameterData(
                 id: paramId,
@@ -2753,21 +2573,14 @@ namespace ISIDA.Gomeostas
                 weight: int.Parse(parts[4]),
                 normaWell: int.Parse(parts[5]),
                 speed: int.Parse(parts[6]),
-                isVital: bool.Parse(parts[10].Trim()),
-                criticalMinValue: float.Parse(parts[11].Trim(), CultureInfo.InvariantCulture),
-                criticalMaxValue: float.Parse(parts[12].Trim(), CultureInfo.InvariantCulture)
-                );
-
-            // Загрузка влияний состояний
-            if (parts.Length >= 8)
-              param.BadStateInfluence = StrToDict(parts[7]);
-
-            if (parts.Length >= 9)
-              param.WellStateInfluence = StrToDict(parts[8]);
+                isVital: bool.Parse(parts[8].Trim()),
+                criticalMinValue: float.Parse(parts[9].Trim(), CultureInfo.InvariantCulture),
+                criticalMaxValue: float.Parse(parts[10].Trim(), CultureInfo.InvariantCulture)
+            );
 
             // Загрузка активаций стилей
-            if (parts.Length >= 10)
-              param.StyleActivations = ParseStyleActivations(parts[9]);
+            if (parts.Length >= 8 && !string.IsNullOrWhiteSpace(parts[7]))
+              param.StyleActivations = ParseStyleActivations(parts[7]);
 
             _agentState.Parameters.Add(param);
 
@@ -2887,30 +2700,26 @@ namespace ISIDA.Gomeostas
 
         var lines = new List<string>
         {
-            FileHeaders.ParametersFormat,
-            FileHeaders.ParametersBadInfluence,
-            FileHeaders.ParametersWellInfluence,
-            FileHeaders.ParametersActivations
+          FileHeaders.ParametersFormat,
+          FileHeaders.ParametersActivations
         };
 
         foreach (var param in _agentState.Parameters.OrderBy(p => p.Id))
         {
-          var badInfluenceStr = DictToStr(param.BadStateInfluence);
-          var wellInfluenceStr = DictToStr(param.WellStateInfluence);
           var activationsStr = StyleActivationsToStr(param.StyleActivations);
 
           lines.Add($"{param.Id}|{param.Name}|{param.Description}|" +
                    $"{param.Value.ToString(CultureInfo.InvariantCulture)}|{param.Weight}|" +
                    $"{param.NormaWell}|{param.Speed}|" +
-                   $"{badInfluenceStr}|{wellInfluenceStr}|{activationsStr}|" +
+                   $"{activationsStr}|" +
                    $"{param.IsVital}|" +
                    $"{param.CriticalMinValue.ToString(CultureInfo.InvariantCulture)}|" +
                    $"{param.CriticalMaxValue.ToString(CultureInfo.InvariantCulture)}");
         }
 
-        var linCount = 6;
-        if (lines.Count == 5)
-          linCount = 5; // для случая очистки всего кроме шапки
+        var linCount = 4;
+        if (lines.Count == 3)
+          linCount = 3; // для случая очистки всего кроме шапки
 
         var result = SafeSaveFile(
             GetAgentParametersPath(),

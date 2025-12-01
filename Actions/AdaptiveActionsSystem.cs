@@ -680,23 +680,6 @@ namespace ISIDA.Actions
       }
     }
 
-    /// <summary>
-    /// Получает информацию об интенсивности действия с учетом стилей
-    /// </summary>
-    /// <param name="actionId">ID действия</param>
-    /// <returns>Кортеж (базовая интенсивность, модификация от стилей, итоговая интенсивность)</returns>
-    //public (int BaseVigor, int StyleModulation, int FinalVigor) GetActionVigorInfo(int actionId)
-    //{
-    //  if (!_actions.TryGetValue(actionId, out var action))
-    //    return (5, 0, 5);
-
-    //  int baseVigor = action.Vigor;
-    //  int styleModulation = CalculateStyleModulation(actionId);
-    //  int finalVigor = ClampInt(baseVigor + styleModulation, 1, 10);
-
-    //  return (baseVigor, styleModulation, finalVigor);
-    //}
-
     #endregion
 
     #region Валидация и коррекция антагонистов

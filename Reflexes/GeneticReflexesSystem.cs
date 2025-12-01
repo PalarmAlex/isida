@@ -23,13 +23,9 @@ namespace ISIDA.Reflexes
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
-    private readonly string _gomeostasFolderPath;
     private bool _disposed = false;
 
     #region Привязка к ReflexTreeSystem через события
-
-    // В ReflexTreeSystem уже есть ссылка на GeneticReflexesSystem,
-    // поэтому ссылаться на нее не стоит - будут циклические ссылки
 
     /// <summary>Событие удаления одиночного безусловного рефлекса</summary>
     public event Action<int> GeneticReflexDeleted;
@@ -125,7 +121,6 @@ namespace ISIDA.Reflexes
         string reflexesFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
-      _gomeostasFolderPath = Path.GetDirectoryName(gomeostas.GomeostasFolderPath);
       _influenceActionSystem = InfluenceActionSystem.Instance;
       _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
 
