@@ -308,33 +308,6 @@ namespace ISIDA.Gomeostas
             return false;
           }
 
-          // Валидация влияния на действия
-          if (style.StileActionInfluence == null)
-          {
-            errorMessage = $"Стиль {style.Name} (ID: {style.Id}) имеет null значение влияния на действия";
-            return false;
-          }
-
-          // Проверка существования ID действий
-          foreach (var actionId in style.StileActionInfluence.Keys)
-          {
-            if (!AdaptiveActionsSystem.Instance.GetAllAdaptiveActions().Any(a => a.Id == actionId))
-            {
-              errorMessage = $"Стиль {style.Name} (ID: {style.Id}) ссылается на несуществующее действие ID={actionId}";
-              return false;
-            }
-          }
-
-          // Проверка диапазона модуляций
-          foreach (var modulation in style.StileActionInfluence.Values)
-          {
-            if (modulation < -5 || modulation > 5)
-            {
-              errorMessage = $"Стиль {style.Name} (ID: {style.Id}) имеет недопустимую модуляцию действия: {modulation} (допустимо -5..+5)";
-              return false;
-            }
-          }
-
           // Проверка существования ID антагонистов
           foreach (var antId in style.AntagonistStyles)
           {
@@ -744,27 +717,6 @@ namespace ISIDA.Gomeostas
       /// При активации данного стиля, все указанные здесь стили будут деактивированы.
       /// </remarks>
       public List<int> AntagonistStyles { get; set; } = new List<int>();
-
-      private Dictionary<int, int> stileActionInfluence = new Dictionary<int, int>();
-
-      /// <summary>
-      /// Список действий, которые модулируются по энергичности стилем. [ID действия, модуляция [-5...+5]]  
-      /// </summary>
-      public Dictionary<int, int> StileActionInfluence
-      {
-        get => stileActionInfluence;
-        set
-        {
-          foreach (var modulation in value.Values)
-          {
-            var validation = SettingsValidator.ValidateStileActionInfluencet(modulation);
-            if (!validation.isValid)
-              throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          }
-
-          stileActionInfluence = value;
-        }
-      }
     }
 
     /// <summary>
@@ -2200,7 +2152,6 @@ namespace ISIDA.Gomeostas
     /// <param name="description">Описание стиля</param>
     /// <param name="weight">Вес стиля (0-100)</param>
     /// <param name="antagonistStyles">Список ID стилей-антагонистов</param>
-    /// <param name="actionInfluence">Список ID действий, на которые оказывается влияние: [ID действия, влиянме [-5...+5]]</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров</param>
     /// <returns>ID созданного стиля и предупреждения (если есть)</returns>
     public (int StyleId, string[] Warnings) AddBehaviorStyle(
@@ -2208,7 +2159,6 @@ namespace ISIDA.Gomeostas
         string description,
         int weight,
         List<int> antagonistStyles = null,
-        Dictionary<int, int> actionInfluence = null,
         bool strictValidation = false)
     {
       if (_agentState.EvolutionStage > 0)
@@ -2218,8 +2168,6 @@ namespace ISIDA.Gomeostas
         throw new ArgumentException("Наименование стиля не может быть пустым", nameof(name));
 
       var warnings = new List<string>();
-
-      // Проверка и корректировка веса
       if (weight < 0 || weight > 100)
       {
         string message = $"Вес стиля скорректирован с {weight} до {ClampInt(weight, 0, 100)} " +
@@ -2236,11 +2184,9 @@ namespace ISIDA.Gomeostas
       try
       {
         EnsureAgentState(AgentCheck.NotDead);
-
-        // Генерация нового ID
         int newId = _agentState.BehaviorStyles.Count == 0
-            ? 1
-            : _agentState.BehaviorStyles.Keys.Max() + 1;
+          ? 1
+          : _agentState.BehaviorStyles.Keys.Max() + 1;
 
         var style = new BehaviorStyle
         {
@@ -2248,14 +2194,12 @@ namespace ISIDA.Gomeostas
           Name = name,
           Description = description,
           Weight = weight,
-          AntagonistStyles = antagonistStyles ?? new List<int>(),
-          StileActionInfluence = actionInfluence ?? new Dictionary<int, int>()
+          AntagonistStyles = antagonistStyles ?? new List<int>()
         };
 
         _agentState.BehaviorStyles.Add(newId, style);
         _agentState.LastBehaviorStylesId = newId;
 
-        // Обновляем индексы после добавления стиля
         BuildStyleIndexes();
 
         return (newId, warnings.ToArray());
@@ -2665,30 +2609,10 @@ namespace ISIDA.Gomeostas
             Weight = int.Parse(parts[3])
           };
 
-          // Загрузка влияния на действия
+          // Загрузка антагонистов
           if (parts.Length >= 5 && !string.IsNullOrWhiteSpace(parts[4]))
           {
-            style.StileActionInfluence = parts[4].Split(';')
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(s =>
-                {
-                  var pair = s.Split(':');
-                  if (pair.Length == 2 &&
-                          int.TryParse(pair[0], out int actionId) &&
-                          int.TryParse(pair[1], out int modulation))
-                  {
-                    return new { actionId, modulation };
-                  }
-                  return null;
-                })
-                .Where(x => x != null)
-                .ToDictionary(x => x.actionId, x => x.modulation);
-          }
-
-          // Загрузка антагонистов
-          if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
-          {
-            style.AntagonistStyles = parts[5].Split(',')
+            style.AntagonistStyles = parts[4].Split(',')
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .Select(int.Parse)
                 .ToList();
@@ -2884,7 +2808,6 @@ namespace ISIDA.Gomeostas
           var lines = new List<string>
             {
               FileHeaders.StylesFormat,
-              FileHeaders.StylesActionInfluence,
               FileHeaders.StylesAntagonis
             };
 
@@ -3029,18 +2952,13 @@ namespace ISIDA.Gomeostas
         EnsureDataDirectory();
         var lines = new List<string>
         {
-            FileHeaders.StylesFormat,
-            FileHeaders.StylesActionInfluence,
-            FileHeaders.StylesAntagonis
+          FileHeaders.StylesFormat,
+          FileHeaders.StylesAntagonis
         };
 
         foreach (var style in _agentState.BehaviorStyles.Values.OrderBy(s => s.Id))
         {
-          // Преобразуем словарь влияния на действия в строку
-          var actionInfluenceStr = string.Join(";",
-              style.StileActionInfluence.Select(kv => $"{kv.Key}:{kv.Value}"));
-
-          lines.Add($"{style.Id}|{style.Name}|{style.Description}|{style.Weight}|{actionInfluenceStr}|" +
+          lines.Add($"{style.Id}|{style.Name}|{style.Description}|{style.Weight}|" +
                   $"{string.Join(",", style.AntagonistStyles)}");
         }
 

@@ -693,7 +693,7 @@ namespace ISIDA.Reflexes
             {
               var styleIds = styleCombination.Select(s => s.Id).ToList();
               var level3 = new List<int>();
-              var adaptiveActions = SelectAdaptiveActionsForStyles(styleCombination, defaultAction);
+              var adaptiveActions = new List<int> { defaultAction.Id };
               var candidateKey = CreateReflexKey(baseState, styleIds, level3, adaptiveActions);
               if (existingReflexesSet.Contains(candidateKey))
               {
@@ -754,69 +754,6 @@ namespace ISIDA.Reflexes
       {
         return (false, 0, $"Ошибка создания рефлексов: {ex.Message}");
       }
-    }
-
-    /// <summary>
-    /// Выбирает одно адаптивное действие на основе влияний стилей из комбинации
-    /// </summary>
-    /// <param name="styleCombination">Комбинация стилей</param>
-    /// <param name="defaultAction">Действие по умолчанию</param>
-    /// <returns>ID одного адаптивного действия</returns>
-    private List<int> SelectAdaptiveActionsForStyles(List<GomeostasSystem.BehaviorStyle> styleCombination, AdaptiveAction defaultAction)
-    {
-      var candidateActions = new Dictionary<int, (int ActionId, int StyleWeight, int Modulation)>();
-
-      // Собираем все действия с положительным влиянием от всех стилей в комбинации
-      foreach (var style in styleCombination)
-      {
-        if (style.StileActionInfluence != null && style.StileActionInfluence.Any())
-        {
-          foreach (var influence in style.StileActionInfluence)
-          {
-            int actionId = influence.Key;
-            int modulation = influence.Value;
-
-            // Учитываем только действия с положительным влиянием (модуляция > 0)
-            if (modulation > 0)
-            {
-              // Если действие уже есть в кандидатах, выбираем от стиля с наибольшим весом
-              if (!candidateActions.ContainsKey(actionId) ||
-                  style.Weight > candidateActions[actionId].StyleWeight)
-              {
-                candidateActions[actionId] = (actionId, style.Weight, modulation);
-              }
-              // Если веса стилей одинаковые, выбираем с наибольшей модуляцией
-              else if (style.Weight == candidateActions[actionId].StyleWeight &&
-                       modulation > candidateActions[actionId].Modulation)
-              {
-                candidateActions[actionId] = (actionId, style.Weight, modulation);
-              }
-            }
-          }
-        }
-      }
-
-      if (candidateActions.Any())
-      {
-        // Сначала ищем действие от стиля с максимальным весом
-        var maxWeight = candidateActions.Values.Max(ca => ca.StyleWeight);
-        var actionsWithMaxWeight = candidateActions.Values.Where(ca => ca.StyleWeight == maxWeight).ToList();
-
-        // Если несколько действий от стилей с максимальным весом, выбираем с максимальной модуляцией
-        if (actionsWithMaxWeight.Count > 1)
-        {
-          var maxModulation = actionsWithMaxWeight.Max(ca => ca.Modulation);
-          var bestAction = actionsWithMaxWeight.First(ca => ca.Modulation == maxModulation);
-          return new List<int> { bestAction.ActionId };
-        }
-        else
-        {
-          return new List<int> { actionsWithMaxWeight.First().ActionId };
-        }
-      }
-
-      // Если не нашли подходящих действий, используем действие по умолчанию
-      return new List<int> { defaultAction.Id };
     }
    
     /// <summary>

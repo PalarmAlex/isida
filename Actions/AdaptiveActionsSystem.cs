@@ -519,16 +519,6 @@ namespace ISIDA.Actions
           }
         }
 
-        // очистка ссылок на это действие как модулируемое из стилей реагирования
-        var allBehaviorStyles = _gomeostas.GetAllBehaviorStyles();
-        foreach (var style in allBehaviorStyles.Values)
-        {
-          if (style.StileActionInfluence.ContainsKey(actionId))
-          {
-            style.StileActionInfluence.Remove(actionId);
-          }
-        }
-
         // Вызываем событие удаления действия
         AdaptiveActionDeleted?.Invoke(actionId);
 
@@ -669,7 +659,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Получает интенсивность действия с учетом модуляции от активных стилей
+    /// Получает интенсивность действия
     /// </summary>
     /// <param name="actionId">ID действия</param>
     /// <returns>Модифицированная интенсивность (1..10)</returns>
@@ -682,13 +672,7 @@ namespace ISIDA.Actions
 
         int baseVigor = action.Vigor;
 
-        // Рассчитываем модуляцию от стилей
-        int styleModulation = CalculateStyleModulation(actionId);
-
-        // Применяем модуляцию к интенсивности
-        int modifiedVigor = ClampInt(baseVigor + styleModulation, 1, 10);
-
-        return modifiedVigor;
+        return baseVigor; // пока оставим просто базовую, возможно потом будем менять как то
       }
       catch
       {
@@ -701,50 +685,17 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="actionId">ID действия</param>
     /// <returns>Кортеж (базовая интенсивность, модификация от стилей, итоговая интенсивность)</returns>
-    public (int BaseVigor, int StyleModulation, int FinalVigor) GetActionVigorInfo(int actionId)
-    {
-      if (!_actions.TryGetValue(actionId, out var action))
-        return (5, 0, 5);
+    //public (int BaseVigor, int StyleModulation, int FinalVigor) GetActionVigorInfo(int actionId)
+    //{
+    //  if (!_actions.TryGetValue(actionId, out var action))
+    //    return (5, 0, 5);
 
-      int baseVigor = action.Vigor;
-      int styleModulation = CalculateStyleModulation(actionId);
-      int finalVigor = ClampInt(baseVigor + styleModulation, 1, 10);
+    //  int baseVigor = action.Vigor;
+    //  int styleModulation = CalculateStyleModulation(actionId);
+    //  int finalVigor = ClampInt(baseVigor + styleModulation, 1, 10);
 
-      return (baseVigor, styleModulation, finalVigor);
-    }
-
-    /// <summary>
-    /// Вычисляет суммарную модуляцию действия от активных стилей поведения
-    /// </summary>
-    /// <param name="actionId">ID действия</param>
-    /// <returns>Суммарная модуляция интенсивности (-5..+5)</returns>
-    private int CalculateStyleModulation(int actionId)
-    {
-      try
-      {
-        var activeStyles = _gomeostas.GetActiveStyles();
-        if (!activeStyles.Any())
-          return 0;
-
-        int totalModulation = 0;
-
-        foreach (var style in activeStyles)
-        {
-          if (style?.StileActionInfluence != null &&
-              style.StileActionInfluence.TryGetValue(actionId, out int modulation))
-          {
-            totalModulation += modulation;
-          }
-        }
-
-        // Ограничиваем суммарную модуляцию диапазоном -5..+5
-        return ClampInt(totalModulation, -5, 5);
-      }
-      catch
-      {
-        return 0;
-      }
-    }
+    //  return (baseVigor, styleModulation, finalVigor);
+    //}
 
     #endregion
 

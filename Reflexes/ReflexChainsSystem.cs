@@ -62,7 +62,7 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Структуры данных (совместимые с ReflexTreeSystem)
+    #region Структуры данных
 
     /// <summary>Звено цепочки рефлексов</summary>
     public class ChainLink

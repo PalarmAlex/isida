@@ -50,8 +50,7 @@ namespace ISIDA.Common
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Стили поведения
-      public const string StylesFormat = "# Формат: ID|Имя|Описание|Вес|Влияние|Антагонисты";
-      public const string StylesActionInfluence = "# Влияние стиля: ActionID1:Value1,ActionID2:Value2,ActionID3:Value3";
+      public const string StylesFormat = "# Формат: ID|Имя|Описание|Вес|Антагонисты";
       public const string StylesAntagonis = "# Антагонисты: id1,id2,id3";
 
       // Параметры гомеостаза
