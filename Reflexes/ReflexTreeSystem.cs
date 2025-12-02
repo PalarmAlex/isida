@@ -5,7 +5,6 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using static ISIDA.Reflexes.ReflexTreeSystem;
 
 namespace ISIDA.Reflexes
 {
@@ -39,9 +38,9 @@ namespace ISIDA.Reflexes
     /// Инициализирует глобальный экземпляр системы дерева рефлексов
     /// </summary>
     public static void InitializeInstance(
-      GeneticReflexesSystem geneticReflexesSystem, 
-      PerceptionImagesSystem perceptionImagesSystem,
-      ReflexChainsSystem reflexChainsSystem)
+        GeneticReflexesSystem geneticReflexesSystem,
+        PerceptionImagesSystem perceptionImagesSystem,
+        ReflexChainsSystem reflexChainsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexTreeSystem уже инициализирован.");
@@ -50,9 +49,9 @@ namespace ISIDA.Reflexes
     }
 
     private ReflexTreeSystem(
-      GeneticReflexesSystem geneticReflexesSystem, 
-      PerceptionImagesSystem perceptionImagesSystem,
-      ReflexChainsSystem reflexChainsSystem)
+        GeneticReflexesSystem geneticReflexesSystem,
+        PerceptionImagesSystem perceptionImagesSystem,
+        ReflexChainsSystem reflexChainsSystem)
     {
       try
       {
@@ -123,7 +122,7 @@ namespace ISIDA.Reflexes
 
     /// <summary>
     /// Узел дерева рефлексов
-    /// Формат: ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex
+    /// Формат: ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex|ReflexChainID|ChainStartLinkID
     /// </summary>
     public class ReflexNode
     {
@@ -234,10 +233,87 @@ namespace ISIDA.Reflexes
     #region Управление деревом рефлексов
 
     /// <summary>
+    /// Привязывает цепочку рефлексов к узлу дерева
+    /// </summary>
+    public bool AttachChainToNode(int nodeId, int chainId, int startLinkId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        var node = FindNodeByID(nodeId);
+        if (node == null)
+        {
+          LogError($"Узел с ID {nodeId} не найден");
+          return false;
+        }
+
+        // Проверяем существование цепочки
+        if (!_reflexChainsSystem.GetAllReflexChains().ContainsKey(chainId))
+        {
+          LogError($"Цепочка с ID {chainId} не найдена");
+          return false;
+        }
+
+        node.ReflexChainID = chainId;
+        node.ChainStartLinkID = startLinkId;
+
+        SaveReflexTreeInternal();
+        LogInfo($"Цепочка {chainId} привязана к узлу {nodeId}, стартовое звено: {startLinkId}");
+
+        return true;
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка привязки цепочки к узлу: {ex.Message}");
+        return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Отвязывает цепочку рефлексов от узла дерева
+    /// </summary>
+    public bool DetachChainFromNode(int nodeId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        var node = FindNodeByID(nodeId);
+        if (node == null)
+        {
+          LogError($"Узел с ID {nodeId} не найден");
+          return false;
+        }
+
+        int oldChainId = node.ReflexChainID;
+        node.ReflexChainID = 0;
+        node.ChainStartLinkID = 0;
+
+        SaveReflexTreeInternal();
+        LogInfo($"Цепочка {oldChainId} отвязана от узла {nodeId}");
+
+        return true;
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка отвязки цепочки от узла: {ex.Message}");
+        return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Создает новый узел дерева рефлексов
     /// </summary>
     public (int ID, ReflexNode Node) CreateNewReflexNode(ReflexNode parent, int id, int baseID,
-        int styleID, int actionID, int geneticReflexID, int conditionedReflex, bool checkUnicum)
+        int styleID, int actionID, int geneticReflexID, int conditionedReflex,
+        int reflexChainID, int chainStartLinkID, bool checkUnicum)
     {
       if (checkUnicum)
       {
@@ -265,7 +341,9 @@ namespace ISIDA.Reflexes
         StyleID = styleID,
         ActionID = actionID,
         GeneticReflexID = geneticReflexID,
-        ConditionedReflex = conditionedReflex
+        ConditionedReflex = conditionedReflex,
+        ReflexChainID = reflexChainID,
+        ChainStartLinkID = chainStartLinkID
       };
 
       parent?.Children.Add(node);
@@ -366,22 +444,31 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Создает новую ветку с новым рефлексом
     /// </summary>
-    public int CreateNewReflexToTreeFromNodes(int level, int[] conditions, ReflexNode node)
+    private int CreateNewReflexToTreeFromNodes(int level, int[] conditions, ReflexNode node, int geneticReflexId = 0)
     {
       if (node == null || level >= conditions.Length)
+      {
+        // Если достигли конца условий или последний узел - привязываем рефлекс
+        if (node != null && geneticReflexId > 0)
+        {
+          node.GeneticReflexID = geneticReflexId;
+        }
         return node?.ID ?? 0;
+      }
 
       int id;
+
       switch (level)
       {
         case 0: // Базовое состояние
-          (id, _) = CreateNewReflexNode(node, 0, conditions[0], 0, 0, 0, 0, true);
+          (id, _) = CreateNewReflexNode(node, 0, conditions[0], 0, 0, 0, 0, 0, 0, true);
           break;
         case 1: // Стиль поведения
-          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, conditions[1], 0, 0, 0, true);
+          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, conditions[1], 0, 0, 0, 0, 0, true);
           break;
         case 2: // Пусковой стимул
-          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, node.StyleID, conditions[2], 0, 0, true);
+          (id, _) = CreateNewReflexNode(node, 0, node.BaseID, node.StyleID, conditions[2],
+              geneticReflexId, 0, 0, 0, true); // Привязываем рефлекс на последнем уровне
           break;
         default:
           return node.ID;
@@ -389,7 +476,9 @@ namespace ISIDA.Reflexes
 
       var newNode = FindNodeByID(id);
       if (newNode != null)
-        return CreateNewReflexToTreeFromNodes(level + 1, conditions, newNode);
+      {
+        return CreateNewReflexToTreeFromNodes(level + 1, conditions, newNode, geneticReflexId);
+      }
 
       return id;
     }
@@ -446,12 +535,11 @@ namespace ISIDA.Reflexes
             }
 
             // Создаем ветку от найденного узла
-            int lastNodeId = CreateNewReflexToTreeFromNodes(level, conditionArr, detectedNode);
+            int lastNodeId = CreateNewReflexToTreeFromNodes(level, conditionArr, detectedNode, geneticReflexId);
 
             var newNode = FindNodeByID(lastNodeId);
             if (newNode != null)
             {
-              newNode.GeneticReflexID = geneticReflexId;
               SaveReflexTreeInternal();
               return lastNodeId;
             }
@@ -459,12 +547,11 @@ namespace ISIDA.Reflexes
         }
 
         // Если не найден подходящий узел или detectedNodeId = 0, создаем с нуля от корня
-        int newNodeIdFromRoot = CreateNewReflexToTreeFromNodes(0, conditionArr, ReflexTree);
+        int newNodeIdFromRoot = CreateNewReflexToTreeFromNodes(0, conditionArr, ReflexTree, geneticReflexId);
         var newNodeFromRoot = FindNodeByID(newNodeIdFromRoot);
 
         if (newNodeFromRoot != null)
         {
-          newNodeFromRoot.GeneticReflexID = geneticReflexId;
           SaveReflexTreeInternal();
           return newNodeIdFromRoot;
         }
@@ -504,6 +591,14 @@ namespace ISIDA.Reflexes
     #endregion
 
     #region Методы для работы с цепочками
+
+    /// <summary>Получает текущий активный пульс цепочки</summary>
+    /// <param name="chainID">ID цепочки</param>
+    /// <returns>Текущий пульс или 0 если цепочка не активна</returns>
+    public int GetCurrentChainPulse(int chainID)
+    {
+      return _activeChains.TryGetValue(chainID, out var chain) ? chain.CurrentPulse : 0;
+    }
 
     /// <summary>Находит подходящую цепочку для текущих условий</summary>
     /// <param name="baseID">Базовое состояние гомеостаза</param>
@@ -553,29 +648,37 @@ namespace ISIDA.Reflexes
     public (bool Success, bool ChainCompleted, int ExecutedReflexId, int NextLinkId)
         ExecuteChainStep(int chainID, int currentPulse, bool previousStepSuccess)
     {
-      if (!_activeChains.TryGetValue(chainID, out var activeChain))
-        return (false, true, 0, 0);
-
-      var chainLinks = _reflexChainsSystem.GetChainLinks(chainID);
-      var currentLink = chainLinks.FirstOrDefault(l => l.ID == activeChain.CurrentLinkID);
-
-      if (currentLink == null)
+      _lock.EnterWriteLock();
+      try
       {
-        _activeChains.Remove(chainID);
-        return (false, true, 0, 0);
+        if (!_activeChains.TryGetValue(chainID, out var activeChain))
+          return (false, true, 0, 0);
+
+        var chainLinks = _reflexChainsSystem.GetChainLinks(chainID);
+        var currentLink = chainLinks.FirstOrDefault(l => l.ID == activeChain.CurrentLinkID);
+
+        if (currentLink == null)
+        {
+          _activeChains.Remove(chainID);
+          return (false, true, 0, 0);
+        }
+
+        activeChain.CurrentPulse = currentPulse;
+        int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+
+        if (currentLink.IsTerminal || nextLinkId == 0)
+        {
+          _activeChains.Remove(chainID);
+          return (true, true, currentLink.ReflexID, 0);
+        }
+
+        activeChain.CurrentLinkID = nextLinkId;
+        return (true, false, currentLink.ReflexID, nextLinkId);
       }
-
-      activeChain.CurrentPulse = currentPulse;
-      int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
-
-      if (currentLink.IsTerminal || nextLinkId == 0)
+      finally
       {
-        _activeChains.Remove(chainID);
-        return (true, true, currentLink.ReflexID, 0);
+        _lock.ExitWriteLock();
       }
-
-      activeChain.CurrentLinkID = nextLinkId;
-      return (true, false, currentLink.ReflexID, nextLinkId);
     }
 
     /// <summary>Деактивирует цепочку</summary>
@@ -839,7 +942,8 @@ namespace ISIDA.Reflexes
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 7)
+
+        if (parts.Length < 9)
           return false;
 
         if (!int.TryParse(parts[0], out _))
@@ -875,7 +979,7 @@ namespace ISIDA.Reflexes
               continue;
 
             var parts = trimmedLine.Split('|');
-            if (parts.Length < 7)
+            if (parts.Length < 9)
               continue;
 
             if (!int.TryParse(parts[0], out int id) ||
@@ -884,14 +988,16 @@ namespace ISIDA.Reflexes
                 !int.TryParse(parts[3], out int styleID) ||
                 !int.TryParse(parts[4], out int actionID) ||
                 !int.TryParse(parts[5], out int geneticReflexID) ||
-                !int.TryParse(parts[6], out int conditionedReflex))
+                !int.TryParse(parts[6], out int conditionedReflex) ||
+                !int.TryParse(parts[7], out int reflexChainID) ||
+                !int.TryParse(parts[8], out int chainStartLinkID))
               continue;
 
             var parentNode = FindNodeByID(parentID);
             if (parentNode != null)
             {
               CreateNewReflexNode(parentNode, id, baseID, styleID, actionID,
-                  geneticReflexID, conditionedReflex, false);
+                  geneticReflexID, conditionedReflex, reflexChainID, chainStartLinkID, false);
             }
           }
         }
@@ -920,9 +1026,9 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void CreateBasicReflexTree()
     {
-      CreateNewReflexNode(ReflexTree, 0, -1, 0, 0, 0, 0, false);
-      CreateNewReflexNode(ReflexTree, 0, 0, 0, 0, 0, 0, false);
-      CreateNewReflexNode(ReflexTree, 0, 1, 0, 0, 0, 0, false);
+      CreateNewReflexNode(ReflexTree, 0, -1, 0, 0, 0, 0, 0, 0, false);
+      CreateNewReflexNode(ReflexTree, 0, 0, 0, 0, 0, 0, 0, 0, false);
+      CreateNewReflexNode(ReflexTree, 0, 1, 0, 0, 0, 0, 0, 0, false);
 
       SaveReflexTreeInternal();
     }
@@ -930,17 +1036,18 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Сохраняет дерево рефлексов в файл
     /// </summary>
-
     internal (bool Success, string ErrorMessage) SaveReflexTreeInternal()
     {
       try
       {
         var lines = new List<string>
                 {
-                  "# ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex",
-                  "# BaseID: -1: Плохо, 0: Норма, 1: Хорошо",
-                  "# StyleID: ID образа стилей поведения",
-                  "# ActionID: ID образа пусковых стимулов"
+                    "# ID|ParentID|BaseID|StyleID|ActionID|GeneticReflexID|ConditionedReflex|ReflexChainID|ChainStartLinkID",
+                    "# BaseID: -1: Плохо, 0: Норма, 1: Хорошо",
+                    "# StyleID: ID образа стилей поведения",
+                    "# ActionID: ID образа пусковых стимулов",
+                    "# ReflexChainID: ID цепочки рефлексов (0 если нет)",
+                    "# ChainStartLinkID: ID стартового звена цепочки"
                 };
 
         foreach (var child in ReflexTree.Children)
@@ -990,7 +1097,9 @@ namespace ISIDA.Reflexes
     {
       var lines = new List<string>();
 
-      lines.Add($"{node.ID}|{node.ParentID}|{node.BaseID}|{node.StyleID}|{node.ActionID}|{node.GeneticReflexID}|{node.ConditionedReflex}");
+      // Добавляем поля для цепочек (ReflexChainID|ChainStartLinkID)
+      lines.Add($"{node.ID}|{node.ParentID}|{node.BaseID}|{node.StyleID}|{node.ActionID}|" +
+                $"{node.GeneticReflexID}|{node.ConditionedReflex}|{node.ReflexChainID}|{node.ChainStartLinkID}");
 
       foreach (var child in node.Children)
       {
@@ -1014,6 +1123,15 @@ namespace ISIDA.Reflexes
     private static void LogError(string message)
     {
       FileValidator.LogError(message);
+    }
+
+    /// <summary>
+    /// Логирование информации
+    /// </summary>
+    private static void LogInfo(string message)
+    {
+      System.Diagnostics.Debug.WriteLine($"[ReflexTreeSystem] INFO: {message}");
+      FileValidator.LogError($"[ReflexTreeSystem] INFO: {message}");
     }
 
     #endregion

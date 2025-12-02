@@ -265,6 +265,26 @@ namespace ISIDA.Reflexes
       }
     }
 
+    /// <summary>Проверяет существование цепочки и звена</summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="linkId">ID звена</param>
+    /// <returns>True если цепочка и звено существуют</returns>
+    public bool ChainAndLinkExist(int chainId, int linkId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
+          return false;
+
+        return chain.Links.Any(l => l.ID == linkId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     #endregion
 
     #region Работа с файлами
