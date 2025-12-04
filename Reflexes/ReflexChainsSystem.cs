@@ -1,4 +1,5 @@
 ﻿using ISIDA.Common;
+using ISIDA.Actions;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -16,6 +17,7 @@ namespace ISIDA.Reflexes
   public sealed class ReflexChainsSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
     private readonly GeneticReflexesSystem _geneticReflexesSystem;
     private bool _disposed = false;
 
@@ -35,18 +37,21 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Инициализирует глобальный экземпляр системы цепочек рефлексов
     /// </summary>
-    public static void InitializeInstance(GeneticReflexesSystem geneticReflexesSystem)
+    public static void InitializeInstance(GeneticReflexesSystem geneticReflexesSystem, AdaptiveActionsSystem adaptiveActionsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexChainsSystem уже инициализирован.");
 
-      _instance = new ReflexChainsSystem(geneticReflexesSystem);
+      _instance = new ReflexChainsSystem(geneticReflexesSystem, adaptiveActionsSystem);
     }
 
-    private ReflexChainsSystem(GeneticReflexesSystem geneticReflexesSystem)
+    private ReflexChainsSystem(GeneticReflexesSystem geneticReflexesSystem, AdaptiveActionsSystem adaptiveActionsSystem)
     {
       _geneticReflexesSystem = geneticReflexesSystem ??
-          throw new ArgumentNullException(nameof(geneticReflexesSystem));
+    throw new ArgumentNullException(nameof(geneticReflexesSystem));
+
+      _adaptiveActionsSystem = adaptiveActionsSystem ??
+          throw new ArgumentNullException(nameof(adaptiveActionsSystem));
 
       try
       {
@@ -73,17 +78,14 @@ namespace ISIDA.Reflexes
       /// <summary>ID цепочки, к которой принадлежит звено</summary>
       public int ChainID { get; set; }
 
-      /// <summary>ID рефлекса для выполнения</summary>
-      public int ReflexID { get; set; }
+      /// <summary>ID адаптивного действия для выполнения</summary>
+      public int ActionId { get; set; }
 
       /// <summary>ID следующего звена при успешном выполнении</summary>
       public int SuccessNextLink { get; set; }
 
       /// <summary>ID следующего звена при неудачном выполнении</summary>
       public int FailureNextLink { get; set; }
-
-      /// <summary>Флаг конечного звена (завершает цепочку)</summary>
-      public bool IsTerminal { get; set; }
 
       /// <summary>Описание звена (для отладки)</summary>
       public string Description { get; set; }
@@ -131,7 +133,9 @@ namespace ISIDA.Reflexes
 
     #region Управление цепочками
 
-    /// <summary>Получает все цепочки рефлексов</summary>
+    /// <summary>
+    /// Получает все цепочки рефлексов
+    /// </summary>
     public ReadOnlyDictionary<int, ReflexChain> GetAllReflexChains()
     {
       _lock.EnterReadLock();
@@ -195,13 +199,13 @@ namespace ISIDA.Reflexes
       if (links == null || !links.Any())
         throw new ArgumentException("Цепочка должна содержать хотя бы одно звено", nameof(links));
 
-      // Проверяем существование рефлексов
-      var allReflexes = _geneticReflexesSystem.GetAllGeneticReflexesList();
+      // Проверяем существование адаптивных действий
+      var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
       foreach (var link in links)
       {
-        if (!allReflexes.Any(r => r.Id == link.ReflexID))
+        if (!allActions.Any(a => a.Id == link.ActionId))
         {
-          warnings.Add($"Рефлекс с ID {link.ReflexID} не существует");
+          warnings.Add($"Адаптивное действие с ID {link.ActionId} не существует");
         }
       }
 
@@ -221,6 +225,7 @@ namespace ISIDA.Reflexes
         };
 
         _reflexChains.Add(newId, chain);
+        SaveReflexChains();
         return (newId, warnings.ToArray());
       }
       finally
@@ -240,7 +245,12 @@ namespace ISIDA.Reflexes
         if (!_reflexChains.ContainsKey(chainId))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
-        return _reflexChains.Remove(chainId);
+        bool removed = _reflexChains.Remove(chainId);
+        if (removed)
+        {
+          SaveReflexChains();
+        }
+        return removed;
       }
       finally
       {
@@ -248,16 +258,16 @@ namespace ISIDA.Reflexes
       }
     }
 
-    /// <summary>Проверяет, используется ли рефлекс в цепочках</summary>
-    /// <param name="reflexId">ID рефлекса</param>
-    /// <returns>True если рефлекс используется в цепочках</returns>
-    public bool IsReflexUsedInChains(int reflexId)
+    /// <summary>Проверяет, используется ли действие в цепочках</summary>
+    /// <param name="actionId">ID адаптивного действия</param>
+    /// <returns>True если действие используется в цепочках</returns>
+    public bool IsActionUsedInChains(int actionId)
     {
       _lock.EnterReadLock();
       try
       {
         return _reflexChains.Values
-            .Any(chain => chain.Links.Any(link => link.ReflexID == reflexId));
+            .Any(chain => chain.Links.Any(link => link.ActionId == actionId));
       }
       finally
       {
@@ -278,6 +288,224 @@ namespace ISIDA.Reflexes
           return false;
 
         return chain.Links.Any(l => l.ID == linkId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>Добавляет звено к существующей цепочке</summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="actionId">ID адаптивного действия</param>
+    /// <param name="successNextLink">ID следующего звена при успехе</param>
+    /// <param name="failureNextLink">ID следующего звена при неудаче</param>
+    /// <param name="description">Описание звена</param>
+    /// <returns>ID созданного звена и предупреждения</returns>
+    public (int LinkId, string[] Warnings) AddChainLink(
+        int chainId, int actionId, int successNextLink,
+        int failureNextLink, string description)
+    {
+      var warnings = new List<string>();
+
+      _lock.EnterWriteLock();
+      try
+      {
+        // Проверяем существование цепочки
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
+          throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
+
+        // Проверяем существование адаптивного действия
+        var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
+        if (!allActions.Any(a => a.Id == actionId))
+          warnings.Add($"Адаптивное действие с ID {actionId} не существует");
+
+        // Проверяем ссылки на следующие звенья (если они не 0)
+        if (successNextLink != 0 && !chain.Links.Any(l => l.ID == successNextLink))
+          warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено в цепочке");
+
+        if (failureNextLink != 0 && !chain.Links.Any(l => l.ID == failureNextLink))
+          warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено в цепочке");
+
+        // Генерируем уникальный ID
+        int newLinkId = ++_lastLinkId;
+
+        var link = new ChainLink
+        {
+          ID = newLinkId,
+          ChainID = chainId,
+          ActionId = actionId,
+          SuccessNextLink = successNextLink,
+          FailureNextLink = failureNextLink,
+          Description = description ?? $"Звено {newLinkId}"
+        };
+
+        chain.Links.Add(link);
+
+        SaveReflexChains();
+        return (newLinkId, warnings.ToArray());
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Обновляет существующее звено цепочки
+    /// </summary>
+    public (bool Success, string[] Warnings) UpdateChainLink(
+        int chainId, int linkId, int actionId, int successNextLink,
+        int failureNextLink, string description)
+    {
+      var warnings = new List<string>();
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
+          throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
+
+        var link = chain.Links.FirstOrDefault(l => l.ID == linkId);
+        if (link == null)
+          throw new KeyNotFoundException($"Звено с ID {linkId} не найдено в цепочке {chainId}");
+
+        // Проверяем существование адаптивного действия
+        var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
+        if (!allActions.Any(a => a.Id == actionId))
+          warnings.Add($"Адаптивное действие с ID {actionId} не существует");
+
+        // Проверяем циклические ссылки (нельзя ссылаться на себя)
+        if (successNextLink == linkId)
+          throw new ArgumentException("Звено не может ссылаться на себя (успех)");
+
+        if (failureNextLink == linkId)
+          throw new ArgumentException("Звено не может ссылаться на себя (неудача)");
+
+        // Проверяем существование следующих звеньев (кроме 0)
+        if (successNextLink != 0 && !chain.Links.Any(l => l.ID == successNextLink))
+          warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено");
+
+        if (failureNextLink != 0 && !chain.Links.Any(l => l.ID == failureNextLink))
+          warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено");
+
+        // Обновляем звено
+        link.ActionId = actionId;
+        link.SuccessNextLink = successNextLink;
+        link.FailureNextLink = failureNextLink;
+        link.Description = description ?? link.Description;
+
+        SaveReflexChains();
+        return (true, warnings.ToArray());
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>Удаляет звено из цепочки</summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="linkId">ID звена</param>
+    /// <param name="reconnectLinks">Обновлять ли ссылки других звеньев на удаляемое</param>
+    /// <returns>True если звено удалено</returns>
+    public bool RemoveChainLink(int chainId, int linkId, bool reconnectLinks = false)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
+          throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
+
+        var linkToRemove = chain.Links.FirstOrDefault(l => l.ID == linkId);
+        if (linkToRemove == null)
+          return false;
+
+        // Находим все звенья, которые ссылаются на удаляемое
+        var referencingLinks = chain.Links.Where(l =>
+            l.SuccessNextLink == linkId || l.FailureNextLink == linkId).ToList();
+
+        if (referencingLinks.Any())
+        {
+          if (!reconnectLinks)
+            throw new InvalidOperationException(
+                $"Звено {linkId} используется другими звеньями: " +
+                string.Join(", ", referencingLinks.Select(l => l.ID)));
+
+          // Перенаправляем ссылки на 0 (ничего не делать)
+          foreach (var refLink in referencingLinks)
+          {
+            if (refLink.SuccessNextLink == linkId)
+              refLink.SuccessNextLink = 0;
+            if (refLink.FailureNextLink == linkId)
+              refLink.FailureNextLink = 0;
+          }
+        }
+
+        // Удаляем звено
+        bool removed = chain.Links.Remove(linkToRemove);
+        if (removed)
+        {
+          SaveReflexChains();
+        }
+        return removed;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Проверяет целостность цепочки
+    /// </summary>
+    public (bool IsValid, string[] Issues) ValidateChain(int chainId)
+    {
+      var issues = new List<string>();
+
+      _lock.EnterReadLock();
+      try
+      {
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
+        {
+          issues.Add($"Цепочка с ID {chainId} не найдена");
+          return (false, issues.ToArray());
+        }
+
+        if (!chain.Links.Any())
+        {
+          issues.Add("Цепочка не содержит звеньев");
+          return (false, issues.ToArray());
+        }
+
+        // Проверяем существование адаптивных действий
+        var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
+        foreach (var link in chain.Links)
+        {
+          if (!allActions.Any(a => a.Id == link.ActionId))
+            issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
+
+          // Проверяем циклические ссылки
+          if (link.SuccessNextLink == link.ID)
+            issues.Add($"Звено {link.ID} ссылается на себя (успех)");
+
+          if (link.FailureNextLink == link.ID)
+            issues.Add($"Звено {link.ID} ссылается на себя (неудача)");
+
+          // Проверяем существование следующих звеньев (кроме 0)
+          if (link.SuccessNextLink != 0 && !chain.Links.Any(l => l.ID == link.SuccessNextLink))
+            issues.Add($"Звено {link.ID}: следующее при успехе {link.SuccessNextLink} не найдено");
+
+          if (link.FailureNextLink != 0 && !chain.Links.Any(l => l.ID == link.FailureNextLink))
+            issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
+        }
+
+        // Проверяем наличие конечных звеньев (звеньев с SuccessNextLink = 0 и FailureNextLink = 0)
+        var terminalLinks = chain.Links.Where(l => l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
+        if (terminalLinks.Count == 0)
+          issues.Add("Цепочка не содержит конечных звеньев (бесконечный цикл)");
+
+        return (!issues.Any(), issues.ToArray());
       }
       finally
       {
@@ -339,6 +567,9 @@ namespace ISIDA.Reflexes
       return true;
     }
 
+    /// <summary>
+    /// Загружает цепочки рефлексов из файла
+    /// </summary>
     private void LoadReflexChains()
     {
       string filePath = GetReflexChainsFilePath();
@@ -392,23 +623,21 @@ namespace ISIDA.Reflexes
             }
 
             // Звено цепочки
-            if (parts.Length >= 7 && parts[0] == "LINK" && currentChain != null)
+            if (parts.Length >= 6 && parts[0] == "LINK" && currentChain != null) // Уменьшили с 7 до 6
             {
               if (int.TryParse(parts[1], out int linkId) &&
-                  int.TryParse(parts[2], out int reflexId) &&
+                  int.TryParse(parts[2], out int actionId) &&
                   int.TryParse(parts[3], out int successNext) &&
-                  int.TryParse(parts[4], out int failureNext) &&
-                  bool.TryParse(parts[5], out bool isTerminal))
+                  int.TryParse(parts[4], out int failureNext))
               {
                 var link = new ChainLink
                 {
                   ID = linkId,
                   ChainID = currentChain.ID,
-                  ReflexID = reflexId,
+                  ActionId = actionId,
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
-                  IsTerminal = isTerminal,
-                  Description = parts[6]
+                  Description = parts[5] // Без IsTerminal
                 };
 
                 currentChain.Links.Add(link);
@@ -446,19 +675,17 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsReflexDesc,
         FileHeaders.ReflexChainsSuccessDesc,
         FileHeaders.ReflexChainsFailureDesc,
-        FileHeaders.ReflexChainsTerminalDesc,
         "# Пример цепочки 'Охота':",
         "CHAIN|1|Охота|Цепочка охотничьего поведения|10",
-        "LINK|1|5|2|1|false|Обнаружение добычи",
-        "LINK|2|6|3|1|false|Преследование",
-        "LINK|3|7|0|0|true|Захват добычи"
+        "LINK|1|5|2|1|Обнаружение добычи",
+        "LINK|2|6|3|1|Преследование",
+        "LINK|3|7|0|0|Захват добычи"
     };
 
       File.WriteAllLines(GetReflexChainsFilePath(), lines);
     }
 
     /// <summary>Сохраняет цепочки рефлексов в файл</summary>
-    /// <returns>Результат операции сохранения</returns>
     public (bool Success, string ErrorMessage) SaveReflexChains()
     {
       _lock.EnterReadLock();
@@ -475,8 +702,7 @@ namespace ISIDA.Reflexes
             FileHeaders.ReflexChainsLinkDesc,
             FileHeaders.ReflexChainsReflexDesc,
             FileHeaders.ReflexChainsSuccessDesc,
-            FileHeaders.ReflexChainsFailureDesc,
-            FileHeaders.ReflexChainsTerminalDesc
+            FileHeaders.ReflexChainsFailureDesc
         };
 
         foreach (var chain in _reflexChains.Values.OrderBy(c => c.ID))
@@ -487,7 +713,7 @@ namespace ISIDA.Reflexes
           // Звенья
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
-            lines.Add($"LINK|{link.ID}|{link.ReflexID}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.IsTerminal}|{link.Description}");
+            lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}");
           }
 
           lines.Add(""); // Разделитель
@@ -497,7 +723,7 @@ namespace ISIDA.Reflexes
             GetReflexChainsFilePath(),
             lines,
             FileValidator.IsValidReflexChainsFile,
-            minLinesCount: 10, // Учитываем все строки шапки
+            minLinesCount: 9,
             fileDescription: "цепочек рефлексов");
 
         return result;

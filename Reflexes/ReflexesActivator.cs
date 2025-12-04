@@ -47,13 +47,14 @@ namespace ISIDA.Reflexes
         ConditionedReflexesSystem conditionedReflexes,
         InfluenceActionSystem influenceActions,
         ReflexTreeSystem reflexTree,
+        ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
         AdaptiveActionsSystem adaptiveActions)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexesActivator уже инициализирован.");
 
-      _instance = new ReflexesActivator(gomeostas, geneticReflexes, conditionedReflexes, influenceActions, reflexTree, reflexExecution, adaptiveActions);
+      _instance = new ReflexesActivator(gomeostas, geneticReflexes, conditionedReflexes, influenceActions, reflexTree, reflexChainsSystem, reflexExecution, adaptiveActions);
     }
 
     private readonly GomeostasSystem _gomeostas;
@@ -63,6 +64,7 @@ namespace ISIDA.Reflexes
     private readonly ReflexTreeSystem _reflexTree;
     private readonly ReflexExecutionService _reflexExecutionService;
     private readonly AdaptiveActionsSystem _adaptiveActions;
+    private readonly ReflexChainsSystem _reflexChainsSystem;
 
     private ReflexesActivator(
         GomeostasSystem gomeostas,
@@ -70,6 +72,7 @@ namespace ISIDA.Reflexes
         ConditionedReflexesSystem conditionedReflexes,
         InfluenceActionSystem influenceActions,
         ReflexTreeSystem reflexTree,
+        ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
         AdaptiveActionsSystem adaptiveActions)
     {
@@ -78,6 +81,7 @@ namespace ISIDA.Reflexes
       _conditionedReflexes = conditionedReflexes ?? throw new ArgumentNullException(nameof(conditionedReflexes));
       _influenceActions = influenceActions ?? throw new ArgumentNullException(nameof(influenceActions));
       _reflexTree = reflexTree ?? throw new ArgumentNullException(nameof(reflexTree));
+      _reflexChainsSystem = reflexChainsSystem ?? throw new ArgumentNullException(nameof(reflexChainsSystem));
       _reflexExecutionService = reflexExecution ?? throw new ArgumentNullException(nameof(reflexExecution));
       _adaptiveActions = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));
 
@@ -238,29 +242,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Активация при изменении сочетания стилей реагирования
-    /// </summary>
-    private void ActiveFromConditionChange(int pulseCount)
-    {
-      if (_isSleeping) return;
-
-      _activatedPulsCount = pulseCount;
-      UpdateCurrentStates(ActivationType.ConditionChange);
-      var conditions = GetCurrentGeneticConditionsArray();
-      _reflexTree.ConditionsDetection(conditions);     
-
-      _weitPulceCount = 0;
-      bool psychicBlocked = false;
-      if (psychicBlocked)
-      {
-        LogInfo("Рефлекс заблокирован психикой");
-        return;
-      }
-
-      ExecuteReflexes();
-    }
-
-    /// <summary>
     /// Активация при действиях с Пульта
     /// </summary>  
     private void ActiveFromAction(int pulseCount)
@@ -345,29 +326,127 @@ namespace ISIDA.Reflexes
       CollectReflexesForExecution();
       try
       {
-        // цепочки запускаются в CollectReflexesForExecution()
-        // цепочки обрабатываются асинхронно через ProcessActiveChain
+        // Проверяем, нужно ли запускать цепочку
+        var detectedNodeId = _reflexTree.DetectedLastNodeID;
+        if (detectedNodeId > 0)
+        {
+          var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
+          if (detectedNode != null && detectedNode.IsChainNode)
+          {
+            // Запускаем цепочку, начиная с текущего рефлекса
+            ExecuteChainFromReflex(detectedNode);
+            return; // Цепочка запущена, одиночные рефлексы не выполняем
+          }
+        }
+
+        // Если цепочки нет, выполняем одиночные рефлексы
         if (_conditionedReflexesToRun.Any())
         {
           foreach (var reflexId in _conditionedReflexesToRun)
           {
-            ExecuteConditionedReflex(reflexId);
-            _activeConditionReflexID = reflexId;
-            _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
+            var result = _reflexExecutionService.ExecuteConditionedReflex(reflexId);
+            if (result.Success)
+            {
+              _activeConditionReflexID = reflexId;
+              _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
+            }
           }
         }
         else if (_geneticReflexesToRun.Any())
         {
           foreach (var reflexId in _geneticReflexesToRun)
           {
-            ExecuteGeneticReflex(reflexId);
-            _activeGeneticReflexID = reflexId;            
+            var result = _reflexExecutionService.ExecuteGeneticReflex(reflexId);
+            if (result.Success)
+            {
+              _activeGeneticReflexID = reflexId;
+            }
           }
         }
       }
       catch (Exception ex)
       {
         Debug.WriteLine($"Ошибка запуска рефлекса: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Запускает цепочку рефлексов, начиная с текущего рефлекса
+    /// </summary>
+    private void ExecuteChainFromReflex(ReflexTreeSystem.ReflexNode node)
+    {
+      try
+      {
+        int chainId = node.ReflexChainID;
+        int startReflexId = node.ActiveReflex; // Может быть как условным, так и безусловным
+        bool isConditioned = node.ConditionedReflex > 0;
+
+        if (chainId <= 0 || startReflexId <= 0)
+          return;
+
+        // Получаем цепочку
+        var chain = _reflexChainsSystem.GetChain(chainId);
+        if (chain == null || !chain.Links.Any())
+          return;
+
+        // Получаем действие для стартового рефлекса
+        int startActionId = _reflexExecutionService.GetActionIdForReflex(startReflexId, isConditioned);
+        if (startActionId <= 0)
+        {
+          LogError($"Не найдено действие для рефлекса {startReflexId}");
+          return;
+        }
+
+        // Ищем звено, соответствующее стартовому действию
+        var startLink = chain.Links.FirstOrDefault(link => startActionId == link.ActionId);
+
+        if (startLink == null)
+        {
+          LogError($"Не найдено звено для действия {startActionId} в цепочке {chainId}");
+          return;
+        }
+
+        // Запоминаем условия запуска цепочки
+        _chainBaseID = _activeCurBaseID;
+        _chainStyleID = _activeCurBaseStyleID;
+        _chainActionID = _activeCurReflexTriggerStimulusID;
+
+        // Сначала выполняем стартовый рефлекс через сервис
+        if (isConditioned)
+        {
+          var result = _reflexExecutionService.ExecuteConditionedReflex(node.ConditionedReflex);
+          if (result.Success)
+          {
+            _activeConditionReflexID = node.ConditionedReflex;
+            _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
+          }
+        }
+        else
+        {
+          var result = _reflexExecutionService.ExecuteGeneticReflex(node.GeneticReflexID);
+          if (result.Success)
+          {
+            _activeGeneticReflexID = node.GeneticReflexID;
+          }
+        }
+
+        // Активируем цепочку для продолжения выполнения
+        if (_reflexTree.ActivateChain(chainId, startLink.ID, GlobalTimer.GlobalPulsCount))
+        {
+          _activeChainId = chainId;
+          _completedReflexesInChain.Add(startReflexId);
+
+          LogInfo($"Цепочка {chainId} запущена от рефлекса {startReflexId}, стартовое звено: {startLink.ID}");
+        }
+        else
+        {
+          LogError($"Не удалось активировать цепочку {chainId}");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка запуска цепочки от рефлекса: {ex.Message}");
+        DeactivateChain();
       }
     }
 
@@ -455,7 +534,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Сбор цепочек рефлексов или одиночных рефлексов для выполнения с учетом иерархии
+    /// Сбор рефлексов для выполнения (с учетом цепочек)
     /// </summary>
     private void CollectReflexesForExecution()
     {
@@ -472,31 +551,28 @@ namespace ISIDA.Reflexes
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
       if (detectedNode == null) return;
 
-      // в критической ситации собираем одиночные рефлексы
-      if (_gomeostas.HasCriticalChanges)
+      // Проверяем, содержит ли узел цепочку
+      if (detectedNode.IsChainNode)
       {
-        CollectSingleReflexes(detectedNode);
+        // Цепочка будет обработана в ExecuteReflexes()
+        // Собираем только стартовый рефлекс
+        if (detectedNode.ConditionedReflex > 0)
+        {
+          _conditionedReflexesToRun.Add(detectedNode.ConditionedReflex);
+        }
+        else if (detectedNode.GeneticReflexID > 0)
+        {
+          _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
+        }
         return;
       }
 
-      // сначала пытаемся найти и запустить цепочки
-      if (detectedNode.IsChainNode)
-      {
-        var (chainId, startLinkId) = _reflexTree.FindSuitableChain(
-            _activeCurBaseID,
-            _activeCurBaseStyleID,
-            _activeCurReflexTriggerStimulusID);
+      // Если цепочки нет, собираем обычные рефлексы
+      if (_activeCurTriggerStimulusID > 0)
+        CollectConditionedReflexes(detectedNode);
 
-        if (chainId > 0 && startLinkId > 0)
-        {
-          // Запускаем цепочку
-          ExecuteChain(chainId, startLinkId);
-          return;
-        }
-      }
-
-      // если цепочек нет, то собираем одиночные рефлексы
-      CollectSingleReflexes(detectedNode);
+      if (!_conditionedReflexesToRun.Any() && _activeCurReflexTriggerStimulusID > 0)
+        CollectGeneticReflexesWithTriggers(detectedNode);
     }
 
     /// <summary>
@@ -505,16 +581,10 @@ namespace ISIDA.Reflexes
     private void CollectSingleReflexes(ReflexTreeSystem.ReflexNode node)
     {
       if (_activeCurTriggerStimulusID > 0)
-      {
         CollectConditionedReflexes(node);
-        return;
-      }
 
       if (!_conditionedReflexesToRun.Any() && _activeCurReflexTriggerStimulusID > 0)
-      {
         CollectGeneticReflexesWithTriggers(node);
-        return;
-      }
     }
 
     /// <summary>
@@ -624,63 +694,6 @@ namespace ISIDA.Reflexes
       return activeActions?.Select(a => a.Id).ToArray() ?? new int[0];
     }
 
-    /// <summary>
-    /// Выполнение условного рефлекса
-    /// </summary>
-    private void ExecuteConditionedReflex(int reflexId)
-    {
-      try
-      {
-        var reflex = _conditionedReflexes.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
-
-        if (reflex != null)
-        {
-          // Усиление ассоциации при успешном выполнении
-          _conditionedReflexes.StrengthenAssociation(reflexId);
-        }
-      }
-      catch (Exception ex)
-      {
-        LogError($"Ошибка выполнения условного рефлекса {reflexId}: {ex.Message}");
-      }
-    }
-
-    /// <summary>
-    /// Выполнение безусловного рефлекса
-    /// </summary>
-    private void ExecuteGeneticReflex(int reflexId)
-    {
-      try
-      {
-        var reflex = _geneticReflexes.GetAllGeneticReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
-
-        if (reflex != null)
-        {
-          // Выполняем адаптивные действия рефлекса
-          if (reflex.AdaptiveActions?.Any() == true)
-          {
-            // Устанавливаем источник активации для каждого действия
-            foreach (var actionId in reflex.AdaptiveActions)
-            {
-              var action = _adaptiveActions.GetAllAdaptiveActions()
-                  .FirstOrDefault(a => a.Id == actionId);
-              if (action != null)
-                action.ActivationSource = ActionActivationSource.GeneticReflex;
-            }
-            var result = _reflexExecutionService.ExecuteAdaptiveActions(reflex.AdaptiveActions);
-            if (!result.Success)
-              LogError($"Ошибка выполнения безусловного рефлекса {reflexId}");
-          }
-        }
-      }
-      catch (Exception ex)
-      {
-        LogError($"Ошибка выполнения безусловного рефлекса {reflexId}: {ex.Message}");
-      }
-    }
-
     #endregion
 
     #region Активация и выполнение цепочек рефлексов
@@ -749,11 +762,11 @@ namespace ISIDA.Reflexes
         return;
       }
 
-      // Выполняем рефлекс текущего звена
-      if (result.ExecutedReflexId > 0)
+      // Выполняем действие текущего звена
+      if (result.ExecutedActionId > 0)
       {
-        ExecuteGeneticReflex(result.ExecutedReflexId);
-        _completedReflexesInChain.Add(result.ExecutedReflexId);
+        _reflexExecutionService.ExecuteAdaptiveAction(result.ExecutedActionId);
+        _completedReflexesInChain.Add(result.ExecutedActionId);
       }
 
       // Если цепочка завершена
@@ -812,7 +825,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверка и выполнение активной цепочки в текущем пульсе
+    /// Проверяет и выполняет активную цепочку в текущем пульсе
     /// </summary>
     private void ProcessActiveChain(int pulseCount)
     {
@@ -825,7 +838,33 @@ namespace ISIDA.Reflexes
         // Выполняем шаг каждые N пульсов (например, каждую секунду)
         if (pulseCount >= (chain.CurrentPulse + _reflexActionDuration))
         {
-          ExecuteChainStep(pulseCount);
+          // TODO: Заглушка - всегда считаем предыдущий шаг успешным
+          bool previousStepSuccess = true;
+
+          var result = _reflexTree.ExecuteChainStep(_activeChainId, pulseCount, previousStepSuccess);
+
+          if (!result.Success)
+          {
+            LogError($"Ошибка выполнения шага цепочки {_activeChainId}");
+            DeactivateChain();
+            return;
+          }
+
+          // Выполняем действие текущего звена (кроме стартового, которое уже выполнено)
+          if (result.ExecutedActionId > 0 && !_completedReflexesInChain.Contains(result.ExecutedActionId))
+          {
+            var actionResult = _reflexExecutionService.ExecuteAdaptiveAction(result.ExecutedActionId);
+            if (actionResult.Success)
+              _completedReflexesInChain.Add(result.ExecutedActionId);
+          }
+
+          // Если цепочка завершена
+          if (result.ChainCompleted)
+          {
+            LogInfo($"Цепочка {_activeChainId} успешно завершена. " +
+                   $"Выполнено действий: {_completedReflexesInChain.Count}");
+            DeactivateChain();
+          }
         }
       }
     }

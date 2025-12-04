@@ -30,15 +30,14 @@ namespace ISIDA.Common
       // Цепочки безусловных рефлексов
       public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
       public const string ReflexChainsChain = "# CHAIN|ID|Name|Description|Priority";
-      public const string ReflexChainsLink = "# LINK|LinkID|ReflexID|SuccessNext|FailureNext|IsTerminal|Description";
+      public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|IsTerminal|Description";
       public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
       public const string ReflexChainsPriorityDesc = "# Priority: приоритет цепочки (выше = приоритетнее)";
       public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
-      public const string ReflexChainsReflexDesc = "# ReflexID: ID рефлекса для выполнения";
+      public const string ReflexChainsReflexDesc = "# ActionID: ID действия для выполнения";
       public const string ReflexChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
       public const string ReflexChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
-      public const string ReflexChainsTerminalDesc = "# IsTerminal: флаг конечного звена (true/false)";
 
       // Гомеостатические воздействия
       public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты";
