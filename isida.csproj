@@ -88,6 +88,7 @@
     <Compile Include="Common\FileValidator.cs" />
     <Compile Include="Common\GlobalTimer.cs" />
     <Compile Include="Common\ILogWriter.cs" />
+    <Compile Include="Common\IsidaEngine.cs" />
     <Compile Include="Common\ResearchLogger.cs" />
     <Compile Include="Common\SettingsValidator.cs" />
     <Compile Include="Gomeostas\GomeostasSystem.cs" />

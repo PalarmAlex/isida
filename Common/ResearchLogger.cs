@@ -414,7 +414,7 @@ namespace ISIDA.Common
     /// Устанавливает писатель логов для записи в память
     /// </summary>
     /// <param name="logWriter">Писатель логов</param>
-    public static void SetMemoryLogWriter(ILogWriter logWriter)
+    public void SetMemoryLogWriter(ILogWriter logWriter)
     {
       _memoryLogWriter = logWriter;
     }
