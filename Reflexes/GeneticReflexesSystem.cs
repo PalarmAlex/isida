@@ -188,6 +188,11 @@ namespace ISIDA.Reflexes
       /// Адаптивные действия рефлекса
       /// </summary>
       public List<int> AdaptiveActions { get; set; } = new List<int>();
+
+      /// <summary>
+      /// ID цепочки рефлексов, привязанной к узлу дерева
+      /// </summary>
+      public int ReflexChainID { get; set; }
     }
 
     #endregion

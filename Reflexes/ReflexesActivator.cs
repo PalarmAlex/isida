@@ -752,6 +752,35 @@ namespace ISIDA.Reflexes
       // В реальности нужно получать подтверждение от оператора
       bool previousStepSuccess = true;
 
+      // Проверяем ограничения циклических повторений
+      var chain = _reflexChainsSystem.GetChain(_activeChainId);
+      if (chain != null)
+      {
+        // Получаем текущее активное звено из дерева рефлексов
+        var activeLinkId = _reflexTree.GetCurrentChainLink(_activeChainId);
+        if (activeLinkId > 0)
+        {
+          var currentLink = chain.Links.FirstOrDefault(l => l.ID == activeLinkId);
+          if (currentLink != null)
+          {
+            // Проверяем следующее звено на предмет циклического перехода
+            int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+
+            // Если следующее звено это сам звено (повтор) или предыдущее звено
+            if (nextLinkId == currentLink.ID || (nextLinkId > 0 && nextLinkId < currentLink.ID))
+            {
+              // Проверяем, не превышено ли максимальное количество повторений
+              if (_reflexChainsSystem.HasReachedMaxRepetitions(_activeChainId, currentLink.ID, nextLinkId))
+              {
+                LogInfo($"Цепочка {_activeChainId} прервана - достигнут лимит повторений звена {currentLink.ID}");
+                DeactivateChain();
+                return;
+              }
+            }
+          }
+        }
+      }
+
       // Выполняем шаг цепочки
       var result = _reflexTree.ExecuteChainStep(_activeChainId, pulseCount, previousStepSuccess);
 
@@ -807,24 +836,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Деактивация цепочки
-    /// </summary>
-    private void DeactivateChain()
-    {
-      if (_activeChainId > 0)
-      {
-        _reflexTree.DeactivateChain(_activeChainId);
-        LogInfo($"Цепочка {_activeChainId} деактивирована");
-      }
-
-      _activeChainId = 0;
-      _chainBaseID = 0;
-      _chainStyleID = 0;
-      _chainActionID = 0;
-      _completedReflexesInChain.Clear();
-    }
-
-    /// <summary>
     /// Проверяет и выполняет активную цепочку в текущем пульсе
     /// </summary>
     private void ProcessActiveChain(int pulseCount)
@@ -839,7 +850,35 @@ namespace ISIDA.Reflexes
         if (pulseCount >= (chain.CurrentPulse + _reflexActionDuration))
         {
           // TODO: Заглушка - всегда считаем предыдущий шаг успешным
-          bool previousStepSuccess = true;
+          bool previousStepSuccess = true; // TODO: заменить на реальную проверку
+
+          // Проверяем ограничения циклических повторений
+          var chainInfo = _reflexChainsSystem.GetChain(_activeChainId);
+          if (chainInfo != null)
+          {
+            var currentLinkId = _reflexTree.GetCurrentChainLink(_activeChainId);
+            if (currentLinkId > 0)
+            {
+              var currentLink = chainInfo.Links.FirstOrDefault(l => l.ID == currentLinkId);
+              if (currentLink != null)
+              {
+                // Проверяем следующее звено на предмет циклического перехода
+                int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+
+                // Если следующее звено это сам звено (повтор) или предыдущее звено
+                if (nextLinkId == currentLink.ID || (nextLinkId > 0 && nextLinkId < currentLink.ID))
+                {
+                  // Проверяем, не превышено ли максимальное количество повторений
+                  if (_reflexChainsSystem.HasReachedMaxRepetitions(_activeChainId, currentLink.ID, nextLinkId))
+                  {
+                    LogInfo($"Цепочка {_activeChainId} прервана - достигнут лимит повторений звена {currentLink.ID}");
+                    DeactivateChain();
+                    return;
+                  }
+                }
+              }
+            }
+          }
 
           var result = _reflexTree.ExecuteChainStep(_activeChainId, pulseCount, previousStepSuccess);
 
@@ -867,6 +906,27 @@ namespace ISIDA.Reflexes
           }
         }
       }
+    }
+
+    /// <summary>
+    /// Деактивация цепочки
+    /// </summary>
+    private void DeactivateChain()
+    {
+      if (_activeChainId > 0)
+      {
+        // Сбрасываем счетчики повторений при деактивации цепочки
+        _reflexChainsSystem.ResetChainRepetitions(_activeChainId);
+
+        _reflexTree.DeactivateChain(_activeChainId);
+        LogInfo($"Цепочка {_activeChainId} деактивирована");
+      }
+
+      _activeChainId = 0;
+      _chainBaseID = 0;
+      _chainStyleID = 0;
+      _chainActionID = 0;
+      _completedReflexesInChain.Clear();
     }
 
     #endregion
