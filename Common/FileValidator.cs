@@ -34,6 +34,7 @@ namespace ISIDA.Common
       public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
       public const string ReflexChainsPriorityDesc = "# Priority: приоритет цепочки (выше = приоритетнее)";
+      public const string ReflexChainsMaxRepetitionsDesc = "# Максимальное количество повторений циклических ссылок (для цепочки - по умолчанию, для звена - конкретное значение, 0 = использовать значение цепочки)";
       public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
       public const string ReflexChainsReflexDesc = "# ActionID: ID действия для выполнения";
       public const string ReflexChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
@@ -93,9 +94,11 @@ namespace ISIDA.Common
 
         try
         {
-          if (!Directory.Exists(logsDirectory))
+          // Создаем директорию, если её нет
+          var directory = Path.GetDirectoryName(_logFilePath);
+          if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
           {
-            Directory.CreateDirectory(logsDirectory);
+            Directory.CreateDirectory(directory);
           }
         }
         catch (Exception ex)
@@ -103,21 +106,6 @@ namespace ISIDA.Common
           System.Diagnostics.Debug.WriteLine($"SetLogsPath error: {ex.Message}");
         }
       }
-    }
-
-    static FileValidator()
-    {
-      try
-      {
-        var logDir = Path.GetDirectoryName(_logFilePath);
-        if (!Directory.Exists(logDir))
-          Directory.CreateDirectory(logDir);
-      }
-      catch (Exception ex)
-      {
-        System.Diagnostics.Debug.WriteLine($"FileValidator: Ошибка создания каталогов: {ex.Message}");
-      }
-
     }
 
     /// <summary>
