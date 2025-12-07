@@ -269,23 +269,45 @@ namespace ISIDA.Reflexes
     /// <returns>True если цепочка удалена, иначе False</returns>
     public bool RemoveReflexChain(int chainId)
     {
+      _lock.EnterWriteLock();
       try
       {
-        if (!_reflexChains.ContainsKey(chainId))
+        if (!_reflexChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
+        var reflexesUsingChain = _geneticReflexesSystem.GetReflexesForChain(chainId);
+        foreach (var reflexId in reflexesUsingChain)
+        {
+          try
+          {
+            _geneticReflexesSystem.DetachChainFromReflex(reflexId);
+          }
+          catch (Exception ex)
+          {
+            LogError($"Ошибка при отвязке цепочки {chainId} от рефлекса {reflexId}: {ex.Message}");
+          }
+        }
+
+        var linkIds = chain.Links.Select(l => l.ID).ToList();
         bool removed = _reflexChains.Remove(chainId);
+
         if (removed)
         {
-          SaveReflexChains();
+          SaveReflexChainsCore();
           OnReflexChainDeleted(chainId);
+          LogInfo($"Цепочка {chainId} удалена. Удалено звеньев: {linkIds.Count}");
         }
 
         return removed;
       }
-      catch
+      catch (Exception ex)
       {
+        LogError($"Ошибка при удалении цепочки {chainId}: {ex.Message}");
         return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 
@@ -487,6 +509,7 @@ namespace ISIDA.Reflexes
     /// <param name="linkId">ID звена</param>
     /// <param name="reconnectLinks">Обновлять ли ссылки других звеньев на удаляемое</param>
     /// <returns>True если звено удалено</returns>
+    /// <exception cref="InvalidOperationException">Если удаление последнего звена</exception>
     public bool RemoveChainLink(int chainId, int linkId, bool reconnectLinks = false)
     {
       _lock.EnterWriteLock();
@@ -499,7 +522,14 @@ namespace ISIDA.Reflexes
         if (linkToRemove == null)
           return false;
 
-        // Находим все звенья, которые ссылаются на удаляемое
+        if (chain.Links.Count <= 1)
+        {
+          throw new InvalidOperationException(
+              $"Невозможно удалить последнее звено {linkId} из цепочки {chainId}. " +
+              "Цепочка должна содержать хотя бы одно звено. " +
+              "Для удаления цепочки используйте метод RemoveReflexChain().");
+        }
+
         var referencingLinks = chain.Links.Where(l =>
             l.SuccessNextLink == linkId || l.FailureNextLink == linkId).ToList();
 
@@ -510,7 +540,6 @@ namespace ISIDA.Reflexes
                 $"Звено {linkId} используется другими звеньями: " +
                 string.Join(", ", referencingLinks.Select(l => l.ID)));
 
-          // Перенаправляем ссылки на 0 (ничего не делать)
           foreach (var refLink in referencingLinks)
           {
             if (refLink.SuccessNextLink == linkId)
@@ -520,7 +549,6 @@ namespace ISIDA.Reflexes
           }
         }
 
-        // Удаляем звено
         bool removed = chain.Links.Remove(linkToRemove);
         if (removed)
           SaveReflexChainsCore();
@@ -549,20 +577,18 @@ namespace ISIDA.Reflexes
           return (false, issues.ToArray());
         }
 
-        if (!chain.Links.Any())
+        if (chain.Links.Count < 1)
         {
-          issues.Add("Цепочка не содержит звеньев");
+          issues.Add("Цепочка должна содержать хотя бы одно звено");
           return (false, issues.ToArray());
         }
 
-        // Проверяем существование адаптивных действий
         var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
         foreach (var link in chain.Links)
         {
           if (!allActions.Any(a => a.Id == link.ActionId))
             issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
 
-          // Если циклические ссылки запрещены, проверяем ссылки на предыдущие звенья
           if (!AllowCyclicReferences)
           {
             if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
@@ -572,7 +598,6 @@ namespace ISIDA.Reflexes
               issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.FailureNextLink} (AllowCyclicReferences = false)");
           }
 
-          // Проверяем существование следующих звеньев (кроме 0 и кроме себя)
           if (link.SuccessNextLink != 0 && link.SuccessNextLink != link.ID &&
               !chain.Links.Any(l => l.ID == link.SuccessNextLink))
             issues.Add($"Звено {link.ID}: следующее при успехе {link.SuccessNextLink} не найдено");
@@ -581,17 +606,14 @@ namespace ISIDA.Reflexes
               !chain.Links.Any(l => l.ID == link.FailureNextLink))
             issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
 
-          // Проверяем максимальное количество повторений
           if (link.MaxCyclicRepetitions <= 0)
             issues.Add($"Звено {link.ID}: максимальное количество повторений должно быть больше 0");
         }
 
-        // Проверяем наличие конечных звеньев (звеньев с SuccessNextLink = 0 и FailureNextLink = 0)
         var terminalLinks = chain.Links.Where(l =>
             (l.SuccessNextLink == 0 || l.SuccessNextLink == l.ID) &&
             (l.FailureNextLink == 0 || l.FailureNextLink == l.ID)).ToList();
 
-        // Если есть только циклические ссылки без конечных, проверяем наличие счетчиков повторений
         if (terminalLinks.Count == 0 && !chain.Links.Any(l => l.MaxCyclicRepetitions > 0))
         {
           issues.Add("Цепочка не содержит конечных звеньев и не настроены счетчики повторений (бесконечный цикл)");

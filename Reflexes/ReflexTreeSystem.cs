@@ -768,8 +768,6 @@ namespace ISIDA.Reflexes
         if (reflexIdsSet.Count == 0) return;
 
         int removedCount = 0;
-
-        // Используем рекурсивный обход для массового удаления
         RemoveMultipleReflexesFromNode(ReflexTree, reflexIdsSet, ref removedCount);
 
         if (removedCount > 0)
@@ -795,14 +793,13 @@ namespace ISIDA.Reflexes
     {
       if (node == null) return;
 
-      // Проверяем текущий узел
       if (node.GeneticReflexID == geneticReflexId)
       {
         node.GeneticReflexID = 0;
+        node.ReflexChainID = 0;
         removedCount++;
       }
 
-      // Рекурсивно проверяем дочерние узлы
       foreach (var child in node.Children)
       {
         RemoveReflexFromNode(child, geneticReflexId, ref removedCount);
@@ -816,14 +813,13 @@ namespace ISIDA.Reflexes
     {
       if (node == null) return;
 
-      // Проверяем текущий узел
       if (geneticReflexIds.Contains(node.GeneticReflexID))
       {
         node.GeneticReflexID = 0;
+        node.ReflexChainID = 0;
         removedCount++;
       }
 
-      // Рекурсивно проверяем дочерние узлы
       foreach (var child in node.Children)
       {
         RemoveMultipleReflexesFromNode(child, geneticReflexIds, ref removedCount);
@@ -866,14 +862,13 @@ namespace ISIDA.Reflexes
     {
       if (node == null) return;
 
-      // Очищаем текущий узел
       if (node.GeneticReflexID > 0)
       {
         node.GeneticReflexID = 0;
+        node.ReflexChainID = 0;
         clearedCount++;
       }
 
-      // Рекурсивно очищаем дочерние узлы
       foreach (var child in node.Children)
       {
         ClearAllReflexesFromNode(child, ref clearedCount);
