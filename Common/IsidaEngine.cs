@@ -229,6 +229,23 @@ namespace ISIDA.Common
     {
       ResearchLogger?.Dispose();
     }
+
+    /// <summary>
+    /// Проверяет, все ли системы инициализированы
+    /// </summary>
+    public bool IsFullyInitialized =>
+        Gomeostas != null &&
+        SensorySystem != null &&
+        AdaptiveActions != null &&
+        InfluenceActions != null &&
+        GeneticReflexes != null &&
+        ConditionedReflexes != null &&
+        PerceptionImages != null &&
+        ReflexesActivator != null &&
+        ReflexTree != null &&
+        ReflexChains != null &&
+        ReflexExecution != null &&
+        ResearchLogger != null;
   }
 
   /// <summary>
@@ -305,16 +322,22 @@ namespace ISIDA.Common
         SensorySystem.InitializeInstance(context.Gomeostas, config.SensorsFolder);
         context.SensorySystem = SensorySystem.Instance;
 
-        // Шаг 6: Безусловные рефлексы и цепочки
+        // Шаг 6: Безусловные рефлексы
         initializationStep = 6;
         GeneticReflexesSystem.InitializeInstance(context.Gomeostas, config.ReflexesFolder);
         context.GeneticReflexes = GeneticReflexesSystem.Instance;
 
+        // Шаг 7: Система цепочек рефлексов
+        initializationStep = 7;
         ReflexChainsSystem.InitializeInstance(context.GeneticReflexes, context.AdaptiveActions);
         context.ReflexChains = ReflexChainsSystem.Instance;
 
-        // Шаг 7: Образы восприятия
-        initializationStep = 7;
+        // Шаг 8: Вторичная инициализация безусловных рефлексов с системой цепочек
+        initializationStep = 8;
+        GeneticReflexesSystem.InitializeWithChains(context.ReflexChains);
+
+        // Шаг 9: Образы восприятия
+        initializationStep = 9;
         PerceptionImagesSystem.InitializeInstance(context.Gomeostas, context.GeneticReflexes);
         context.PerceptionImages = PerceptionImagesSystem.Instance;
 
@@ -322,24 +345,24 @@ namespace ISIDA.Common
         context.InfluenceActions.SetPerceptionImagesSystem(context.PerceptionImages);
         context.SensorySystem.SetDependentSystems(context.GeneticReflexes, context.PerceptionImages);
 
-        // Шаг 8: Условные рефлексы
-        initializationStep = 8;
+        // Шаг 10: Условные рефлексы
+        initializationStep = 10;
         ConditionedReflexesSystem.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
             context.PerceptionImages);
         context.ConditionedReflexes = ConditionedReflexesSystem.Instance;
 
-        // Шаг 9: Дерево рефлексов
-        initializationStep = 9;
+        // Шаг 11: Дерево рефлексов
+        initializationStep = 11;
         ReflexTreeSystem.InitializeInstance(
             context.GeneticReflexes,
             context.PerceptionImages,
             context.ReflexChains);
         context.ReflexTree = ReflexTreeSystem.Instance;
 
-        // Шаг 10: Сервис выполнения рефлексов
-        initializationStep = 10;
+        // Шаг 12: Сервис выполнения рефлексов
+        initializationStep = 12;
         ReflexExecutionService.InitializeInstance(
             context.AdaptiveActions,
             context.InfluenceActions,
@@ -347,8 +370,8 @@ namespace ISIDA.Common
             context.ConditionedReflexes);
         context.ReflexExecution = ReflexExecutionService.Instance;
 
-        // Шаг 11: Активатор рефлексов
-        initializationStep = 11;
+        // Шаг 13: Активатор рефлексов
+        initializationStep = 13;
         ReflexesActivator.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
@@ -360,8 +383,8 @@ namespace ISIDA.Common
             context.AdaptiveActions);
         context.ReflexesActivator = ReflexesActivator.Instance;
 
-        // Шаг 12: Логирование и глобальный таймер
-        initializationStep = 12;
+        // Шаг 14: Логирование и глобальный таймер
+        initializationStep = 14;
         context.ResearchLogger = new ResearchLogger(
             context.Gomeostas,
             context.PerceptionImages,
@@ -385,8 +408,8 @@ namespace ISIDA.Common
             context.AdaptiveActions,
             context.ReflexesActivator);
 
-        // Шаг 13: Применение конфигурации
-        initializationStep = 13;
+        // Шаг 15: Применение конфигурации
+        initializationStep = 15;
         context.Gomeostas.DefaultStileId = config.DefaultStileId;
         context.Gomeostas.CompareLevel = config.CompareLevel;
         context.Gomeostas.DifSensorPar = config.DifSensorPar;

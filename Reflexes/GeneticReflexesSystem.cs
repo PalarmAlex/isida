@@ -5,6 +5,7 @@ using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -23,6 +24,7 @@ namespace ISIDA.Reflexes
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
+    private ReflexChainsSystem _reflexChainsSystem;
     private bool _disposed = false;
 
     #region Привязка к ReflexTreeSystem через события
@@ -144,6 +146,34 @@ namespace ISIDA.Reflexes
         LogError($"Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
         throw;
       }
+    }
+
+    /// <summary>
+    /// Инициализация cистемы цепочек рефлексов
+    /// </summary>
+    public static void InitializeWithChains(ReflexChainsSystem reflexChainsSystem)
+    {
+      if (_instance == null)
+        throw new InvalidOperationException("GeneticReflexesSystem должен быть инициализирован перед вызовом InitializeWithChains");
+
+      if (reflexChainsSystem == null)
+        throw new ArgumentNullException(nameof(reflexChainsSystem));
+
+      _instance.SetReflexChainsSystem(reflexChainsSystem);
+    }
+
+    /// <summary>
+    /// Устанавливает систему цепочек рефлексов после инициализации
+    /// </summary>
+    private void SetReflexChainsSystem(ReflexChainsSystem reflexChainsSystem)
+    {
+      if (_reflexChainsSystem != null)
+        throw new InvalidOperationException("ReflexChainsSystem уже установлена");
+
+      _reflexChainsSystem = reflexChainsSystem;
+
+      // Подписываемся на события удаления цепочек
+      _reflexChainsSystem.ReflexChainDeleted += OnReflexChainDeleted;
     }
 
     #endregion
@@ -399,7 +429,8 @@ namespace ISIDA.Reflexes
           Level1 = originalReflex.Level1,
           Level2 = new List<int>(originalReflex.Level2),
           Level3 = new List<int>(originalReflex.Level3),
-          AdaptiveActions = new List<int>(originalReflex.AdaptiveActions)
+          AdaptiveActions = new List<int>(originalReflex.AdaptiveActions),
+          ReflexChainID = originalReflex.ReflexChainID
         };
       }
       finally
@@ -768,8 +799,144 @@ namespace ISIDA.Reflexes
 
       return $"{level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedLevel3)}|{string.Join(",", sortedAdaptiveActions)}";
     }
-   
+
     #endregion
+
+    #region Методы работы с цепочками
+
+    /// <summary>
+    /// Привязывает цепочку рефлексов к безусловному рефлексу
+    /// </summary>
+    /// <param name="reflexId">ID рефлекса</param>
+    /// <param name="chainId">ID цепочки</param>
+    /// <exception cref="InvalidOperationException">Если система цепочек не инициализирована</exception>
+    public bool AttachChainToReflex(int reflexId, int chainId)
+    {
+      if (_reflexChainsSystem == null)
+        throw new InvalidOperationException("Система цепочек рефлексов не инициализирована");
+
+      if (!_geneticReflexes.ContainsKey(reflexId))
+        throw new KeyNotFoundException($"Рефлекс с ID {reflexId} не найден");
+
+      // Проверяем существование цепочки
+      var chain = _reflexChainsSystem.GetChain(chainId);
+      if (chain == null)
+        throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        _geneticReflexes[reflexId].ReflexChainID = chainId;
+        return true;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Отвязывает цепочку рефлексов от безусловного рефлекса
+    /// </summary>
+    /// <param name="reflexId">ID рефлекса</param>
+    public bool DetachChainFromReflex(int reflexId)
+    {
+      if (!_geneticReflexes.ContainsKey(reflexId))
+        throw new KeyNotFoundException($"Рефлекс с ID {reflexId} не найден");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        int oldChainId = _geneticReflexes[reflexId].ReflexChainID;
+        _geneticReflexes[reflexId].ReflexChainID = 0;
+        LogInfo($"Отвязана цепочка {oldChainId} от рефлекса {reflexId}");
+        return true;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает ID цепочки, привязанной к рефлексу
+    /// </summary>
+    /// <param name="reflexId">ID рефлекса</param>
+    /// <returns>ID цепочки или 0 если не привязана</returns>
+    public int GetChainForReflex(int reflexId)
+    {
+      if (!_geneticReflexes.ContainsKey(reflexId))
+        throw new KeyNotFoundException($"Рефлекс с ID {reflexId} не найден");
+
+      _lock.EnterReadLock();
+      try
+      {
+        return _geneticReflexes[reflexId].ReflexChainID;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает все рефлексы, привязанные к указанной цепочке
+    /// </summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <returns>Список ID рефлексов</returns>
+    public List<int> GetReflexesForChain(int chainId)
+    {
+      if (chainId <= 0)
+        return new List<int>();
+
+      _lock.EnterReadLock();
+      try
+      {
+        return _geneticReflexes.Values
+            .Where(r => r.ReflexChainID == chainId)
+            .Select(r => r.Id)
+            .ToList();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Обработчик удаления цепочки рефлексов
+    /// </summary>
+    private void OnReflexChainDeleted(int chainId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_geneticReflexes == null) return;
+
+        int clearedCount = 0;
+
+        // Очищаем ссылки на удаленную цепочку во всех рефлексах
+        foreach (var reflex in _geneticReflexes.Values)
+        {
+          if (reflex.ReflexChainID == chainId)
+          {
+            reflex.ReflexChainID = 0;
+            clearedCount++;
+          }
+        }
+
+        if (clearedCount > 0)
+        {
+          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
 
     #region Работа с файлами
 
@@ -815,7 +982,6 @@ namespace ISIDA.Reflexes
             if (!int.TryParse(parts[1].Trim(), out int level1))
               continue;
 
-            // Парсим остальные поля
             var level2 = parts.Length > 2 ? ParseIntList(parts[2]) : new List<int>();
             var level3 = parts.Length > 3 ? ParseIntList(parts[3]) : new List<int>();
             var adaptiveActions = parts.Length > 4 ? ParseIntList(parts[4]) : new List<int>();
@@ -824,13 +990,18 @@ namespace ISIDA.Reflexes
             if (!validationResult.IsValid)
               continue;
 
+            int reflexChainID = 0;
+            if (parts.Length > 5 && int.TryParse(parts[5].Trim(), out int parsedChainId))
+              reflexChainID = parsedChainId;
+
             var reflex = new GeneticReflex
             {
               Id = id,
               Level1 = level1,
               Level2 = level2,
               Level3 = level3,
-              AdaptiveActions = adaptiveActions
+              AdaptiveActions = adaptiveActions,
+              ReflexChainID = reflexChainID
             };
 
             _geneticReflexes[reflex.Id] = reflex;
@@ -842,13 +1013,14 @@ namespace ISIDA.Reflexes
         {
           EnsureDataDirectory();
           var lines = new List<string>
-          {
-            FileHeaders.GeneticReflexesFormat,
-            FileHeaders.GeneticReflexesLevel1,
-            FileHeaders.GeneticReflexesLevel2,
-            FileHeaders.GeneticReflexesLevel3,
-            FileHeaders.GeneticReflexesActions
-          };
+            {
+                FileHeaders.GeneticReflexesFormat,
+                FileHeaders.GeneticReflexesLevel1,
+                FileHeaders.GeneticReflexesLevel2,
+                FileHeaders.GeneticReflexesLevel3,
+                FileHeaders.GeneticReflexesActions,
+                FileHeaders.GeneticReflexesChain
+            };
           File.WriteAllLines(path, lines);
 
           _geneticReflexes.Clear();
@@ -878,7 +1050,6 @@ namespace ISIDA.Reflexes
 
         if (IsValidate)
         {
-          // Используем метод валидации для каждого рефлекса
           foreach (var reflex in _geneticReflexes.Values)
           {
             var validationResult = ValidateGeneticReflexParameters(
@@ -899,11 +1070,12 @@ namespace ISIDA.Reflexes
 
         var lines = new List<string>
         {
-          FileHeaders.GeneticReflexesFormat,
-          FileHeaders.GeneticReflexesLevel1,
-          FileHeaders.GeneticReflexesLevel2,
-          FileHeaders.GeneticReflexesLevel3,
-          FileHeaders.GeneticReflexesActions
+            FileHeaders.GeneticReflexesFormat,
+            FileHeaders.GeneticReflexesLevel1,
+            FileHeaders.GeneticReflexesLevel2,
+            FileHeaders.GeneticReflexesLevel3,
+            FileHeaders.GeneticReflexesActions,
+            FileHeaders.GeneticReflexesChain
         };
 
         foreach (var reflex in _geneticReflexes.Values.OrderBy(r => r.Id))
@@ -911,18 +1083,19 @@ namespace ISIDA.Reflexes
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|" +
                    $"{string.Join(",", reflex.Level3)}|" +
-                   $"{string.Join(",", reflex.AdaptiveActions)}");
+                   $"{string.Join(",", reflex.AdaptiveActions)}|" +
+                   $"{reflex.ReflexChainID}");
         }
 
-        var linCount = 5; // Минимум: шапка + 1 рефлекс
+        var minLinesCount = 6;
         if (lines.Count == 5)
-          linCount = 5; // только шапка
+          minLinesCount = 5;
 
         var result = SafeSaveFile(
             GetGeneticReflexesFilePath(),
             lines,
             content => IsValidGeneticReflexesFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: linCount,
+            minLinesCount: minLinesCount,
             fileDescription: "безусловных рефлексов");
 
         return result;
@@ -1104,6 +1277,20 @@ namespace ISIDA.Reflexes
           reflex.Level2,
           reflex.Level3,
           reflex.AdaptiveActions);
+    }
+
+    #endregion
+
+    #region Вспомогательные методы
+
+    private static void LogInfo(string message)
+    {
+      Debug.WriteLine($"[ReflexChainsSystem] INFO: {message}");
+    }
+
+    private static void LogError(string message)
+    {
+      FileValidator.LogError($"[ReflexChainsSystem] ERROR: {message}");
     }
 
     #endregion

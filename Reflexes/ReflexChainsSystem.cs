@@ -21,6 +21,16 @@ namespace ISIDA.Reflexes
     private readonly GeneticReflexesSystem _geneticReflexesSystem;
     private bool _disposed = false;
 
+    /// <summary>
+    /// Событие удаления цепочки
+    /// </summary>
+    public event Action<int> ReflexChainDeleted;
+
+    private void OnReflexChainDeleted(int chainId)
+    {
+      ReflexChainDeleted?.Invoke(chainId);
+    }
+
     #region Инициализация
 
     private static ReflexChainsSystem _instance;
@@ -114,9 +124,6 @@ namespace ISIDA.Reflexes
 
       /// <summary>Звенья цепочки</summary>
       public List<ChainLink> Links { get; set; } = new List<ChainLink>();
-
-      /// <summary>Максимальное количество повторений циклических ссылок по умолчанию</summary>
-      public int DefaultMaxCyclicRepetitions { get; set; } = 3;
     }
 
     #endregion
@@ -203,11 +210,11 @@ namespace ISIDA.Reflexes
     /// <param name="description">Описание цепочки</param>
     /// <param name="priority">Приоритет цепочки</param>
     /// <param name="links">Звенья цепочки</param>
-    /// <param name="defaultMaxCyclicRepetitions">Максимальное количество повторений циклических ссылок по умолчанию</param>
+    /// <param name="maxCyclicRepetitions">Максимальное количество повторений циклических ссылок по умолчанию</param>
     /// <returns>ID созданной цепочки и предупреждения</returns>
     public (int ChainId, string[] Warnings) AddReflexChain(
         string name, string description, int priority, List<ChainLink> links,
-        int defaultMaxCyclicRepetitions = 3)
+        int maxCyclicRepetitions = 3)
     {
       var warnings = new List<string>();
 
@@ -238,19 +245,17 @@ namespace ISIDA.Reflexes
           Name = name,
           Description = description,
           Priority = priority,
-          Links = links,
-          DefaultMaxCyclicRepetitions = defaultMaxCyclicRepetitions
+          Links = links
         };
 
         // Устанавливаем максимальное количество повторений для каждого звена
         foreach (var link in chain.Links)
         {
           if (link.MaxCyclicRepetitions <= 0)
-            link.MaxCyclicRepetitions = chain.DefaultMaxCyclicRepetitions;
+            link.MaxCyclicRepetitions = maxCyclicRepetitions;
         }
 
         _reflexChains.Add(newId, chain);
-        SaveReflexChains();
         return (newId, warnings.ToArray());
       }
       finally
@@ -264,7 +269,6 @@ namespace ISIDA.Reflexes
     /// <returns>True если цепочка удалена, иначе False</returns>
     public bool RemoveReflexChain(int chainId)
     {
-      _lock.EnterWriteLock();
       try
       {
         if (!_reflexChains.ContainsKey(chainId))
@@ -274,12 +278,14 @@ namespace ISIDA.Reflexes
         if (removed)
         {
           SaveReflexChains();
+          OnReflexChainDeleted(chainId);
         }
+
         return removed;
       }
-      finally
+      catch
       {
-        _lock.ExitWriteLock();
+        return false;
       }
     }
 
@@ -334,7 +340,7 @@ namespace ISIDA.Reflexes
     {
       var warnings = new List<string>();
 
-      _lock.EnterWriteLock();
+      _lock.EnterReadLock();
       try
       {
         // Проверяем существование цепочки
@@ -378,12 +384,7 @@ namespace ISIDA.Reflexes
           }
         }
 
-        // Генерируем уникальный ID
         int newLinkId = ++_lastLinkId;
-
-        // Устанавливаем максимальное количество повторений
-        if (maxCyclicRepetitions <= 0)
-          maxCyclicRepetitions = chain.DefaultMaxCyclicRepetitions;
 
         var link = new ChainLink
         {
@@ -398,8 +399,6 @@ namespace ISIDA.Reflexes
         };
 
         chain.Links.Add(link);
-
-        SaveReflexChains();
         return (newLinkId, warnings.ToArray());
       }
       finally
@@ -474,7 +473,7 @@ namespace ISIDA.Reflexes
         link.Description = description ?? link.Description;
         link.MaxCyclicRepetitions = maxCyclicRepetitions;
 
-        SaveReflexChains();
+        SaveReflexChainsCore();
         return (true, warnings.ToArray());
       }
       finally
@@ -524,9 +523,8 @@ namespace ISIDA.Reflexes
         // Удаляем звено
         bool removed = chain.Links.Remove(linkToRemove);
         if (removed)
-        {
-          SaveReflexChains();
-        }
+          SaveReflexChainsCore();
+
         return removed;
       }
       finally
@@ -716,7 +714,11 @@ namespace ISIDA.Reflexes
       }
     }
 
-    private bool IsValidReflexChainsFile(IEnumerable<string> lines)
+    /// <summary>
+    /// Проверяет валидность содержимого файла цепочек рефлексов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidReflexChainsFile(IEnumerable<string> lines)
     {
       if (lines == null)
         return false;
@@ -725,6 +727,13 @@ namespace ISIDA.Reflexes
       if (lineList.Count < 1)
         return false;
 
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
       foreach (var line in lineList)
       {
         var trimmed = line?.Trim();
@@ -732,10 +741,31 @@ namespace ISIDA.Reflexes
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 3)
-          return false;
 
-        return true;
+        if (parts[0] == "CHAIN")
+        {
+          if (parts.Length < 6)
+            return false;
+
+          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0 ||
+              !int.TryParse(parts[4], out int priority) ||
+              !int.TryParse(parts[5], out int maxCyclicRepetitions))
+            return false;
+        }
+        else if (parts[0] == "LINK")
+        {
+          if (parts.Length < 7)
+            return false;
+
+          if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
+              !int.TryParse(parts[2], out int actionId) || actionId <= 0 ||
+              !int.TryParse(parts[3], out int successNext) ||
+              !int.TryParse(parts[4], out int failureNext) ||
+              !int.TryParse(parts[6], out int maxCyclicRepetitions))
+            return false;
+        }
+        else
+          return false;
       }
 
       return true;
@@ -747,6 +777,12 @@ namespace ISIDA.Reflexes
     private void LoadReflexChains()
     {
       string filePath = GetReflexChainsFilePath();
+
+      if (!File.Exists(filePath))
+      {
+        CreateDefaultReflexChainsFile();
+        return;
+      }
 
       if (!IsValidReflexChainsFile(filePath))
       {
@@ -773,7 +809,6 @@ namespace ISIDA.Reflexes
 
             var parts = trimmedLine.Split('|');
 
-            // Заголовок цепочки
             if (parts.Length >= 6 && parts[0] == "CHAIN")
             {
               if (int.TryParse(parts[1], out int chainId) &&
@@ -786,7 +821,6 @@ namespace ISIDA.Reflexes
                   Name = parts[2],
                   Description = parts[3],
                   Priority = priority,
-                  DefaultMaxCyclicRepetitions = maxCyclicRepetitions,
                   Links = new List<ChainLink>()
                 };
 
@@ -797,7 +831,6 @@ namespace ISIDA.Reflexes
               continue;
             }
 
-            // Звено цепочки
             if (parts.Length >= 7 && parts[0] == "LINK" && currentChain != null)
             {
               if (int.TryParse(parts[1], out int linkId) &&
@@ -814,7 +847,7 @@ namespace ISIDA.Reflexes
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
                   Description = parts[5],
-                  MaxCyclicRepetitions = maxCyclicRepetitions > 0 ? maxCyclicRepetitions : currentChain.DefaultMaxCyclicRepetitions,
+                  MaxCyclicRepetitions = maxCyclicRepetitions,
                   CurrentRepetitions = 0
                 };
 
@@ -832,7 +865,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error loading reflex chains: {ex.Message}");
+        Debug.WriteLine($"Error loading reflex chains: {ex.Message}");
         CreateDefaultReflexChainsFile();
       }
     }
@@ -846,6 +879,7 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsFormat,
         FileHeaders.ReflexChainsChain,
         FileHeaders.ReflexChainsLink,
+        FileHeaders.ReflexChainsLink,
         FileHeaders.ReflexChainsChainDesc,
         FileHeaders.ReflexChainsNameDesc,
         FileHeaders.ReflexChainsPriorityDesc,
@@ -853,12 +887,7 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsLinkDesc,
         FileHeaders.ReflexChainsReflexDesc,
         FileHeaders.ReflexChainsSuccessDesc,
-        FileHeaders.ReflexChainsFailureDesc,
-        "# Пример цепочки 'Охота':",
-        "CHAIN|1|Охота|Цепочка охотничьего поведения|10|3",
-        "LINK|1|5|2|1|Обнаружение добычи|3",
-        "LINK|2|6|3|1|Преследование|3",
-        "LINK|3|7|0|0|Захват добычи|3"
+        FileHeaders.ReflexChainsFailureDesc
     };
 
       File.WriteAllLines(GetReflexChainsFilePath(), lines);
@@ -867,55 +896,70 @@ namespace ISIDA.Reflexes
     /// <summary>Сохраняет цепочки рефлексов в файл</summary>
     public (bool Success, string ErrorMessage) SaveReflexChains()
     {
-      _lock.EnterReadLock();
+      _lock.EnterWriteLock();
       try
       {
-        var lines = new List<string>
-        {
-            FileHeaders.ReflexChainsFormat,
-            FileHeaders.ReflexChainsChain,
-            FileHeaders.ReflexChainsLink,
-            FileHeaders.ReflexChainsChainDesc,
-            FileHeaders.ReflexChainsNameDesc,
-            FileHeaders.ReflexChainsPriorityDesc,
-            FileHeaders.ReflexChainsMaxRepetitionsDesc,
-            FileHeaders.ReflexChainsLinkDesc,
-            FileHeaders.ReflexChainsReflexDesc,
-            FileHeaders.ReflexChainsSuccessDesc,
-            FileHeaders.ReflexChainsFailureDesc
-        };
+        return SaveReflexChainsCore();
+      }
+      catch (Exception ex)
+      {
+        return (false, $"Ошибка при сохранении цепочек рефлексов: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
 
+    private (bool Success, string ErrorMessage) SaveReflexChainsCore()
+    {
+      var lines = new List<string>
+    {
+        FileHeaders.ReflexChainsFormat,
+        FileHeaders.ReflexChainsChain,
+        FileHeaders.ReflexChainsLink,
+        FileHeaders.ReflexChainsChainDesc,
+        FileHeaders.ReflexChainsNameDesc,
+        FileHeaders.ReflexChainsPriorityDesc,
+        FileHeaders.ReflexChainsMaxRepetitionsDesc,
+        FileHeaders.ReflexChainsLinkDesc,
+        FileHeaders.ReflexChainsReflexDesc,
+        FileHeaders.ReflexChainsSuccessDesc,
+        FileHeaders.ReflexChainsFailureDesc
+    };
+      lines.Add("");
+
+      if (_reflexChains.Count > 0)
+      {
         foreach (var chain in _reflexChains.Values.OrderBy(c => c.ID))
         {
-          // Заголовок цепочки
-          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}|{chain.Priority}|{chain.DefaultMaxCyclicRepetitions}");
-
-          // Звенья
+          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}|{chain.Priority}|{GlobalMaxCyclicRepetitions}");
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
             lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}|{link.MaxCyclicRepetitions}");
           }
 
-          lines.Add(""); // Разделитель
+          lines.Add("");
         }
+      }
 
-        var result = FileValidator.SafeSaveFile(
-            GetReflexChainsFilePath(),
-            lines,
-            FileValidator.IsValidReflexChainsFile,
-            minLinesCount: 9,
-            fileDescription: "цепочек рефлексов");
+      var result = FileValidator.SafeSaveFile(
+          GetReflexChainsFilePath(),
+          lines,
+          FileValidator.IsValidReflexChainsFile,
+          minLinesCount: 12, // Минимальное количество строк - заголовки + пустая строка
+          fileDescription: "цепочек рефлексов");
 
-        return result;
-      }
-      catch (Exception ex)
+      if (!result.Success)
+        Debug.WriteLine($"Ошибка сохранения цепочек: {result.ErrorMessage}");
+      else
       {
-        return (false, ex.Message);
+        Debug.WriteLine($"Цепочки сохранены. Файл сохранен, строк: {lines.Count}");
+        if (_reflexChains.Count > 0)
+          Debug.WriteLine($"Цепочек сохранено: {_reflexChains.Count}");
       }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
+
+      return result;
     }
 
     #endregion
