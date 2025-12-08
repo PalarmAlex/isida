@@ -30,11 +30,10 @@ namespace ISIDA.Common
 
       // Цепочки безусловных рефлексов
       public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
-      public const string ReflexChainsChain = "# CHAIN|ID|Name|Description|Priority";
+      public const string ReflexChainsChain = "# CHAIN|ID|Name|Description";
       public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|IsTerminal|Description|MaxCyclicRepetitions";
       public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
-      public const string ReflexChainsPriorityDesc = "# Priority: приоритет цепочки (выше = приоритетнее)";
       public const string ReflexChainsMaxRepetitionsDesc = "# MaxCyclicRepetitions: Максимальное количество повторений циклических ссылок (для цепочки - по умолчанию, для звена - конкретное значение, 0 = использовать значение цепочки)";
       public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
       public const string ReflexChainsReflexDesc = "# ActionID: ID действия для выполнения";

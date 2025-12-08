@@ -119,9 +119,6 @@ namespace ISIDA.Reflexes
       /// <summary>Описание цепочки</summary>
       public string Description { get; set; }
 
-      /// <summary>Приоритет цепочки (выше = приоритетнее)</summary>
-      public int Priority { get; set; }
-
       /// <summary>Звенья цепочки</summary>
       public List<ChainLink> Links { get; set; } = new List<ChainLink>();
     }
@@ -208,12 +205,11 @@ namespace ISIDA.Reflexes
     /// <summary>Добавляет новую цепочку рефлексов</summary>
     /// <param name="name">Наименование цепочки</param>
     /// <param name="description">Описание цепочки</param>
-    /// <param name="priority">Приоритет цепочки</param>
     /// <param name="links">Звенья цепочки</param>
     /// <param name="maxCyclicRepetitions">Максимальное количество повторений циклических ссылок по умолчанию</param>
     /// <returns>ID созданной цепочки и предупреждения</returns>
     public (int ChainId, string[] Warnings) AddReflexChain(
-        string name, string description, int priority, List<ChainLink> links,
+        string name, string description, List<ChainLink> links,
         int maxCyclicRepetitions = 3)
     {
       var warnings = new List<string>();
@@ -224,14 +220,11 @@ namespace ISIDA.Reflexes
       if (links == null || !links.Any())
         throw new ArgumentException("Цепочка должна содержать хотя бы одно звено", nameof(links));
 
-      // Проверяем существование адаптивных действий
       var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
       foreach (var link in links)
       {
         if (!allActions.Any(a => a.Id == link.ActionId))
-        {
           warnings.Add($"Адаптивное действие с ID {link.ActionId} не существует");
-        }
       }
 
       _lock.EnterWriteLock();
@@ -244,11 +237,9 @@ namespace ISIDA.Reflexes
           ID = newId,
           Name = name,
           Description = description,
-          Priority = priority,
           Links = links
         };
 
-        // Устанавливаем максимальное количество повторений для каждого звена
         foreach (var link in chain.Links)
         {
           if (link.MaxCyclicRepetitions <= 0)
@@ -764,14 +755,9 @@ namespace ISIDA.Reflexes
 
         var parts = trimmed.Split('|');
 
-        if (parts[0] == "CHAIN")
+        if (parts.Length >= 4 && parts[0] == "CHAIN")
         {
-          if (parts.Length < 6)
-            return false;
-
-          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0 ||
-              !int.TryParse(parts[4], out int priority) ||
-              !int.TryParse(parts[5], out int maxCyclicRepetitions))
+          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0)
             return false;
         }
         else if (parts[0] == "LINK")
@@ -831,18 +817,16 @@ namespace ISIDA.Reflexes
 
             var parts = trimmedLine.Split('|');
 
-            if (parts.Length >= 6 && parts[0] == "CHAIN")
+            if (parts.Length >= 5 && parts[0] == "CHAIN") // Было 6, стало 5
             {
               if (int.TryParse(parts[1], out int chainId) &&
-                  int.TryParse(parts[4], out int priority) &&
-                  int.TryParse(parts[5], out int maxCyclicRepetitions))
+                  int.TryParse(parts[4], out int maxCyclicRepetitions)) // Убрали priority
               {
                 currentChain = new ReflexChain
                 {
                   ID = chainId,
                   Name = parts[2],
                   Description = parts[3],
-                  Priority = priority,
                   Links = new List<ChainLink>()
                 };
 
@@ -901,10 +885,8 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsFormat,
         FileHeaders.ReflexChainsChain,
         FileHeaders.ReflexChainsLink,
-        FileHeaders.ReflexChainsLink,
         FileHeaders.ReflexChainsChainDesc,
         FileHeaders.ReflexChainsNameDesc,
-        FileHeaders.ReflexChainsPriorityDesc,
         FileHeaders.ReflexChainsMaxRepetitionsDesc,
         FileHeaders.ReflexChainsLinkDesc,
         FileHeaders.ReflexChainsReflexDesc,
@@ -942,7 +924,6 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsLink,
         FileHeaders.ReflexChainsChainDesc,
         FileHeaders.ReflexChainsNameDesc,
-        FileHeaders.ReflexChainsPriorityDesc,
         FileHeaders.ReflexChainsMaxRepetitionsDesc,
         FileHeaders.ReflexChainsLinkDesc,
         FileHeaders.ReflexChainsReflexDesc,
@@ -955,7 +936,7 @@ namespace ISIDA.Reflexes
       {
         foreach (var chain in _reflexChains.Values.OrderBy(c => c.ID))
         {
-          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}|{chain.Priority}|{GlobalMaxCyclicRepetitions}");
+          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}|{GlobalMaxCyclicRepetitions}");
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
             lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}|{link.MaxCyclicRepetitions}");
@@ -969,7 +950,7 @@ namespace ISIDA.Reflexes
           GetReflexChainsFilePath(),
           lines,
           FileValidator.IsValidReflexChainsFile,
-          minLinesCount: 12, // Минимальное количество строк - заголовки + пустая строка
+          minLinesCount: 11,
           fileDescription: "цепочек рефлексов");
 
       if (!result.Success)
