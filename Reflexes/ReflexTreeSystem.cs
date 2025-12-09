@@ -663,7 +663,6 @@ namespace ISIDA.Reflexes
         activeChain.CurrentPulse = currentPulse;
         int nextLinkId = previousStepSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
 
-        // Если нет следующего звена - цепочка завершена
         if (nextLinkId == 0)
         {
           _activeChains.Remove(chainID);

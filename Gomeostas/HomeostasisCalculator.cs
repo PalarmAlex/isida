@@ -1,4 +1,5 @@
 ﻿using ISIDA.Common;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,6 +15,22 @@ namespace ISIDA.Gomeostas
   /// </summary>
   public sealed class HomeostasisCalculator : IDisposable
   {
+    private ReflexesActivator _reflexesActivator;
+    /// <summary>
+    /// Флаг активности цепочки рефлексов
+    /// </summary>
+    private bool _isChainActiveCalc = false;
+
+    /// <summary>
+    /// Устанавливает ссылку на систему управления цепочками рефлексов
+    /// </summary>
+    public void SetReflexesActivatorm(ReflexesActivator reflexesActivator)
+    {
+      _reflexesActivator = reflexesActivator ??
+          throw new ArgumentNullException(nameof(reflexesActivator));
+      _isChainActiveCalc = _reflexesActivator._isChainActive;
+    }
+
     /// <summary>
     /// Определение критичности изменений
     /// </summary>
@@ -265,7 +282,7 @@ namespace ISIDA.Gomeostas
           absDelta < difSensorPar)
       {
         var duration = (DateTime.UtcNow - param.LastStateChangeTime.Value).TotalSeconds;
-        if (duration < dynamicTime)
+        if (duration < dynamicTime || _isChainActiveCalc)
         {
           // Продолжаем удерживать
           float rawDev = CalculateDeviation(param.Value, param.NormaWell, param.Speed);
@@ -421,7 +438,7 @@ namespace ISIDA.Gomeostas
         {
           // Проверяем, не истекло ли время действия состояния Well
           var wellDuration = (DateTime.UtcNow - lastWellStateTime.Value).TotalSeconds;
-          if (wellDuration >= dynamicTime)
+          if (wellDuration >= dynamicTime && !_isChainActiveCalc)
           {
             // Время истекло - возвращаемся в нормальное состояние
             overallState = HomeostasisOverallState.Normal;

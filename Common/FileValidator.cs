@@ -31,10 +31,9 @@ namespace ISIDA.Common
       // Цепочки безусловных рефлексов
       public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
       public const string ReflexChainsChain = "# CHAIN|ID|Name|Description";
-      public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|IsTerminal|Description|MaxCyclicRepetitions";
+      public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|IsTerminal|Description";
       public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
-      public const string ReflexChainsMaxRepetitionsDesc = "# MaxCyclicRepetitions: Максимальное количество повторений циклических ссылок (для цепочки - по умолчанию, для звена - конкретное значение, 0 = использовать значение цепочки)";
       public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
       public const string ReflexChainsReflexDesc = "# ActionID: ID действия для выполнения";
       public const string ReflexChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
@@ -169,28 +168,21 @@ namespace ISIDA.Common
 
         var parts = trimmed.Split('|');
 
-        // Проверяем строку CHAIN
-        if (parts.Length >= 5 && parts[0] == "CHAIN")
+        if (parts.Length >= 4 && parts[0] == "CHAIN")
         {
-          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0 ||
-              !int.TryParse(parts[4], out int priority))
+          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0)
             return false;
         }
-        // Проверяем строку LINK
-        else if (parts.Length >= 7 && parts[0] == "LINK")
+        else if (parts.Length >= 6 && parts[0] == "LINK")
         {
           if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
-              !int.TryParse(parts[2], out int reflexId) || reflexId <= 0 ||
+              !int.TryParse(parts[2], out int actionId) || actionId <= 0 ||
               !int.TryParse(parts[3], out int successNext) ||
-              !int.TryParse(parts[4], out int failureNext) ||
-              !bool.TryParse(parts[5], out _))
+              !int.TryParse(parts[4], out int failureNext))
             return false;
         }
         else
-        {
-          // Неизвестный формат строки
           return false;
-        }
 
         return true;
       }

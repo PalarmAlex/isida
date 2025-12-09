@@ -99,12 +99,6 @@ namespace ISIDA.Reflexes
 
       /// <summary>Описание звена (для отладки)</summary>
       public string Description { get; set; }
-
-      /// <summary>Максимальное количество повторений для циклических ссылок</summary>
-      public int MaxCyclicRepetitions { get; set; }
-
-      /// <summary>Текущее количество выполненных повторений</summary>
-      public int CurrentRepetitions { get; set; }
     }
 
     /// <summary>Цепочка рефлексов</summary>
@@ -131,16 +125,6 @@ namespace ISIDA.Reflexes
     private readonly Dictionary<int, ReflexChain> _reflexChains = new Dictionary<int, ReflexChain>();
     private int _lastChainId = 0;
     private int _lastLinkId = 0;
-
-    /// <summary>
-    /// Максимальное количество повторений циклических ссылок по умолчанию для всех цепочек
-    /// </summary>
-    public int GlobalMaxCyclicRepetitions { get; set; } = 3;
-
-    /// <summary>
-    /// Флаг разрешения циклических ссылок (ссылок на предыдущие звенья)
-    /// </summary>
-    public bool AllowCyclicReferences { get; set; } = true;
 
     private string GetReflexChainsFilePath()
     {
@@ -206,11 +190,9 @@ namespace ISIDA.Reflexes
     /// <param name="name">Наименование цепочки</param>
     /// <param name="description">Описание цепочки</param>
     /// <param name="links">Звенья цепочки</param>
-    /// <param name="maxCyclicRepetitions">Максимальное количество повторений циклических ссылок по умолчанию</param>
     /// <returns>ID созданной цепочки и предупреждения</returns>
     public (int ChainId, string[] Warnings) AddReflexChain(
-        string name, string description, List<ChainLink> links,
-        int maxCyclicRepetitions = 3)
+        string name, string description, List<ChainLink> links)
     {
       var warnings = new List<string>();
 
@@ -225,6 +207,10 @@ namespace ISIDA.Reflexes
       {
         if (!allActions.Any(a => a.Id == link.ActionId))
           warnings.Add($"Адаптивное действие с ID {link.ActionId} не существует");
+
+        int duplicateCount = links.Count(l => l.ActionId == link.ActionId);
+        if (duplicateCount > 1)
+          warnings.Add($"Действие {link.ActionId} повторяется {duplicateCount} раз в цепочке");
       }
 
       _lock.EnterWriteLock();
@@ -239,12 +225,6 @@ namespace ISIDA.Reflexes
           Description = description,
           Links = links
         };
-
-        foreach (var link in chain.Links)
-        {
-          if (link.MaxCyclicRepetitions <= 0)
-            link.MaxCyclicRepetitions = maxCyclicRepetitions;
-        }
 
         _reflexChains.Add(newId, chain);
         return (newId, warnings.ToArray());
@@ -345,56 +325,39 @@ namespace ISIDA.Reflexes
     /// <param name="successNextLink">ID следующего звена при успехе</param>
     /// <param name="failureNextLink">ID следующего звена при неудаче</param>
     /// <param name="description">Описание звена</param>
-    /// <param name="maxCyclicRepetitions">Максимальное количество повторений для циклических ссылок</param>
     /// <returns>ID созданного звена и предупреждения</returns>
     public (int LinkId, string[] Warnings) AddChainLink(
         int chainId, int actionId, int successNextLink,
-        int failureNextLink, string description, int maxCyclicRepetitions = 0)
+        int failureNextLink, string description)
     {
       var warnings = new List<string>();
 
-      _lock.EnterReadLock();
+      _lock.EnterWriteLock();
       try
       {
-        // Проверяем существование цепочки
         if (!_reflexChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
-        // Проверяем существование адаптивного действия
         var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
         if (!allActions.Any(a => a.Id == actionId))
           warnings.Add($"Адаптивное действие с ID {actionId} не существует");
 
-        // Проверяем циклические ссылки
-        if (AllowCyclicReferences)
+        if (successNextLink != 0)
         {
-          // Разрешены циклические ссылки - проверяем только существование звеньев
-          if (successNextLink != 0 && !chain.Links.Any(l => l.ID == successNextLink))
+          var existingLink = chain.Links.FirstOrDefault(l => l.ID == successNextLink);
+          if (existingLink == null)
             warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено в цепочке");
-
-          if (failureNextLink != 0 && !chain.Links.Any(l => l.ID == failureNextLink))
-            warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено в цепочке");
+          else if (successNextLink <= chain.Links.Max(l => l.ID))
+            warnings.Add($"Ссылка на предыдущее звено (ID:{successNextLink}) запрещена");
         }
-        else
-        {
-          // Циклические ссылки запрещены
-          if (successNextLink != 0)
-          {
-            var existingLink = chain.Links.FirstOrDefault(l => l.ID == successNextLink);
-            if (existingLink == null)
-              warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено в цепочке");
-            else if (successNextLink <= chain.Links.Max(l => l.ID))
-              warnings.Add($"Ссылка на предыдущее звено (ID:{successNextLink}) запрещена (AllowCyclicReferences = false)");
-          }
 
-          if (failureNextLink != 0)
-          {
-            var existingLink = chain.Links.FirstOrDefault(l => l.ID == failureNextLink);
-            if (existingLink == null)
-              warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено в цепочке");
-            else if (failureNextLink <= chain.Links.Max(l => l.ID))
-              warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена (AllowCyclicReferences = false)");
-          }
+        if (failureNextLink != 0)
+        {
+          var existingLink = chain.Links.FirstOrDefault(l => l.ID == failureNextLink);
+          if (existingLink == null)
+            warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено в цепочке");
+          else if (failureNextLink <= chain.Links.Max(l => l.ID))
+            warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена");
         }
 
         int newLinkId = ++_lastLinkId;
@@ -406,9 +369,7 @@ namespace ISIDA.Reflexes
           ActionId = actionId,
           SuccessNextLink = successNextLink,
           FailureNextLink = failureNextLink,
-          Description = description ?? $"Звено {newLinkId}",
-          MaxCyclicRepetitions = maxCyclicRepetitions,
-          CurrentRepetitions = 0
+          Description = description ?? $"Звено {newLinkId}"
         };
 
         chain.Links.Add(link);
@@ -425,7 +386,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     public (bool Success, string[] Warnings) UpdateChainLink(
         int chainId, int linkId, int actionId, int successNextLink,
-        int failureNextLink, string description, int maxCyclicRepetitions = 0)
+        int failureNextLink, string description)
     {
       var warnings = new List<string>();
 
@@ -439,52 +400,32 @@ namespace ISIDA.Reflexes
         if (link == null)
           throw new KeyNotFoundException($"Звено с ID {linkId} не найдено в цепочке {chainId}");
 
-        // Проверяем существование адаптивного действия
         var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
         if (!allActions.Any(a => a.Id == actionId))
           warnings.Add($"Адаптивное действие с ID {actionId} не существует");
 
-        if (AllowCyclicReferences)
+        if (successNextLink != 0 && successNextLink != linkId)
         {
-          // Циклические ссылки разрешены - проверяем только существование звеньев
-          if (successNextLink != 0 && successNextLink != linkId && !chain.Links.Any(l => l.ID == successNextLink))
+          var existingLink = chain.Links.FirstOrDefault(l => l.ID == successNextLink);
+          if (existingLink == null)
             warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено");
-
-          if (failureNextLink != 0 && failureNextLink != linkId && !chain.Links.Any(l => l.ID == failureNextLink))
-            warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено");
+          else if (successNextLink <= linkId)
+            warnings.Add($"Ссылка на предыдущее звено (ID:{successNextLink}) запрещена");
         }
-        else
+
+        if (failureNextLink != 0 && failureNextLink != linkId)
         {
-          // Циклические ссылки запрещены
-          if (successNextLink != 0 && successNextLink != linkId)
-          {
-            var existingLink = chain.Links.FirstOrDefault(l => l.ID == successNextLink);
-            if (existingLink == null)
-              warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено");
-            else if (successNextLink <= linkId)
-              warnings.Add($"Ссылка на предыдущее звено (ID:{successNextLink}) запрещена (AllowCyclicReferences = false)");
-          }
-
-          if (failureNextLink != 0 && failureNextLink != linkId)
-          {
-            var existingLink = chain.Links.FirstOrDefault(l => l.ID == failureNextLink);
-            if (existingLink == null)
-              warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено");
-            else if (failureNextLink <= linkId)
-              warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена (AllowCyclicReferences = false)");
-          }
+          var existingLink = chain.Links.FirstOrDefault(l => l.ID == failureNextLink);
+          if (existingLink == null)
+            warnings.Add($"Следующее звено при неудаче (ID:{failureNextLink}) не найдено");
+          else if (failureNextLink <= linkId)
+            warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена");
         }
 
-        // Устанавливаем максимальное количество повторений
-        if (maxCyclicRepetitions <= 0)
-          maxCyclicRepetitions = link.MaxCyclicRepetitions;
-
-        // Обновляем звено
         link.ActionId = actionId;
         link.SuccessNextLink = successNextLink;
         link.FailureNextLink = failureNextLink;
         link.Description = description ?? link.Description;
-        link.MaxCyclicRepetitions = maxCyclicRepetitions;
 
         SaveReflexChainsCore();
         return (true, warnings.ToArray());
@@ -580,14 +521,11 @@ namespace ISIDA.Reflexes
           if (!allActions.Any(a => a.Id == link.ActionId))
             issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
 
-          if (!AllowCyclicReferences)
-          {
-            if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
-              issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink} (AllowCyclicReferences = false)");
+          if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
+            issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink}");
 
-            if (link.FailureNextLink != 0 && link.FailureNextLink <= link.ID)
-              issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.FailureNextLink} (AllowCyclicReferences = false)");
-          }
+          if (link.FailureNextLink != 0 && link.FailureNextLink <= link.ID)
+            issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.FailureNextLink}");
 
           if (link.SuccessNextLink != 0 && link.SuccessNextLink != link.ID &&
               !chain.Links.Any(l => l.ID == link.SuccessNextLink))
@@ -596,101 +534,17 @@ namespace ISIDA.Reflexes
           if (link.FailureNextLink != 0 && link.FailureNextLink != link.ID &&
               !chain.Links.Any(l => l.ID == link.FailureNextLink))
             issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
-
-          if (link.MaxCyclicRepetitions <= 0)
-            issues.Add($"Звено {link.ID}: максимальное количество повторений должно быть больше 0");
         }
 
         var terminalLinks = chain.Links.Where(l =>
-            (l.SuccessNextLink == 0 || l.SuccessNextLink == l.ID) &&
-            (l.FailureNextLink == 0 || l.FailureNextLink == l.ID)).ToList();
+            l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
 
-        if (terminalLinks.Count == 0 && !chain.Links.Any(l => l.MaxCyclicRepetitions > 0))
+        if (terminalLinks.Count == 0)
         {
-          issues.Add("Цепочка не содержит конечных звеньев и не настроены счетчики повторений (бесконечный цикл)");
+          issues.Add("Цепочка не содержит конечных звеньев (бесконечный цикл)");
         }
 
         return (!issues.Any(), issues.ToArray());
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Сбрасывает счетчики повторений для всех звеньев цепочки
-    /// </summary>
-    public void ResetChainRepetitions(int chainId)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        if (!_reflexChains.TryGetValue(chainId, out var chain))
-          return;
-
-        foreach (var link in chain.Links)
-        {
-          link.CurrentRepetitions = 0;
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Проверяет, достигнуто ли максимальное количество повторений для циклической ссылки
-    /// </summary>
-    public bool HasReachedMaxRepetitions(int chainId, int linkId, int targetLinkId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_reflexChains.TryGetValue(chainId, out var chain))
-          return true;
-
-        var sourceLink = chain.Links.FirstOrDefault(l => l.ID == linkId);
-        if (sourceLink == null)
-          return true;
-
-        // Если это ссылка на самого себя
-        if (targetLinkId == linkId)
-        {
-          sourceLink.CurrentRepetitions++;
-          return sourceLink.CurrentRepetitions >= sourceLink.MaxCyclicRepetitions;
-        }
-
-        // Если это ссылка на предыдущее звено
-        var targetLink = chain.Links.FirstOrDefault(l => l.ID == targetLinkId);
-        if (targetLink != null && targetLink.ID < linkId)
-        {
-          targetLink.CurrentRepetitions++;
-          return targetLink.CurrentRepetitions >= targetLink.MaxCyclicRepetitions;
-        }
-
-        return false;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Получает текущее количество повторений для звена
-    /// </summary>
-    public int GetCurrentRepetitions(int chainId, int linkId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_reflexChains.TryGetValue(chainId, out var chain))
-          return 0;
-
-        var link = chain.Links.FirstOrDefault(l => l.ID == linkId);
-        return link?.CurrentRepetitions ?? 0;
       }
       finally
       {
@@ -762,14 +616,13 @@ namespace ISIDA.Reflexes
         }
         else if (parts[0] == "LINK")
         {
-          if (parts.Length < 7)
+          if (parts.Length < 6)
             return false;
 
           if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
               !int.TryParse(parts[2], out int actionId) || actionId <= 0 ||
               !int.TryParse(parts[3], out int successNext) ||
-              !int.TryParse(parts[4], out int failureNext) ||
-              !int.TryParse(parts[6], out int maxCyclicRepetitions))
+              !int.TryParse(parts[4], out int failureNext))
             return false;
         }
         else
@@ -817,10 +670,9 @@ namespace ISIDA.Reflexes
 
             var parts = trimmedLine.Split('|');
 
-            if (parts.Length >= 5 && parts[0] == "CHAIN") // Было 6, стало 5
+            if (parts.Length >= 4 && parts[0] == "CHAIN")
             {
-              if (int.TryParse(parts[1], out int chainId) &&
-                  int.TryParse(parts[4], out int maxCyclicRepetitions)) // Убрали priority
+              if (int.TryParse(parts[1], out int chainId))
               {
                 currentChain = new ReflexChain
                 {
@@ -837,13 +689,12 @@ namespace ISIDA.Reflexes
               continue;
             }
 
-            if (parts.Length >= 7 && parts[0] == "LINK" && currentChain != null)
+            if (parts.Length >= 6 && parts[0] == "LINK" && currentChain != null)
             {
               if (int.TryParse(parts[1], out int linkId) &&
                   int.TryParse(parts[2], out int actionId) &&
                   int.TryParse(parts[3], out int successNext) &&
-                  int.TryParse(parts[4], out int failureNext) &&
-                  int.TryParse(parts[6], out int maxCyclicRepetitions))
+                  int.TryParse(parts[4], out int failureNext))
               {
                 var link = new ChainLink
                 {
@@ -852,9 +703,7 @@ namespace ISIDA.Reflexes
                   ActionId = actionId,
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
-                  Description = parts[5],
-                  MaxCyclicRepetitions = maxCyclicRepetitions,
-                  CurrentRepetitions = 0
+                  Description = parts[5]
                 };
 
                 currentChain.Links.Add(link);
@@ -887,7 +736,6 @@ namespace ISIDA.Reflexes
         FileHeaders.ReflexChainsLink,
         FileHeaders.ReflexChainsChainDesc,
         FileHeaders.ReflexChainsNameDesc,
-        FileHeaders.ReflexChainsMaxRepetitionsDesc,
         FileHeaders.ReflexChainsLinkDesc,
         FileHeaders.ReflexChainsReflexDesc,
         FileHeaders.ReflexChainsSuccessDesc,
@@ -918,30 +766,28 @@ namespace ISIDA.Reflexes
     private (bool Success, string ErrorMessage) SaveReflexChainsCore()
     {
       var lines = new List<string>
-    {
+      {
         FileHeaders.ReflexChainsFormat,
         FileHeaders.ReflexChainsChain,
         FileHeaders.ReflexChainsLink,
         FileHeaders.ReflexChainsChainDesc,
         FileHeaders.ReflexChainsNameDesc,
-        FileHeaders.ReflexChainsMaxRepetitionsDesc,
         FileHeaders.ReflexChainsLinkDesc,
         FileHeaders.ReflexChainsReflexDesc,
         FileHeaders.ReflexChainsSuccessDesc,
         FileHeaders.ReflexChainsFailureDesc
-    };
+      };
       lines.Add("");
 
       if (_reflexChains.Count > 0)
       {
         foreach (var chain in _reflexChains.Values.OrderBy(c => c.ID))
         {
-          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}|{GlobalMaxCyclicRepetitions}");
+          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}");
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
-            lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}|{link.MaxCyclicRepetitions}");
+            lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}");
           }
-
           lines.Add("");
         }
       }
@@ -950,7 +796,7 @@ namespace ISIDA.Reflexes
           GetReflexChainsFilePath(),
           lines,
           FileValidator.IsValidReflexChainsFile,
-          minLinesCount: 11,
+          minLinesCount: 10,
           fileDescription: "цепочек рефлексов");
 
       if (!result.Success)

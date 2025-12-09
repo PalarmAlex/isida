@@ -89,17 +89,8 @@ namespace ISIDA.Reflexes
         if (actionIds == null || !actionIds.Any())
           return (false, $"Безусловный рефлекс {reflexId} не содержит действий");
 
-        // Устанавливаем источник активации для каждого действия
-        foreach (var actionId in actionIds)
-        {
-          var action = _adaptiveActionsSystem.GetAllAdaptiveActions()
-              .FirstOrDefault(a => a.Id == actionId);
-          if (action != null)
-            action.ActivationSource = ActionActivationSource.GeneticReflex;
-        }
-
-        // Выполняем действия рефлекса
-        return ExecuteAdaptiveActions(actionIds);
+        // Выполняем действия рефлекса с указанием источника
+        return ExecuteAdaptiveActions(actionIds, ActionActivationSource.GeneticReflex);
       }
       catch (Exception ex)
       {
@@ -125,14 +116,10 @@ namespace ISIDA.Reflexes
         if (actionId <= 0)
           return (false, $"Условный рефлекс {reflexId} не содержит связанного действия");
 
-        // Устанавливаем источник активации для действия
-        var action = _adaptiveActionsSystem.GetAllAdaptiveActions()
-            .FirstOrDefault(a => a.Id == actionId);
-        if (action != null)
-          action.ActivationSource = ActionActivationSource.ConditionedReflex;
-
-        // Выполняем действие рефлекса
-        var result = ExecuteAdaptiveActions(new List<int> { actionId });
+        // Выполняем действие рефлекса с указанием источника
+        var result = ExecuteAdaptiveActions(
+            new List<int> { actionId },
+            ActionActivationSource.ConditionedReflex);
 
         // Усиление ассоциации при успешном выполнении
         if (result.Success)
@@ -147,9 +134,15 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Выполняет последовательность адаптивных действий рефлекса
+    /// Выполняет последовательность адаптивных действий рефлекса с указанием источника
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteAdaptiveActions(List<int> actionIds, int phraseId = 0)
+    /// <param name="actionIds">Список ID действий для выполнения</param>
+    /// <param name="activationSource">Источник активации действий</param>
+    /// <param name="phraseId">ID фразы (0 по умолчанию)</param>
+    public (bool Success, string ErrorMessage) ExecuteAdaptiveActions(
+        List<int> actionIds,
+        ActionActivationSource activationSource,
+        int phraseId = 0)
     {
       if (actionIds == null || !actionIds.Any())
         return (false, "Нет действий для выполнения");
@@ -161,14 +154,24 @@ namespace ISIDA.Reflexes
       {
         try
         {
+          // Устанавливаем источник активации перед выполнением
+          var action = _adaptiveActionsSystem.GetAllAdaptiveActions()
+              .FirstOrDefault(a => a.Id == actionId);
+
+          if (action != null)
+          {
+            action.ActivationSource = activationSource;
+            action.ActivationPulse = GlobalTimer.GlobalPulsCount;
+          }
+
           bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId);
           if (applied)
           {
             successfulActions.Add(actionId);
-            results.Add($"Действие {actionId} выполнено успешно");
+            results.Add($"Действие {actionId} выполнено успешно (Источник: {activationSource})");
           }
           else
-            results.Add($"Действие {actionId} не может быть применено (возможно, недостаточно энергичности или антагонизм)");
+            results.Add($"Действие {actionId} не может быть применено");
         }
         catch (Exception ex)
         {
@@ -188,11 +191,34 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Выполняет адаптивное действие по его ID
+    /// Выполняет адаптивное действие по его ID с указанием источника
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteAdaptiveAction(int actionId, int phraseId = 0)
+    /// <param name="actionId">ID действия</param>
+    /// <param name="activationSource">Источник активации</param>
+    /// <param name="phraseId">ID фразы (0 по умолчанию)</param>
+    public (bool Success, string ErrorMessage) ExecuteAdaptiveAction(
+        int actionId,
+        ActionActivationSource activationSource,
+        int phraseId = 0)
     {
-      return ExecuteAdaptiveActions(new List<int> { actionId }, phraseId);
+      return ExecuteAdaptiveActions(new List<int> { actionId }, activationSource, phraseId);
+    }
+
+    /// <summary>
+    /// Выполняет действие цепочки рефлексов
+    /// </summary>
+    /// <param name="actionId">ID действия</param>
+    /// <param name="isFromConditionedReflex">True если цепочка запущена от условного рефлекса</param>
+    public (bool Success, string ErrorMessage) ExecuteChainAction(
+        int actionId,
+        bool isFromConditionedReflex = false)
+    {
+      // Определяем источник активации для цепочки
+      var activationSource = isFromConditionedReflex
+          ? ActionActivationSource.ConditionedReflex
+          : ActionActivationSource.GeneticReflex;
+
+      return ExecuteAdaptiveAction(actionId, activationSource);
     }
 
     #endregion

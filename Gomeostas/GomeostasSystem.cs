@@ -42,6 +42,14 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// Устанавливает ссылку на систему запуска рефлексов
+    /// </summary>
+    public void SetReflexesActivatorm(ReflexesActivator reflexesActivator)
+    {
+      _calculator.SetReflexesActivatorm(reflexesActivator);
+    }
+
+    /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
     public GomeostasSystem(string gomeostasFolderPath = null)
