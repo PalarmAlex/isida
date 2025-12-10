@@ -27,8 +27,7 @@ namespace ISIDA.Gomeostas
     public void SetReflexesActivatorm(ReflexesActivator reflexesActivator)
     {
       _reflexesActivator = reflexesActivator ??
-          throw new ArgumentNullException(nameof(reflexesActivator));
-      _isChainActiveCalc = _reflexesActivator._isChainActive;
+          throw new ArgumentNullException(nameof(reflexesActivator));     
     }
 
     /// <summary>
@@ -282,6 +281,7 @@ namespace ISIDA.Gomeostas
           absDelta < difSensorPar)
       {
         var duration = (DateTime.UtcNow - param.LastStateChangeTime.Value).TotalSeconds;
+        _isChainActiveCalc = _reflexesActivator._isChainActive;
         if (duration < dynamicTime || _isChainActiveCalc)
         {
           // Продолжаем удерживать

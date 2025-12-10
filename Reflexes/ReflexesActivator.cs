@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using static ISIDA.Actions.AdaptiveActionsSystem;
+using static ISIDA.Gomeostas.GomeostasSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 
 namespace ISIDA.Reflexes
@@ -174,6 +175,8 @@ namespace ISIDA.Reflexes
     private int _activatedPulsCount = 0;
     private int _reflexActionDuration = 0;
     private int _weitPulceCount = 0;
+    private bool _chainAlreadyActivatedInThisContext = false;
+    private int _lastReflexActivationPulse = 0;
 
     // Текущие условия запуска цепочки
     private int _chainBaseID = 0;
@@ -247,45 +250,45 @@ namespace ISIDA.Reflexes
 
       ProcessActiveChain(pulseCount);
 
-      //if (!CanActivate(pulseCount, isSleeping)) return;
+      if (!CanActivate(pulseCount, isSleeping)) return;
 
-      //if (_weitPulceCount == 0)
-      //{
-      //  // Только активация по изменению контекстов
-      //  if (_gomeostas.IsNewConditions)
-      //    ActiveFromConditionChange(pulseCount);
-      //}
-      //else
-      //{
-      //  if (pulseCount > _weitPulceCount + _reflexActionDuration)
-      //    ActiveFromConditionChange(pulseCount);
-      //}
+      if (_weitPulceCount == 0)
+      {
+        if (_gomeostas.IsNewConditions)
+          ActiveFromConditionChange(pulseCount);
+      }
+      else
+      {
+        if (pulseCount > _weitPulceCount + _reflexActionDuration)
+          ActiveFromConditionChange(pulseCount);
+      }
 
       CleanupOldTriggers(pulseCount);
     }
 
-    ///// <summary>
-    ///// Активация при изменении сочетания стилей реагирования
-    ///// </summary>
-    //private void ActiveFromConditionChange(int pulseCount)
-    //{
-    //  if (_isSleeping) return;
+    /// <summary>
+    /// Активация при изменении сочетания стилей реагирования
+    /// </summary>
+    private void ActiveFromConditionChange(int pulseCount)
+    {
+      if (_isSleeping) return;
+      if (!CanActivate(pulseCount, _isSleeping)) return;
 
-    //  _activatedPulsCount = pulseCount;
-    //  UpdateCurrentStates(ActivationType.ConditionChange);
-    //  var conditions = GetCurrentGeneticConditionsArray();
-    //  _reflexTree.ConditionsDetection(conditions);
+      _activatedPulsCount = pulseCount;
+      _weitPulceCount = pulseCount;
+      UpdateCurrentStates(ActivationType.ConditionChange);
+      var conditions = GetCurrentConditionsWithoutTrigger();
+      _reflexTree.ConditionsDetection(conditions);
 
-    //  _weitPulceCount = 0;
-    //  bool psychicBlocked = false;
-    //  if (psychicBlocked)
-    //  {
-    //    LogInfo("Рефлекс заблокирован психикой");
-    //    return;
-    //  }
+      bool psychicBlocked = false;
+      if (psychicBlocked)
+      {
+        LogInfo("Рефлекс заблокирован психикой");
+        return;
+      }
 
-    //  ExecuteReflexes(pulseCount);
-    //}
+      ExecuteReflexes(pulseCount);
+    }
 
     /// <summary>
     /// Активация при действиях с Пульта
@@ -312,7 +315,7 @@ namespace ISIDA.Reflexes
         _adaptiveActions.ClearActiveAction();
         ExecuteReflexes(pulseCount);
 
-        if(_activeGeneticReflexID != 0)
+        if (_activeGeneticReflexID != 0)
         {
           _researchLogger.LogSystemState(pulseCount);
           // чтобы не попало в логи на следующем пульсе
@@ -351,7 +354,7 @@ namespace ISIDA.Reflexes
         _adaptiveActions.ClearActivePhrases();
         ExecuteReflexes(pulseCount);
 
-        if(_activeConditionReflexID != 0)
+        if (_activeConditionReflexID != 0)
         {
           _researchLogger.LogSystemState(pulseCount);
           // чтобы не попало в логи на следующем пульсе
@@ -369,6 +372,9 @@ namespace ISIDA.Reflexes
     // обнуление ID рефлексов и триггеров через ResetStates() в ProcessAgentPulse()
     private void ExecuteReflexes(int pulseCount)
     {
+      if (_lastReflexActivationPulse > 0 && pulseCount < _lastReflexActivationPulse + _reflexActionDuration)
+        return;
+
       CollectReflexesForExecution();
       try
       {
@@ -392,6 +398,7 @@ namespace ISIDA.Reflexes
             {
               _activeConditionReflexID = reflexId;
               _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
+              _lastReflexActivationPulse = pulseCount;
             }
           }
         }
@@ -401,7 +408,10 @@ namespace ISIDA.Reflexes
           {
             var result = _reflexExecutionService.ExecuteGeneticReflex(reflexId);
             if (result.Success)
+            {
               _activeGeneticReflexID = reflexId;
+              _lastReflexActivationPulse = pulseCount;
+            }
           }
         }
       }
@@ -424,6 +434,9 @@ namespace ISIDA.Reflexes
         if (chainId <= 0 || startReflexId <= 0)
           return;
 
+        if (_chainAlreadyActivatedInThisContext)
+          return;
+
         var chain = _reflexChainsSystem.GetChain(chainId);
         if (chain == null || !chain.Links.Any())
           return;
@@ -432,6 +445,7 @@ namespace ISIDA.Reflexes
 
         _chainBaseID = _activeCurBaseID;
         _chainStyleID = _activeCurBaseStyleID;
+        _chainAlreadyActivatedInThisContext = true;
 
         bool reflexExecuted = false;
         bool isConditioned = node.ConditionedReflex > 0;
@@ -489,12 +503,19 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void UpdateCurrentStates(ActivationType activationType)
     {
+      int oldBaseID = _activeCurBaseID;
+      int oldStyleID = _activeCurBaseStyleID;
+
       // Базовое состояние гомеостаза
       var homeostasisState = _gomeostas.GetHomeostasisState();
       _activeCurBaseID = (int)homeostasisState.OverallState;
 
       // Образ сочетания базовых контекстов (стилей поведения)
       _activeCurBaseStyleID = _gomeostas.ActiveBehaviorStyleImageId;
+
+      // Сбрасываем флаг, если изменились условия (не для цепочки)
+      if (!_isChainActive && (oldBaseID != _activeCurBaseID || oldStyleID != _activeCurBaseStyleID))
+        _chainAlreadyActivatedInThisContext = false;
     }
 
     /// <summary>
@@ -549,7 +570,6 @@ namespace ISIDA.Reflexes
       try
       {
         _lastStepSuccessResult = success;
-        LogInfo($"Результат выполнения действия установлен: {(success ? "УСПЕХ" : "НЕУДАЧА")}");
       }
       finally
       {
@@ -596,6 +616,14 @@ namespace ISIDA.Reflexes
     #region Активация и выполнение рефлексов
 
     /// <summary>
+    /// Получение текущего массива условий без учета триггера [baseID, styleID, 0]
+    /// </summary>
+    private int[] GetCurrentConditionsWithoutTrigger()
+    {
+      return new int[] { _activeCurBaseID, _activeCurBaseStyleID, 0 };
+    }
+
+    /// <summary>
     /// Получение текущего массива условий полного образа пускового триггера [baseID, styleID, actionID, PhraseID]
     /// </summary>
     private int[] GetCurrentConditionsArray()
@@ -619,7 +647,6 @@ namespace ISIDA.Reflexes
       _geneticReflexesToRun.Clear();
       _conditionedReflexesToRun.Clear();
 
-      // Если уже есть активная цепочка - ничего не делаем
       if (_isChainActive)
         return;
 
@@ -629,28 +656,25 @@ namespace ISIDA.Reflexes
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
       if (detectedNode == null) return;
 
-      // Проверяем, содержит ли узел цепочку
       if (detectedNode.IsChainNode)
       {
         // Цепочка будет обработана в ExecuteReflexes()
         // Собираем только стартовый рефлекс
         if (detectedNode.ConditionedReflex > 0)
-        {
           _conditionedReflexesToRun.Add(detectedNode.ConditionedReflex);
-        }
         else if (detectedNode.GeneticReflexID > 0)
-        {
           _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
-        }
         return;
       }
 
-      // Если цепочки нет, собираем обычные рефлексы
       if (_activeCurTriggerStimulusID > 0)
         CollectConditionedReflexes(detectedNode);
 
-      if (!_conditionedReflexesToRun.Any() && _activeCurReflexTriggerStimulusID > 0)
+      if (_activeCurReflexTriggerStimulusID > 0)
         CollectGeneticReflexesWithTriggers(detectedNode);
+
+      if (!_conditionedReflexesToRun.Any() && !_geneticReflexesToRun.Any())
+        CollectReflexesWithoutTrigger(detectedNode);
     }
 
     /// <summary>
@@ -662,7 +686,8 @@ namespace ISIDA.Reflexes
       {
         var reflex = _conditionedReflexes.GetAllConditionedReflexes()
             .FirstOrDefault(r => r.Id == node.ConditionedReflex);
-        if (reflex != null && reflex.CanBeActivated() && IsReflexConditionsMet(reflex))
+        if (reflex != null && reflex.CanBeActivated() &&
+            IsReflexConditionsMet(reflex, checkTrigger: true)) // Добавлен параметр
           _conditionedReflexesToRun.Add(node.ConditionedReflex);
       }
     }
@@ -676,7 +701,7 @@ namespace ISIDA.Reflexes
       {
         var reflex = _geneticReflexes.GetAllGeneticReflexes()
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
-        if (reflex != null && IsReflexConditionsMet(reflex))
+        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: true)) // Добавлен параметр
         {
           _geneticReflexesToRun.Add(node.GeneticReflexID);
         }
@@ -684,9 +709,39 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверка условий для безусловного рефлекса (строгое совпадение)
+    /// Сбор рефлексов, которые могут быть активированы только по состоянию и стилю (без триггера)
     /// </summary>
-    private bool IsReflexConditionsMet(GeneticReflex reflex)
+    private void CollectReflexesWithoutTrigger(ReflexTreeSystem.ReflexNode node)
+    {
+      // Проверяем генетические рефлексы без триггера
+      if (node.GeneticReflexID > 0)
+      {
+        var reflex = _geneticReflexes.GetAllGeneticReflexes()
+            .FirstOrDefault(r => r.Id == node.GeneticReflexID);
+
+        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: false))
+        {
+          _geneticReflexesToRun.Add(node.GeneticReflexID);
+        }
+      }
+
+      // Проверяем условные рефлексы без триггера
+      if (node.ConditionedReflex > 0)
+      {
+        var reflex = _conditionedReflexes.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == node.ConditionedReflex);
+
+        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: false))
+        {
+          _conditionedReflexesToRun.Add(node.ConditionedReflex);
+        }
+      }
+    }
+
+    /// <summary>
+    /// Проверка условий для безусловного рефлекса (с поддержкой активации без триггера)
+    /// </summary>
+    private bool IsReflexConditionsMet(GeneticReflex reflex, bool checkTrigger = true)
     {
       // Проверка Level1 - базовое состояние
       if (reflex.Level1 != _activeCurBaseID)
@@ -705,8 +760,8 @@ namespace ISIDA.Reflexes
           return false;
       }
 
-      // Проверка Level3 - пусковые стимулы
-      if (reflex.Level3 != null && reflex.Level3.Any())
+      // Проверка Level3 - пусковые стимулы (только если checkTrigger = true)
+      if (checkTrigger && reflex.Level3 != null && reflex.Level3.Any())
       {
         // Получаем текущие активные воздействия
         var currentTriggers = GetCurrentTriggerActionIDs();
@@ -723,9 +778,9 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверка условий для условного рефлекса (строгое совпадение)
+    /// Проверка условий для условного рефлекса (с поддержкой активации без триггера)
     /// </summary>
-    private bool IsReflexConditionsMet(ConditionedReflexesSystem.ConditionedReflex reflex)
+    private bool IsReflexConditionsMet(ConditionedReflexesSystem.ConditionedReflex reflex, bool checkTrigger = true)
     {
       // Проверка Level1 - базовое состояние
       if (reflex.Level1 != _activeCurBaseID)
@@ -743,9 +798,18 @@ namespace ISIDA.Reflexes
           !currentStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
         return false;
 
-      // Проверка Level3 - пусковой стимул (образ восприятия)
-      if (reflex.Level3 != _activeCurTriggerStimulusID)
-        return false;
+      // Проверка Level3 - пусковой стимул (только если checkTrigger = true)
+      if (checkTrigger)
+      {
+        if (reflex.Level3 != _activeCurTriggerStimulusID)
+          return false;
+      }
+      else
+      {
+        // Для рефлексов без триггера Level3 должен быть 0
+        if (reflex.Level3 != 0)
+          return false;
+      }
 
       return true;
     }
@@ -889,7 +953,7 @@ namespace ISIDA.Reflexes
       if (activeChain.TryGetValue(_activeChainId, out var chain))
       {
         // чтобы действия соседних звеньев не склеивались в одном пульсе
-        int requiredTime = _reflexActionDuration + 1;
+        int requiredTime = _reflexActionDuration;
 
         if (pulseCount >= (chain.CurrentPulse + requiredTime))
         {
@@ -913,6 +977,7 @@ namespace ISIDA.Reflexes
       _activeChainId = 0;
       _chainBaseID = 0;
       _chainStyleID = 0;
+      _chainAlreadyActivatedInThisContext = false;
       _completedReflexesInChain.Clear();
     }
 
@@ -944,6 +1009,8 @@ namespace ISIDA.Reflexes
         _activatedPulsCount = 0;
         _influenceActions.ActiveCurTriggerStimulusID = 0;
         _influenceActions.ActiveCurReflexTriggerStimulusID = 0;
+        _chainAlreadyActivatedInThisContext = false;
+        _lastReflexActivationPulse = 0;
         _geneticReflexesToRun.Clear();
         _conditionedReflexesToRun.Clear();
       }

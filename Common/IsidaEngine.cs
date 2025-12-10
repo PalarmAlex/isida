@@ -306,11 +306,17 @@ namespace ISIDA.Common
         initializationStep = 2;
         GomeostasSystem.InitializeInstance(config.GomeostasFolder);
         context.Gomeostas = GomeostasSystem.Instance;
+        context.Gomeostas.DefaultStileId = config.DefaultStileId;
+        context.Gomeostas.CompareLevel = config.CompareLevel;
+        context.Gomeostas.DifSensorPar = config.DifSensorPar;
+        context.Gomeostas.DynamicTime = config.DynamicTime;
 
         // Шаг 3: Адаптивные действия
         initializationStep = 3;
         AdaptiveActionsSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
         context.AdaptiveActions = AdaptiveActionsSystem.Instance;
+        context.AdaptiveActions.ReflexActionDisplayDuration = config.ReflexActionDisplayDuration;
+        context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;       
 
         // Шаг 4: Внешние действия
         initializationStep = 4;
@@ -321,6 +327,7 @@ namespace ISIDA.Common
         initializationStep = 5;
         SensorySystem.InitializeInstance(context.Gomeostas, config.SensorsFolder);
         context.SensorySystem = SensorySystem.Instance;
+        context.SensorySystem.VerbalRecognitionThreshold = config.RecognitionThreshold;
 
         // Шаг 6: Безусловные рефлексы
         initializationStep = 6;
@@ -408,16 +415,6 @@ namespace ISIDA.Common
             context.Gomeostas,
             context.AdaptiveActions,
             context.ReflexesActivator);
-
-        // Шаг 15: Применение конфигурации
-        initializationStep = 15;
-        context.Gomeostas.DefaultStileId = config.DefaultStileId;
-        context.Gomeostas.CompareLevel = config.CompareLevel;
-        context.Gomeostas.DifSensorPar = config.DifSensorPar;
-        context.Gomeostas.DynamicTime = config.DynamicTime;
-        context.AdaptiveActions.ReflexActionDisplayDuration = config.ReflexActionDisplayDuration;
-        context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;
-        context.SensorySystem.VerbalRecognitionThreshold = config.RecognitionThreshold;
       }
       catch (Exception ex)
       {
