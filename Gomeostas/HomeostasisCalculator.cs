@@ -15,19 +15,19 @@ namespace ISIDA.Gomeostas
   /// </summary>
   public sealed class HomeostasisCalculator : IDisposable
   {
-    private ReflexesActivator _reflexesActivator;
+    private bool _isChainActive = false;
+
     /// <summary>
     /// Флаг активности цепочки рефлексов
     /// </summary>
-    private bool _isChainActiveCalc = false;
+    public bool IsChainActive => _isChainActive;
 
     /// <summary>
-    /// Устанавливает ссылку на систему управления цепочками рефлексов
+    /// Флаг активности цепочки рефлексов
     /// </summary>
-    public void SetReflexesActivatorm(ReflexesActivator reflexesActivator)
+    public void SetChainActive(bool isActive)
     {
-      _reflexesActivator = reflexesActivator ??
-          throw new ArgumentNullException(nameof(reflexesActivator));     
+      _isChainActive = isActive;
     }
 
     /// <summary>
@@ -277,14 +277,15 @@ namespace ISIDA.Gomeostas
 
       // удержание — если оно активно и изменение параметра малое
       if (param.LastState != ParameterState.Normal &&
-          param.LastStateChangeTime.HasValue &&
+          param.LastStateChangePulse.HasValue &&
           absDelta < difSensorPar)
       {
-        var duration = (DateTime.UtcNow - param.LastStateChangeTime.Value).TotalSeconds;
-        _isChainActiveCalc = _reflexesActivator._isChainActive;
-        if (duration < dynamicTime || _isChainActiveCalc)
+        int pulsesSinceChange = GlobalTimer.GlobalPulsCount - param.LastStateChangePulse.Value;
+        bool keepHolding = (pulsesSinceChange < dynamicTime) || _isChainActive;
+
+        if (keepHolding)
         {
-          // Продолжаем удерживать
+          // Продолжаем удерживать состояние
           float rawDev = CalculateDeviation(param.Value, param.NormaWell, param.Speed);
           return new ParameterStateInfo
           {
@@ -296,8 +297,8 @@ namespace ISIDA.Gomeostas
         }
         else
         {
-          // Время истекло — сбрасываем
-          param.LastStateChangeTime = null;
+          // Время удержания истекло
+          param.LastStateChangePulse = null;
           param.LastState = ParameterState.Normal;
         }
       }
@@ -326,13 +327,13 @@ namespace ISIDA.Gomeostas
       {
         // Временное состояние — удерживаем
         param.LastState = newState;
-        param.LastStateChangeTime = DateTime.UtcNow;
+        param.LastStateChangePulse = GlobalTimer.GlobalPulsCount;
       }
       else
       {
         // Постоянное состояние — не удерживаем
         param.LastState = newState;
-        param.LastStateChangeTime = null;
+        param.LastStateChangePulse = null;
       }
 
       // расчет отклонения
@@ -358,7 +359,7 @@ namespace ISIDA.Gomeostas
     /// <param name="parameters">Коллекция параметров гомеостаза</param>
     /// <param name="dynamicTime">Время динамического состояния в секундах</param>
     /// <param name="difSensorPar">Порог значимого изменения параметра</param>
-    /// <param name="lastWellStateTime">Время последнего перехода в состояние Well (для гистерезиса)</param>
+    /// <param name="lastWellStatePulse">Время в пульсах последнего перехода в состояние Well (для гистерезиса)</param>
     /// <param name="relativeThreshold">Относительный порог активации состояния (0-1). 
     /// Например, 0.3 означает, что состояние активируется при 30% от максимально возможного отклонения</param>
     /// <returns>Состояние гомеостаза агента</returns>
@@ -366,7 +367,7 @@ namespace ISIDA.Gomeostas
         IEnumerable<ParameterData> parameters,
         int dynamicTime,
         float difSensorPar,
-        ref DateTime? lastWellStateTime,
+        ref int? lastWellStatePulse,
         float relativeThreshold = 30f)
     {
       var startTime = DateTime.UtcNow;
@@ -434,24 +435,20 @@ namespace ISIDA.Gomeostas
       // Состояние Well временное и сбрасывается после dynamicTime секунд
       if (overallState == HomeostasisOverallState.Well)
       {
-        if (lastWellStateTime.HasValue)
+        if (lastWellStatePulse.HasValue)
         {
-          // Проверяем, не истекло ли время действия состояния Well
-          var wellDuration = (DateTime.UtcNow - lastWellStateTime.Value).TotalSeconds;
-          if (wellDuration >= dynamicTime && !_isChainActiveCalc)
+          int pulsesSinceWell = GlobalTimer.GlobalPulsCount - lastWellStatePulse.Value;
+          if (pulsesSinceWell >= dynamicTime && !_isChainActive)
           {
-            // Время истекло - возвращаемся в нормальное состояние
             overallState = HomeostasisOverallState.Normal;
-            lastWellStateTime = null;
+            lastWellStatePulse = null;
           }
         }
         else
-          // Первый вход в состояние Well - запоминаем время
-          lastWellStateTime = DateTime.UtcNow;
+          lastWellStatePulse = GlobalTimer.GlobalPulsCount;
       }
       else
-        // Не в состоянии Well - сбрасываем таймер
-        lastWellStateTime = null;
+        lastWellStatePulse = null;
 
       var result = new AgentHomeostasisState
       {

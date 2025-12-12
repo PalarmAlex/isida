@@ -115,28 +115,8 @@ namespace ISIDA.Reflexes
 
     #region Константы и состояния
 
-    /// <summary>
-    /// Типы активации дерева рефлексов
-    /// </summary>
-    public enum ActivationType
-    {
-      /// <summary>
-      /// Изменение сочетания базовых контекстов
-      /// </summary>
-      ConditionChange = 1,
-
-      /// <summary>
-      /// Действия с Пульта
-      /// </summary>
-      Action = 2,
-
-      /// <summary>
-      /// Фраза с Пульта
-      /// </summary>
-      Phrase = 3
-    }
-
     private bool _lastStepSuccessResult = true;
+    private int _chainCooldownUntilPulse = 0;
 
     /// <summary>
     /// Текущий результат выполнения действия (для цепочек рефлексов)
@@ -250,20 +230,27 @@ namespace ISIDA.Reflexes
 
       ProcessActiveChain(pulseCount);
 
-      if (!CanActivate(pulseCount, isSleeping)) return;
+      if (pulseCount > _chainCooldownUntilPulse)
+        _chainCooldownUntilPulse = 0;
 
-      if (_weitPulceCount == 0)
+      // только если нет активной цепочки, проверяем новые условия
+      if (!_isChainActive)
       {
-        if (_gomeostas.IsNewConditions)
-          ActiveFromConditionChange(pulseCount);
-      }
-      else
-      {
-        if (pulseCount > _weitPulceCount + _reflexActionDuration)
-          ActiveFromConditionChange(pulseCount);
-      }
+        if (!CanActivate(pulseCount, isSleeping)) return;
 
-      CleanupOldTriggers(pulseCount);
+        if (_weitPulceCount == 0)
+        {
+          if (_gomeostas.IsNewConditions)
+            ActiveFromConditionChange(pulseCount);
+        }
+        else
+        {
+          if (pulseCount > _weitPulceCount + _reflexActionDuration)
+            ActiveFromConditionChange(pulseCount);
+        }
+
+        CleanupOldTriggers(pulseCount);
+      }
     }
 
     /// <summary>
@@ -274,9 +261,13 @@ namespace ISIDA.Reflexes
       if (_isSleeping) return;
       if (!CanActivate(pulseCount, _isSleeping)) return;
 
+      // Не активируем новые рефлексы, если уже выполняется цепочка
+      if (_isChainActive)
+        return;
+
       _activatedPulsCount = pulseCount;
       _weitPulceCount = pulseCount;
-      UpdateCurrentStates(ActivationType.ConditionChange);
+      UpdateCurrentStates();
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
@@ -301,7 +292,7 @@ namespace ISIDA.Reflexes
       {
         _activatedPulsCount = pulseCount;
         _weitPulceCount = pulseCount;
-        UpdateCurrentStates(ActivationType.Action);
+        UpdateCurrentStates();
         GetActiveTriggerStimulusImage();
         var conditions = GetCurrentGeneticConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
@@ -312,7 +303,12 @@ namespace ISIDA.Reflexes
           LogInfo("Рефлекс заблокирован психикой");
           return;
         }
+
+        _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
+        _gomeostas.Calculator.SetChainActive(false);
+        DeactivateChain();
+
         ExecuteReflexes(pulseCount);
 
         if (_activeGeneticReflexID != 0)
@@ -340,7 +336,7 @@ namespace ISIDA.Reflexes
       {
         _activatedPulsCount = pulseCount;
         _weitPulceCount = pulseCount;
-        UpdateCurrentStates(ActivationType.Phrase);
+        UpdateCurrentStates();
         GetActiveTriggerStimulusImage();
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
@@ -351,7 +347,12 @@ namespace ISIDA.Reflexes
           LogInfo("Рефлекс заблокирован психикой");
           return;
         }
+
+        _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActivePhrases();
+        _gomeostas.Calculator.SetChainActive(false);
+        DeactivateChain();
+
         ExecuteReflexes(pulseCount);
 
         if (_activeConditionReflexID != 0)
@@ -373,6 +374,10 @@ namespace ISIDA.Reflexes
     private void ExecuteReflexes(int pulseCount)
     {
       if (_lastReflexActivationPulse > 0 && pulseCount < _lastReflexActivationPulse + _reflexActionDuration)
+        return;
+
+      // Не собираем рефлексы, если уже выполняется цепочка
+      if (_isChainActive)
         return;
 
       CollectReflexesForExecution();
@@ -428,6 +433,12 @@ namespace ISIDA.Reflexes
     {
       try
       {
+        if (!CanActivateChain(pulseCount))
+        {
+          LogInfo($"Pulse: {pulseCount}, Активация цепочки заблокирована (задержка или уже активна)");
+          return;
+        }
+
         int chainId = node.ReflexChainID;
         int startReflexId = node.ActiveReflex;
 
@@ -469,12 +480,15 @@ namespace ISIDA.Reflexes
             reflexExecuted = true;
           }
         }
+        _gomeostas.Calculator.SetChainActive(true);
 
         if (reflexExecuted && _reflexTree.ActivateChain(chainId, firstChainLink.ID, GlobalTimer.GlobalPulsCount))
         {
           _activeChainId = chainId;
           LogInfo($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса {startReflexId}, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
+
+          LogInfo($"Pulse: {pulseCount}, _activeCurBaseID: {_activeCurBaseID} _activeCurBaseStyleID: {_activeCurBaseStyleID}");
         }
         else
           LogError($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
@@ -491,6 +505,18 @@ namespace ISIDA.Reflexes
     #region Вспомогательные методы
 
     /// <summary>
+    /// Проверка возможности активации цепочки в текущем пульсе
+    /// </summary>
+    private bool CanActivateChain(int pulseCount)
+    {
+      // Проверяем задержку после деактивации цепочки
+      if (pulseCount <= _chainCooldownUntilPulse)
+        return false;
+
+      return !_isChainActive && !_chainAlreadyActivatedInThisContext;
+    }
+
+    /// <summary>
     /// Проверка возможности активации в текущем пульсе
     /// </summary>
     private bool CanActivate(int pulseCount, bool isSleeping)
@@ -501,7 +527,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Обновление текущих состояний восприятия
     /// </summary>
-    private void UpdateCurrentStates(ActivationType activationType)
+    private void UpdateCurrentStates()
     {
       int oldBaseID = _activeCurBaseID;
       int oldStyleID = _activeCurBaseStyleID;
@@ -936,6 +962,9 @@ namespace ISIDA.Reflexes
       if (_chainBaseID != _activeCurBaseID || _chainStyleID != _activeCurBaseStyleID)
         return false;
 
+      if (_activeCurTriggerStimulusID != 0 || _activeCurReflexTriggerStimulusID != 0)
+        return false;
+
       if (_gomeostas.HasCriticalChanges)
         return false;
 
@@ -952,7 +981,6 @@ namespace ISIDA.Reflexes
       var activeChain = _reflexTree.GetActiveChains();
       if (activeChain.TryGetValue(_activeChainId, out var chain))
       {
-        // чтобы действия соседних звеньев не склеивались в одном пульсе
         int requiredTime = _reflexActionDuration;
 
         if (pulseCount >= (chain.CurrentPulse + requiredTime))
@@ -972,12 +1000,14 @@ namespace ISIDA.Reflexes
       {
         _reflexTree.DeactivateChain(_activeChainId);
         LogInfo($"Цепочка {_activeChainId} деактивирована");
+        _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount + 1;
       }
 
       _activeChainId = 0;
       _chainBaseID = 0;
       _chainStyleID = 0;
       _chainAlreadyActivatedInThisContext = false;
+      _gomeostas.Calculator.SetChainActive(false);
       _completedReflexesInChain.Clear();
     }
 

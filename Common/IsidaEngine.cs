@@ -389,7 +389,6 @@ namespace ISIDA.Common
             context.ReflexExecution,
             context.AdaptiveActions);
         context.ReflexesActivator = ReflexesActivator.Instance;
-        context.Gomeostas.SetReflexesActivatorm(context.ReflexesActivator);
 
         // Шаг 14: Логирование и глобальный таймер
         initializationStep = 14;

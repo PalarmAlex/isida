@@ -42,14 +42,6 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Устанавливает ссылку на систему запуска рефлексов
-    /// </summary>
-    public void SetReflexesActivatorm(ReflexesActivator reflexesActivator)
-    {
-      _calculator.SetReflexesActivatorm(reflexesActivator);
-    }
-
-    /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
     public GomeostasSystem(string gomeostasFolderPath = null)
@@ -729,7 +721,7 @@ namespace ISIDA.Gomeostas
         _previousState = ParameterState.Normal;
         _previousValue = 50f;
         LastState = ParameterState.Normal;
-        LastStateChangeTime = null;
+        LastStateChangePulse = null;
         _isDominant = false;
       }
 
@@ -755,7 +747,7 @@ namespace ISIDA.Gomeostas
         _previousState = initialState;
         _previousValue = value;
         LastState = ParameterState.Normal;
-        LastStateChangeTime = null;
+        LastStateChangePulse = null;
       }
 
       /// <summary>
@@ -776,7 +768,7 @@ namespace ISIDA.Gomeostas
       /// Устанавливается в момент перехода между состояниями и сбрасывается
       /// при возврате в состояние Normal или при истечении времени удержания.
       /// </remarks>
-      public DateTime? LastStateChangeTime { get; set; }
+      public int? LastStateChangePulse { get; set; } = null;
 
       /// <summary>
       /// Последнее зафиксированное состояние параметра
@@ -992,10 +984,7 @@ namespace ISIDA.Gomeostas
         var newState = Instance.Calculator.CalculateParameterState(
             this, dynamicTime, difSensorPar);
 
-        // Сохраняем старое состояние в PreviousState до обновления
         _previousState = CurrentState;
-
-        // Устанавливаем новое состояние
         CurrentState = newState.State;
       }
 
@@ -1134,7 +1123,7 @@ namespace ISIDA.Gomeostas
       /// <summary>
       /// Время последнего перехода в состояние Хорошо
       /// </summary>
-      public DateTime? LastWellStateTime { get; set; }
+      public int? LastWellStatePulse { get; set; } = null;
 
       /// <summary>
       /// Флаг первого пульса агента
@@ -1608,16 +1597,16 @@ namespace ISIDA.Gomeostas
       _lock.EnterReadLock();
       try
       {
-        var lastWellStateTime = _agentState.LastWellStateTime;
+        var lastWellStatePulse = _agentState.LastWellStatePulse;
 
         homeostasisState = _calculator.CalculateAgentState(
             _agentState.Parameters,
             _dynamicTime,
             _difSensorPar,
-            ref lastWellStateTime,
+            ref lastWellStatePulse,
             _compareLevel);
 
-        _agentState.LastWellStateTime = lastWellStateTime;
+        _agentState.LastWellStatePulse = lastWellStatePulse;
       }
       finally
       {
@@ -1967,15 +1956,15 @@ namespace ISIDA.Gomeostas
 
     internal AgentHomeostasisState GetHomeostasisStateInternal()
     {
-      var lastWellStateTime = _agentState.LastWellStateTime;
+      var lastWellStatePulse = _agentState.LastWellStatePulse;
       var result = _calculator.CalculateAgentState(
           _agentState.Parameters,
           _dynamicTime,
           _difSensorPar,
-          ref lastWellStateTime,
+          ref lastWellStatePulse,
           _compareLevel);
 
-      _agentState.LastWellStateTime = lastWellStateTime;
+      _agentState.LastWellStatePulse = lastWellStatePulse;
 
       return result;
     }
