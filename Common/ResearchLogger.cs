@@ -544,6 +544,12 @@ namespace ISIDA.Common
         {
           var urgencyFunction = _homeostasisCalculator.CalculateUrgencyFunction(param);
           var (activationZone, activationDetails) = _homeostasisCalculator.GetStateForStyleActivation(param, param.CurrentState);
+          if (!string.IsNullOrEmpty(activationDetails))
+          {
+            int pipeIndex = activationDetails.IndexOf('|');
+            if (pipeIndex >= 0)
+              activationDetails = activationDetails.Substring(pipeIndex + 1);
+          }
 
           state.Parameters.Add(new ParameterLogData
           {

@@ -228,6 +228,9 @@ namespace ISIDA.Reflexes
     {
       _isSleeping = isSleeping;
 
+      if (pulseChainCompleted !=0 && pulseCount > pulseChainCompleted + _reflexActionDuration)
+        DeactivateChain();
+
       ProcessActiveChain(pulseCount);
 
       if (pulseCount > _chainCooldownUntilPulse)
@@ -266,7 +269,7 @@ namespace ISIDA.Reflexes
         return;
 
       _activatedPulsCount = pulseCount;
-      _weitPulceCount = pulseCount;
+      _weitPulceCount = 0;
       UpdateCurrentStates();
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
@@ -306,7 +309,6 @@ namespace ISIDA.Reflexes
 
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
-        _gomeostas.Calculator.SetChainActive(false);
         DeactivateChain();
 
         ExecuteReflexes(pulseCount);
@@ -350,7 +352,6 @@ namespace ISIDA.Reflexes
 
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActivePhrases();
-        _gomeostas.Calculator.SetChainActive(false);
         DeactivateChain();
 
         ExecuteReflexes(pulseCount);
@@ -508,7 +509,7 @@ namespace ISIDA.Reflexes
     /// Проверка возможности активации цепочки в текущем пульсе
     /// </summary>
     private bool CanActivateChain(int pulseCount)
-    {
+    {   
       // Проверяем задержку после деактивации цепочки
       if (pulseCount <= _chainCooldownUntilPulse)
         return false;
@@ -854,6 +855,8 @@ namespace ISIDA.Reflexes
 
     #region Активация и выполнение цепочек рефлексов
 
+    private int pulseChainCompleted = 0;
+
     /// <summary>
     /// Выполнение шага активной цепочки
     /// </summary>
@@ -904,9 +907,9 @@ namespace ISIDA.Reflexes
         {
           _completedReflexesInChain.Add(result.ExecutedActionId);
           ResetStepResult();
-
           LogInfo($"Pulse: {pulseCount}, Выполнено действие {result.ExecutedActionId} из цепочки {_activeChainId}, " +
                  $"результат будет определен на следующем пульсе");
+          pulseChainCompleted = pulseCount;
         }
       }
 
@@ -914,7 +917,8 @@ namespace ISIDA.Reflexes
       {
         LogInfo($"Pulse: {pulseCount}, Цепочка {_activeChainId} успешно завершена. " +
                $"Выполнено действий в цепочке: {_completedReflexesInChain.Count}");
-        DeactivateChain();
+        // цепочка сбросится в ProcessReflexPulse() - нужно дать время завершить действие
+        //DeactivateChain();
       }
     }
 
