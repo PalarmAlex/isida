@@ -171,8 +171,6 @@ namespace ISIDA.Reflexes
         throw new InvalidOperationException("ReflexChainsSystem уже установлена");
 
       _reflexChainsSystem = reflexChainsSystem;
-
-      // Подписываемся на события удаления цепочек
       _reflexChainsSystem.ReflexChainDeleted += OnReflexChainDeleted;
     }
 
@@ -838,7 +836,6 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Отвязывает цепочку рефлексов от безусловного рефлекса
     /// </summary>
-    /// <param name="reflexId">ID рефлекса</param>
     public bool DetachChainFromReflex(int reflexId)
     {
       if (!_geneticReflexes.ContainsKey(reflexId))
@@ -849,6 +846,9 @@ namespace ISIDA.Reflexes
       {
         int oldChainId = _geneticReflexes[reflexId].ReflexChainID;
         _geneticReflexes[reflexId].ReflexChainID = 0;
+
+        SaveGeneticReflexes(false);
+
         LogInfo($"Отвязана цепочка {oldChainId} от рефлекса {reflexId}");
         return true;
       }
@@ -910,14 +910,13 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void OnReflexChainDeleted(int chainId)
     {
+      if (chainId <= 0 || _geneticReflexes == null) return;
+
+      int clearedCount = 0;
+
       _lock.EnterWriteLock();
       try
       {
-        if (_geneticReflexes == null) return;
-
-        int clearedCount = 0;
-
-        // Очищаем ссылки на удаленную цепочку во всех рефлексах
         foreach (var reflex in _geneticReflexes.Values)
         {
           if (reflex.ReflexChainID == chainId)
@@ -926,15 +925,19 @@ namespace ISIDA.Reflexes
             clearedCount++;
           }
         }
-
-        if (clearedCount > 0)
-        {
-          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
-        }
       }
       finally
       {
         _lock.ExitWriteLock();
+      }
+
+      if (clearedCount > 0)
+      {
+        var (success, errMsg) = SaveGeneticReflexes(false);
+        if (!success)
+          LogInfo($"Не удалось обновить файл б/у рефлексов после удаления ссылок цепочек: {errMsg}");
+        else
+          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
       }
     }
 

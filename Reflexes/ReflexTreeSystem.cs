@@ -62,6 +62,7 @@ namespace ISIDA.Reflexes
         _geneticReflexesSystem.GeneticReflexDeleted += OnGeneticReflexDeleted;
         _geneticReflexesSystem.MultipleGeneticReflexesDeleted += OnMultipleGeneticReflexesDeleted;
         _geneticReflexesSystem.GeneticReflexCreated += OnGeneticReflexCreated;
+        _reflexChainsSystem.ReflexChainDeleted += OnReflexChainDeleted;
 
         EnsureDataDirectory();
         LoadReflexTree();
@@ -73,6 +74,14 @@ namespace ISIDA.Reflexes
         LogError($"Ошибка инициализации ReflexTreeSystem: {ex.Message}");
         throw;
       }
+    }
+
+    /// <summary>
+    /// Обработчик удаления цепочки рефлексов
+    /// </summary>
+    private void OnReflexChainDeleted(int chainId)
+    {
+      ClearChainReferences(chainId);
     }
 
     private void OnGeneticReflexDeleted(int reflexId)
@@ -714,6 +723,54 @@ namespace ISIDA.Reflexes
     public int GetCurrentChainLink(int chainID)
     {
       return _activeChains.TryGetValue(chainID, out var chain) ? chain.CurrentLinkID : 0;
+    }
+
+    /// <summary>
+    /// Очищает ссылки на цепочку рефлексов в дереве
+    /// </summary>
+    public void ClearChainReferences(int chainId)
+    {
+      if (chainId <= 0) return;
+
+      int clearedCount = 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        ClearChainFromNode(ReflexTree, chainId, ref clearedCount);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      if (clearedCount > 0)
+      {
+        var (success, errorMessage) = SaveReflexTreeInternal();
+        if (!success)
+          LogError($"Не удалось сохранить дерево после очистки ссылок на цепочку {chainId}: {errorMessage}");
+        else
+          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} узлах дерева");
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно очищает ссылки на цепочку из узла и его дочерних узлов
+    /// </summary>
+    private void ClearChainFromNode(ReflexNode node, int chainId, ref int clearedCount)
+    {
+      if (node == null) return;
+
+      if (node.ReflexChainID == chainId)
+      {
+        node.ReflexChainID = 0;
+        clearedCount++;
+      }
+
+      foreach (var child in node.Children)
+      {
+        ClearChainFromNode(child, chainId, ref clearedCount);
+      }
     }
 
     #endregion

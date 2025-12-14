@@ -246,19 +246,6 @@ namespace ISIDA.Reflexes
         if (!_reflexChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
-        var reflexesUsingChain = _geneticReflexesSystem.GetReflexesForChain(chainId);
-        foreach (var reflexId in reflexesUsingChain)
-        {
-          try
-          {
-            _geneticReflexesSystem.DetachChainFromReflex(reflexId);
-          }
-          catch (Exception ex)
-          {
-            LogError($"Ошибка при отвязке цепочки {chainId} от рефлекса {reflexId}: {ex.Message}");
-          }
-        }
-
         var linkIds = chain.Links.Select(l => l.ID).ToList();
         bool removed = _reflexChains.Remove(chainId);
 
