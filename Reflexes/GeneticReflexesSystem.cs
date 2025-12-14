@@ -531,6 +531,138 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Обновляет все безусловные рефлексы, вызывая события создания для каждого рефлекса.
+    /// Используется для синхронизации после ручного изменения файла рефлексов.
+    /// </summary>
+    /// <returns>Кортеж (успех, количество обновленных рефлексов, сообщение об ошибке)</returns>
+    public (bool Success, int UpdatedCount, string ErrorMessage) UpdateAllGeneticReflex()
+    {
+      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        return (false, 0, "Работа с безусловных рефлексов разрешена только в стадии 0");
+
+      if (PerceptionImagesSystem.Instance == null)
+        return (false, 0, "Система образов восприятия не инициализирована");
+
+      if (ReflexTreeSystem.Instance == null)
+        return (false, 0, "Система дерева рефлексов не инициализирована");
+
+      List<GeneticReflex> reflexesCopy;
+
+      _lock.EnterReadLock();
+      try
+      {
+        reflexesCopy = _geneticReflexes.Values.ToList();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      int updatedCount = 0;
+      int skippedCount = 0;
+      var errors = new List<string>();
+      var perceptionSystem = PerceptionImagesSystem.Instance;
+      var reflexTreeSystem = ReflexTreeSystem.Instance;
+      var styleImageCache = new Dictionary<string, int>();
+      var actionImageCache = new Dictionary<string, int>();
+      var checkedNodes = new HashSet<string>();
+
+      foreach (var reflex in reflexesCopy)
+      {
+        try
+        {
+          string nodeKey = $"{reflex.Level1}|{string.Join(",", reflex.Level2?.OrderBy(x => x) ?? Enumerable.Empty<int>())}|{string.Join(",", reflex.Level3?.OrderBy(x => x) ?? Enumerable.Empty<int>())}";
+          if (checkedNodes.Contains(nodeKey))
+          {
+            skippedCount++;
+            continue;
+          }
+
+          int styleImageId = 0;
+          if (reflex.Level2 != null && reflex.Level2.Any())
+          {
+            var styleKey = string.Join(",", reflex.Level2.OrderBy(x => x));
+            if (!styleImageCache.TryGetValue(styleKey, out styleImageId))
+            {
+              try
+              {
+                styleImageId = perceptionSystem.AddBehaviorStyleImage(reflex.Level2);
+                styleImageCache[styleKey] = styleImageId;
+              }
+              catch
+              {
+                styleImageId = GetHashForList(reflex.Level2);
+                styleImageCache[styleKey] = styleImageId;
+              }
+            }
+          }
+
+          int actionImageId = 0;
+          if (reflex.Level3 != null && reflex.Level3.Any())
+          {
+            var actionKey = string.Join(",", reflex.Level3.OrderBy(x => x));
+            if (!actionImageCache.TryGetValue(actionKey, out actionImageId))
+            {
+              try
+              {
+                actionImageId = perceptionSystem.AddPerceptionImage(reflex.Level3, new List<int>());
+                actionImageCache[actionKey] = actionImageId;
+              }
+              catch
+              {
+                actionImageId = GetHashForList(reflex.Level3);
+                actionImageCache[actionKey] = actionImageId;
+              }
+            }
+          }
+
+          var (nodeId, node) = reflexTreeSystem.FindReflexTreeNodeFromCondition(
+              reflex.Level1, styleImageId, actionImageId);
+
+          if (node != null)
+          {
+            checkedNodes.Add(nodeKey);
+            skippedCount++;
+            continue;
+          }
+
+          OnGeneticReflexCreated(
+              reflex.Id,
+              reflex.Level1,
+              reflex.Level2?.ToList() ?? new List<int>(),
+              reflex.Level3?.ToList() ?? new List<int>()
+          );
+
+          checkedNodes.Add(nodeKey);
+          updatedCount++;
+        }
+        catch (Exception ex)
+        {
+          errors.Add($"Ошибка обновления рефлекса ID {reflex.Id}: {ex.Message}");
+        }
+      }
+
+      if (errors.Any())
+      {
+        string errorMessage = $"Обновлено {updatedCount} из {reflexesCopy.Count} рефлексов, пропущено {skippedCount} существующих. Ошибки: {string.Join("; ", errors)}";
+        return (updatedCount > 0, updatedCount, errorMessage);
+      }
+
+      return (true, updatedCount, $"Успешно обновлено {updatedCount} рефлексов, пропущено {skippedCount} существующих");
+    }
+
+    /// <summary>
+    /// Получает хэш для списка ID
+    /// </summary>
+    private int GetHashForList(List<int> ids)
+    {
+      if (ids == null || !ids.Any()) return 0;
+
+      var sorted = ids.OrderBy(x => x).ToList();
+      return Math.Abs(string.Join(",", sorted).GetHashCode());
+    }
+
+    /// <summary>
     /// Удаляет безусловный рефлекс по указанному ID
     /// </summary>
     /// <param name="reflexId">ID удаляемого безусловного рефлекса</param>
