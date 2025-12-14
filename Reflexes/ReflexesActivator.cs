@@ -300,6 +300,8 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentGeneticConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
+        bool fullMatchFound = _reflexTree.DetectedLevel == 2;
+
         bool psychicBlocked = false;
         if (psychicBlocked)
         {
@@ -310,6 +312,12 @@ namespace ISIDA.Reflexes
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
         DeactivateChain();
+
+        if (!fullMatchFound && _reflexTree.DetectedLastNodeID > 0)
+        {
+          _geneticReflexesToRun.Clear();
+          _geneticReflexesToRun.Add(-1);
+        }
 
         ExecuteReflexes(pulseCount);
 
@@ -343,6 +351,8 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
+        bool fullMatchFound = _reflexTree.DetectedLevel == 2;
+
         bool psychicBlocked = false;
         if (psychicBlocked)
         {
@@ -353,6 +363,12 @@ namespace ISIDA.Reflexes
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActivePhrases();
         DeactivateChain();
+
+        if (!fullMatchFound && _reflexTree.DetectedLastNodeID > 0)
+        {
+          _conditionedReflexesToRun.Clear();
+          _conditionedReflexesToRun.Add(-1);
+        }
 
         ExecuteReflexes(pulseCount);
 
@@ -381,7 +397,33 @@ namespace ISIDA.Reflexes
       if (_isChainActive)
         return;
 
+      if ((_geneticReflexesToRun.Contains(-1) || _conditionedReflexesToRun.Contains(-1)) &&
+         _reflexTree.DetectedLevel < 2)
+      {
+        // Пропускаем сбор рефлексов, сразу выполняем рефлекс по умолчанию
+        var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
+        if (result.Success)
+        {
+          _activeGeneticReflexID = -1;
+          _lastReflexActivationPulse = pulseCount;
+        }
+        return;
+      }
+
       CollectReflexesForExecution();
+
+      // если установлен рефлекс по умочанию - запускаем его
+      if (_geneticReflexesToRun[0] == -1)
+      {
+        var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
+        if (result.Success)
+        {
+          _activeGeneticReflexID = -1;
+          _lastReflexActivationPulse = pulseCount;
+        }
+        return;
+      }
+
       try
       {
         var detectedNodeId = _reflexTree.DetectedLastNodeID;
@@ -698,7 +740,11 @@ namespace ISIDA.Reflexes
         CollectConditionedReflexes(detectedNode);
 
       if (_activeCurReflexTriggerStimulusID > 0)
+      {
         CollectGeneticReflexesWithTriggers(detectedNode);
+        if (!_geneticReflexesToRun.Any())
+          _geneticReflexesToRun.Add(-1); // рефлекс по умолчанию
+      }
 
       if (!_conditionedReflexesToRun.Any() && !_geneticReflexesToRun.Any())
         CollectReflexesWithoutTrigger(detectedNode);
@@ -728,10 +774,8 @@ namespace ISIDA.Reflexes
       {
         var reflex = _geneticReflexes.GetAllGeneticReflexes()
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
-        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: true)) // Добавлен параметр
-        {
+        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: true))
           _geneticReflexesToRun.Add(node.GeneticReflexID);
-        }
       }
     }
 

@@ -78,18 +78,23 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        var reflex = _geneticReflexesSystem.GetAllGeneticReflexesList()
-            .FirstOrDefault(r => r.Id == reflexId);
+        var actionIds = new List<int>();
 
-        if (reflex == null)
-          return (false, $"Безусловный рефлекс с ID {reflexId} не найден");
+        if (reflexId == -1) // рефлекс по умолчанию
+          actionIds.Add(_adaptiveActionsSystem.DefaultAdaptiveActionId);
+        else
+        {
+          var reflex = _geneticReflexesSystem.GetAllGeneticReflexesList()
+                .FirstOrDefault(r => r.Id == reflexId);
 
-        // Получаем действия рефлекса
-        var actionIds = GetActionsForGeneticReflex(reflexId);
-        if (actionIds == null || !actionIds.Any())
-          return (false, $"Безусловный рефлекс {reflexId} не содержит действий");
+          if (reflex == null)
+            return (false, $"Безусловный рефлекс с ID {reflexId} не найден");
 
-        // Выполняем действия рефлекса с указанием источника
+          actionIds = GetActionsForGeneticReflex(reflexId);
+          if (actionIds == null || !actionIds.Any())
+            return (false, $"Безусловный рефлекс {reflexId} не содержит действий");
+        }
+
         return ExecuteAdaptiveActions(actionIds, ActionActivationSource.GeneticReflex);
       }
       catch (Exception ex)

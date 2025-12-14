@@ -231,11 +231,17 @@ namespace ISIDA.Reflexes
     private readonly Dictionary<int, ActiveChain> _activeChains = new Dictionary<int, ActiveChain>();
     private int _lastReflexNodeID = 0;
     private int _detectedLastNodeID = 0;
+    private int _detectedLevel = 0;
 
     /// <summary>
     /// Текущий последний распознанный узел дерева - результат распознавания
     /// </summary>
     public int DetectedLastNodeID => _detectedLastNodeID;
+
+    /// <summary>
+    /// Уровень, на котором был найден узел (0 - только базовое состояние, 1 - состояние + стиль, 2 - состояние + стиль + триггер)
+    /// </summary>
+    public int DetectedLevel => _detectedLevel;
 
     #endregion
 
@@ -331,17 +337,22 @@ namespace ISIDA.Reflexes
     public void ConditionsDetection(int[] conditionArr)
     {
       _detectedLastNodeID = 0;
+      _detectedLevel = 0;
 
       foreach (var node in ReflexTree.Children)
       {
         if (conditionArr[0] == node.BaseID)
         {
           _detectedLastNodeID = node.ID;
+          _detectedLevel = 0;
           var remainingConditions = conditionArr.Skip(1).ToArray();
           GetReflexTreeNode(1, remainingConditions, node);
           break; // только одно из Базовых состояний
         }
       }
+
+      if (_detectedLastNodeID == 0)
+        _detectedLevel = -1;
     }
 
     private void GetReflexTreeNode(int level, int[] conditions, ReflexNode node)
@@ -369,7 +380,9 @@ namespace ISIDA.Reflexes
         if (conditions[0] != levelID) continue;
 
         _detectedLastNodeID = child.ID;
+        _detectedLevel = level;
         GetReflexTreeNode(level + 1, remainingConditions, child);
+        return;
       }
     }
 
