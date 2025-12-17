@@ -112,10 +112,10 @@ namespace ISIDA.Reflexes
         }
 
         int[] conditionArr = new int[] { e.Level1, styleImageId, actionImageId };
-        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, e.ReflexId);
+        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, e.ReflexId, e.ReflexChainID);
 
         if (treeNodeId > 0)
-          LogError($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
+          LogError($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}, цепочка: {e.ReflexChainID}");
       }
       catch (Exception ex)
       {
@@ -389,14 +389,22 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Создает новую ветку с новым рефлексом
     /// </summary>
-    private int CreateNewReflexToTreeFromNodes(int level, int[] conditions, ReflexNode node, int geneticReflexId = 0)
+    private int CreateNewReflexToTreeFromNodes(int level, int[] conditions, ReflexNode node,
+        int geneticReflexId = 0, int reflexChainID = 0)
     {
       if (node == null || level >= conditions.Length)
       {
         // Если достигли конца условий или последний узел - привязываем рефлекс
-        if (node != null && geneticReflexId > 0)
+        if (node != null)
         {
-          node.GeneticReflexID = geneticReflexId;
+          if (geneticReflexId > 0)
+          {
+            node.GeneticReflexID = geneticReflexId;
+          }
+          if (reflexChainID > 0)
+          {
+            node.ReflexChainID = reflexChainID;
+          }
         }
         return node?.ID ?? 0;
       }
@@ -413,7 +421,7 @@ namespace ISIDA.Reflexes
           break;
         case 2: // Пусковой стимул
           (id, _) = CreateNewReflexNode(node, 0, node.BaseID, node.StyleID, conditions[2],
-              geneticReflexId, 0, 0, true);
+              geneticReflexId, 0, reflexChainID, true);
           break;
         default:
           return node.ID;
@@ -422,21 +430,19 @@ namespace ISIDA.Reflexes
       var newNode = FindNodeByID(id);
       if (newNode != null)
       {
-        return CreateNewReflexToTreeFromNodes(level + 1, conditions, newNode, geneticReflexId);
+        return CreateNewReflexToTreeFromNodes(level + 1, conditions, newNode, geneticReflexId, reflexChainID);
       }
 
       return id;
     }
-
     /// <summary>
     /// Находит или создает узел дерева для указанных условий и привязывает рефлекс
     /// </summary>
-    public int FindOrCreateNodeForReflex(int[] conditionArr, int geneticReflexId)
+    public int FindOrCreateNodeForReflex(int[] conditionArr, int geneticReflexId, int reflexChainID = 0)
     {
       _lock.EnterWriteLock();
       try
       {
-        // Проверяем валидность входных данных
         if (conditionArr == null || conditionArr.Length < 3)
         {
           LogError("Недопустимый массив условий в FindOrCreateNodeForReflex");
@@ -447,13 +453,15 @@ namespace ISIDA.Reflexes
         int styleID = conditionArr[1];
         int actionID = conditionArr[2];
 
-        // Ищем существующий узел по условиям
         var (existingId, existingNode) = FindReflexTreeNodeFromCondition(baseID, styleID, actionID);
 
         if (existingId > 0 && existingNode != null)
         {
-          // Узел существует - привязываем рефлекс
           existingNode.GeneticReflexID = geneticReflexId;
+          if (reflexChainID > 0)
+          {
+            existingNode.ReflexChainID = reflexChainID;
+          }
           SaveReflexTreeInternal();
           return existingId;
         }
@@ -465,13 +473,11 @@ namespace ISIDA.Reflexes
 
         if (detectedNodeId > 0)
         {
-          // Находим уровень найденного узла
           int level = GetLevelFromNodeID(detectedNodeId);
           var detectedNode = FindNodeByID(detectedNodeId);
 
           if (detectedNode != null)
           {
-            // Проверяем, что найденный узел имеет правильное базовое состояние
             if (detectedNode.BaseID != baseID)
             {
               // Если базовое состояние не совпадает, начинаем с корня
@@ -480,7 +486,8 @@ namespace ISIDA.Reflexes
             }
 
             // Создаем ветку от найденного узла
-            int lastNodeId = CreateNewReflexToTreeFromNodes(level, conditionArr, detectedNode, geneticReflexId);
+            int lastNodeId = CreateNewReflexToTreeFromNodes(level, conditionArr, detectedNode,
+                geneticReflexId, reflexChainID);
 
             var newNode = FindNodeByID(lastNodeId);
             if (newNode != null)
@@ -492,7 +499,8 @@ namespace ISIDA.Reflexes
         }
 
         // Если не найден подходящий узел или detectedNodeId = 0, создаем с нуля от корня
-        int newNodeIdFromRoot = CreateNewReflexToTreeFromNodes(0, conditionArr, ReflexTree, geneticReflexId);
+        int newNodeIdFromRoot = CreateNewReflexToTreeFromNodes(0, conditionArr, ReflexTree,
+            geneticReflexId, reflexChainID);
         var newNodeFromRoot = FindNodeByID(newNodeIdFromRoot);
 
         if (newNodeFromRoot != null)

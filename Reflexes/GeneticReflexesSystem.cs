@@ -37,7 +37,7 @@ namespace ISIDA.Reflexes
 
     /// <summary>Событие создания нового безусловного рефлекса</summary>
     public event Action<GeneticReflexCreatedEventArgs> GeneticReflexCreated;
-    
+
     /// <summary>Аргументы события создания рефлекса</summary>
     public class GeneticReflexCreatedEventArgs
     {
@@ -53,13 +53,18 @@ namespace ISIDA.Reflexes
       /// <summary>Внешние воздействия</summary>
       public List<int> Level3 { get; }
 
+      /// <summary>ID цепочки рефлексов</summary>
+      public int ReflexChainID { get; }
+
       /// <summary>Создает аргументы события</summary>
-      public GeneticReflexCreatedEventArgs(int reflexId, int level1, List<int> level2, List<int> level3)
+      public GeneticReflexCreatedEventArgs(int reflexId, int level1, List<int> level2,
+          List<int> level3, int reflexChainID = 0)
       {
         ReflexId = reflexId;
         Level1 = level1;
         Level2 = level2;
         Level3 = level3;
+        ReflexChainID = reflexChainID;
       }
     }
 
@@ -393,9 +398,10 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>Вызывает событие создания рефлекса</summary>
-    private void OnGeneticReflexCreated(int reflexId, int level1, List<int> level2, List<int> level3)
+    private void OnGeneticReflexCreated(int reflexId, int level1, List<int> level2,
+        List<int> level3, int reflexChainID = 0)
     {
-      var args = new GeneticReflexCreatedEventArgs(reflexId, level1, level2, level3);
+      var args = new GeneticReflexCreatedEventArgs(reflexId, level1, level2, level3, reflexChainID);
       GeneticReflexCreated?.Invoke(args);
     }
 
@@ -538,7 +544,7 @@ namespace ISIDA.Reflexes
     public (bool Success, int UpdatedCount, string ErrorMessage) UpdateAllGeneticReflex()
     {
       if (_gomeostas.GetAgentState().EvolutionStage > 0)
-        return (false, 0, "Работа с безусловных рефлексов разрешена только в стадии 0");
+        return (false, 0, "Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (PerceptionImagesSystem.Instance == null)
         return (false, 0, "Система образов восприятия не инициализирована");
@@ -616,21 +622,40 @@ namespace ISIDA.Reflexes
             }
           }
 
+          // Ищем существующий узел дерева
           var (nodeId, node) = reflexTreeSystem.FindReflexTreeNodeFromCondition(
               reflex.Level1, styleImageId, actionImageId);
 
           if (node != null)
           {
+            // Если узел уже существует, проверяем нужно ли обновить цепочку
+            if (node.ReflexChainID != reflex.ReflexChainID)
+            {
+              node.ReflexChainID = reflex.ReflexChainID;
+              var (saveSuccess, saveError) = reflexTreeSystem.SaveReflexTree();
+              if (!saveSuccess)
+              {
+                errors.Add($"Ошибка сохранения дерева после обновления цепочки для узла {nodeId}: {saveError}");
+              }
+              else
+              {
+                updatedCount++;
+                LogInfo($"Обновлена цепочка {reflex.ReflexChainID} для узла {nodeId} (рефлекс ID {reflex.Id})");
+              }
+            }
+
             checkedNodes.Add(nodeKey);
             skippedCount++;
             continue;
           }
 
+          // Создаем новую запись в дереве рефлексов с указанием цепочки
           OnGeneticReflexCreated(
               reflex.Id,
               reflex.Level1,
               reflex.Level2?.ToList() ?? new List<int>(),
-              reflex.Level3?.ToList() ?? new List<int>()
+              reflex.Level3?.ToList() ?? new List<int>(),
+              reflex.ReflexChainID  // Важно: передаем ReflexChainID
           );
 
           checkedNodes.Add(nodeKey);

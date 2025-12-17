@@ -552,73 +552,6 @@ namespace ISIDA.Reflexes
       }
     }
 
-    private bool IsValidReflexChainsFile(string filePath)
-    {
-      if (!File.Exists(filePath))
-        return false;
-
-      try
-      {
-        var lines = File.ReadLines(filePath).ToList();
-        return IsValidReflexChainsFile(lines);
-      }
-      catch
-      {
-        return false;
-      }
-    }
-
-    /// <summary>
-    /// Проверяет валидность содержимого файла цепочек рефлексов
-    /// Разрешает файлы, содержащие только шапку (комментарии #)
-    /// </summary>
-    public static bool IsValidReflexChainsFile(IEnumerable<string> lines)
-    {
-      if (lines == null)
-        return false;
-
-      var lineList = lines.ToList();
-      if (lineList.Count < 1)
-        return false;
-
-      bool hasOnlyComments = lineList.All(line =>
-          string.IsNullOrWhiteSpace(line) ||
-          line.Trim().StartsWith("#", StringComparison.Ordinal));
-
-      if (hasOnlyComments)
-        return true;
-
-      foreach (var line in lineList)
-      {
-        var trimmed = line?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
-          continue;
-
-        var parts = trimmed.Split('|');
-
-        if (parts.Length >= 4 && parts[0] == "CHAIN")
-        {
-          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0)
-            return false;
-        }
-        else if (parts[0] == "LINK")
-        {
-          if (parts.Length < 6)
-            return false;
-
-          if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
-              !int.TryParse(parts[2], out int actionId) || actionId <= 0 ||
-              !int.TryParse(parts[3], out int successNext) ||
-              !int.TryParse(parts[4], out int failureNext))
-            return false;
-        }
-        else
-          return false;
-      }
-
-      return true;
-    }
-
     /// <summary>
     /// Загружает цепочки рефлексов из файла
     /// </summary>
@@ -657,15 +590,15 @@ namespace ISIDA.Reflexes
 
             var parts = trimmedLine.Split('|');
 
-            if (parts.Length >= 4 && parts[0] == "CHAIN")
+            if (parts.Length >= 2 && parts[0] == "CHAIN")
             {
-              if (int.TryParse(parts[1], out int chainId))
+              if (int.TryParse(parts[1], out int chainId) && chainId > 0)
               {
                 currentChain = new ReflexChain
                 {
                   ID = chainId,
-                  Name = parts[2],
-                  Description = parts[3],
+                  Name = parts.Length > 2 ? parts[2] : "",
+                  Description = parts.Length > 3 ? parts[3] : "",
                   Links = new List<ChainLink>()
                 };
 
@@ -676,7 +609,7 @@ namespace ISIDA.Reflexes
               continue;
             }
 
-            if (parts.Length >= 6 && parts[0] == "LINK" && currentChain != null)
+            if (parts.Length >= 5 && parts[0] == "LINK" && currentChain != null)
             {
               if (int.TryParse(parts[1], out int linkId) &&
                   int.TryParse(parts[2], out int actionId) &&
@@ -690,7 +623,7 @@ namespace ISIDA.Reflexes
                   ActionId = actionId,
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
-                  Description = parts[5]
+                  Description = parts.Length > 5 ? parts[5] : ""
                 };
 
                 currentChain.Links.Add(link);
@@ -770,7 +703,11 @@ namespace ISIDA.Reflexes
       {
         foreach (var chain in _reflexChains.Values.OrderBy(c => c.ID))
         {
-          lines.Add($"CHAIN|{chain.ID}|{chain.Name}|{chain.Description}");
+          string name = chain.Name ?? "";
+          string description = chain.Description ?? "";
+
+          lines.Add($"CHAIN|{chain.ID}|{name}|{description}");
+
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
             lines.Add($"LINK|{link.ID}|{link.ActionId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description}");

@@ -31,7 +31,7 @@ namespace ISIDA.Common
       // Цепочки безусловных рефлексов
       public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
       public const string ReflexChainsChain = "# CHAIN|ID|Name|Description";
-      public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|IsTerminal|Description";
+      public const string ReflexChainsLink = "# LINK|LinkID|ActionID|SuccessNext|FailureNext|Description";
       public const string ReflexChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string ReflexChainsNameDesc = "# Name: наименование цепочки";
       public const string ReflexChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
@@ -160,6 +160,15 @@ namespace ISIDA.Common
       if (lineList.Count < 1)
         return false;
 
+      // Проверяем, что файл содержит только комментарии/пустые строки
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
       foreach (var line in lineList)
       {
         var trimmed = line?.Trim();
@@ -168,12 +177,17 @@ namespace ISIDA.Common
 
         var parts = trimmed.Split('|');
 
-        if (parts.Length >= 4 && parts[0] == "CHAIN")
+        if (parts.Length >= 2 && parts[0] == "CHAIN")
         {
+          // CHAIN|ID
           if (!int.TryParse(parts[1], out int chainId) || chainId <= 0)
             return false;
+
+          // Должно быть хотя бы ID после CHAIN
+          if (parts.Length < 2)
+            return false;
         }
-        else if (parts.Length >= 6 && parts[0] == "LINK")
+        else if (parts.Length >= 5 && parts[0] == "LINK")
         {
           if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
               !int.TryParse(parts[2], out int actionId) || actionId <= 0 ||
@@ -182,12 +196,12 @@ namespace ISIDA.Common
             return false;
         }
         else
-          return false;
-
-        return true;
+        {
+          return false; // Неизвестный формат строки
+        }
       }
 
-      return true; // только шапка — допустимо
+      return true; // Все строки прошли проверку
     }
 
     #endregion
