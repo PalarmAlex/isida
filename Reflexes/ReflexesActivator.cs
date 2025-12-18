@@ -228,7 +228,7 @@ namespace ISIDA.Reflexes
     {
       _isSleeping = isSleeping;
 
-      if (pulseChainCompleted !=0 && pulseCount > pulseChainCompleted + _reflexActionDuration)
+      if (_gomeostas.IsNewConditions || (pulseChainCompleted !=0 && pulseCount > pulseChainCompleted + _reflexActionDuration))
         DeactivateChain();
 
       ProcessActiveChain(pulseCount);

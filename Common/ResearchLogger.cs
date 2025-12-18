@@ -10,7 +10,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Gomeostas.GomeostasSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
@@ -760,10 +760,10 @@ namespace ISIDA.Common
         // Записываем в JSONL
         if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
         {
-          var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+          var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
           {
-            WriteIndented = false,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            Formatting = Formatting.None,
+            NullValueHandling = NullValueHandling.Ignore
           });
           _jsonlWriter.WriteLine(jsonLine);
         }
@@ -821,10 +821,10 @@ namespace ISIDA.Common
           // Записываем в JSONL (если выбран формат)
           if (_currentFormat.HasFlag(LogFormat.JsonL) && _parametersJsonlWriter != null)
           {
-            var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+            var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
             {
-              WriteIndented = false,
-              Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+              Formatting = Formatting.None,
+              NullValueHandling = NullValueHandling.Ignore
             });
             _parametersJsonlWriter.WriteLine(jsonLine);
           }
@@ -875,10 +875,10 @@ namespace ISIDA.Common
       // Записываем в JSONL (если выбран формат)
       if (_currentFormat.HasFlag(LogFormat.JsonL) && _stylesJsonlWriter != null)
       {
-        var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+        var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
         {
-          WriteIndented = false,
-          Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+          Formatting = Formatting.None,
+          NullValueHandling = NullValueHandling.Ignore
         });
         _stylesJsonlWriter.WriteLine(jsonLine);
       }
@@ -947,10 +947,10 @@ namespace ISIDA.Common
       // Записываем в JSONL (если выбран формат)
       if (_currentFormat.HasFlag(LogFormat.JsonL) && _stylesJsonlWriter != null)
       {
-        var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+        var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
         {
-          WriteIndented = false,
-          Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+          Formatting = Formatting.None,
+          NullValueHandling = NullValueHandling.Ignore
         });
         _stylesJsonlWriter.WriteLine(jsonLine);
       }
@@ -982,10 +982,10 @@ namespace ISIDA.Common
       // Записываем в JSONL (если выбран формат)
       if (_currentFormat.HasFlag(LogFormat.JsonL) && _stylesJsonlWriter != null)
       {
-        var jsonLine = JsonSerializer.Serialize(logEntry, new JsonSerializerOptions
+        var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
         {
-          WriteIndented = false,
-          Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+          Formatting = Formatting.None,
+          NullValueHandling = NullValueHandling.Ignore
         });
         _stylesJsonlWriter.WriteLine(jsonLine);
       }
