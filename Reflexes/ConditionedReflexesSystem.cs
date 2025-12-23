@@ -136,7 +136,7 @@ namespace ISIDA.Reflexes
       private float _learningRate = 0.2f;
       private float _decayRate = 0.98f;
       private float _activationThreshold = 0.6f;
-      private int _timeWindowMs = 500;
+      private int _timeWindowPulses = 5;
       private float _minAssociationStrength = 0.1f;
       private int _maxRank = 10;
       private int _baseInactivationTime = 1000;
@@ -271,17 +271,17 @@ namespace ISIDA.Reflexes
       }
 
       /// <summary>
-      /// Временное окно корреляции τ (100-2000 мс)
+      /// Временное окно корреляции τ (пульсов)
       /// </summary>
-      public int TimeWindowMs
+      public int TimeWindowPulses
       {
-        get => _timeWindowMs;
+        get => _timeWindowPulses;
         set
         {
-          var validation = SettingsValidator.ValidateTimeWindowMs(value);
+          var validation = SettingsValidator.ValidateTimeWindowPulses(value);
           if (!validation.isValid)
             throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _timeWindowMs = value;
+          _timeWindowPulses = value;
         }
       }
 
@@ -426,9 +426,9 @@ namespace ISIDA.Reflexes
       public float MinAssociationStrength { get; set; } = 0.1f;
 
       /// <summary>
-      /// Временное окно корреляции τ (мс)
+      /// Временное окно корреляции τ (пульсов)
       /// </summary>
-      public int TimeWindowMs { get; set; } = 500;
+      public int TimeWindowPulses { get; set; } = 5;
 
       /// <summary>
       /// Максимальный ранг рефлекса
@@ -634,7 +634,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Обновляет активные условные рефлексы на основе текущего состояния
     /// </summary>
-    public void UpdateActiveReflexes(int[] currentConditions)
+    public void UpdateActiveReflexes(int[] currentConditions, int currentPulse)
     {
       _lock.EnterWriteLock();
       try
@@ -643,6 +643,10 @@ namespace ISIDA.Reflexes
 
         foreach (var reflex in _conditionedReflexes.Values)
         {
+          // Проверяем временную корреляцию
+          if (!IsWithinTimeWindow(currentPulse, reflex.LastActivation, reflex.TimeWindowPulses))
+            continue;
+
           // Проверка условий активации и порога крепости
           if (IsReflexConditionsMet(reflex, currentConditions) &&
               reflex.AssociationStrength >= _settings.ActivationThreshold)
@@ -663,6 +667,34 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Проверяет, находятся ли события в пределах временного окна
+    /// </summary>
+    private bool IsWithinTimeWindow(int currentPulse, int lastActivationPulse, int timeWindowPulses)
+    {
+      return (currentPulse - lastActivationPulse) <= timeWindowPulses;
+    }
+
+    /// <summary>
+    /// Попытка образования условного рефлекса на основе временной корреляции
+    /// </summary>
+    public bool TryFormAssociation(
+        int unconditionalStimulusPulse,
+        int conditionedStimulusPulse,
+        ConditionedReflex reflex)
+    {
+      // Проверяем, находятся ли стимулы в пределах временного окна
+      if (!AreStimuliCorrelated(unconditionalStimulusPulse, conditionedStimulusPulse,
+                                reflex.TimeWindowPulses))
+      {
+        return false; // Стимулы не коррелируют во времени
+      }
+
+      // Усиливаем ассоциацию
+      reflex.StrengthenAssociation();
+      return true;
     }
 
     /// <summary>
@@ -699,6 +731,7 @@ namespace ISIDA.Reflexes
     }
 
     internal bool removeAllConditionedReflexes = false;
+
     /// <summary>
     /// Удаляет все условные рефлексы
     /// </summary>
@@ -800,6 +833,17 @@ namespace ISIDA.Reflexes
       return reflex.Level3 == conditions[2];
     }
 
+    /// <summary>
+    /// Проверяет, находятся ли два стимула в пределах временного окна корреляции
+    /// </summary>
+    /// <param name="pulse1">Пульс первого стимула</param>
+    /// <param name="pulse2">Пульс второго стимула</param>
+    /// <param name="timeWindowPulses">Временное окно в пульсах</param>
+    public bool AreStimuliCorrelated(int pulse1, int pulse2, int timeWindowPulses)
+    {
+      return Math.Abs(pulse1 - pulse2) <= timeWindowPulses;
+    }
+
     #endregion
 
     #region Валидация
@@ -814,22 +858,16 @@ namespace ISIDA.Reflexes
       // Проверка Level1
       var validBaseStates = new[] { -1, 0, 1 };
       if (!validBaseStates.Contains(level1))
-      {
         return (false, "Level1 должен быть одним из значений: -1, 0, 1");
-      }
 
       // Проверка Level3 (должен существовать образ восприятия)
       var perceptionImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
       if (!perceptionImages.Any(img => img.Id == level3))
-      {
         return (false, $"Level3 (ID образа восприятия {level3}) не найден");
-      }
 
       // Проверка ранга
       if (rank < 0 || rank > _settings.MaxRank)
-      {
         return (false, $"Ранг должен быть в диапазоне 0-{_settings.MaxRank}");
-      }
 
       return (true, string.Empty);
     }
@@ -842,9 +880,7 @@ namespace ISIDA.Reflexes
     {
       string directory = Path.GetDirectoryName(GetConditionedReflexesFilePath());
       if (!Directory.Exists(directory))
-      {
         Directory.CreateDirectory(directory);
-      }
     }
 
     private string GetConditionedReflexesFilePath()
@@ -950,8 +986,8 @@ namespace ISIDA.Reflexes
             case "ActivationThreshold":
               _settings.ActivationThreshold = float.Parse(value);
               break;
-            case "TimeWindowMs":
-              _settings.TimeWindowMs = int.Parse(value);
+            case "TimeWindowPulses":
+              _settings.TimeWindowPulses = int.Parse(value);
               break;
             case "MaxRank":
               _settings.MaxRank = int.Parse(value);
@@ -1026,7 +1062,7 @@ namespace ISIDA.Reflexes
             "# LearningRate: коэффициент обучения α (0.1-0.3)",
             "# DecayRate: коэффициент затухания η (0.95-0.99)",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
-            "# TimeWindowMs: временное окно корреляции τ (мс)",
+            "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
             "# MaxRank: максимальный ранг рефлекса",
             "# MaxInactivationTime: время жизни без активации (пульсы)"
           };
@@ -1034,7 +1070,7 @@ namespace ISIDA.Reflexes
         lines.Add($"LearningRate={_settings.LearningRate}");
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
-        lines.Add($"TimeWindowMs={_settings.TimeWindowMs}");
+        lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
         lines.Add($"MaxRank={_settings.MaxRank}");
         lines.Add($"MaxInactivationTime={_settings.MaxInactivationTime}");
 

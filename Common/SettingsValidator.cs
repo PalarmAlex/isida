@@ -131,11 +131,11 @@ namespace ISIDA.Common
     /// <summary>
     /// Валидация временного окна корреляции τ
     /// </summary>
-    public static (bool isValid, string errorMessage) ValidateTimeWindowMs(int? value)
+    public static (bool isValid, string errorMessage) ValidateTimeWindowPulses(int? value)
     {
       const string paramName = "Временное окно корреляции";
-      const string range = "[100:2000] мс";
-      return ValidateValueCustom(value, paramName, 100, 2000, range);
+      const string range = "[1:10] пульсов";
+      return ValidateValueCustom(value, paramName, 1, 10, range);
     }
 
     /// <summary>
