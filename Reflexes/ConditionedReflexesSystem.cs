@@ -490,6 +490,59 @@ namespace ISIDA.Reflexes
 
     #endregion
 
+    #region Привязка к ReflexTreeSystem через события
+
+    /// <summary>Событие создания нового условного рефлекса</summary>
+    public event Action<ConditionedReflexCreatedEventArgs> ConditionedReflexCreated;
+
+    /// <summary>Событие удаления одиночного условного рефлекса</summary>
+    public event Action<int> ConditionedReflexDeleted;
+
+    /// <summary>Событие массового удаления условных рефлексов</summary>
+    public event Action<List<int>> MultipleConditionedReflexesDeleted;
+
+    /// <summary>Аргументы события создания условного рефлекса</summary>
+    public class ConditionedReflexCreatedEventArgs
+    {
+      /// <summary>ID созданного рефлекса</summary>
+      public int ReflexId { get; }
+
+      /// <summary>Базовое состояние гомеостаза</summary>
+      public int Level1 { get; }
+
+      /// <summary>Стили поведения</summary>
+      public List<int> Level2 { get; }
+
+      /// <summary>ID образа пускового стимула</summary>
+      public int Level3 { get; }
+
+      /// <summary>Создает аргументы события</summary>
+      public ConditionedReflexCreatedEventArgs(int reflexId, int level1, List<int> level2, int level3)
+      {
+        ReflexId = reflexId;
+        Level1 = level1;
+        Level2 = level2;
+        Level3 = level3;
+      }
+    }
+
+    private void OnConditionedReflexCreated(int reflexId, int level1, List<int> level2, int level3)
+    {
+      ConditionedReflexCreated?.Invoke(new ConditionedReflexCreatedEventArgs(reflexId, level1, level2, level3));
+    }
+
+    private void OnConditionedReflexDeleted(int reflexId)
+    {
+      ConditionedReflexDeleted?.Invoke(reflexId);
+    }
+
+    private void OnMultipleConditionedReflexesDeleted(List<int> reflexIds)
+    {
+      MultipleConditionedReflexesDeleted?.Invoke(reflexIds);
+    }
+
+    #endregion
+
     #region Управление условными рефлексами
 
     /// <summary>
@@ -555,13 +608,23 @@ namespace ISIDA.Reflexes
           Level3 = level3,
           AdaptiveActions = adaptiveActions ?? new List<int>(),
           Rank = rank,
-          AssociationStrength = _settings.MinAssociationStrength + 0.1f, // Начальное значение выше минимального
+          AssociationStrength = _settings.MinAssociationStrength + 0.1f,
           LastActivation = _currentPulseCount,
           BirthTime = _currentPulseCount,
           SourceGeneticReflexId = sourceGeneticReflexId
         };
 
         _conditionedReflexes.Add(newId, conditionedReflex);
+
+        try
+        {
+          OnConditionedReflexCreated(newId, level1, level2, level3);
+        }
+        catch (Exception ex)
+        {
+          warnings.Add($"Ошибка при обработке создания условного рефлекса: {ex.Message}");
+        }
+
         return (newId, warnings.ToArray());
       }
       finally
@@ -715,7 +778,10 @@ namespace ISIDA.Reflexes
 
         var removed = _conditionedReflexes.Remove(reflexId);
         if (removed)
+        {
           _activeConditionedReflexes.RemoveAll(r => r.Id == reflexId);
+          OnConditionedReflexDeleted(reflexId);
+        }
 
         return removed;
       }
@@ -744,9 +810,14 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
+        var deletedReflexIds = _conditionedReflexes.Keys.ToList();
+
         _conditionedReflexes.Clear();
         _activeConditionedReflexes.Clear();
         _lastConditionedReflexId = 0;
+
+        if (deletedReflexIds.Any())
+          OnMultipleConditionedReflexesDeleted(deletedReflexIds);
 
         return true;
       }
@@ -1122,6 +1193,10 @@ namespace ISIDA.Reflexes
           var adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
           adaptiveActionsSystem.AdaptiveActionDeleted -= OnAdaptiveActionDeleted;
         }
+
+        ConditionedReflexCreated = null;
+        ConditionedReflexDeleted = null;
+        MultipleConditionedReflexesDeleted = null;
 
         SaveConditionedReflexes();
         SaveConditionedReflexSettings();

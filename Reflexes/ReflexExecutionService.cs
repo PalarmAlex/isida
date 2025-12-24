@@ -116,14 +116,14 @@ namespace ISIDA.Reflexes
         if (reflex == null)
           return (false, $"Условный рефлекс с ID {reflexId} не найден");
 
-        // Получаем действие для условного рефлекса
-        int actionId = GetActionForConditionedReflex(reflexId);
-        if (actionId <= 0)
-          return (false, $"Условный рефлекс {reflexId} не содержит связанного действия");
+        // Получаем список действий для условного рефлекса
+        var actions = reflex.AdaptiveActions?.ToList() ?? new List<int>();
+        if (!actions.Any())
+          return (false, $"Условный рефлекс {reflexId} не содержит связанных действий");
 
-        // Выполняем действие рефлекса с указанием источника
+        // Выполняем действия рефлекса с указанием источника
         var result = ExecuteAdaptiveActions(
-            new List<int> { actionId },
+            actions,
             ActionActivationSource.ConditionedReflex);
 
         // Усиление ассоциации при успешном выполнении
@@ -245,10 +245,7 @@ namespace ISIDA.Reflexes
         if (reflex == null)
           return 0;
 
-        // TODO: Добавить логику сопоставления условного рефлекса с действием
-        // Пока что возвращаем ID рефлекса как ID действия
-        // В будущем можно будет хранить это сопоставление в базе данных
-        return reflexId;
+        return reflex.AdaptiveActions?.FirstOrDefault() ?? 0;
       }
       catch
       {
@@ -271,7 +268,29 @@ namespace ISIDA.Reflexes
         if (reflex == null)
           return new List<int>();
 
-        // Возвращаем AdaptiveActions из рефлекса
+        return reflex.AdaptiveActions?.ToList() ?? new List<int>();
+      }
+      catch
+      {
+        return new List<int>();
+      }
+    }
+
+    /// <summary>
+    /// Получает список действий для условного рефлекса
+    /// </summary>
+    /// <param name="reflexId">ID условного рефлекса</param>
+    /// <returns>Список ID адаптивных действий</returns>
+    public List<int> GetActionsListForConditionedReflex(int reflexId)
+    {
+      try
+      {
+        var reflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == reflexId);
+
+        if (reflex == null)
+          return new List<int>();
+
         return reflex.AdaptiveActions?.ToList() ?? new List<int>();
       }
       catch

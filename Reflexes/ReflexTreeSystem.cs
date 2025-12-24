@@ -14,6 +14,7 @@ namespace ISIDA.Reflexes
   public sealed class ReflexTreeSystem : IDisposable
   {
     private readonly GeneticReflexesSystem _geneticReflexesSystem;
+    private readonly ConditionedReflexesSystem _conditionedReflexesSystem;
     private readonly PerceptionImagesSystem _perceptionImagesSystem;
     private readonly ReflexChainsSystem _reflexChainsSystem;
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -39,23 +40,26 @@ namespace ISIDA.Reflexes
     /// </summary>
     public static void InitializeInstance(
         GeneticReflexesSystem geneticReflexesSystem,
+        ConditionedReflexesSystem conditionedReflexesSystem,
         PerceptionImagesSystem perceptionImagesSystem,
         ReflexChainsSystem reflexChainsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexTreeSystem уже инициализирован.");
 
-      _instance = new ReflexTreeSystem(geneticReflexesSystem, perceptionImagesSystem, reflexChainsSystem);
+      _instance = new ReflexTreeSystem(geneticReflexesSystem, conditionedReflexesSystem, perceptionImagesSystem, reflexChainsSystem);
     }
 
     private ReflexTreeSystem(
         GeneticReflexesSystem geneticReflexesSystem,
+        ConditionedReflexesSystem conditionedReflexesSystem,
         PerceptionImagesSystem perceptionImagesSystem,
         ReflexChainsSystem reflexChainsSystem)
     {
       try
       {
         _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
+        _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
         _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
         _reflexChainsSystem = reflexChainsSystem ?? throw new ArgumentNullException(nameof(reflexChainsSystem));
 
@@ -63,6 +67,10 @@ namespace ISIDA.Reflexes
         _geneticReflexesSystem.MultipleGeneticReflexesDeleted += OnMultipleGeneticReflexesDeleted;
         _geneticReflexesSystem.GeneticReflexCreated += OnGeneticReflexCreated;
         _reflexChainsSystem.ReflexChainDeleted += OnReflexChainDeleted;
+
+        _conditionedReflexesSystem.ConditionedReflexCreated += OnConditionedReflexCreated;
+        _conditionedReflexesSystem.ConditionedReflexDeleted += OnConditionedReflexDeleted;
+        _conditionedReflexesSystem.MultipleConditionedReflexesDeleted += OnMultipleConditionedReflexesDeleted;
 
         EnsureDataDirectory();
         LoadReflexTree();
@@ -113,14 +121,61 @@ namespace ISIDA.Reflexes
 
         int[] conditionArr = new int[] { e.Level1, styleImageId, actionImageId };
         int treeNodeId = FindOrCreateNodeForReflex(conditionArr, e.ReflexId, e.ReflexChainID);
-
-        if (treeNodeId > 0)
-          LogError($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}, цепочка: {e.ReflexChainID}");
+        if (treeNodeId > 0) // сохранение дерева уже есть в FindOrCreateNodeForReflex()
+          LogInfo($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}, цепочка: {e.ReflexChainID}");
       }
       catch (Exception ex)
       {
         LogError($"Ошибка привязки рефлекса {e.ReflexId} к дереву: {ex.Message}");
       }
+    }
+
+    /// <summary>
+    /// Обработчик создания условного рефлекса
+    /// </summary>
+    private void OnConditionedReflexCreated(ConditionedReflexesSystem.ConditionedReflexCreatedEventArgs e)
+    {
+      try
+      {
+        int styleImageId = 0;
+
+        if (PerceptionImagesSystem.IsInitialized && e.Level2 != null && e.Level2.Any())
+          styleImageId = _perceptionImagesSystem.AddBehaviorStyleImage(e.Level2);
+
+        int[] conditionArr = new int[] { e.Level1, styleImageId, e.Level3 };
+        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, 0, 0); // 0 для geneticReflexId, так как это условный
+
+        if (treeNodeId > 0)
+        {
+          var node = FindNodeByID(treeNodeId);
+          if (node != null)
+          {
+            node.ConditionedReflex = e.ReflexId;
+            SaveReflexTreeInternal();
+            LogInfo($"Условный рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка привязки условного рефлекса {e.ReflexId} к дереву: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Обработчик удаления условного рефлекса
+    /// </summary>
+    private void OnConditionedReflexDeleted(int reflexId)
+    {
+      ClearConditionedReflexReferences(reflexId);
+    }
+
+    /// <summary>
+    /// Обработчик массового удаления условных рефлексов
+    /// </summary>
+    private void OnMultipleConditionedReflexesDeleted(List<int> reflexIds)
+    {
+      ClearMultipleConditionedReflexReferences(reflexIds);
     }
 
     #endregion
@@ -435,6 +490,7 @@ namespace ISIDA.Reflexes
 
       return id;
     }
+
     /// <summary>
     /// Находит или создает узел дерева для указанных условий и привязывает рефлекс
     /// </summary>
@@ -459,9 +515,8 @@ namespace ISIDA.Reflexes
         {
           existingNode.GeneticReflexID = geneticReflexId;
           if (reflexChainID > 0)
-          {
             existingNode.ReflexChainID = reflexChainID;
-          }
+
           SaveReflexTreeInternal();
           return existingId;
         }
@@ -796,7 +851,7 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Очистка ссылок на удаленные рефлексы
+    #region Очистка ссылок на удаленные безусловные рефлексы
 
     /// <summary>
     /// Удаляет ссылки на безусловный рефлекс из дерева рефлексов (оптимизированная версия)
@@ -949,6 +1004,109 @@ namespace ISIDA.Reflexes
       foreach (var child in node.Children)
       {
         ClearAllReflexesFromNode(child, ref clearedCount);
+      }
+    }
+
+    #endregion
+
+    #region Очистка ссылок на удаленные условные рефлексы
+
+    /// <summary>
+    /// Удаляет ссылки на условный рефлекс из дерева рефлексов
+    /// </summary>
+    public void ClearConditionedReflexReferences(int conditionedReflexId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (conditionedReflexId <= 0) return;
+
+        int removedCount = 0;
+        RemoveConditionedReflexFromNode(ReflexTree, conditionedReflexId, ref removedCount);
+
+        if (removedCount > 0)
+        {
+          SaveReflexTreeInternal();
+          LogInfo($"Удалено {removedCount} ссылок на условный рефлекс ID {conditionedReflexId}");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка удаления ссылок на условный рефлекс: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Удаляет ссылки на несколько условных рефлексов из дерева
+    /// </summary>
+    public void ClearMultipleConditionedReflexReferences(IEnumerable<int> conditionedReflexIds)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (conditionedReflexIds == null) return;
+
+        var reflexIdsSet = new HashSet<int>(conditionedReflexIds.Where(id => id > 0));
+        if (reflexIdsSet.Count == 0) return;
+
+        int removedCount = 0;
+        RemoveMultipleConditionedReflexesFromNode(ReflexTree, reflexIdsSet, ref removedCount);
+
+        if (removedCount > 0)
+        {
+          SaveReflexTreeInternal();
+          LogInfo($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} условных рефлексов");
+        }
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка удаления множественных ссылок на условные рефлексы: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно удаляет ссылки на условный рефлекс из узла и его дочерних узлов
+    /// </summary>
+    private void RemoveConditionedReflexFromNode(ReflexNode node, int conditionedReflexId, ref int removedCount)
+    {
+      if (node == null) return;
+
+      if (node.ConditionedReflex == conditionedReflexId)
+      {
+        node.ConditionedReflex = 0;
+        removedCount++;
+      }
+
+      foreach (var child in node.Children)
+      {
+        RemoveConditionedReflexFromNode(child, conditionedReflexId, ref removedCount);
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивно удаляет ссылки на несколько условных рефлексов из узла и его дочерних узлов
+    /// </summary>
+    private void RemoveMultipleConditionedReflexesFromNode(ReflexNode node, HashSet<int> conditionedReflexIds, ref int removedCount)
+    {
+      if (node == null) return;
+
+      if (conditionedReflexIds.Contains(node.ConditionedReflex))
+      {
+        node.ConditionedReflex = 0;
+        removedCount++;
+      }
+
+      foreach (var child in node.Children)
+      {
+        RemoveMultipleConditionedReflexesFromNode(child, conditionedReflexIds, ref removedCount);
       }
     }
 
@@ -1220,6 +1378,13 @@ namespace ISIDA.Reflexes
           _geneticReflexesSystem.GeneticReflexDeleted -= OnGeneticReflexDeleted;
           _geneticReflexesSystem.GeneticReflexCreated -= OnGeneticReflexCreated;
           _geneticReflexesSystem.MultipleGeneticReflexesDeleted -= OnMultipleGeneticReflexesDeleted;
+        }
+
+        if (_conditionedReflexesSystem != null)
+        {
+          _conditionedReflexesSystem.ConditionedReflexCreated -= OnConditionedReflexCreated;
+          _conditionedReflexesSystem.ConditionedReflexDeleted -= OnConditionedReflexDeleted;
+          _conditionedReflexesSystem.MultipleConditionedReflexesDeleted -= OnMultipleConditionedReflexesDeleted;
         }
 
         SaveReflexesAttributes();

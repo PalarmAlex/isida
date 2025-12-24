@@ -351,8 +351,6 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
-        bool fullMatchFound = _reflexTree.DetectedLevel == 2;
-
         bool psychicBlocked = false;
         if (psychicBlocked)
         {
@@ -363,13 +361,6 @@ namespace ISIDA.Reflexes
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActivePhrases();
         DeactivateChain();
-
-        if (!fullMatchFound && _reflexTree.DetectedLastNodeID > 0)
-        {
-          _conditionedReflexesToRun.Clear();
-          _conditionedReflexesToRun.Add(-1);
-        }
-
         ExecuteReflexes(pulseCount);
 
         if (_activeConditionReflexID != 0)
@@ -379,6 +370,10 @@ namespace ISIDA.Reflexes
           _activeGlobalCurTriggerStimulusID = 0;
           _activeConditionReflexID = 0;
         }
+      }
+      catch (Exception ex)
+      {
+        LogError($"ActiveFromPhrase: {ex.Message}");
       }
       finally
       {
@@ -397,8 +392,7 @@ namespace ISIDA.Reflexes
       if (_isChainActive)
         return;
 
-      if ((_geneticReflexesToRun.Contains(-1) || _conditionedReflexesToRun.Contains(-1)) &&
-         _reflexTree.DetectedLevel < 2)
+      if (_geneticReflexesToRun.Contains(-1) && _reflexTree.DetectedLevel < 2)
       {
         // Пропускаем сбор рефлексов, сразу выполняем рефлекс по умолчанию
         var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
@@ -413,7 +407,7 @@ namespace ISIDA.Reflexes
       CollectReflexesForExecution();
 
       // если установлен рефлекс по умочанию - запускаем его
-      if (_geneticReflexesToRun[0] == -1)
+      if (_geneticReflexesToRun.Any() && _geneticReflexesToRun[0] == -1)
       {
         var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
         if (result.Success)
@@ -465,7 +459,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка запуска рефлекса: {ex.Message}");
+        LogError($"ExecuteReflexes: {ex.Message}");
       }
     }
 
@@ -530,8 +524,6 @@ namespace ISIDA.Reflexes
           _activeChainId = chainId;
           LogInfo($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса {startReflexId}, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
-
-          LogInfo($"Pulse: {pulseCount}, _activeCurBaseID: {_activeCurBaseID} _activeCurBaseStyleID: {_activeCurBaseStyleID}");
         }
         else
           LogError($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
@@ -725,14 +717,14 @@ namespace ISIDA.Reflexes
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
       if (detectedNode == null) return;
 
-      if (detectedNode.IsChainNode)
+      // только если это не условный рефлекс
+      if (detectedNode.IsChainNode && detectedNode.ConditionedReflex == 0)
       {
         // Цепочка будет обработана в ExecuteReflexes()
         // Собираем только стартовый рефлекс
-        if (detectedNode.ConditionedReflex > 0)
-          _conditionedReflexesToRun.Add(detectedNode.ConditionedReflex);
-        else if (detectedNode.GeneticReflexID > 0)
+        if (detectedNode.GeneticReflexID > 0)
           _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
+
         return;
       }
 
@@ -760,7 +752,7 @@ namespace ISIDA.Reflexes
         var reflex = _conditionedReflexes.GetAllConditionedReflexes()
             .FirstOrDefault(r => r.Id == node.ConditionedReflex);
         if (reflex != null && reflex.CanBeActivated() &&
-            IsReflexConditionsMet(reflex, checkTrigger: true)) // Добавлен параметр
+            IsReflexConditionsMet(reflex))
           _conditionedReflexesToRun.Add(node.ConditionedReflex);
       }
     }
@@ -774,7 +766,7 @@ namespace ISIDA.Reflexes
       {
         var reflex = _geneticReflexes.GetAllGeneticReflexes()
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
-        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: true))
+        if (reflex != null && IsReflexConditionsMet(reflex))
           _geneticReflexesToRun.Add(node.GeneticReflexID);
       }
     }
@@ -784,35 +776,20 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void CollectReflexesWithoutTrigger(ReflexTreeSystem.ReflexNode node)
     {
-      // Проверяем генетические рефлексы без триггера
       if (node.GeneticReflexID > 0)
       {
         var reflex = _geneticReflexes.GetAllGeneticReflexes()
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
 
-        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: false))
-        {
+        if (reflex != null && IsReflexConditionsMet(reflex))
           _geneticReflexesToRun.Add(node.GeneticReflexID);
-        }
-      }
-
-      // Проверяем условные рефлексы без триггера
-      if (node.ConditionedReflex > 0)
-      {
-        var reflex = _conditionedReflexes.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == node.ConditionedReflex);
-
-        if (reflex != null && IsReflexConditionsMet(reflex, checkTrigger: false))
-        {
-          _conditionedReflexesToRun.Add(node.ConditionedReflex);
-        }
       }
     }
 
     /// <summary>
     /// Проверка условий для безусловного рефлекса (с поддержкой активации без триггера)
     /// </summary>
-    private bool IsReflexConditionsMet(GeneticReflex reflex, bool checkTrigger = true)
+    private bool IsReflexConditionsMet(GeneticReflex reflex)
     {
       // Проверка Level1 - базовое состояние
       if (reflex.Level1 != _activeCurBaseID)
@@ -831,8 +808,8 @@ namespace ISIDA.Reflexes
           return false;
       }
 
-      // Проверка Level3 - пусковые стимулы (только если checkTrigger = true)
-      if (checkTrigger && reflex.Level3 != null && reflex.Level3.Any())
+      // Проверка Level3 - пусковые стимулы
+      if (reflex.Level3 != null && reflex.Level3.Any())
       {
         // Получаем текущие активные воздействия
         var currentTriggers = GetCurrentTriggerActionIDs();
@@ -849,9 +826,9 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверка условий для условного рефлекса (с поддержкой активации без триггера)
+    /// Проверка условий для условного рефлекса
     /// </summary>
-    private bool IsReflexConditionsMet(ConditionedReflexesSystem.ConditionedReflex reflex, bool checkTrigger = true)
+    private bool IsReflexConditionsMet(ConditionedReflexesSystem.ConditionedReflex reflex)
     {
       // Проверка Level1 - базовое состояние
       if (reflex.Level1 != _activeCurBaseID)
@@ -869,18 +846,9 @@ namespace ISIDA.Reflexes
           !currentStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
         return false;
 
-      // Проверка Level3 - пусковой стимул (только если checkTrigger = true)
-      if (checkTrigger)
-      {
-        if (reflex.Level3 != _activeCurTriggerStimulusID)
-          return false;
-      }
-      else
-      {
-        // Для рефлексов без триггера Level3 должен быть 0
-        if (reflex.Level3 != 0)
-          return false;
-      }
+      // Проверка Level3 - пусковой стимул
+      if (reflex.Level3 != _activeCurTriggerStimulusID)
+        return false;
 
       return true;
     }

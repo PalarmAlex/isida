@@ -364,6 +364,7 @@ namespace ISIDA.Common
         initializationStep = 11;
         ReflexTreeSystem.InitializeInstance(
             context.GeneticReflexes,
+            context.ConditionedReflexes,
             context.PerceptionImages,
             context.ReflexChains);
         context.ReflexTree = ReflexTreeSystem.Instance;

@@ -39,8 +39,8 @@ namespace ISIDA.Common
         case "ActivationThreshold":
           return ValidateActivationThreshold((float)value);
 
-        case "TimeWindowMs":
-          return ValidateTimeWindowMs((int)value);
+        case "TimeWindowPulses":
+          return ValidateTimeWindowPulses((int)value);
 
         case "MinAssociationStrength":
           return ValidateMinAssociationStrength((float)value);
