@@ -888,6 +888,22 @@ namespace ISIDA.Reflexes
       return Math.Abs(pulse1 - pulse2) <= timeWindowPulses;
     }
 
+    /// <summary>
+    /// Получает настройки временного окна корреляции
+    /// </summary>
+    public int GetTimeWindowPulses()
+    {
+      return _settings.TimeWindowPulses;
+    }
+
+    /// <summary>
+    /// Получает минимальную крепость связи
+    /// </summary>
+    public float GetMinAssociationStrength()
+    {
+      return _settings.MinAssociationStrength;
+    }
+
     #endregion
 
     #region Валидация

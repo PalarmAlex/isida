@@ -99,6 +99,7 @@
     <Compile Include="Gomeostas\ValidationService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
+    <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />
     <Compile Include="Reflexes\PerceptionImagesSystem.cs" />
     <Compile Include="Reflexes\ReflexChainsSystem.cs" />

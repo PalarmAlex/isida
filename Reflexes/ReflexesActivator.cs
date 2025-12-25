@@ -23,7 +23,7 @@ namespace ISIDA.Reflexes
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
     private ResearchLogger _researchLogger;
-
+    
     #region Инициализация
 
     private static ReflexesActivator _instance;
@@ -50,12 +50,13 @@ namespace ISIDA.Reflexes
         ReflexTreeSystem reflexTree,
         ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
-        AdaptiveActionsSystem adaptiveActions)
+        AdaptiveActionsSystem adaptiveActions,
+        ConditionedReflexFormationService reflexFormationService)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexesActivator уже инициализирован.");
 
-      _instance = new ReflexesActivator(gomeostas, geneticReflexes, conditionedReflexes, influenceActions, reflexTree, reflexChainsSystem, reflexExecution, adaptiveActions);
+      _instance = new ReflexesActivator(gomeostas, geneticReflexes, conditionedReflexes, influenceActions, reflexTree, reflexChainsSystem, reflexExecution, adaptiveActions, reflexFormationService);
     }
 
     private readonly GomeostasSystem _gomeostas;
@@ -66,6 +67,7 @@ namespace ISIDA.Reflexes
     private readonly ReflexExecutionService _reflexExecutionService;
     private readonly AdaptiveActionsSystem _adaptiveActions;
     private readonly ReflexChainsSystem _reflexChainsSystem;
+    private readonly ConditionedReflexFormationService _reflexFormationService;
 
     private ReflexesActivator(
         GomeostasSystem gomeostas,
@@ -75,7 +77,8 @@ namespace ISIDA.Reflexes
         ReflexTreeSystem reflexTree,
         ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
-        AdaptiveActionsSystem adaptiveActions)
+        AdaptiveActionsSystem adaptiveActions,
+        ConditionedReflexFormationService reflexFormationService)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _geneticReflexes = geneticReflexes ?? throw new ArgumentNullException(nameof(geneticReflexes));
@@ -85,6 +88,7 @@ namespace ISIDA.Reflexes
       _reflexChainsSystem = reflexChainsSystem ?? throw new ArgumentNullException(nameof(reflexChainsSystem));
       _reflexExecutionService = reflexExecution ?? throw new ArgumentNullException(nameof(reflexExecution));
       _adaptiveActions = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));
+      _reflexFormationService = reflexFormationService ?? throw new ArgumentNullException(nameof(reflexFormationService));
 
       _reflexActionDuration = _adaptiveActions.ReflexActionDisplayDuration;
 
@@ -251,8 +255,33 @@ namespace ISIDA.Reflexes
           if (pulseCount > _weitPulceCount + _reflexActionDuration)
             ActiveFromConditionChange(pulseCount);
         }
-
         CleanupOldTriggers(pulseCount);
+      }
+      ProcessConditionedReflexFormation(pulseCount);
+    }
+
+    /// <summary>
+    /// Обработка формирования условных рефлексов на каждом пульсе
+    /// </summary>
+    private void ProcessConditionedReflexFormation(int pulseCount)
+    {
+      if (_isSleeping) return;
+      if (_gomeostas.GetAgentState().EvolutionStage < 1) return;
+
+      try
+      {
+        // Получаем текущий стимул
+        int currentStimulus = _activeCurTriggerStimulusID;
+        if (currentStimulus > 0)
+          _reflexFormationService.ProcessStimulus(pulseCount, currentStimulus);
+
+        // Очистка устаревших рефлексов (раз в 100 пульсов)
+        if (pulseCount % 100 == 0)
+          _reflexFormationService.CleanupOldReflexes(pulseCount);
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка формирования условных рефлексов: {ex.Message}");
       }
     }
 
@@ -297,6 +326,18 @@ namespace ISIDA.Reflexes
         _weitPulceCount = pulseCount;
         UpdateCurrentStates();
         GetActiveTriggerStimulusImage();
+
+        if (_activeCurReflexTriggerStimulusID > 0)
+        {
+          var actions = _reflexExecutionService.GetActionsForReflex(_activeGeneticReflexID, false);
+          _reflexFormationService.RecordStimulus(
+              pulseCount,
+              _activeCurReflexTriggerStimulusID,
+              _activeCurBaseID,
+              _activeCurBaseStyleID,
+              actions);
+        }
+
         var conditions = GetCurrentGeneticConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
@@ -359,6 +400,7 @@ namespace ISIDA.Reflexes
         }
 
         _chainCooldownUntilPulse = 0;
+        _adaptiveActions.ClearActiveAction();
         _adaptiveActions.ClearActivePhrases();
         DeactivateChain();
         ExecuteReflexes(pulseCount);

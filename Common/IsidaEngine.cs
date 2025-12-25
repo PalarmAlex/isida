@@ -218,6 +218,11 @@ namespace ISIDA.Common
     public ReflexExecutionService ReflexExecution { get; internal set; }
 
     /// <summary>
+    /// Сервис формирования условных рефлексов на основе временных корреляций
+    /// </summary>
+    public ConditionedReflexFormationService ConditionedReflexFormation { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -245,6 +250,7 @@ namespace ISIDA.Common
         ReflexTree != null &&
         ReflexChains != null &&
         ReflexExecution != null &&
+        ConditionedReflexFormation != null &&
         ResearchLogger != null;
   }
 
@@ -378,8 +384,18 @@ namespace ISIDA.Common
             context.ConditionedReflexes);
         context.ReflexExecution = ReflexExecutionService.Instance;
 
-        // Шаг 13: Активатор рефлексов
+        // Шаг 13: Сервис формирования условных рефлексов на основе временных корреляций
         initializationStep = 13;
+        ConditionedReflexFormationService.InitializeInstance(
+            context.Gomeostas,
+            context.GeneticReflexes,
+            context.ConditionedReflexes,
+            context.PerceptionImages,
+            context.AdaptiveActions);
+        context.ConditionedReflexFormation = ConditionedReflexFormationService.Instance;
+
+        // Шаг 14: Активатор рефлексов
+        initializationStep = 14;
         ReflexesActivator.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
@@ -388,11 +404,12 @@ namespace ISIDA.Common
             context.ReflexTree,
             context.ReflexChains,
             context.ReflexExecution,
-            context.AdaptiveActions);
+            context.AdaptiveActions,
+            context.ConditionedReflexFormation);
         context.ReflexesActivator = ReflexesActivator.Instance;
 
-        // Шаг 14: Логирование и глобальный таймер
-        initializationStep = 14;
+        // Шаг 15: Логирование и глобальный таймер
+        initializationStep = 15;
         context.ResearchLogger = new ResearchLogger(
             context.Gomeostas,
             context.PerceptionImages,

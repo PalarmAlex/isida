@@ -57,6 +57,27 @@ namespace ISIDA.Common
     private static GomeostasSystem _gomeostas;
     private static AdaptiveActionsSystem _actionsSystem;
     private static ReflexesActivator _reflexesActivator;
+    private static ConditionedReflexesSystem _conditionedReflexesSystem;
+    private static ConditionedReflexFormationService _reflexFormationService;
+
+    private static bool HasConditionedReflexesSystem => _conditionedReflexesSystem != null;
+    private static bool HasReflexFormationService => _reflexFormationService != null;
+
+    /// <summary>
+    /// Установка зависимости для _conditionedReflexesSystem
+    /// </summary>
+    public static void SetConditionedReflexesSystem(ConditionedReflexesSystem system)
+    {
+      _conditionedReflexesSystem = system ?? throw new ArgumentNullException(nameof(system));
+    }
+
+    /// <summary>
+    /// Установка зависимости для _reflexFormationService
+    /// </summary>
+    public static void SetReflexFormationService(ConditionedReflexFormationService service)
+    {
+      _reflexFormationService = service ?? throw new ArgumentNullException(nameof(service));
+    }
 
     #endregion
 
@@ -419,6 +440,21 @@ namespace ISIDA.Common
           return;
         }
 
+        // Увеличение времени жизни в пульсах для условных рефлексов
+        if (!agentState.IsDead && HasConditionedReflexesSystem)
+        {
+          try
+          {
+            _conditionedReflexesSystem.IncrementPulse();
+          }
+          catch (Exception conditionedEx)
+          {
+            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в IncrementPulse: {conditionedEx.Message}");
+            // Важно: НЕ сбрасываем _conditionedReflexesSystem в null при ошибке,
+            // так как это может быть временной проблемой
+          }
+        }
+
         if (!agentState.IsSleeping)
         {
           try
@@ -429,6 +465,21 @@ namespace ISIDA.Common
           {
             Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в ProcessReflexPulse: {reflexEx.Message}");
             // Продолжаем выполнение, даже если рефлексы сломались
+          }
+        }
+
+        // периодическая очистка условных рефлексов
+        if (!agentState.IsDead && !agentState.IsSleeping &&
+            HasReflexFormationService &&
+            GlobalPulsCount % 100 == 0)
+        {
+          try
+          {
+            _reflexFormationService.CleanupOldReflexes(GlobalPulsCount);
+          }
+          catch (Exception cleanupEx)
+          {
+            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка очистки рефлексов: {cleanupEx.Message}");
           }
         }
 
