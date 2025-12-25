@@ -14,7 +14,7 @@ namespace ISIDA.Common
     internal static class FileHeaders
     {
       // Условные рефлексы
-      public const string ConditionedReflexesFormat = "# ID|Name|Description|Level1|Level2|Level3|AdaptiveActions|Rank|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId";
+      public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AdaptiveActions|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId";
       public const string ConditionedReflexesLevel1 = "# Level1: -1:Плохо, 0:Норма, 1:Хорошо";
       public const string ConditionedReflexesLevel2 = "# Level2: id1,id2,id3 (образ стилей поведения)";
       public const string ConditionedReflexesLevel3 = "# Level3: ID образа пускового стимула";

@@ -138,7 +138,6 @@ namespace ISIDA.Reflexes
       private float _activationThreshold = 0.6f;
       private int _timeWindowPulses = 5;
       private float _minAssociationStrength = 0.1f;
-      private int _maxRank = 10;
       private int _baseInactivationTime = 1000;
 
       /// <summary>
@@ -170,11 +169,6 @@ namespace ISIDA.Reflexes
       /// Адаптивные действия рефлекса
       /// </summary>
       public List<int> AdaptiveActions { get; set; } = new List<int>();
-
-      /// <summary>
-      /// Ранг рефлекса (число цепочки родителей)
-      /// </summary>
-      public int Rank { get; set; }
 
       /// <summary>
       /// Крепость ассоциативной связи. [0, 1]
@@ -297,21 +291,6 @@ namespace ISIDA.Reflexes
           if (!validation.isValid)
             throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
           _minAssociationStrength = value;
-        }
-      }
-
-      /// <summary>
-      /// Максимальный ранг рефлекса (1-50)
-      /// </summary>
-      public int MaxRank
-      {
-        get => _maxRank;
-        set
-        {
-          var validation = SettingsValidator.ValidateMaxRank(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _maxRank = value;
         }
       }
 
@@ -553,15 +532,14 @@ namespace ISIDA.Reflexes
         List<int> level2,
         int level3,
         List<int> adaptiveActions,
-        int sourceGeneticReflexId,
-        int rank = 0)
+        int sourceGeneticReflexId)
     {
       if (_gomeostas.GetAgentState().EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
       var warnings = new List<string>();
 
-      var validationResult = ValidateConditionedReflexParameters(level1, level2, level3, adaptiveActions, rank);
+      var validationResult = ValidateConditionedReflexParameters(level1, level2, level3, adaptiveActions);
       if (!validationResult.IsValid)
       {
         warnings.Add(validationResult.ErrorMessage);
@@ -574,8 +552,7 @@ namespace ISIDA.Reflexes
         Level1 = level1,
         Level2 = level2?.OrderBy(x => x).ToList() ?? new List<int>(),
         Level3 = level3,
-        AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>(),
-        Rank = rank
+        AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
       };
 
       _lock.EnterReadLock();
@@ -607,7 +584,6 @@ namespace ISIDA.Reflexes
           Level2 = level2 ?? new List<int>(),
           Level3 = level3,
           AdaptiveActions = adaptiveActions ?? new List<int>(),
-          Rank = rank,
           AssociationStrength = _settings.MinAssociationStrength + 0.1f,
           LastActivation = _currentPulseCount,
           BirthTime = _currentPulseCount,
@@ -719,12 +695,9 @@ namespace ISIDA.Reflexes
           }
         }
 
-        // Сортировка по рангу и крепости связи
+        // Сортировка только по крепости связи
         _activeConditionedReflexes.Sort((a, b) =>
-        {
-          int rankCompare = b.Rank.CompareTo(a.Rank);
-          return rankCompare != 0 ? rankCompare : b.AssociationStrength.CompareTo(a.AssociationStrength);
-        });
+            b.AssociationStrength.CompareTo(a.AssociationStrength));
       }
       finally
       {
@@ -923,8 +896,7 @@ namespace ISIDA.Reflexes
         int level1,
         List<int> level2,
         int level3,
-        List<int> adaptiveActions,
-        int rank)
+        List<int> adaptiveActions)
     {
       // Проверка Level1
       var validBaseStates = new[] { -1, 0, 1 };
@@ -935,10 +907,6 @@ namespace ISIDA.Reflexes
       var perceptionImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
       if (!perceptionImages.Any(img => img.Id == level3))
         return (false, $"Level3 (ID образа восприятия {level3}) не найден");
-
-      // Проверка ранга
-      if (rank < 0 || rank > _settings.MaxRank)
-        return (false, $"Ранг должен быть в диапазоне 0-{_settings.MaxRank}");
 
       return (true, string.Empty);
     }
@@ -989,7 +957,7 @@ namespace ISIDA.Reflexes
               continue;
 
             var parts = line.Split('|');
-            if (parts.Length < 9)
+            if (parts.Length < 8)
               continue;
 
             if (!int.TryParse(parts[0], out int id))
@@ -1002,11 +970,10 @@ namespace ISIDA.Reflexes
               Level2 = ParseIntList(parts[2]),
               Level3 = int.Parse(parts[3]),
               AdaptiveActions = ParseIntList(parts[4]),
-              Rank = int.Parse(parts[5]),
-              AssociationStrength = float.Parse(parts[6]),
-              LastActivation = int.Parse(parts[7]),
-              BirthTime = int.Parse(parts[8]),
-              SourceGeneticReflexId = parts.Length > 11 ? int.Parse(parts[9]) : 0
+              AssociationStrength = float.Parse(parts[5]),
+              LastActivation = int.Parse(parts[6]),
+              BirthTime = int.Parse(parts[7]),
+              SourceGeneticReflexId = parts.Length > 8 ? int.Parse(parts[8]) : 0
             };
 
             _conditionedReflexes[id] = reflex;
@@ -1030,7 +997,10 @@ namespace ISIDA.Reflexes
       string filePath = GetConditionedReflexSettingsFilePath();
 
       if (!File.Exists(filePath))
+      {
+        SaveConditionedReflexSettings(); // создаем файл настроек по умолчанию
         return;
+      }
 
       try
       {
@@ -1059,9 +1029,6 @@ namespace ISIDA.Reflexes
               break;
             case "TimeWindowPulses":
               _settings.TimeWindowPulses = int.Parse(value);
-              break;
-            case "MaxRank":
-              _settings.MaxRank = int.Parse(value);
               break;
             case "MaxInactivationTime":
               _settings.MaxInactivationTime = int.Parse(value);
@@ -1096,7 +1063,7 @@ namespace ISIDA.Reflexes
         {
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|{reflex.Level3}|" +
-                   $"{string.Join(",", reflex.AdaptiveActions)}|{reflex.Rank}|" +
+                   $"{string.Join(",", reflex.AdaptiveActions)}|" +
                    $"{reflex.AssociationStrength}|{reflex.LastActivation}|" +
                    $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}");
         }
@@ -1104,7 +1071,7 @@ namespace ISIDA.Reflexes
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexesFilePath(),
             lines,
-            content => true, // Упрощенная валидация
+            content => true,
             minLinesCount: 2,
             fileDescription: "условных рефлексов");
 
@@ -1134,7 +1101,6 @@ namespace ISIDA.Reflexes
             "# DecayRate: коэффициент затухания η (0.95-0.99)",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
             "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
-            "# MaxRank: максимальный ранг рефлекса",
             "# MaxInactivationTime: время жизни без активации (пульсы)"
           };
 
@@ -1142,7 +1108,6 @@ namespace ISIDA.Reflexes
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
         lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
-        lines.Add($"MaxRank={_settings.MaxRank}");
         lines.Add($"MaxInactivationTime={_settings.MaxInactivationTime}");
 
         var result = FileValidator.SafeSaveFile(

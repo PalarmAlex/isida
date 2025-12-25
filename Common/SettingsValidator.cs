@@ -45,9 +45,6 @@ namespace ISIDA.Common
         case "MinAssociationStrength":
           return ValidateMinAssociationStrength((float)value);
 
-        case "MaxRank":
-          return ValidateMaxRank((int)value);
-
         case "MaxInactivationTime":
           return ValidateMaxInactivationTime((int)value);
 
@@ -146,16 +143,6 @@ namespace ISIDA.Common
       const string paramName = "Минимальная крепость связи";
       const string range = "[0.01:0.3]";
       return ValidateValueCustom(value, paramName, 0.01f, 0.3f, range);
-    }
-
-    /// <summary>
-    /// Валидация максимального ранга рефлекса
-    /// </summary>
-    public static (bool isValid, string errorMessage) ValidateMaxRank(int? value)
-    {
-      const string paramName = "Максимальный ранг рефлекса";
-      const string range = "[1:50]";
-      return ValidateValueCustom(value, paramName, 1, 50, range);
     }
 
     /// <summary>
