@@ -3,8 +3,14 @@ using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
+using System.Diagnostics;
 using System.IO;
+using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.ResearchLogger;
+using static ISIDA.Reflexes.ConditionedReflexesSystem;
+using static ISIDA.Reflexes.GeneticReflexesSystem;
+using static ISIDA.Reflexes.PerceptionImagesSystem;
+using static ISIDA.Reflexes.ReflexChainsSystem;
 
 namespace ISIDA.Common
 {
@@ -227,12 +233,69 @@ namespace ISIDA.Common
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
 
+    private bool _disposed = false;
     /// <summary>
     /// Освобождает ресурсы, используемые контекстом ISIDA
     /// </summary>
     public void Dispose()
     {
-      ResearchLogger?.Dispose();
+      if (_disposed) return;
+
+      Debug.WriteLine("[IsidaContext] Начинается безопасное освобождение ресурсов...");
+
+      int disposedCount = 0;
+      int errorCount = 0;
+
+      try
+      {
+        // Список систем в правильном порядке освобождения
+        var systems = new (string Name, IDisposable System)[]
+        {
+            ("ResearchLogger", ResearchLogger),
+            ("ReflexesActivator", ReflexesActivator),
+            ("ConditionedReflexFormation", ConditionedReflexFormation),
+            ("ReflexExecution", ReflexExecution),
+            ("ReflexTree", ReflexTree),
+            ("ReflexChains", ReflexChains),
+            ("ConditionedReflexes", ConditionedReflexes),
+            ("PerceptionImages", PerceptionImages),
+            ("SensorySystem", SensorySystem),
+            ("InfluenceActions", InfluenceActions),
+            ("AdaptiveActions", AdaptiveActions),
+            ("GeneticReflexes", GeneticReflexes),
+            ("Gomeostas", Gomeostas)
+        };
+
+        foreach (var system in systems)
+        {
+          try
+          {
+            if (system.System != null)
+            {
+              system.System.Dispose();
+              disposedCount++;
+              Debug.WriteLine($"[IsidaContext] ✓ {system.Name} освобожден");
+            }
+          }
+          catch (ObjectDisposedException)
+          {
+            // Игнорируем - объект уже был освобожден
+            Debug.WriteLine($"[IsidaContext] - {system.Name} уже освобожден");
+          }
+          catch (Exception ex)
+          {
+            errorCount++;
+            Debug.WriteLine($"[IsidaContext] ✗ Ошибка освобождения {system.Name}: {ex.Message}");
+          }
+        }
+
+        Debug.WriteLine($"[IsidaContext] Результат: {disposedCount} успешно, {errorCount} ошибок");
+      }
+      finally
+      {
+        _disposed = true;
+        Debug.WriteLine($"[IsidaContext] Освобождение завершено");
+      }
     }
 
     /// <summary>

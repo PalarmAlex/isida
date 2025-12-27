@@ -327,17 +327,6 @@ namespace ISIDA.Reflexes
         UpdateCurrentStates();
         GetActiveTriggerStimulusImage();
 
-        if (_activeCurReflexTriggerStimulusID > 0)
-        {
-          var actions = _reflexExecutionService.GetActionsForReflex(_activeGeneticReflexID, false);
-          _reflexFormationService.RecordStimulus(
-              pulseCount,
-              _activeCurReflexTriggerStimulusID,
-              _activeCurBaseID,
-              _activeCurBaseStyleID,
-              actions);
-        }
-
         var conditions = GetCurrentGeneticConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
@@ -364,6 +353,22 @@ namespace ISIDA.Reflexes
 
         if (_activeGeneticReflexID != 0)
         {
+          if (_activeCurReflexTriggerStimulusID > 0)
+          {
+            var reflex = _geneticReflexes.GetAllGeneticReflexesList()
+                .FirstOrDefault(r => r.Id == _activeGeneticReflexID);
+
+            var actions = reflex?.AdaptiveActions?.ToList() ?? new List<int>();
+
+            _reflexFormationService.RecordStimulusWithReflex(
+                pulseCount,
+                _activeCurReflexTriggerStimulusID,
+                _activeCurBaseID,
+                _activeCurBaseStyleID,
+                _activeGeneticReflexID,
+                actions);
+          }
+
           _researchLogger.LogSystemState(pulseCount);
           // чтобы не попало в логи на следующем пульсе
           _activeGlobalCurTriggerStimulusID = 0;
@@ -421,6 +426,16 @@ namespace ISIDA.Reflexes
       {
 
       }
+    }
+
+    private List<int> GetActionsForActiveGeneticReflex()
+    {
+      if (_activeGeneticReflexID <= 0) return new List<int>();
+
+      var reflex = _geneticReflexes.GetAllGeneticReflexesList()
+          .FirstOrDefault(r => r.Id == _activeGeneticReflexID);
+
+      return reflex?.AdaptiveActions?.ToList() ?? new List<int>();
     }
 
     // Выполнение рефлексов

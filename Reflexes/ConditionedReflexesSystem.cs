@@ -103,7 +103,6 @@ namespace ISIDA.Reflexes
       _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
 
-      // Подписываемся на события удаления
       _gomeostas.StyleDeleted += OnStyleDeleted;
       var adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
       adaptiveActionsSystem.AdaptiveActionDeleted += OnAdaptiveActionDeleted;
@@ -408,11 +407,6 @@ namespace ISIDA.Reflexes
       /// Временное окно корреляции τ (пульсов)
       /// </summary>
       public int TimeWindowPulses { get; set; } = 5;
-
-      /// <summary>
-      /// Максимальный ранг рефлекса
-      /// </summary>
-      public int MaxRank { get; set; } = 10;
 
       /// <summary>
       /// Время жизни рефлекса без активации (в пульсах)

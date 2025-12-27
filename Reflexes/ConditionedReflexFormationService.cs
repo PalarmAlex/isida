@@ -102,6 +102,11 @@ namespace ISIDA.Reflexes
       /// Связанные действия (для безусловных рефлексов)
       /// </summary>
       public List<int> AssociatedActions { get; set; } = new List<int>();
+
+      /// <summary>
+      /// ID исходного безусловного рефлекса
+      /// </summary>
+      public int GeneticReflexId { get; set; }
     }
 
     // История стимулов (циклический буфер)
@@ -252,7 +257,6 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        // Получаем все условные рефлексы с таким же Level3 (стимулом)
         var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
             .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
             .ToList();
@@ -261,43 +265,45 @@ namespace ISIDA.Reflexes
 
         foreach (var existingReflex in existingReflexes)
         {
-          // Проверяем, совпадают ли условия (Level1 и Level2)
           if (existingReflex.Level1 == conditionedStimulus.BaseState &&
               existingReflex.Level2.OrderBy(x => x).SequenceEqual(GetCurrentStyleIds().OrderBy(x => x)))
           {
-            // Усиливаем существующий рефлекс
             _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
             foundMatchingReflex = true;
-            LogInfo($"Усилен условный рефлекс ID={existingReflex.Id} " +
-                   $"для стимула {conditionedStimulus.StimulusImageId}");
+            LogInfo($"Усилен условный рефлекс ID={existingReflex.Id}");
             break;
           }
         }
 
-        // Если подходящего рефлекса не найдено, создаем новый
         if (!foundMatchingReflex)
         {
-          // Получаем ID безусловного рефлекса (если есть)
-          int sourceGeneticReflexId = FindGeneticReflexId(unconditionedStimulus);
+          List<int> adaptiveActions = new List<int>();
 
-          // Создаем новый условный рефлекс
+          if (unconditionedStimulus.GeneticReflexId > 0)
+          {
+            var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
+                .FirstOrDefault(r => r.Id == unconditionedStimulus.GeneticReflexId);
+
+            if (geneticReflex != null)
+              adaptiveActions = geneticReflex.AdaptiveActions?.ToList() ?? new List<int>();
+          }
+          else
+            adaptiveActions = unconditionedStimulus.AssociatedActions.ToList();
+
           var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
               level1: conditionedStimulus.BaseState,
               level2: GetCurrentStyleIds(),
               level3: conditionedStimulus.StimulusImageId,
-              adaptiveActions: unconditionedStimulus.AssociatedActions,
-              sourceGeneticReflexId: sourceGeneticReflexId);
+              adaptiveActions: adaptiveActions,
+              sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId);
 
           if (newReflexId > 0)
-          {
-            LogInfo($"Создан новый условный рефлекс ID={newReflexId}: " +
-                   $"{conditionedStimulus.StimulusImageId} → {string.Join(",", unconditionedStimulus.AssociatedActions)}");
-          }
+            LogInfo($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
         }
       }
       catch (Exception ex)
       {
-        LogError($"[ProcessConditionedAssociation]. Ошибка обработки ассоциации: {ex.Message}");
+        LogError($"[ProcessConditionedAssociation]. Ошибка: {ex.Message}");
       }
     }
 
@@ -315,49 +321,76 @@ namespace ISIDA.Reflexes
     /// </summary>
     private List<int> GetActionsForStimulus(int stimulusImageId)
     {
+      var currentStyleIds = GetCurrentStyleIds();
       var actions = new List<int>();
 
       try
       {
-        // Ищем безусловный рефлекс для этого стимула
         var allGeneticReflexes = _geneticReflexes.GetAllGeneticReflexesList();
 
         foreach (var reflex in allGeneticReflexes)
         {
-          // Проверяем, содержит ли рефлекс этот стимул в Level3
+          if (reflex.Level2 != null && reflex.Level2.Any())
+          {
+            if (!reflex.Level2.All(styleId => currentStyleIds.Contains(styleId)))
+              continue;
+          }
+
           if (reflex.Level3 != null && reflex.Level3.Contains(stimulusImageId))
           {
-            actions.AddRange(reflex.AdaptiveActions);
+            if (reflex.AdaptiveActions != null)
+              actions.AddRange(reflex.AdaptiveActions);
           }
         }
       }
       catch (Exception ex)
       {
-        LogError($"[GetActionsForStimulus]. Ошибка получения действий для стимула: {ex.Message}");
+        LogError($"[GetActionsForStimulus]. Ошибка: {ex.Message}");
       }
 
       return actions.Distinct().ToList();
     }
 
     /// <summary>
-    /// Находит ID безусловного рефлекса для стимула
+    /// Добавляет стимул с указанием конкретного безусловного рефлекса
     /// </summary>
-    private int FindGeneticReflexId(StimulusRecord stimulus)
+    public void RecordStimulusWithReflex(int pulse, int stimulusImageId, int baseState,
+        int behaviorStyleImageId, int geneticReflexId, List<int> associatedActions = null)
     {
-      var allGeneticReflexes = _geneticReflexes.GetAllGeneticReflexesList();
-
-      foreach (var reflex in allGeneticReflexes)
+      _lock.EnterWriteLock();
+      try
       {
-        if (reflex.Level1 == stimulus.BaseState &&
-            reflex.Level3 != null &&
-            reflex.Level3.Contains(stimulus.StimulusImageId) &&
-            reflex.AdaptiveActions.SequenceEqual(stimulus.AssociatedActions))
+        // Создаем новую запись
+        var record = new StimulusRecord
         {
-          return reflex.Id;
+          Pulse = pulse,
+          StimulusImageId = stimulusImageId,
+          BaseState = baseState,
+          BehaviorStyleImageId = behaviorStyleImageId,
+          AssociatedActions = associatedActions?.ToList() ?? new List<int>(),
+          GeneticReflexId = geneticReflexId
+        };
+
+        // Добавляем в историю
+        _stimulusHistory.Insert(0, record);
+
+        // Ограничиваем размер истории
+        if (_stimulusHistory.Count > MAX_HISTORY_SIZE)
+        {
+          _stimulusHistory.RemoveRange(MAX_HISTORY_SIZE, _stimulusHistory.Count - MAX_HISTORY_SIZE);
+        }
+
+        // Если есть связанные действия, сохраняем как безусловный стимул
+        if (associatedActions != null && associatedActions.Any())
+        {
+          _lastUnconditionedStimulus = record;
+          LogInfo($"Записан безусловный стимул ID={stimulusImageId} от рефлекса {geneticReflexId} в пульс {pulse}");
         }
       }
-
-      return 0; // Не найден
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     #endregion
