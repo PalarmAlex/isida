@@ -109,47 +109,45 @@ namespace ISIDA.Reflexes
       public int GeneticReflexId { get; set; }
     }
 
-    // История стимулов (циклический буфер)
-    private readonly List<StimulusRecord> _stimulusHistory = new List<StimulusRecord>();
-    private const int MAX_HISTORY_SIZE = 100;
-
     // Последний безусловный стимул
     private StimulusRecord _lastUnconditionedStimulus = null;
 
+    // Последний условный стимул
+    private StimulusRecord _lastConditionedStimulus = null;
+
     /// <summary>
-    /// Добавляет стимул в историю
+    /// Добавление стимула в историю
     /// </summary>
-    public void RecordStimulus(int pulse, int stimulusImageId, int baseState,
-        int behaviorStyleImageId, List<int> associatedActions = null)
+    public void RecordStimulus(
+        int pulse,
+        int stimulusImageId,
+        int baseState,
+        int behaviorStyleImageId,
+        List<int> associatedActions = null,
+        int geneticReflexId = 0)
     {
       _lock.EnterWriteLock();
       try
       {
-        // Создаем новую запись
         var record = new StimulusRecord
         {
           Pulse = pulse,
           StimulusImageId = stimulusImageId,
           BaseState = baseState,
           BehaviorStyleImageId = behaviorStyleImageId,
-          AssociatedActions = associatedActions?.ToList() ?? new List<int>()
+          AssociatedActions = associatedActions?.ToList() ?? new List<int>(),
+          GeneticReflexId = geneticReflexId
         };
 
-        // Добавляем в историю
-        _stimulusHistory.Insert(0, record); // Новые записи в начало
-
-        // Ограничиваем размер истории
-        if (_stimulusHistory.Count > MAX_HISTORY_SIZE)
-        {
-          _stimulusHistory.RemoveRange(MAX_HISTORY_SIZE, _stimulusHistory.Count - MAX_HISTORY_SIZE);
-        }
-
-        // Если это безусловный стимул (есть связанные действия), сохраняем его
-        if (associatedActions != null && associatedActions.Any())
+        // Если это безусловный стимул (есть связанные действия или ID рефлекса), сохраняем его
+        if ((associatedActions != null && associatedActions.Any()) || geneticReflexId > 0)
         {
           _lastUnconditionedStimulus = record;
-          LogInfo($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}");
+          LogInfo($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}, рефлекс={geneticReflexId}");
         }
+        else
+          // Сохраняем как условный стимул
+          _lastConditionedStimulus = record;
       }
       finally
       {
@@ -165,10 +163,17 @@ namespace ISIDA.Reflexes
       _lock.EnterReadLock();
       try
       {
-        return _stimulusHistory
-            .Where(r => (currentPulse - r.Pulse) <= timeWindowPulses)
-            .OrderBy(r => r.Pulse)
-            .ToList();
+        var recentStimuli = new List<StimulusRecord>();
+
+        // Проверяем последний условный стимул
+        if (_lastConditionedStimulus != null && (currentPulse - _lastConditionedStimulus.Pulse) <= timeWindowPulses)
+          recentStimuli.Add(_lastConditionedStimulus);
+
+        // Проверяем последний безусловный стимул
+        if (_lastUnconditionedStimulus != null && (currentPulse - _lastUnconditionedStimulus.Pulse) <= timeWindowPulses)
+          recentStimuli.Add(_lastUnconditionedStimulus);
+
+        return recentStimuli.OrderBy(r => r.Pulse).ToList();
       }
       finally
       {
@@ -186,22 +191,10 @@ namespace ISIDA.Reflexes
     public void ProcessStimulus(int pulse, int stimulusImageId)
     {
       if (_gomeostas.GetAgentState().EvolutionStage < 1)
-        return; // Условные рефлексы только со стадии 1
+        return;
 
       try
       {
-        // Получаем текущие состояния
-        var homeostasisState = _gomeostas.GetHomeostasisState();
-        int baseState = (int)homeostasisState.OverallState;
-        int behaviorStyleImageId = _gomeostas.ActiveBehaviorStyleImageId;
-
-        // Получаем список адаптивных действий для текущего стимула
-        var actions = GetActionsForStimulus(stimulusImageId);
-
-        // Записываем стимул в историю
-        RecordStimulus(pulse, stimulusImageId, baseState, behaviorStyleImageId, actions);
-
-        // Проверяем корреляции с предыдущими стимулами
         CheckTemporalCorrelations(pulse);
       }
       catch (Exception ex)
@@ -215,29 +208,25 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void CheckTemporalCorrelations(int currentPulse)
     {
-      if (_lastUnconditionedStimulus == null)
+      if (_lastUnconditionedStimulus == null || _lastConditionedStimulus == null)
         return;
 
       // Получаем настройки системы
       var settings = _conditionedReflexes.Settings;
       int timeWindow = settings.TimeWindowPulses;
 
-      // Проверяем, находится ли последний безусловный стимул в пределах временного окна
-      if ((currentPulse - _lastUnconditionedStimulus.Pulse) <= timeWindow)
-      {
-        // Получаем все условные стимулы в окне
-        var conditionedStimuli = _stimulusHistory
-            .Where(r => r != _lastUnconditionedStimulus &&
-                        (currentPulse - r.Pulse) <= timeWindow &&
-                        (!r.AssociatedActions.Any() || r.AssociatedActions.Count == 0))
-            .OrderByDescending(r => r.Pulse)
-            .ToList();
+      // Проверяем, находятся ли оба стимула в пределах временного окна
+      bool unconditionedInWindow = (currentPulse - _lastUnconditionedStimulus.Pulse) <= timeWindow;
+      bool conditionedInWindow = (currentPulse - _lastConditionedStimulus.Pulse) <= timeWindow;
 
-        foreach (var conditionedStimulus in conditionedStimuli)
+      if (unconditionedInWindow && conditionedInWindow)
+      {
+        // Проверяем, что условный стимул предшествовал безусловному
+        if (_lastConditionedStimulus.Pulse < _lastUnconditionedStimulus.Pulse)
         {
           // Проверяем, можно ли создать/усилить условный рефлекс
           ProcessConditionedAssociation(
-              conditionedStimulus,
+              _lastConditionedStimulus,
               _lastUnconditionedStimulus,
               currentPulse);
         }
@@ -278,6 +267,7 @@ namespace ISIDA.Reflexes
         if (!foundMatchingReflex)
         {
           List<int> adaptiveActions = new List<int>();
+          List<int> reflexStyles = new List<int>();
 
           if (unconditionedStimulus.GeneticReflexId > 0)
           {
@@ -285,14 +275,20 @@ namespace ISIDA.Reflexes
                 .FirstOrDefault(r => r.Id == unconditionedStimulus.GeneticReflexId);
 
             if (geneticReflex != null)
+            {
               adaptiveActions = geneticReflex.AdaptiveActions?.ToList() ?? new List<int>();
+              reflexStyles = geneticReflex.Level2?.ToList() ?? new List<int>();
+            }
           }
           else
+          {
             adaptiveActions = unconditionedStimulus.AssociatedActions.ToList();
+            reflexStyles = GetCurrentStyleIds();
+          }
 
           var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
               level1: conditionedStimulus.BaseState,
-              level2: GetCurrentStyleIds(),
+              level2: reflexStyles,
               level3: conditionedStimulus.StimulusImageId,
               adaptiveActions: adaptiveActions,
               sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId);
@@ -321,6 +317,19 @@ namespace ISIDA.Reflexes
     /// </summary>
     private List<int> GetActionsForStimulus(int stimulusImageId)
     {
+      var perceptionImage = _perceptionImagesSystem
+          .GetAllPerceptionImagesList()
+          .FirstOrDefault(img => img.Id == stimulusImageId);
+
+      if (perceptionImage == null)
+        return new List<int>();
+
+      var influenceActionsFromImage = perceptionImage.InfluenceActionsList ?? new List<int>();
+      if (!influenceActionsFromImage.Any() && perceptionImage.PhraseIdList.Any())
+        return new List<int>();
+
+      var homeostasisState = _gomeostas.GetHomeostasisState();
+      int currentBaseState = (int)homeostasisState.OverallState;
       var currentStyleIds = GetCurrentStyleIds();
       var actions = new List<int>();
 
@@ -330,17 +339,42 @@ namespace ISIDA.Reflexes
 
         foreach (var reflex in allGeneticReflexes)
         {
+          // Проверяем Level1 - базовое состояние гомеостаза
+          if (reflex.Level1 != currentBaseState)
+            continue;
+
+          // Проверяем Level2 - стили поведения
           if (reflex.Level2 != null && reflex.Level2.Any())
           {
-            if (!reflex.Level2.All(styleId => currentStyleIds.Contains(styleId)))
+            // Проверяем точное совпадение наборов стилей
+            // Сортируем для сравнения независимо от порядка
+            var sortedReflexStyles = reflex.Level2.OrderBy(x => x).ToList();
+            var sortedCurrentStyles = currentStyleIds.OrderBy(x => x).ToList();
+
+            if (!sortedReflexStyles.SequenceEqual(sortedCurrentStyles))
               continue;
           }
-
-          if (reflex.Level3 != null && reflex.Level3.Contains(stimulusImageId))
+          else if (currentStyleIds.Any())
           {
-            if (reflex.AdaptiveActions != null)
-              actions.AddRange(reflex.AdaptiveActions);
+            // Если у рефлекса нет стилей, а сейчас есть активные стили - не подходит
+            continue;
           }
+
+          if (reflex.Level3 != null && reflex.Level3.Any())
+          {
+            // Для сопоставления нужны идентичные списки воздействий
+            // Сравниваем отсортированные списки
+            var sortedReflexActions = reflex.Level3.OrderBy(x => x).ToList();
+            var sortedImageActions = influenceActionsFromImage.OrderBy(x => x).ToList();
+
+            if (!sortedReflexActions.SequenceEqual(sortedImageActions))
+              continue;
+          }
+          else if (influenceActionsFromImage.Any())
+            continue;
+
+          if (reflex.AdaptiveActions != null)
+            actions.AddRange(reflex.AdaptiveActions);
         }
       }
       catch (Exception ex)
@@ -349,48 +383,6 @@ namespace ISIDA.Reflexes
       }
 
       return actions.Distinct().ToList();
-    }
-
-    /// <summary>
-    /// Добавляет стимул с указанием конкретного безусловного рефлекса
-    /// </summary>
-    public void RecordStimulusWithReflex(int pulse, int stimulusImageId, int baseState,
-        int behaviorStyleImageId, int geneticReflexId, List<int> associatedActions = null)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        // Создаем новую запись
-        var record = new StimulusRecord
-        {
-          Pulse = pulse,
-          StimulusImageId = stimulusImageId,
-          BaseState = baseState,
-          BehaviorStyleImageId = behaviorStyleImageId,
-          AssociatedActions = associatedActions?.ToList() ?? new List<int>(),
-          GeneticReflexId = geneticReflexId
-        };
-
-        // Добавляем в историю
-        _stimulusHistory.Insert(0, record);
-
-        // Ограничиваем размер истории
-        if (_stimulusHistory.Count > MAX_HISTORY_SIZE)
-        {
-          _stimulusHistory.RemoveRange(MAX_HISTORY_SIZE, _stimulusHistory.Count - MAX_HISTORY_SIZE);
-        }
-
-        // Если есть связанные действия, сохраняем как безусловный стимул
-        if (associatedActions != null && associatedActions.Any())
-        {
-          _lastUnconditionedStimulus = record;
-          LogInfo($"Записан безусловный стимул ID={stimulusImageId} от рефлекса {geneticReflexId} в пульс {pulse}");
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
     }
 
     #endregion
@@ -419,7 +411,7 @@ namespace ISIDA.Reflexes
         {
           _conditionedReflexes.RemoveConditionedReflex(reflexId);
           var (success, errMsg) = _conditionedReflexes.SaveConditionedReflexes();
-          if(success)
+          if (success)
             LogInfo($"Удален устаревший условный рефлекс ID={reflexId}");
           else
             LogError($"[CleanupOldReflexes]. Не удалось обновить файл условных рефлексов: {errMsg}");
@@ -431,6 +423,7 @@ namespace ISIDA.Reflexes
       }
     }
 
+
     /// <summary>
     /// Сбрасывает историю стимулов
     /// </summary>
@@ -439,8 +432,8 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
-        _stimulusHistory.Clear();
         _lastUnconditionedStimulus = null;
+        _lastConditionedStimulus = null;
         LogInfo("История стимулов сброшена");
       }
       finally
@@ -448,6 +441,7 @@ namespace ISIDA.Reflexes
         _lock.ExitWriteLock();
       }
     }
+
 
     #endregion
 

@@ -270,10 +270,10 @@ namespace ISIDA.Reflexes
 
       try
       {
-        // Получаем текущий стимул
-        int currentStimulus = _activeCurTriggerStimulusID;
-        if (currentStimulus > 0)
-          _reflexFormationService.ProcessStimulus(pulseCount, currentStimulus);
+        //// Получаем текущий стимул
+        //int currentStimulus = _activeCurReflexTriggerStimulusID;
+        //if (currentStimulus > 0)
+        //  _reflexFormationService.ProcessStimulus(pulseCount, currentStimulus);
 
         // Очистка устаревших рефлексов (раз в 100 пульсов)
         if (pulseCount % 100 == 0)
@@ -360,13 +360,15 @@ namespace ISIDA.Reflexes
 
             var actions = reflex?.AdaptiveActions?.ToList() ?? new List<int>();
 
-            _reflexFormationService.RecordStimulusWithReflex(
+            _reflexFormationService.RecordStimulus(
                 pulseCount,
                 _activeCurReflexTriggerStimulusID,
                 _activeCurBaseID,
                 _activeCurBaseStyleID,
-                _activeGeneticReflexID,
-                actions);
+                actions,
+                _activeGeneticReflexID);
+
+            _reflexFormationService.ProcessStimulus(pulseCount, _activeCurReflexTriggerStimulusID);
           }
 
           _researchLogger.LogSystemState(pulseCount);
@@ -410,6 +412,18 @@ namespace ISIDA.Reflexes
         DeactivateChain();
         ExecuteReflexes(pulseCount);
 
+        if (_activeCurTriggerStimulusID != 0)
+        {
+          // Сохраняем как условный стимул
+          _reflexFormationService.RecordStimulus(
+            pulseCount,
+            _activeCurTriggerStimulusID,
+            _activeCurBaseID,
+            _activeCurBaseStyleID,
+            null,
+            0);
+        }
+
         if (_activeConditionReflexID != 0)
         {
           _researchLogger.LogSystemState(pulseCount);
@@ -426,16 +440,6 @@ namespace ISIDA.Reflexes
       {
 
       }
-    }
-
-    private List<int> GetActionsForActiveGeneticReflex()
-    {
-      if (_activeGeneticReflexID <= 0) return new List<int>();
-
-      var reflex = _geneticReflexes.GetAllGeneticReflexesList()
-          .FirstOrDefault(r => r.Id == _activeGeneticReflexID);
-
-      return reflex?.AdaptiveActions?.ToList() ?? new List<int>();
     }
 
     // Выполнение рефлексов

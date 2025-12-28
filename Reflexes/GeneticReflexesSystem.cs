@@ -459,6 +459,39 @@ namespace ISIDA.Reflexes
       // Проверяем, изменились ли условия триггера рефлекса
       bool conditionsChanged = !AreReflexesSemanticallyEqual(oldReflexCopy, reflex);
 
+      // Проверка на дубликаты среди других рефлексов (если условия изменились)
+      if (conditionsChanged)
+      {
+        // Создаем кандидата для проверки дубликатов
+        var candidateReflex = new GeneticReflex
+        {
+          Level1 = reflex.Level1,
+          Level2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>(),
+          Level3 = reflex.Level3?.OrderBy(x => x).ToList() ?? new List<int>(),
+          AdaptiveActions = reflex.AdaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
+        };
+
+        _lock.EnterReadLock();
+        try
+        {
+          // Проверяем, есть ли уже рефлекс с такими же условиями (исключая текущий)
+          bool isDuplicate = _geneticReflexes.Values
+              .Where(r => r.Id != oldReflexId) // исключаем текущий рефлекс
+              .Any(existing => AreReflexesSemanticallyEqual(existing, candidateReflex));
+
+          if (isDuplicate)
+          {
+            string strErr = $"Безусловный рефлекс с указанными уровнями Level1, Level2, Level3 уже существует. Дублирование запрещено.";
+            warnings.Add(strErr);
+            throw new ArgumentException(strErr);
+          }
+        }
+        finally
+        {
+          _lock.ExitReadLock();
+        }
+      }
+
       if (!conditionsChanged)
       {
         // Если условия не изменились, просто обновляем рефлекс
@@ -502,7 +535,7 @@ namespace ISIDA.Reflexes
           throw new InvalidOperationException("Не удалось создать обновленный рефлекс");
         }
 
-        // меняем новый ID рефлекса на старый
+        // Меняем новый ID рефлекса на старый (сохраняем оригинальный ID)
         _lock.EnterWriteLock();
         try
         {
@@ -512,14 +545,15 @@ namespace ISIDA.Reflexes
 
             _geneticReflexes.Remove(newReflexId);
             newReflex.Id = oldReflexId;
+            newReflex.ReflexChainID = reflex.ReflexChainID; // Сохраняем chain ID
             _geneticReflexes[oldReflexId] = newReflex;
 
             if (oldReflexId > _lastGeneticReflexId)
               _lastGeneticReflexId = oldReflexId;
 
-            // обновляем ID в дереве рефлексов
+            // Обновляем ID в дереве рефлексов
             OnGeneticReflexDeleted(newReflexId);
-            OnGeneticReflexCreated(oldReflexId, level1, level2, level3);
+            OnGeneticReflexCreated(oldReflexId, level1, level2, level3, reflex.ReflexChainID);
           }
         }
         finally
@@ -562,6 +596,13 @@ namespace ISIDA.Reflexes
       finally
       {
         _lock.ExitReadLock();
+      }
+
+      // проверка на дублеры
+      var duplicateErrors = CheckForDuplicateReflexes(reflexesCopy);
+      if (!string.IsNullOrEmpty(duplicateErrors))
+      {
+        return (false, 0, $"Найдены дублирующиеся рефлексы: {duplicateErrors}");
       }
 
       int updatedCount = 0;
@@ -655,7 +696,7 @@ namespace ISIDA.Reflexes
               reflex.Level1,
               reflex.Level2?.ToList() ?? new List<int>(),
               reflex.Level3?.ToList() ?? new List<int>(),
-              reflex.ReflexChainID  // Важно: передаем ReflexChainID
+              reflex.ReflexChainID
           );
 
           checkedNodes.Add(nodeKey);
@@ -1210,6 +1251,7 @@ namespace ISIDA.Reflexes
 
         if (IsValidate)
         {
+          // Проверка отдельных рефлексов
           foreach (var reflex in _geneticReflexes.Values)
           {
             var validationResult = ValidateGeneticReflexParameters(
@@ -1224,19 +1266,38 @@ namespace ISIDA.Reflexes
               return (false, errorMessage);
             }
           }
+
+          // Проверка на дубликаты - на случай, если файл рефлексов был собран вручную
+          var reflexesList = _geneticReflexes.Values.ToList();
+          for (int i = 0; i < reflexesList.Count; i++)
+          {
+            for (int j = i + 1; j < reflexesList.Count; j++)
+            {
+              if (AreReflexesSemanticallyEqual(reflexesList[i], reflexesList[j]))
+              {
+                errorMessage = $"Найдены дублирующиеся рефлексы. " +
+                              $"Рефлекс ID: {reflexesList[j].Id} дублирует рефлекс ID: {reflexesList[i].Id}. " +
+                              $"Условия: Level1={reflexesList[i].Level1}, " +
+                              $"Level2=[{string.Join(",", reflexesList[i].Level2.OrderBy(x => x))}], " +
+                              $"Level3=[{string.Join(",", reflexesList[i].Level3.OrderBy(x => x))}], " +
+                              $"AdaptiveActions=[{string.Join(",", reflexesList[i].AdaptiveActions.OrderBy(x => x))}]";
+                return (false, errorMessage);
+              }
+            }
+          }
         }
 
         EnsureDataDirectory();
 
         var lines = new List<string>
-        {
-            FileHeaders.GeneticReflexesFormat,
-            FileHeaders.GeneticReflexesLevel1,
-            FileHeaders.GeneticReflexesLevel2,
-            FileHeaders.GeneticReflexesLevel3,
-            FileHeaders.GeneticReflexesActions,
-            FileHeaders.GeneticReflexesChain
-        };
+    {
+        FileHeaders.GeneticReflexesFormat,
+        FileHeaders.GeneticReflexesLevel1,
+        FileHeaders.GeneticReflexesLevel2,
+        FileHeaders.GeneticReflexesLevel3,
+        FileHeaders.GeneticReflexesActions,
+        FileHeaders.GeneticReflexesChain
+    };
 
         foreach (var reflex in _geneticReflexes.Values.OrderBy(r => r.Id))
         {
@@ -1288,6 +1349,53 @@ namespace ISIDA.Reflexes
     #region Валидация безусловных рефлексов
 
     /// <summary>
+    /// Проверяет список рефлексов на наличие дубликатов по условиям триггера
+    /// </summary>
+    private string CheckForDuplicateReflexes(List<GeneticReflex> reflexes)
+    {
+      if (reflexes == null || reflexes.Count < 2)
+        return string.Empty;
+
+      var seenReflexes = new Dictionary<string, List<int>>();
+      var duplicateMessages = new List<string>();
+
+      foreach (var reflex in reflexes)
+      {
+        // Создаем ключ по условиям триггера (Level1+Level2+Level3)
+        var sortedLevel2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>();
+        var sortedLevel3 = reflex.Level3?.OrderBy(x => x).ToList() ?? new List<int>();
+        var key = $"{reflex.Level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedLevel3)}";
+
+        if (!seenReflexes.ContainsKey(key))
+        {
+          seenReflexes[key] = new List<int> { reflex.Id };
+        }
+        else
+        {
+          seenReflexes[key].Add(reflex.Id);
+
+          // Если это второй или последующий рефлекс с такими же условиями - это дубликат
+          if (seenReflexes[key].Count == 2) // Первое обнаружение дубликата
+          {
+            var duplicateIds = string.Join(", ", seenReflexes[key]);
+            duplicateMessages.Add(
+                $"Условия: Level1={reflex.Level1}, " +
+                $"Level2=[{string.Join(",", sortedLevel2)}], " +
+                $"Level3=[{string.Join(",", sortedLevel3)}] - " +
+                $"рефлексы с ID: {duplicateIds}");
+          }
+        }
+      }
+
+      if (duplicateMessages.Any())
+      {
+        return string.Join("; ", duplicateMessages);
+      }
+
+      return string.Empty;
+    }
+
+    /// <summary>
     /// Проверяет, совпадают ли содержимое двух рефлексов по ключевым полям триггера и действий.
     /// </summary>
     private static bool AreReflexesSemanticallyEqual(GeneticReflex a, GeneticReflex b)
@@ -1296,7 +1404,6 @@ namespace ISIDA.Reflexes
       if (a.Level1 != b.Level1) return false;
       if (!a.Level2.OrderBy(x => x).SequenceEqual(b.Level2.OrderBy(x => x))) return false;
       if (!a.Level3.OrderBy(x => x).SequenceEqual(b.Level3.OrderBy(x => x))) return false;
-      if (!a.AdaptiveActions.OrderBy(x => x).SequenceEqual(b.AdaptiveActions.OrderBy(x => x))) return false;
       return true;
     }
 

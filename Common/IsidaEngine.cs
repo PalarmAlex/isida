@@ -243,58 +243,48 @@ namespace ISIDA.Common
 
       Debug.WriteLine("[IsidaContext] Начинается безопасное освобождение ресурсов...");
 
-      int disposedCount = 0;
-      int errorCount = 0;
+      SafeDispose(ResearchLogger, "ResearchLogger");
+      SafeDispose(ReflexesActivator, "ReflexesActivator");
+      SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
+      SafeDispose(ReflexExecution, "ReflexExecution");
+      SafeDispose(ReflexTree, "ReflexTree");
+      SafeDispose(ReflexChains, "ReflexChains");
+      SafeDispose(ConditionedReflexes, "ConditionedReflexes");
+      SafeDispose(PerceptionImages, "PerceptionImages");
+      SafeDispose(SensorySystem, "SensorySystem");
+      SafeDispose(InfluenceActions, "InfluenceActions");
+      SafeDispose(AdaptiveActions, "AdaptiveActions");
+      SafeDispose(GeneticReflexes, "GeneticReflexes");
+      SafeDispose(Gomeostas, "Gomeostas");
+
+      _disposed = true;
+      Debug.WriteLine($"[IsidaContext] Освобождение завершено");
+    }
+
+    private static void SafeDispose(IDisposable disposable, string name)
+    {
+      if (disposable == null)
+      {
+        Debug.WriteLine($"[SafeDispose] - {name} равен null");
+        return;
+      }
 
       try
       {
-        // Список систем в правильном порядке освобождения
-        var systems = new (string Name, IDisposable System)[]
-        {
-            ("ResearchLogger", ResearchLogger),
-            ("ReflexesActivator", ReflexesActivator),
-            ("ConditionedReflexFormation", ConditionedReflexFormation),
-            ("ReflexExecution", ReflexExecution),
-            ("ReflexTree", ReflexTree),
-            ("ReflexChains", ReflexChains),
-            ("ConditionedReflexes", ConditionedReflexes),
-            ("PerceptionImages", PerceptionImages),
-            ("SensorySystem", SensorySystem),
-            ("InfluenceActions", InfluenceActions),
-            ("AdaptiveActions", AdaptiveActions),
-            ("GeneticReflexes", GeneticReflexes),
-            ("Gomeostas", Gomeostas)
-        };
-
-        foreach (var system in systems)
-        {
-          try
-          {
-            if (system.System != null)
-            {
-              system.System.Dispose();
-              disposedCount++;
-              Debug.WriteLine($"[IsidaContext] ✓ {system.Name} освобожден");
-            }
-          }
-          catch (ObjectDisposedException)
-          {
-            // Игнорируем - объект уже был освобожден
-            Debug.WriteLine($"[IsidaContext] - {system.Name} уже освобожден");
-          }
-          catch (Exception ex)
-          {
-            errorCount++;
-            Debug.WriteLine($"[IsidaContext] ✗ Ошибка освобождения {system.Name}: {ex.Message}");
-          }
-        }
-
-        Debug.WriteLine($"[IsidaContext] Результат: {disposedCount} успешно, {errorCount} ошибок");
+        disposable.Dispose();
+        Debug.WriteLine($"[SafeDispose] ✓ {name} освобожден");
       }
-      finally
+      catch (ObjectDisposedException)
       {
-        _disposed = true;
-        Debug.WriteLine($"[IsidaContext] Освобождение завершено");
+        Debug.WriteLine($"[SafeDispose] - {name} уже освобожден");
+      }
+      catch (InvalidOperationException)
+      {
+        Debug.WriteLine($"[SafeDispose] ! {name}: InvalidOperationException при освобождении");
+      }
+      catch (Exception)
+      {
+        Debug.WriteLine($"[SafeDispose] ✗ {name}: Неожиданная ошибка при освобождении");
       }
     }
 
