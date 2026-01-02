@@ -445,7 +445,7 @@ namespace ISIDA.Common
         {
           try
           {
-            _conditionedReflexesSystem.IncrementPulse();
+            _conditionedReflexesSystem.UpdateAgentLifetime();
           }
           catch (Exception conditionedEx)
           {

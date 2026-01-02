@@ -485,6 +485,9 @@ namespace ISIDA.Common
             context.Gomeostas,
             context.AdaptiveActions,
             context.ReflexesActivator);
+
+        GlobalTimer.SetConditionedReflexesSystem(context.ConditionedReflexes);
+        GlobalTimer.SetReflexFormationService(context.ConditionedReflexFormation);
       }
       catch (Exception ex)
       {

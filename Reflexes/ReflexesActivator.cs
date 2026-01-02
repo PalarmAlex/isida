@@ -169,7 +169,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Флаг активной цепочки
     /// </summary>
-    public bool _isChainActive => _activeChainId > 0;
+    private bool _isChainActive => _activeChainId > 0;
     private int _activeChainId = 0;
 
     // Список выполненных рефлексов в текущей цепочке
@@ -270,11 +270,6 @@ namespace ISIDA.Reflexes
 
       try
       {
-        //// Получаем текущий стимул
-        //int currentStimulus = _activeCurReflexTriggerStimulusID;
-        //if (currentStimulus > 0)
-        //  _reflexFormationService.ProcessStimulus(pulseCount, currentStimulus);
-
         // Очистка устаревших рефлексов (раз в 100 пульсов)
         if (pulseCount % 100 == 0)
           _reflexFormationService.CleanupOldReflexes(pulseCount);
@@ -368,7 +363,7 @@ namespace ISIDA.Reflexes
                 actions,
                 _activeGeneticReflexID);
 
-            _reflexFormationService.ProcessStimulus(pulseCount, _activeCurReflexTriggerStimulusID);
+            _reflexFormationService.CheckTemporalCorrelations(pulseCount);
           }
 
           _researchLogger.LogSystemState(pulseCount);
@@ -467,7 +462,7 @@ namespace ISIDA.Reflexes
 
       CollectReflexesForExecution();
 
-      // если установлен рефлекс по умочанию - запускаем его
+      // если установлен рефлекс по умолчанию - запускаем его
       if (_geneticReflexesToRun.Any() && _geneticReflexesToRun[0] == -1)
       {
         var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
@@ -481,31 +476,37 @@ namespace ISIDA.Reflexes
 
       try
       {
-        var detectedNodeId = _reflexTree.DetectedLastNodeID;
-        if (detectedNodeId > 0)
-        {
-          var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
-          if (detectedNode != null && detectedNode.IsChainNode)
-          {
-            ExecuteChainFromReflex(detectedNode, pulseCount);
-            return;
-          }
-        }
+        List<int> activatedGeneticReflexesFromConditioned = new List<int>();
 
         if (_conditionedReflexesToRun.Any())
         {
-          foreach (var reflexId in _conditionedReflexesToRun)
+          foreach (var conditionedReflexId in _conditionedReflexesToRun)
           {
-            var result = _reflexExecutionService.ExecuteConditionedReflex(reflexId);
-            if (result.Success)
+            // Находим исходный безусловный рефлекс
+            var conditionedReflex = _conditionedReflexes.GetAllConditionedReflexes()
+                .FirstOrDefault(r => r.Id == conditionedReflexId);
+
+            if (conditionedReflex != null && conditionedReflex.SourceGeneticReflexId > 0)
             {
-              _activeConditionReflexID = reflexId;
-              _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
-              _lastReflexActivationPulse = pulseCount;
+              // запускаем безусловный рефлекс вместо условного
+              var result = _reflexExecutionService.ExecuteConditionedReflex(conditionedReflex.Id, conditionedReflex.SourceGeneticReflexId);
+              if (result.Success)
+              {
+                // Логируем как активацию условного рефлекса
+                _activeConditionReflexID = conditionedReflexId;
+                _activeGeneticReflexID = conditionedReflex.SourceGeneticReflexId;
+                _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
+                _lastReflexActivationPulse = pulseCount;
+
+                activatedGeneticReflexesFromConditioned.Add(conditionedReflex.SourceGeneticReflexId);
+                LogInfo($"Pulse: {pulseCount}, Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+              }
             }
           }
         }
-        else if (_geneticReflexesToRun.Any())
+
+        // безусловные рефлексы (если нет условных)
+        if (!_conditionedReflexesToRun.Any() && _geneticReflexesToRun.Any())
         {
           foreach (var reflexId in _geneticReflexesToRun)
           {
@@ -517,10 +518,85 @@ namespace ISIDA.Reflexes
             }
           }
         }
+
+        // Проверяем цепочки после выполнения рефлексов
+        CheckForChainActivation(pulseCount);
+
+        // проверяем цепочки для безусловных рефлексов, активированных через условные
+        if (activatedGeneticReflexesFromConditioned.Any())
+          CheckChainsForGeneticReflexes(activatedGeneticReflexesFromConditioned, pulseCount);
       }
       catch (Exception ex)
       {
         LogError($"ExecuteReflexes: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Проверяет цепочки для списка безусловных рефлексов
+    /// </summary>
+    private void CheckChainsForGeneticReflexes(List<int> geneticReflexIds, int pulseCount)
+    {
+      foreach (var geneticReflexId in geneticReflexIds)
+      {
+        if (geneticReflexId <= 0) continue;
+
+        // Находим безусловный рефлекс
+        var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
+            .FirstOrDefault(r => r.Id == geneticReflexId);
+
+        if (geneticReflex == null || geneticReflex.ReflexChainID <= 0)
+          continue;
+
+        // Ищем узел дерева с этой цепочкой
+        var chainNode = FindNodeWithChain(geneticReflex.ReflexChainID);
+        if (chainNode != null)
+        {
+          ExecuteChainFromReflex(chainNode, pulseCount);
+        }
+      }
+    }
+
+    /// <summary>
+    /// Находит узел дерева с указанной цепочкой
+    /// </summary>
+    private ReflexTreeSystem.ReflexNode FindNodeWithChain(int chainId)
+    {
+      try
+      {
+        // Получаем все узлы дерева (нужно добавить метод в ReflexTreeSystem)
+        var allNodes = GetAllReflexTreeNodes();
+        return allNodes?.FirstOrDefault(n => n.ReflexChainID == chainId);
+      }
+      catch (Exception ex)
+      {
+        LogError($"FindNodeWithChain: {ex.Message}");
+        return null;
+      }
+    }
+
+    /// <summary>
+    /// Получает все узлы дерева рефлексов
+    /// </summary>
+    private List<ReflexTreeSystem.ReflexNode> GetAllReflexTreeNodes()
+    {
+      try
+      {
+        // Если в ReflexTreeSystem есть метод GetAllNodes() - используем его
+        // Иначе используем рефлексию или другие способы доступа
+        return _reflexTree.GetAllNodes(); // Предполагаем, что такой метод существует
+      }
+      catch
+      {
+        // Альтернативный способ: через поиск по ID
+        var nodes = new List<ReflexTreeSystem.ReflexNode>();
+        for (int i = 1; i <= 1000; i++) // Максимальный ID узлов
+        {
+          var node = _reflexTree.FindNodeByID(i);
+          if (node != null)
+            nodes.Add(node);
+        }
+        return nodes;
       }
     }
 
@@ -538,10 +614,7 @@ namespace ISIDA.Reflexes
         }
 
         int chainId = node.ReflexChainID;
-        int startReflexId = node.ActiveReflex;
-
-        if (chainId <= 0 || startReflexId <= 0)
-          return;
+        if (chainId <= 0) return;
 
         if (_chainAlreadyActivatedInThisContext)
           return;
@@ -556,34 +629,15 @@ namespace ISIDA.Reflexes
         _chainStyleID = _activeCurBaseStyleID;
         _chainAlreadyActivatedInThisContext = true;
 
-        bool reflexExecuted = false;
-        bool isConditioned = node.ConditionedReflex > 0;
+        // Рефлекс уже выполнен в ExecuteReflexes()
+        bool reflexExecuted = true;
 
-        if (isConditioned)
-        {
-          var result = _reflexExecutionService.ExecuteConditionedReflex(node.ConditionedReflex);
-          if (result.Success)
-          {
-            _activeConditionReflexID = node.ConditionedReflex;
-            _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
-            reflexExecuted = true;
-          }
-        }
-        else
-        {
-          var result = _reflexExecutionService.ExecuteGeneticReflex(node.GeneticReflexID);
-          if (result.Success)
-          {
-            _activeGeneticReflexID = node.GeneticReflexID;
-            reflexExecuted = true;
-          }
-        }
         _gomeostas.Calculator.SetChainActive(true);
 
         if (reflexExecuted && _reflexTree.ActivateChain(chainId, firstChainLink.ID, GlobalTimer.GlobalPulsCount))
         {
           _activeChainId = chainId;
-          LogInfo($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса {startReflexId}, " +
+          LogInfo($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
         }
         else
@@ -591,14 +645,71 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Pulse: {pulseCount}, Ошибка запуска цепочки от рефлекса: {ex.Message}");
+        LogError($"Pulse: {pulseCount}, Ошибка запуска цепочки: {ex.Message}");
         DeactivateChain();
       }
+    }
+
+    /// <summary>
+    /// Проверяет и активирует цепочки после выполнения рефлексов
+    /// </summary>
+    private void CheckForChainActivation(int pulseCount)
+    {
+      var detectedNodeId = _reflexTree.DetectedLastNodeID;
+      if (detectedNodeId <= 0) return;
+
+      var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
+      if (detectedNode == null || !detectedNode.IsChainNode) return;
+
+      // Определяем, какой рефлекс был активирован
+      int activeReflexId = 0;
+      bool isConditionedReflex = false;
+
+      if (_activeConditionReflexID > 0)
+      {
+        activeReflexId = _activeConditionReflexID;
+        isConditionedReflex = true;
+      }
+      else if (_activeGeneticReflexID > 0)
+      {
+        activeReflexId = _activeGeneticReflexID;
+        isConditionedReflex = false;
+      }
+
+      if (activeReflexId <= 0) return;
+
+      // Проверяем, соответствует ли активированный рефлекс узлу дерева
+      bool reflexMatchesNode = (isConditionedReflex && detectedNode.ConditionedReflex == activeReflexId) ||
+                              (!isConditionedReflex && detectedNode.GeneticReflexID == activeReflexId);
+
+      if (reflexMatchesNode && detectedNode.ReflexChainID > 0)
+        ExecuteChainFromReflex(detectedNode, pulseCount);
     }
 
     #endregion
 
     #region Вспомогательные методы
+
+    /// <summary>
+    /// Получает ID активной цепочки
+    /// </summary>
+    public int GetActiveChainId()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _activeChainId;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Флаг активности цепочки
+    /// </summary>
+    public bool IsChainActive => _activeChainId > 0;
 
     /// <summary>
     /// Проверка возможности активации цепочки в текущем пульсе

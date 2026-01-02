@@ -61,6 +61,7 @@ namespace ISIDA.Reflexes
     private readonly PerceptionImagesSystem _perceptionImagesSystem;
     private readonly GeneticReflexesSystem _geneticReflexesSystem;
     private bool _disposed = false;
+    private int _currentAgentLifetime = 0;
 
     #region Инициализация
 
@@ -322,7 +323,7 @@ namespace ISIDA.Reflexes
           MaxAchievedStrength = AssociationStrength;
 
         // Обновляем время последней активации
-        LastActivation = GetCurrentPulse();
+        LastActivation = GetAgentLifetime();
       }
 
       /// <summary>
@@ -330,30 +331,62 @@ namespace ISIDA.Reflexes
       /// </summary>
       public void ApplyDecay()
       {
-        // C_ij(t+1) = η^(1/C_ij(t)) * C_ij(t)
-        // Чем прочнее рефлекс, тем медленнее затухание
-        float strengthFactor = Math.Max(0.1f, AssociationStrength);
-        float effectiveDecayRate = (float)Math.Pow(_decayRate, 1.0 / strengthFactor);
+        // Применяем затухание только на каждом 30-м пульсе
+        int currentPulse = GetAgentLifetime();
+        if (currentPulse % 30 != 0)
+          return;
 
+        // Адаптивное затухание: чем прочнее рефлекс, тем медленнее затухание
+        // Используем формулу: C(t+1) = η^(C(t)) * C(t)
+        // где η ∈ (0,1) - коэффициент затухания
+        float strengthFactor = Math.Max(0.1f, AssociationStrength);
+
+        // Для слабых рефлексов (strength < 0.3) используем более сильное затухание
+        // Для средних (0.3-0.7) - умеренное
+        // Для прочных (>0.7) - очень слабое затухание
+        float effectiveDecayRate;
+
+        if (AssociationStrength > 0.8f)
+          // Прочные рефлексы: почти не затухают
+          effectiveDecayRate = 0.998f;
+        else if (AssociationStrength > 0.4f)
+          // Средние рефлексы: умеренное затухание
+          // decayRate^strengthFactor: при strength=0.5, decayRate=0.98
+          // effectiveDecayRate = 0.98^0.5 ≈ 0.99
+          effectiveDecayRate = (float)Math.Pow(_decayRate, strengthFactor);
+        else
+          // Слабые рефлексы: нормальное затухание
+          effectiveDecayRate = (float)Math.Pow(_decayRate, Math.Sqrt(strengthFactor));
+
+        // Применяем затухание
+        float oldStrength = AssociationStrength;
         AssociationStrength *= effectiveDecayRate;
 
-        // Обновляем максимальную достигнутую прочность (если не изменилась)
+        // Обновляем максимальную достигнутую прочность
         if (AssociationStrength > MaxAchievedStrength)
           MaxAchievedStrength = AssociationStrength;
+
+        //Debug.WriteLine($"ApplyDecay: ID={Id}, Old={oldStrength:F3}, New={AssociationStrength:F3}, " +
+        //               $"DecayRate={effectiveDecayRate:F5}, Pulse={currentPulse}");
       }
 
       /// <summary>
       /// Проверяет, должен ли рефлекс быть удален
       /// </summary>
-      public bool ShouldBeRemoved(int currentPulse)
+      public bool ShouldBeRemoved(int currentLifetime)
       {
-        // Основное условие - минимальная крепость
         if (AssociationStrength < _minAssociationStrength)
           return true;
 
-        // Проверка времени без активации с учетом прочности рефлекса
-        int timeSinceActivation = currentPulse - LastActivation;
-        return timeSinceActivation > CalculatedInactivationTime;
+        int referenceTime = LastActivation > 0 ? LastActivation : BirthTime;
+        int timeSinceReference = currentLifetime - referenceTime;
+
+        // Для новых рефлексов даем время на "акклиматизацию"
+        // Новые рефлексы не удаляем слишком быстро
+        if (timeSinceReference < 100) // Минимум 100 пульсов на "акклиматизацию"
+          return false;
+
+        return timeSinceReference > CalculatedInactivationTime;
       }
 
       /// <summary>
@@ -367,10 +400,26 @@ namespace ISIDA.Reflexes
       /// <summary>
       /// Получает текущее значение пульса из глобального таймера
       /// </summary>
-      private int GetCurrentPulse()
+      private int GetAgentLifetime()
       {
-        return GlobalTimer.GlobalPulsCount;
+        try
+        {
+          return Instance.GetCurrentAgentLifetime();
+        }
+        catch
+        {
+          return 0;
+        }
       }
+    }
+
+    /// <summary>
+    /// Получает текущее время жизни агента (кешированное значение)
+    /// Для внутреннего использования и доступа из класса ConditionedReflex
+    /// </summary>
+    internal int GetCurrentAgentLifetime()
+    {
+      return _currentAgentLifetime;
     }
 
     /// <summary>
@@ -422,7 +471,6 @@ namespace ISIDA.Reflexes
     private readonly List<ConditionedReflex> _activeConditionedReflexes = new List<ConditionedReflex>();
     private readonly ConditionedReflexSettings _settings = new ConditionedReflexSettings();
     private int _lastConditionedReflexId = 0;
-    private int _currentPulseCount = 0;
 
     /// <summary>
     /// Получает текущие настройки системы условных рефлексов
@@ -571,6 +619,7 @@ namespace ISIDA.Reflexes
       try
       {
         int newId = ++_lastConditionedReflexId;
+        int currentLifetime = GetAgentLifetime();
         var conditionedReflex = new ConditionedReflex
         {
           Id = newId,
@@ -579,8 +628,8 @@ namespace ISIDA.Reflexes
           Level3 = level3,
           AdaptiveActions = adaptiveActions ?? new List<int>(),
           AssociationStrength = _settings.MinAssociationStrength + 0.1f,
-          LastActivation = _currentPulseCount,
-          BirthTime = _currentPulseCount,
+          LastActivation = currentLifetime,
+          BirthTime = currentLifetime,
           SourceGeneticReflexId = sourceGeneticReflexId
         };
 
@@ -617,7 +666,7 @@ namespace ISIDA.Reflexes
           reflex.AssociationStrength = reflex.AssociationStrength +
               _settings.LearningRate * (_settings.MaxAssociationStrength - reflex.AssociationStrength);
 
-          reflex.LastActivation = _currentPulseCount;
+          reflex.LastActivation = GetAgentLifetime();
 
           // Ограничение значения
           reflex.AssociationStrength = Math.Min(reflex.AssociationStrength, _settings.MaxAssociationStrength);
@@ -645,10 +694,8 @@ namespace ISIDA.Reflexes
           reflex.ApplyDecay();
 
           // Проверяем на удаление
-          if (reflex.ShouldBeRemoved(_currentPulseCount))
-          {
+          if (reflex.ShouldBeRemoved(GetAgentLifetime()))
             reflexesToRemove.Add(reflex.Id);
-          }
         }
 
         // Удаление ослабленных рефлексов
@@ -673,11 +720,12 @@ namespace ISIDA.Reflexes
       try
       {
         _activeConditionedReflexes.Clear();
+        int agentLifetime = GetAgentLifetime();
 
         foreach (var reflex in _conditionedReflexes.Values)
         {
           // Проверяем временную корреляцию
-          if (!IsWithinTimeWindow(currentPulse, reflex.LastActivation, reflex.TimeWindowPulses))
+          if (!IsWithinTimeWindow(agentLifetime, reflex.LastActivation, reflex.TimeWindowPulses))
             continue;
 
           // Проверка условий активации и порога крепости
@@ -685,7 +733,7 @@ namespace ISIDA.Reflexes
               reflex.AssociationStrength >= _settings.ActivationThreshold)
           {
             _activeConditionedReflexes.Add(reflex);
-            reflex.LastActivation = _currentPulseCount;
+            reflex.LastActivation = GetAgentLifetime();
           }
         }
 
@@ -716,11 +764,8 @@ namespace ISIDA.Reflexes
         ConditionedReflex reflex)
     {
       // Проверяем, находятся ли стимулы в пределах временного окна
-      if (!AreStimuliCorrelated(unconditionalStimulusPulse, conditionedStimulusPulse,
-                                reflex.TimeWindowPulses))
-      {
+      if (!AreStimuliCorrelated(unconditionalStimulusPulse, conditionedStimulusPulse, reflex.TimeWindowPulses))
         return false; // Стимулы не коррелируют во времени
-      }
 
       // Усиливаем ассоциацию
       reflex.StrengthenAssociation();
@@ -795,12 +840,20 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Увеличивает счетчик пульсов (вызывается извне)
+    /// Обновляет время жизни агента (вызывается из GlobalTimer при каждом пульсе)
     /// </summary>
-    public void IncrementPulse()
+  internal void UpdateAgentLifetime()
     {
-      _currentPulseCount++;
-      ApplyDecay(); // Затухание применяется на каждом пульсе
+      try
+      {
+        _currentAgentLifetime = _gomeostas.GetAgentState().Lifetime;
+        ApplyDecay(); // Затухание применяется на каждом пульсе
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"UpdateAgentLifetime: Ошибка обновления времени жизни: {ex.Message}");
+        _currentAgentLifetime = 0;
+      }
     }
 
     #endregion
@@ -846,6 +899,14 @@ namespace ISIDA.Reflexes
     #endregion
 
     #region Вспомогательные методы
+
+    /// <summary>
+    /// Получает текущее значение пульса из глобального таймера
+    /// </summary>
+    private int GetAgentLifetime()
+    {
+      return _currentAgentLifetime;
+    }
 
     private bool AreConditionedReflexesEqual(ConditionedReflex a, ConditionedReflex b)
     {

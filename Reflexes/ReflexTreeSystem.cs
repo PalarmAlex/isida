@@ -596,6 +596,28 @@ namespace ISIDA.Reflexes
       return level;
     }
 
+    /// <summary>
+    /// Получить все узлы дерева
+    /// </summary>
+    public List<ReflexNode> GetAllNodes()
+    {
+      var nodes = new List<ReflexNode>();
+      CollectNodesRecursive(ReflexTree, nodes);
+      return nodes;
+    }
+
+    private void CollectNodesRecursive(ReflexNode node, List<ReflexNode> nodes)
+    {
+      if (node == null) return;
+
+      nodes.Add(node);
+
+      foreach (var child in node.Children)
+      {
+        CollectNodesRecursive(child, nodes);
+      }
+    }
+
     #endregion
 
     #region Методы для работы с цепочками

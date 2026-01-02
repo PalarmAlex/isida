@@ -186,27 +186,9 @@ namespace ISIDA.Reflexes
     #region Формирование условных рефлексов
 
     /// <summary>
-    /// Обработка нового стимула и поиск корреляций
-    /// </summary>
-    public void ProcessStimulus(int pulse, int stimulusImageId)
-    {
-      if (_gomeostas.GetAgentState().EvolutionStage < 1)
-        return;
-
-      try
-      {
-        CheckTemporalCorrelations(pulse);
-      }
-      catch (Exception ex)
-      {
-        LogError($"[ProcessStimulus]. Ошибка обработки стимула: {ex.Message}");
-      }
-    }
-
-    /// <summary>
     /// Проверяет временные корреляции между стимулами
     /// </summary>
-    private void CheckTemporalCorrelations(int currentPulse)
+    internal void CheckTemporalCorrelations(int currentPulse)
     {
       if (_lastUnconditionedStimulus == null || _lastConditionedStimulus == null)
         return;
@@ -312,79 +294,6 @@ namespace ISIDA.Reflexes
       return currentStyles.Select(s => s.Id).ToList();
     }
 
-    /// <summary>
-    /// Получает адаптивные действия для стимула
-    /// </summary>
-    private List<int> GetActionsForStimulus(int stimulusImageId)
-    {
-      var perceptionImage = _perceptionImagesSystem
-          .GetAllPerceptionImagesList()
-          .FirstOrDefault(img => img.Id == stimulusImageId);
-
-      if (perceptionImage == null)
-        return new List<int>();
-
-      var influenceActionsFromImage = perceptionImage.InfluenceActionsList ?? new List<int>();
-      if (!influenceActionsFromImage.Any() && perceptionImage.PhraseIdList.Any())
-        return new List<int>();
-
-      var homeostasisState = _gomeostas.GetHomeostasisState();
-      int currentBaseState = (int)homeostasisState.OverallState;
-      var currentStyleIds = GetCurrentStyleIds();
-      var actions = new List<int>();
-
-      try
-      {
-        var allGeneticReflexes = _geneticReflexes.GetAllGeneticReflexesList();
-
-        foreach (var reflex in allGeneticReflexes)
-        {
-          // Проверяем Level1 - базовое состояние гомеостаза
-          if (reflex.Level1 != currentBaseState)
-            continue;
-
-          // Проверяем Level2 - стили поведения
-          if (reflex.Level2 != null && reflex.Level2.Any())
-          {
-            // Проверяем точное совпадение наборов стилей
-            // Сортируем для сравнения независимо от порядка
-            var sortedReflexStyles = reflex.Level2.OrderBy(x => x).ToList();
-            var sortedCurrentStyles = currentStyleIds.OrderBy(x => x).ToList();
-
-            if (!sortedReflexStyles.SequenceEqual(sortedCurrentStyles))
-              continue;
-          }
-          else if (currentStyleIds.Any())
-          {
-            // Если у рефлекса нет стилей, а сейчас есть активные стили - не подходит
-            continue;
-          }
-
-          if (reflex.Level3 != null && reflex.Level3.Any())
-          {
-            // Для сопоставления нужны идентичные списки воздействий
-            // Сравниваем отсортированные списки
-            var sortedReflexActions = reflex.Level3.OrderBy(x => x).ToList();
-            var sortedImageActions = influenceActionsFromImage.OrderBy(x => x).ToList();
-
-            if (!sortedReflexActions.SequenceEqual(sortedImageActions))
-              continue;
-          }
-          else if (influenceActionsFromImage.Any())
-            continue;
-
-          if (reflex.AdaptiveActions != null)
-            actions.AddRange(reflex.AdaptiveActions);
-        }
-      }
-      catch (Exception ex)
-      {
-        LogError($"[GetActionsForStimulus]. Ошибка: {ex.Message}");
-      }
-
-      return actions.Distinct().ToList();
-    }
-
     #endregion
 
     #region Управление жизненным циклом рефлексов
@@ -402,9 +311,7 @@ namespace ISIDA.Reflexes
         foreach (var reflex in allReflexes)
         {
           if (reflex.ShouldBeRemoved(currentPulse))
-          {
             reflexesToRemove.Add(reflex.Id);
-          }
         }
 
         foreach (var reflexId in reflexesToRemove)
@@ -423,7 +330,6 @@ namespace ISIDA.Reflexes
       }
     }
 
-
     /// <summary>
     /// Сбрасывает историю стимулов
     /// </summary>
@@ -441,7 +347,6 @@ namespace ISIDA.Reflexes
         _lock.ExitWriteLock();
       }
     }
-
 
     #endregion
 

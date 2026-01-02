@@ -106,35 +106,39 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Выполняет условный рефлекс по его ID
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteConditionedReflex(int reflexId)
+    public (bool Success, string ErrorMessage) ExecuteConditionedReflex(int conditionReflexId, int geneticReflexId)
     {
       try
       {
-        var reflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
+        var conditionReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == conditionReflexId);
 
-        if (reflex == null)
-          return (false, $"Условный рефлекс с ID {reflexId} не найден");
+        if (conditionReflex == null)
+          return (false, $"Условный рефлекс с ID {conditionReflexId} не найден");
 
-        // Получаем список действий для условного рефлекса
-        var actions = reflex.AdaptiveActions?.ToList() ?? new List<int>();
+        var geneticReflex = _geneticReflexesSystem.GetAllGeneticReflexesList()
+          .FirstOrDefault(r => r.Id == geneticReflexId);
+
+        if (geneticReflex == null)
+          return (false, $"Ассоцииорованный безусловный рефлекс с ID {geneticReflexId} не найден");
+
+        // Получаем список действий от безусловного рефлекса для условного
+        var actions = geneticReflex.AdaptiveActions?.ToList() ?? new List<int>();
         if (!actions.Any())
-          return (false, $"Условный рефлекс {reflexId} не содержит связанных действий");
+          return (false, $"Ассоцииорованный безусловный рефлекс {geneticReflexId} не содержит связанных действий");
 
         // Выполняем действия рефлекса с указанием источника
-        var result = ExecuteAdaptiveActions(
-            actions,
-            ActionActivationSource.ConditionedReflex);
+        var result = ExecuteAdaptiveActions(actions, ActionActivationSource.ConditionedReflex);
 
         // Усиление ассоциации при успешном выполнении
         if (result.Success)
-          _conditionedReflexesSystem.StrengthenAssociation(reflexId);
+          _conditionedReflexesSystem.StrengthenAssociation(conditionReflexId);
 
         return result;
       }
       catch (Exception ex)
       {
-        return (false, $"Ошибка выполнения условного рефлекса {reflexId}: {ex.Message}");
+        return (false, $"Ошибка выполнения условного рефлекса {conditionReflexId}: {ex.Message}");
       }
     }
 
