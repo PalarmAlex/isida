@@ -106,7 +106,6 @@ namespace ISIDA.Reflexes
 
       _gomeostas.StyleDeleted += OnStyleDeleted;
       var adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
-      adaptiveActionsSystem.AdaptiveActionDeleted += OnAdaptiveActionDeleted;
 
       try
       {
@@ -164,11 +163,6 @@ namespace ISIDA.Reflexes
       /// Третий уровень: ID образа пускового стимула (TriggerStimulusID)
       /// </summary>
       public int Level3 { get; set; }
-
-      /// <summary>
-      /// Адаптивные действия рефлекса
-      /// </summary>
-      public List<int> AdaptiveActions { get; set; } = new List<int>();
 
       /// <summary>
       /// Крепость ассоциативной связи. [0, 1]
@@ -573,7 +567,6 @@ namespace ISIDA.Reflexes
         int level1,
         List<int> level2,
         int level3,
-        List<int> adaptiveActions,
         int sourceGeneticReflexId)
     {
       if (_gomeostas.GetAgentState().EvolutionStage < 1)
@@ -581,7 +574,7 @@ namespace ISIDA.Reflexes
 
       var warnings = new List<string>();
 
-      var validationResult = ValidateConditionedReflexParameters(level1, level2, level3, adaptiveActions);
+      var validationResult = ValidateConditionedReflexParameters(level1, level2, level3);
       if (!validationResult.IsValid)
       {
         warnings.Add(validationResult.ErrorMessage);
@@ -593,8 +586,7 @@ namespace ISIDA.Reflexes
       {
         Level1 = level1,
         Level2 = level2?.OrderBy(x => x).ToList() ?? new List<int>(),
-        Level3 = level3,
-        AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
+        Level3 = level3
       };
 
       _lock.EnterReadLock();
@@ -626,7 +618,6 @@ namespace ISIDA.Reflexes
           Level1 = level1,
           Level2 = level2 ?? new List<int>(),
           Level3 = level3,
-          AdaptiveActions = adaptiveActions ?? new List<int>(),
           AssociationStrength = _settings.MinAssociationStrength + 0.1f,
           LastActivation = currentLifetime,
           BirthTime = currentLifetime,
@@ -878,24 +869,6 @@ namespace ISIDA.Reflexes
       }
     }
 
-    private void OnAdaptiveActionDeleted(int actionId)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        // Удаляем ссылки на действие
-        foreach (var reflex in _conditionedReflexes.Values)
-        {
-          if (reflex.AdaptiveActions.Contains(actionId))
-            reflex.AdaptiveActions.Remove(actionId);
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
     #endregion
 
     #region Вспомогательные методы
@@ -966,8 +939,7 @@ namespace ISIDA.Reflexes
     private (bool IsValid, string ErrorMessage) ValidateConditionedReflexParameters(
         int level1,
         List<int> level2,
-        int level3,
-        List<int> adaptiveActions)
+        int level3)
     {
       // Проверка Level1
       var validBaseStates = new[] { -1, 0, 1 };
@@ -1028,7 +1000,7 @@ namespace ISIDA.Reflexes
               continue;
 
             var parts = line.Split('|');
-            if (parts.Length < 8)
+            if (parts.Length < 7)
               continue;
 
             if (!int.TryParse(parts[0], out int id))
@@ -1040,11 +1012,10 @@ namespace ISIDA.Reflexes
               Level1 = int.Parse(parts[1]),
               Level2 = ParseIntList(parts[2]),
               Level3 = int.Parse(parts[3]),
-              AdaptiveActions = ParseIntList(parts[4]),
-              AssociationStrength = float.Parse(parts[5]),
-              LastActivation = int.Parse(parts[6]),
-              BirthTime = int.Parse(parts[7]),
-              SourceGeneticReflexId = parts.Length > 8 ? int.Parse(parts[8]) : 0
+              AssociationStrength = float.Parse(parts[4]),
+              LastActivation = int.Parse(parts[5]),
+              BirthTime = int.Parse(parts[6]),
+              SourceGeneticReflexId = parts.Length > 7 ? int.Parse(parts[7]) : 0
             };
 
             _conditionedReflexes[id] = reflex;
@@ -1134,7 +1105,6 @@ namespace ISIDA.Reflexes
         {
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|{reflex.Level3}|" +
-                   $"{string.Join(",", reflex.AdaptiveActions)}|" +
                    $"{reflex.AssociationStrength}|{reflex.LastActivation}|" +
                    $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}");
         }
@@ -1223,12 +1193,6 @@ namespace ISIDA.Reflexes
         // Отписываемся от событий
         if (_gomeostas != null)
           _gomeostas.StyleDeleted -= OnStyleDeleted;
-
-        if (AdaptiveActionsSystem.IsInitialized)
-        {
-          var adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
-          adaptiveActionsSystem.AdaptiveActionDeleted -= OnAdaptiveActionDeleted;
-        }
 
         ConditionedReflexCreated = null;
         ConditionedReflexDeleted = null;

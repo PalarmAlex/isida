@@ -353,14 +353,11 @@ namespace ISIDA.Reflexes
             var reflex = _geneticReflexes.GetAllGeneticReflexesList()
                 .FirstOrDefault(r => r.Id == _activeGeneticReflexID);
 
-            var actions = reflex?.AdaptiveActions?.ToList() ?? new List<int>();
-
             _reflexFormationService.RecordStimulus(
                 pulseCount,
                 _activeCurReflexTriggerStimulusID,
                 _activeCurBaseID,
                 _activeCurBaseStyleID,
-                actions,
                 _activeGeneticReflexID);
 
             _reflexFormationService.CheckTemporalCorrelations(pulseCount);
@@ -415,7 +412,6 @@ namespace ISIDA.Reflexes
             _activeCurTriggerStimulusID,
             _activeCurBaseID,
             _activeCurBaseStyleID,
-            null,
             0);
         }
 
@@ -488,8 +484,7 @@ namespace ISIDA.Reflexes
 
             if (conditionedReflex != null && conditionedReflex.SourceGeneticReflexId > 0)
             {
-              // запускаем безусловный рефлекс вместо условного
-              var result = _reflexExecutionService.ExecuteConditionedReflex(conditionedReflex.Id, conditionedReflex.SourceGeneticReflexId);
+              var result = _reflexExecutionService.ExecuteConditionedReflex(conditionedReflex.Id);
               if (result.Success)
               {
                 // Логируем как активацию условного рефлекса

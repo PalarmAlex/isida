@@ -241,6 +241,27 @@ namespace ISIDA.Reflexes
     #region Управление безусловнымм рефлексами
 
     /// <summary>
+    /// Получает безусловный рефлекс по ID
+    /// </summary>
+    /// <param name="reflexId">ID безусловного рефлекса</param>
+    /// <returns>Безусловный рефлекс или null, если не найден</returns>
+    public GeneticReflex GetGeneticReflex(int reflexId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        if (_geneticReflexes.TryGetValue(reflexId, out var reflex))
+          return reflex;
+
+        return null;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// (Internal) Возвращает список активных безусловных рефлексов.
     /// </summary>
     /// <returns>Копия списка активных безусловных рефлексов</returns>
@@ -278,7 +299,7 @@ namespace ISIDA.Reflexes
     /// (Internal) Возвращает список всех безусловных рефлексов.
     /// </summary>
     /// <returns>Копия списка всех безусловных рефлексов</returns>
-    internal List<GeneticReflex> GetAllGeneticReflexesList()
+    public List<GeneticReflex> GetAllGeneticReflexesList()
     {
       _lock.EnterReadLock();
       try

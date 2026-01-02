@@ -18,8 +18,6 @@ namespace ISIDA.Reflexes
     private readonly GomeostasSystem _gomeostas;
     private readonly GeneticReflexesSystem _geneticReflexes;
     private readonly ConditionedReflexesSystem _conditionedReflexes;
-    private readonly PerceptionImagesSystem _perceptionImagesSystem;
-    private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
     private bool _disposed = false;
 
     #region Инициализация
@@ -43,30 +41,22 @@ namespace ISIDA.Reflexes
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
         GeneticReflexesSystem geneticReflexes,
-        ConditionedReflexesSystem conditionedReflexes,
-        PerceptionImagesSystem perceptionImagesSystem,
-        AdaptiveActionsSystem adaptiveActionsSystem)
+        ConditionedReflexesSystem conditionedReflexes)
     {
       if (_instance != null)
         throw new InvalidOperationException("ConditionedReflexFormationService уже инициализирован.");
 
-      _instance = new ConditionedReflexFormationService(
-          gomeostas, geneticReflexes, conditionedReflexes,
-          perceptionImagesSystem, adaptiveActionsSystem);
+      _instance = new ConditionedReflexFormationService(gomeostas, geneticReflexes, conditionedReflexes);
     }
 
     private ConditionedReflexFormationService(
         GomeostasSystem gomeostas,
         GeneticReflexesSystem geneticReflexes,
-        ConditionedReflexesSystem conditionedReflexes,
-        PerceptionImagesSystem perceptionImagesSystem,
-        AdaptiveActionsSystem adaptiveActionsSystem)
+        ConditionedReflexesSystem conditionedReflexes)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _geneticReflexes = geneticReflexes ?? throw new ArgumentNullException(nameof(geneticReflexes));
       _conditionedReflexes = conditionedReflexes ?? throw new ArgumentNullException(nameof(conditionedReflexes));
-      _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
-      _adaptiveActionsSystem = adaptiveActionsSystem ?? throw new ArgumentNullException(nameof(adaptiveActionsSystem));
     }
 
     #endregion
@@ -99,11 +89,6 @@ namespace ISIDA.Reflexes
       public int BehaviorStyleImageId { get; set; }
 
       /// <summary>
-      /// Связанные действия (для безусловных рефлексов)
-      /// </summary>
-      public List<int> AssociatedActions { get; set; } = new List<int>();
-
-      /// <summary>
       /// ID исходного безусловного рефлекса
       /// </summary>
       public int GeneticReflexId { get; set; }
@@ -123,7 +108,6 @@ namespace ISIDA.Reflexes
         int stimulusImageId,
         int baseState,
         int behaviorStyleImageId,
-        List<int> associatedActions = null,
         int geneticReflexId = 0)
     {
       _lock.EnterWriteLock();
@@ -135,12 +119,11 @@ namespace ISIDA.Reflexes
           StimulusImageId = stimulusImageId,
           BaseState = baseState,
           BehaviorStyleImageId = behaviorStyleImageId,
-          AssociatedActions = associatedActions?.ToList() ?? new List<int>(),
           GeneticReflexId = geneticReflexId
         };
 
         // Если это безусловный стимул (есть связанные действия или ID рефлекса), сохраняем его
-        if ((associatedActions != null && associatedActions.Any()) || geneticReflexId > 0)
+        if (geneticReflexId > 0)
         {
           _lastUnconditionedStimulus = record;
           LogInfo($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}, рефлекс={geneticReflexId}");
@@ -248,7 +231,6 @@ namespace ISIDA.Reflexes
 
         if (!foundMatchingReflex)
         {
-          List<int> adaptiveActions = new List<int>();
           List<int> reflexStyles = new List<int>();
 
           if (unconditionedStimulus.GeneticReflexId > 0)
@@ -257,14 +239,11 @@ namespace ISIDA.Reflexes
                 .FirstOrDefault(r => r.Id == unconditionedStimulus.GeneticReflexId);
 
             if (geneticReflex != null)
-            {
-              adaptiveActions = geneticReflex.AdaptiveActions?.ToList() ?? new List<int>();
               reflexStyles = geneticReflex.Level2?.ToList() ?? new List<int>();
-            }
           }
           else
           {
-            adaptiveActions = unconditionedStimulus.AssociatedActions.ToList();
+            // Если нет ID безусловного рефлекса, берем текущие стили
             reflexStyles = GetCurrentStyleIds();
           }
 
@@ -272,7 +251,6 @@ namespace ISIDA.Reflexes
               level1: conditionedStimulus.BaseState,
               level2: reflexStyles,
               level3: conditionedStimulus.StimulusImageId,
-              adaptiveActions: adaptiveActions,
               sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId);
 
           if (newReflexId > 0)

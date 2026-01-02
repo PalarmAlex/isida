@@ -106,7 +106,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Выполняет условный рефлекс по его ID
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteConditionedReflex(int conditionReflexId, int geneticReflexId)
+    public (bool Success, string ErrorMessage) ExecuteConditionedReflex(int conditionReflexId)
     {
       try
       {
@@ -116,16 +116,10 @@ namespace ISIDA.Reflexes
         if (conditionReflex == null)
           return (false, $"Условный рефлекс с ID {conditionReflexId} не найден");
 
-        var geneticReflex = _geneticReflexesSystem.GetAllGeneticReflexesList()
-          .FirstOrDefault(r => r.Id == geneticReflexId);
-
-        if (geneticReflex == null)
-          return (false, $"Ассоцииорованный безусловный рефлекс с ID {geneticReflexId} не найден");
-
-        // Получаем список действий от безусловного рефлекса для условного
-        var actions = geneticReflex.AdaptiveActions?.ToList() ?? new List<int>();
+        // Получаем действия из исходного безусловного рефлекса
+        var actions = GetActionsForGeneticReflex(conditionReflex.SourceGeneticReflexId);
         if (!actions.Any())
-          return (false, $"Ассоцииорованный безусловный рефлекс {geneticReflexId} не содержит связанных действий");
+          return (false, $"Исходный безусловный рефлекс {conditionReflex.SourceGeneticReflexId} не содержит связанных действий");
 
         // Выполняем действия рефлекса с указанием источника
         var result = ExecuteAdaptiveActions(actions, ActionActivationSource.ConditionedReflex);
@@ -235,29 +229,6 @@ namespace ISIDA.Reflexes
     #region Преобразование рефлексов в действия
 
     /// <summary>
-    /// Получает ID действия для условного рефлекса
-    /// </summary>
-    /// <param name="reflexId">ID условного рефлекса</param>
-    /// <returns>ID адаптивного действия или 0 если не найдено</returns>
-    public int GetActionForConditionedReflex(int reflexId)
-    {
-      try
-      {
-        var reflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
-
-        if (reflex == null)
-          return 0;
-
-        return reflex.AdaptiveActions?.FirstOrDefault() ?? 0;
-      }
-      catch
-      {
-        return 0;
-      }
-    }
-
-    /// <summary>
     /// Получает список действий для безусловного рефлекса
     /// </summary>
     /// <param name="reflexId">ID безусловного рефлекса</param>
@@ -281,29 +252,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Получает список действий для условного рефлекса
-    /// </summary>
-    /// <param name="reflexId">ID условного рефлекса</param>
-    /// <returns>Список ID адаптивных действий</returns>
-    public List<int> GetActionsListForConditionedReflex(int reflexId)
-    {
-      try
-      {
-        var reflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
-
-        if (reflex == null)
-          return new List<int>();
-
-        return reflex.AdaptiveActions?.ToList() ?? new List<int>();
-      }
-      catch
-      {
-        return new List<int>();
-      }
-    }
-
-    /// <summary>
     /// Получает ID действия для любого рефлекса (безусловного или условного)
     /// </summary>
     /// <param name="reflexId">ID рефлекса</param>
@@ -313,7 +261,15 @@ namespace ISIDA.Reflexes
     {
       if (isConditioned)
       {
-        return GetActionForConditionedReflex(reflexId);
+        var conditionedReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == reflexId);
+
+        if (conditionedReflex == null || conditionedReflex.SourceGeneticReflexId <= 0)
+          return 0;
+
+        // Получаем действия из исходного безусловного рефлекса
+        var actions = GetActionsForGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+        return actions.FirstOrDefault();
       }
       else
       {
@@ -332,12 +288,42 @@ namespace ISIDA.Reflexes
     {
       if (isConditioned)
       {
-        int actionId = GetActionForConditionedReflex(reflexId);
-        return actionId > 0 ? new List<int> { actionId } : new List<int>();
+        // Для условных рефлексов получаем действия из ассоциированного безусловного рефлекса
+        var conditionedReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == reflexId);
+
+        if (conditionedReflex == null || conditionedReflex.SourceGeneticReflexId <= 0)
+          return new List<int>();
+
+        return GetActionsForGeneticReflex(conditionedReflex.SourceGeneticReflexId);
       }
       else
       {
         return GetActionsForGeneticReflex(reflexId);
+      }
+    }
+
+    /// <summary>
+    /// Получает список действий для условного рефлекса из исходного безусловного рефлекса
+    /// </summary>
+    /// <param name="conditionedReflexId">ID условного рефлекса</param>
+    /// <returns>Список ID адаптивных действий или пустой список</returns>
+    public List<int> GetActionsForConditionedReflexFromSource(int conditionedReflexId)
+    {
+      try
+      {
+        var conditionedReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == conditionedReflexId);
+
+        if (conditionedReflex == null || conditionedReflex.SourceGeneticReflexId <= 0)
+          return new List<int>();
+
+        // Получаем действия из исходного безусловного рефлекса
+        return GetActionsForGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+      }
+      catch
+      {
+        return new List<int>();
       }
     }
 

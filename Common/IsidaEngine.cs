@@ -442,9 +442,7 @@ namespace ISIDA.Common
         ConditionedReflexFormationService.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
-            context.ConditionedReflexes,
-            context.PerceptionImages,
-            context.AdaptiveActions);
+            context.ConditionedReflexes);
         context.ConditionedReflexFormation = ConditionedReflexFormationService.Instance;
 
         // Шаг 14: Активатор рефлексов
