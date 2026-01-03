@@ -541,6 +541,61 @@ namespace ISIDA.Common
 
     #endregion
 
+    #region IsValidActionsImagesFile
+
+    /// <summary>
+    /// Проверяет валидность файла образов действий по пути
+    /// </summary>
+    public static bool IsValidActionsImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidActionsImagesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла образов действий
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidActionsImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 6)
+          return false;
+
+        if (!int.TryParse(parts[0], out _))
+          return false;
+
+        return true;
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
     // Вспомогательный метод для разделения строк
     private static string[] SplitLines(string content)
     {
