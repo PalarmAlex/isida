@@ -11,6 +11,7 @@ using static ISIDA.Reflexes.ConditionedReflexesSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 using static ISIDA.Reflexes.PerceptionImagesSystem;
 using static ISIDA.Reflexes.ReflexChainsSystem;
+using isida.Psychic.Automatism;
 
 namespace ISIDA.Common
 {
@@ -23,6 +24,11 @@ namespace ISIDA.Common
   /// </remarks>
   public class IsidaConfig
   {
+    /// <summary>
+    /// Директория с данными психики (образы действий оператора и агента ИИ)
+    /// </summary>
+    public string PsychicImageDataFolder { get; set; }
+
     /// <summary>
     /// Базовая директория для всех файлов системы ISIDA
     /// </summary>
@@ -138,6 +144,7 @@ namespace ISIDA.Common
       ActionsFolder = Path.Combine(BaseDirectory, "DataActions");
       SensorsFolder = Path.Combine(BaseDirectory, "Sensors");
       ReflexesFolder = Path.Combine(BaseDirectory, "Reflexes");
+      PsychicImageDataFolder = Path.Combine(BaseDirectory, "Data", "Psychic", "Automatism");
       LogsFolder = Path.Combine(BaseDirectory, "Logs");
       return this;
     }
@@ -156,6 +163,8 @@ namespace ISIDA.Common
         throw new ArgumentException("SensorsFolder не указан");
       if (string.IsNullOrEmpty(ReflexesFolder))
         throw new ArgumentException("ReflexesFolder не указан");
+      if (string.IsNullOrEmpty(PsychicImageDataFolder))
+        throw new ArgumentException("PsychicImageDataFolder не указан");
     }
   }
 
@@ -229,6 +238,11 @@ namespace ISIDA.Common
     public ConditionedReflexFormationService ConditionedReflexFormation { get; internal set; }
 
     /// <summary>
+    /// Система образов действий оператора и агента ИИ
+    /// </summary>
+    public ActionsImagesSystem ActionsImages { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -256,6 +270,7 @@ namespace ISIDA.Common
       SafeDispose(AdaptiveActions, "AdaptiveActions");
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(Gomeostas, "Gomeostas");
+      SafeDispose(ActionsImages, "ActionsImages");
 
       _disposed = true;
       Debug.WriteLine($"[IsidaContext] Освобождение завершено");
@@ -299,6 +314,7 @@ namespace ISIDA.Common
         GeneticReflexes != null &&
         ConditionedReflexes != null &&
         PerceptionImages != null &&
+        ActionsImages != null &&
         ReflexesActivator != null &&
         ReflexTree != null &&
         ReflexChains != null &&
@@ -472,6 +488,11 @@ namespace ISIDA.Common
             clearOnStart: config.ClearLogsOnStart,
             enabled: config.LogEnabled
         );
+
+        // Шаг 16: Система образов действий оператора и агента ИИ
+        initializationStep = 16;
+        ActionsImagesSystem.InitializeInstance(config.PsychicImageDataFolder);
+        context.ActionsImages = ActionsImagesSystem.Instance;
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

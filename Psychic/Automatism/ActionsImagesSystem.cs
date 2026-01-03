@@ -380,7 +380,7 @@ namespace isida.Psychic.Automatism
 
     private string GetActionsImagesFilePath()
     {
-      return Path.Combine(_psychicDataPath, $"{ActionsImagesFileName}.txt");
+      return Path.Combine(_psychicDataPath, $"{ActionsImagesFileName}.dat");
     }
 
     /// <summary>
@@ -482,7 +482,7 @@ namespace isida.Psychic.Automatism
         }
 
         if (lines.Count == 0)
-          lines.Add("# ID|ActID через ,|PhraseID через ,|ToneID|MoodID|Kind");
+          lines.Add("# ID|ActID|PhraseID|ToneID|MoodID|Kind");
 
         var result = FileValidator.SafeSaveFile(
             GetActionsImagesFilePath(),
