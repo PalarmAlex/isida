@@ -245,6 +245,29 @@ namespace ISIDA.Sensors
 
     #region Работа со словами
 
+    /// <summary>
+    /// Проверяет существование слова в дереве слов
+    /// </summary>
+    /// <param name="word">Слово для проверки</param>
+    /// <returns>true если слово существует в дереве, false в противном случае</returns>
+    public bool WordExists(string word)
+    {
+      if (string.IsNullOrWhiteSpace(word))
+        return false;
+
+      _lock.EnterReadLock();
+      try
+      {
+        // Ищем слово в дереве (включая промежуточные узлы)
+        var existingId = WordTree.FindBranchInternal(word);
+        return existingId != 0;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     private int GetFirstSymbolFromWordId(int wordId)
     {
       // Получаем слово по ID
@@ -426,6 +449,106 @@ namespace ISIDA.Sensors
     #endregion
 
     #region Работа с фразами
+
+    /// <summary>
+    /// Проверяет существование фразы в дереве фраз
+    /// </summary>
+    /// <param name="phraseWords">Список слов фразы</param>
+    /// <returns>true если фраза существует в дереве, false в противном случае</returns>
+    public bool PhraseExists(List<string> phraseWords)
+    {
+      if (phraseWords == null || !phraseWords.Any())
+        return false;
+
+      // Сначала проверяем существование всех слов
+      foreach (var word in phraseWords)
+      {
+        if (!WordExists(word))
+          return false;
+      }
+
+      // Конвертируем слова в их ID
+      var wordIds = new List<int>();
+      foreach (var word in phraseWords)
+      {
+        var id = WordTree.FindBranchInternal(word);
+        if (id == 0)
+          return false;
+        wordIds.Add(id);
+      }
+
+      _lock.EnterReadLock();
+      try
+      {
+        // Ищем фразу в дереве
+        var existingId = PhraseTree.FindBranchInternal(wordIds);
+        return existingId != 0;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Проверяет существование фразы по тексту
+    /// </summary>
+    /// <param name="phraseText">Текст фразы</param>
+    /// <returns>true если фраза существует в дереве, false в противном случае</returns>
+    public bool PhraseExists(string phraseText)
+    {
+      if (string.IsNullOrWhiteSpace(phraseText))
+        return false;
+
+      // Разбиваем текст на слова
+      var words = Regex.Matches(phraseText, @"(\S+)")
+                     .Cast<Match>()
+                     .Select(m => m.Value)
+                     .ToList();
+
+      return PhraseExists(words);
+    }
+
+    /// <summary>
+    /// Находит ID существующей фразы по тексту
+    /// </summary>
+    /// <param name="phraseText">Текст фразы</param>
+    /// <returns>ID фразы или 0 если не найдена</returns>
+    public int FindPhraseId(string phraseText)
+    {
+      if (string.IsNullOrWhiteSpace(phraseText))
+        return 0;
+
+      // Разбиваем текст на слова
+      var words = Regex.Matches(phraseText, @"(\S+)")
+                     .Cast<Match>()
+                     .Select(m => m.Value)
+                     .ToList();
+
+      if (words.Count == 0)
+        return 0;
+
+      // Сначала проверяем существование всех слов
+      var wordIds = new List<int>();
+      foreach (var word in words)
+      {
+        var wordId = WordTree.FindBranchInternal(word);
+        if (wordId == 0)
+          return 0;
+        wordIds.Add(wordId);
+      }
+
+      _lock.EnterReadLock();
+      try
+      {
+        // Ищем фразу в дереве
+        return PhraseTree.FindBranchInternal(wordIds);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
 
     /// <summary>
     /// Обрабатывает фразу, добавляя ее в дерево или песочницу

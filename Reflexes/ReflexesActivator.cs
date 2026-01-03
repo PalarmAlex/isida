@@ -421,6 +421,7 @@ namespace ISIDA.Reflexes
           // чтобы не попало в логи на следующем пульсе
           _activeGlobalCurTriggerStimulusID = 0;
           _activeConditionReflexID = 0;
+          _activeGeneticReflexID = 0;
         }
       }
       catch (Exception ex)

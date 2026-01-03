@@ -151,42 +151,26 @@ namespace ISIDA.Sensors
     {
       if (branch == null) return default(TNodeId);
 
-      TreeNode<TElement> currentNode = null;
       var elements = branch.ToList();
+      if (!elements.Any()) return default(TNodeId);
+
+      // Начинаем с корневого узла
+      if (!_nodes.TryGetValue(default(TNodeId), out var currentNode))
+        return default(TNodeId);
 
       // Проходим по всем элементам ветки
       foreach (var element in elements)
       {
-        if (currentNode == null)
-        {
-          // Ищем корневой узел с таким элементом
-          var rootNodes = _nodes.Values
-              .Where(n => n.Parent == null && n.Element.Equals(element))
-              .ToList();
+        // Ищем дочерний узел с таким элементом
+        var childNode = currentNode.Children
+            .FirstOrDefault(c => c.Element.Equals(element));
 
-          if (rootNodes.Count == 0) return default(TNodeId);
-          currentNode = rootNodes.First();
-        }
-        else
-        {
-          // Ищем дочерний узел с таким элементом
-          var childNode = currentNode.Children
-              .FirstOrDefault(c => c.Element.Equals(element));
-
-          if (childNode == null) return default(TNodeId);
-          currentNode = childNode;
-        }
+        if (childNode == null) return default(TNodeId);
+        currentNode = childNode;
       }
 
-      // возвращаем ID текущего узла, 
-      // если прошли всю последовательность элементов
-      // не зависимо от того, есть ли у него дети
-      if (currentNode != null && currentNode.Element.Equals(elements.Last()))
-      {
-        return currentNode.Id;
-      }
-
-      return default(TNodeId);
+      // Возвращаем ID конечного узла
+      return currentNode.Id;
     }
 
     /// <summary>
