@@ -171,7 +171,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Проверяет временные корреляции между стимулами
     /// </summary>
-    internal void CheckTemporalCorrelations(int currentPulse)
+    internal void CheckTemporalCorrelations(int currentPulse, bool authoritativeMode = false)
     {
       if (_lastUnconditionedStimulus == null || _lastConditionedStimulus == null)
         return;
@@ -193,7 +193,8 @@ namespace ISIDA.Reflexes
           ProcessConditionedAssociation(
               _lastConditionedStimulus,
               _lastUnconditionedStimulus,
-              currentPulse);
+              currentPulse,
+              authoritativeMode);
         }
       }
 
@@ -207,7 +208,8 @@ namespace ISIDA.Reflexes
     private void ProcessConditionedAssociation(
         StimulusRecord conditionedStimulus,
         StimulusRecord unconditionedStimulus,
-        int currentPulse)
+        int currentPulse,
+        bool authoritativeMode = false)
     {
       try
       {
@@ -251,7 +253,8 @@ namespace ISIDA.Reflexes
               level1: conditionedStimulus.BaseState,
               level2: reflexStyles,
               level3: conditionedStimulus.StimulusImageId,
-              sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId);
+              sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId,
+              authoritativeMod: authoritativeMode);
 
           if (newReflexId > 0)
             LogInfo($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");

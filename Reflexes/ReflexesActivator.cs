@@ -97,9 +97,9 @@ namespace ISIDA.Reflexes
 
       ResetStates();
     }
-    private void OnTriggerStimulusActivated(int pulseCount)
+    private void OnTriggerStimulusActivated(int pulseCount, bool authoritativeMode)
     {
-      ActiveFromAction(pulseCount);
+      ActiveFromAction(pulseCount, authoritativeMode);
     }
 
     private void OnPhraseStimulusActivated(int pulseCount)
@@ -311,7 +311,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Активация при действиях с Пульта
     /// </summary>  
-    private void ActiveFromAction(int pulseCount)
+    private void ActiveFromAction(int pulseCount, bool authoritativeMode = false)
     {
       if (!CanActivate(pulseCount, _isSleeping)) return;
 
@@ -360,7 +360,7 @@ namespace ISIDA.Reflexes
                 _activeCurBaseStyleID,
                 _activeGeneticReflexID);
 
-            _reflexFormationService.CheckTemporalCorrelations(pulseCount);
+            _reflexFormationService.CheckTemporalCorrelations(pulseCount, authoritativeMode);
           }
 
           _researchLogger.LogSystemState(pulseCount);

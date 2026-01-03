@@ -26,7 +26,7 @@ namespace ISIDA.Actions
     private readonly GomeostasSystem _gomeostas;
 
     /// <summary>Событие активации триггерного стимула (действия с пульта)</summary>
-    public event Action<int> TriggerStimulusActivated;
+    public event Action<int, bool> TriggerStimulusActivated;
 
     /// <summary>Событие активации фразового стимула (фразы с пульта)</summary>
     public event Action<int> PhraseStimulusActivated;
@@ -386,7 +386,8 @@ namespace ISIDA.Actions
     /// </summary>
     public (bool Success, string ErrorMessage) ApplyMultipleInfluenceActions(
         List<int> actionIdList,
-        List<int> phraseIdList)
+        List<int> phraseIdList,
+        bool authoritativeMode = false)
     {
       string errorMessage = string.Empty;
 
@@ -419,7 +420,7 @@ namespace ISIDA.Actions
         if (phraseIdList?.Any() == true)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount);
         if (actionIdList?.Any() == true)
-          TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount);
+          TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, authoritativeMode);
 
         // Применение воздействий (после вызова событий)
         foreach (var action in actionsToApply)

@@ -16,7 +16,7 @@ namespace ISIDA.Common
       // Условные рефлексы
       public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId";
       public const string ConditionedReflexesLevel1 = "# Level1: -1:Плохо, 0:Норма, 1:Хорошо";
-      public const string ConditionedReflexesLevel2 = "# Level2: id1,id2,id3 (образ стилей поведения)";
+      public const string ConditionedReflexesLevel2 = "# Level2: id1,id2,id3 (ID стилей поведения)";
       public const string ConditionedReflexesLevel3 = "# Level3: ID образа пускового стимула";
       public const string ConditionedReflexesActions = "# AssociationStrength: крепость связи C_ij ∈ [0,1]";
 

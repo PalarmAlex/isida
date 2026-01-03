@@ -567,7 +567,8 @@ namespace ISIDA.Reflexes
         int level1,
         List<int> level2,
         int level3,
-        int sourceGeneticReflexId)
+        int sourceGeneticReflexId,
+        bool authoritativeMod = false)
     {
       if (_gomeostas.GetAgentState().EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
@@ -612,13 +613,18 @@ namespace ISIDA.Reflexes
       {
         int newId = ++_lastConditionedReflexId;
         int currentLifetime = GetAgentLifetime();
+        float _associationStrength = _settings.MinAssociationStrength + 0.1f;
+
+        if (authoritativeMod)
+          _associationStrength = 0.95f;
+
         var conditionedReflex = new ConditionedReflex
         {
           Id = newId,
           Level1 = level1,
           Level2 = level2 ?? new List<int>(),
           Level3 = level3,
-          AssociationStrength = _settings.MinAssociationStrength + 0.1f,
+          AssociationStrength = _associationStrength,
           LastActivation = currentLifetime,
           BirthTime = currentLifetime,
           SourceGeneticReflexId = sourceGeneticReflexId
@@ -658,8 +664,6 @@ namespace ISIDA.Reflexes
               _settings.LearningRate * (_settings.MaxAssociationStrength - reflex.AssociationStrength);
 
           reflex.LastActivation = GetAgentLifetime();
-
-          // Ограничение значения
           reflex.AssociationStrength = Math.Min(reflex.AssociationStrength, _settings.MaxAssociationStrength);
         }
       }
