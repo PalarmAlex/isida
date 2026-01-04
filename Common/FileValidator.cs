@@ -68,6 +68,14 @@ namespace ISIDA.Common
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
+
+      // Дерево автоматизмов
+      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|PhraseID";
+      public const string AutomatizmTreeFields = "# BaseID: 1-Плохо, 2-Норма, 3-Хорошо; ToneMoodID: 90-по умолчанию";
+
+      // Автоматизмы
+      public const string AutomatizmFormat = "# Формат записи: ID|BranchID|Usefulness|ActionsImageID|NextID|Energy|Belief|Count|GomeoIdSuccesArr";
+      public const string AutomatizmFields = "# BranchID: 0-дерево, >1000000-действия, >2000000-фразы; Belief: 0-предположение,1-чужие,2-проверенное";
     }
 
     private static string _logFilePath;
@@ -627,6 +635,203 @@ namespace ISIDA.Common
               return false;
           }
         }
+
+        return true; // Достаточно одной валидной строки данных
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsValidAutomatizmTreeFile
+
+    /// <summary>
+    /// Проверяет валидность файла дерева автоматизмов по пути
+    /// </summary>
+    public static bool IsValidAutomatizmTreeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidAutomatizmTreeFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла дерева автоматизмов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidAutomatizmTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      // Проверяем, что файл содержит только комментарии/пустые строки (шапку)
+      bool hasOnlyComments = true;
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmed) && !trimmed.StartsWith("#", StringComparison.Ordinal))
+        {
+          hasOnlyComments = false;
+          break;
+        }
+      }
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        // Проверяем минимальное количество полей
+        if (parts.Length < 8)
+          return false;
+
+        // Проверяем ID (первое поле должно быть числом)
+        if (!int.TryParse(parts[0], out int id) || id < 0)
+          return false;
+
+        // Проверяем ParentID
+        if (!int.TryParse(parts[1], out int parentId) || parentId < 0)
+          return false;
+
+        // Проверяем BaseID (1-3)
+        if (!int.TryParse(parts[2], out int baseId) || baseId < 1 || baseId > 3)
+          return false;
+
+        // Проверяем EmotionID (может быть 0)
+        if (!int.TryParse(parts[3], out int emotionId) || emotionId < 0)
+          return false;
+
+        // Проверяем ActivityID (может быть 0)
+        if (!int.TryParse(parts[4], out int activityId) || activityId < 0)
+          return false;
+
+        // Проверяем ToneMoodID (может быть 0 или 90)
+        if (!int.TryParse(parts[5], out int toneMoodId) || (toneMoodId != 0 && toneMoodId != 90 && toneMoodId < 1))
+          return false;
+
+        // Проверяем SimbolID (может быть 0)
+        if (!int.TryParse(parts[6], out int simbolId) || simbolId < 0)
+          return false;
+
+        // Проверяем PhraseID (может быть 0)
+        if (!int.TryParse(parts[7], out int phraseId) || phraseId < 0)
+          return false;
+
+        return true; // Достаточно одной валидной строки данных
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsValidAutomatizmFile
+
+    /// <summary>
+    /// Проверяет валидность файла автоматизмов по пути
+    /// </summary>
+    public static bool IsValidAutomatizmFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidAutomatizmFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла автоматизмов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidAutomatizmFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      // Проверяем, что файл содержит только комментарии/пустые строки (шапку)
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        // Проверяем минимальное количество полей
+        if (parts.Length < 8)
+          return false;
+
+        // Проверяем ID (первое поле должно быть числом)
+        if (!int.TryParse(parts[0], out int id) || id <= 0)
+          return false;
+
+        // Проверяем BranchID
+        if (!int.TryParse(parts[1], out int branchId) || branchId < 0)
+          return false;
+
+        // Проверяем Usefulness
+        if (!int.TryParse(parts[2], out int usefulness))
+          return false;
+
+        // Проверяем ActionsImageID
+        if (!int.TryParse(parts[3], out int actionsImageId) || actionsImageId < 0)
+          return false;
+
+        // Проверяем NextID (может быть 0)
+        if (!int.TryParse(parts[4], out int nextId) || nextId < 0)
+          return false;
+
+        // Проверяем Energy (1-10)
+        if (!int.TryParse(parts[5], out int energy) || energy < 1 || energy > 10)
+          return false;
+
+        // Проверяем Belief (0-2)
+        if (!int.TryParse(parts[6], out int belief) || belief < 0 || belief > 2)
+          return false;
+
+        // Проверяем Count
+        if (!int.TryParse(parts[7], out int count) || count < 0)
+          return false;
 
         return true; // Достаточно одной валидной строки данных
       }
