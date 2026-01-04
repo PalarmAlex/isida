@@ -1,6 +1,7 @@
 ﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -10,26 +11,6 @@ namespace isida.Psychic.Automatism
   /// <summary>
   /// Система образов действий оператора и агента ИИ
   /// </summary>
-  /// <remarks>
-  /// Образ действий оператора - это Стимул (образ восприятия)
-  /// Образ действий Beast - это Акция (образ действия)
-  /// 
-  /// При каждой стимуляции с Пульта Дерева автоматизмов возникает образ восприятия curActiveActionsID, curActiveActions
-  /// Фактически структура повторяет TriggerStimuls из рефлексов и позволяет сохранять
-  /// как образы действий в автоматизмах, так и образы действий оператора, отражаемые в дереве мот.автомтаизмов.
-  /// Используется для формирования пар стимул (действия оператора) - действия (ответ beast)
-  /// для эпизодической памяти и структуры rules - Правил примитивного опыта.
-  /// 
-  /// Обоснование:
-  /// Обощенные образы восприятия, возникающие в теменной ассоциативной коре полностью соотвествуют воспринимаемому
-  /// и не могут меняться.
-  /// Но в лобной коре есть отражение этих образов,
-  /// с возможностью произвольно создавать любые новые из известных элементов старого.
-  /// Поэтому для области рефлексов используется TriggerStimuls,
-  /// а для области психики - ActionsImage (с меткой Kind int // 0 - объектиное действие, 1 - субъективное предположение).
-  /// Эти два вида структур локализуются по обе стороны двигательных программ,
-  /// образуя основу "зеркальной" системы подражания.
-  /// </remarks>
   public sealed class ActionsImagesSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -70,7 +51,7 @@ namespace isida.Psychic.Automatism
           ? Path.Combine(
               Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
               "ISIDA", "Data", "Psychic", "Automatism")
-          : psychicDataPath;
+          : Path.Combine(psychicDataPath, "Automatism");
 
       try
       {
@@ -90,6 +71,25 @@ namespace isida.Psychic.Automatism
 
     private const string ActionsImagesFileName = "action_images";
     private const int PrefixActionIdValue = 10000000; // если ID действия больше prefixActionIdValue, то это цепочка действий
+
+    private static readonly Dictionary<int, string> _toneDictionary = new Dictionary<int, string>
+    {
+      {-1, "Вялый"},
+      {0, "Нормальный"},
+      {1, "Повышенный"}
+    };
+
+    private static readonly Dictionary<int, string> _moodDictionary = new Dictionary<int, string>
+    {
+      {0, "Нормальное"},
+      {1, "Хорошее"},
+      {2, "Плохое"},
+      {3, "Игривое"},
+      {4, "Учитель"},
+      {5, "Агрессивное"},
+      {6, "Защитное"},
+      {7, "Протест"}
+    };
 
     /// <summary>
     /// Образ действий оператора или агента ИИ
@@ -129,6 +129,68 @@ namespace isida.Psychic.Automatism
       /// ID настроения при передаче фразы с Пульта или Ответного действия
       /// </summary>
       public int MoodId { get; set; }
+    }
+
+    #endregion
+
+    #region Методы для ToneId и MoodId
+
+    /// <summary>
+    /// Получает текстовое описание тона по его ID
+    /// </summary>
+    /// <param name="toneId">ID тона</param>
+    /// <returns>Текстовое описание тона или пустую строку, если не найден</returns>
+    public static string GetToneText(int toneId)
+    {
+      return _toneDictionary.TryGetValue(toneId, out var text) ? text : string.Empty;
+    }
+
+    /// <summary>
+    /// Получает текстовое описание настроения по его ID
+    /// </summary>
+    /// <param name="moodId">ID настроения</param>
+    /// <returns>Текстовое описание настроения или пустую строку, если не найден</returns>
+    public static string GetMoodText(int moodId)
+    {
+      return _moodDictionary.TryGetValue(moodId, out var text) ? text : string.Empty;
+    }
+
+    /// <summary>
+    /// Получает список всех доступных тонов в формате ключ-значение
+    /// </summary>
+    /// <returns>Словарь тонов (ID -> Описание)</returns>
+    public static Dictionary<int, string> GetToneList()
+    {
+      return new Dictionary<int, string>(_toneDictionary);
+    }
+
+    /// <summary>
+    /// Получает список всех доступных настроений в формате ключ-значение
+    /// </summary>
+    /// <returns>Словарь настроений (ID -> Описание)</returns>
+    public static Dictionary<int, string> GetMoodList()
+    {
+      return new Dictionary<int, string>(_moodDictionary);
+    }
+
+    /// <summary>
+    /// Проверяет, существует ли тон с указанным ID
+    /// </summary>
+    /// <param name="toneId">ID тона для проверки</param>
+    /// <returns>True, если тон существует</returns>
+    public static bool IsValidToneId(int toneId)
+    {
+      return _toneDictionary.ContainsKey(toneId);
+    }
+
+    /// <summary>
+    /// Проверяет, существует ли настроение с указанным ID
+    /// </summary>
+    /// <param name="moodId">ID настроения для проверки</param>
+    /// <returns>True, если настроение существует</returns>
+    public static bool IsValidMoodId(int moodId)
+    {
+      return _moodDictionary.ContainsKey(moodId);
     }
 
     #endregion
@@ -211,9 +273,13 @@ namespace isida.Psychic.Automatism
 
       if (checkUnicum)
       {
+        Debug.WriteLine($"Проверка уникальности: kind={kind}, actCount={actIdList?.Count}, phraseCount={phraseIdList?.Count}, tone={toneId}, mood={moodId}");
         var existing = CheckUnicumActionsImage(kind, actIdList, phraseIdList, toneId, moodId);
         if (existing.Image != null)
+        {
+          Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
           return existing;
+        }
       }
 
       _lock.EnterWriteLock();
@@ -231,6 +297,7 @@ namespace isida.Psychic.Automatism
         };
 
         _actionsImages[newId] = image;
+        Debug.WriteLine($"Создан новый образ ID={newId}");
 
         if (_doWritingFile)
           SaveActionsImages();
@@ -244,9 +311,9 @@ namespace isida.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создать новый образ действий с указанным ID
+    /// Создать новый образ действий с указанным ID (без блокировки - для внутреннего использования)
     /// </summary>
-    internal (int Id, ActionsImage Image) CreateNewActionsImageWithId(
+    internal (int Id, ActionsImage Image) CreateNewActionsImageWithIdNoLock(
         int id,
         int kind,
         List<int> actIdList,
@@ -256,42 +323,75 @@ namespace isida.Psychic.Automatism
         bool checkUnicum)
     {
       if (id == 0)
-        return CreateNewActionsImage(kind, actIdList, phraseIdList, toneId, moodId, checkUnicum);
+        return CreateNewActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId, checkUnicum);
 
       if (checkUnicum)
       {
-        var existing = CheckUnicumActionsImage(kind, actIdList, phraseIdList, toneId, moodId);
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
         if (existing.Image != null)
           return existing;
       }
 
-      _lock.EnterWriteLock();
-      try
+      if (_lastActionsImageId < id)
+        _lastActionsImageId = id;
+
+      var image = new ActionsImage
       {
-        if (_lastActionsImageId < id)
-          _lastActionsImageId = id;
+        Id = id,
+        Kind = kind,
+        ActIdList = actIdList?.ToList() ?? new List<int>(),
+        PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
+        ToneId = toneId,
+        MoodId = moodId
+      };
 
-        var image = new ActionsImage
-        {
-          Id = id,
-          Kind = kind,
-          ActIdList = actIdList?.ToList() ?? new List<int>(),
-          PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
-          ToneId = toneId,
-          MoodId = moodId
-        };
+      _actionsImages[id] = image;
 
-        _actionsImages[id] = image;
+      if (_doWritingFile)
+        SaveActionsImagesNoLock();
 
-        if (_doWritingFile)
-          SaveActionsImages();
+      return (id, image);
+    }
 
-        return (id, image);
-      }
-      finally
+    /// <summary>
+    /// Создать новый образ действий или возвратить существующий (без блокировки - для внутреннего использования)
+    /// </summary>
+    private (int Id, ActionsImage Image) CreateNewActionsImageNoLock(
+        int kind,
+        List<int> actIdList,
+        List<int> phraseIdList,
+        int toneId,
+        int moodId,
+        bool checkUnicum)
+    {
+      // Не создавать образ с пустым действием и вербальным сенсором
+      if (actIdList == null && (phraseIdList == null || _isUnrecognizedPhraseFromAtmtzmTreeActivation))
+        return (0, null);
+
+      if (checkUnicum)
       {
-        _lock.ExitWriteLock();
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
+        if (existing.Image != null)
+          return existing;
       }
+
+      int newId = ++_lastActionsImageId;
+      var image = new ActionsImage
+      {
+        Id = newId,
+        Kind = kind,
+        ActIdList = actIdList?.ToList() ?? new List<int>(),
+        PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
+        ToneId = toneId,
+        MoodId = moodId
+      };
+
+      _actionsImages[newId] = image;
+
+      if (_doWritingFile)
+        SaveActionsImagesNoLock();
+
+      return (newId, image);
     }
 
     /// <summary>
@@ -307,30 +407,46 @@ namespace isida.Psychic.Automatism
       _lock.EnterReadLock();
       try
       {
-        foreach (var kvp in _actionsImages)
-        {
-          var v = kvp.Value;
-          if (v == null || kind != v.Kind)
-            continue;
-
-          if (!AreListsEqual(actIdList, v.ActIdList))
-            continue;
-
-          if (!AreListsEqual(phraseIdList, v.PhraseIdList))
-            continue;
-
-          if (toneId != v.ToneId || moodId != v.MoodId)
-            continue;
-
-          return (kvp.Key, v);
-        }
-
-        return (0, null);
+        return CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
       }
       finally
       {
         _lock.ExitReadLock();
       }
+    }
+
+    /// <summary>
+    /// Проверить уникальность образа действий (без блокировки - для внутреннего использования)
+    /// </summary>
+    private (int Id, ActionsImage Image) CheckUnicumActionsImageNoLock(
+        int kind,
+        List<int> actIdList,
+        List<int> phraseIdList,
+        int toneId,
+        int moodId)
+    {
+      foreach (var kvp in _actionsImages)
+      {
+        var v = kvp.Value;
+        if (v == null)
+          continue;
+
+        if (kind != v.Kind)
+          continue;
+
+        if (!AreListsEqual(actIdList, v.ActIdList))
+          continue;
+
+        if (!AreListsEqual(phraseIdList, v.PhraseIdList))
+          continue;
+
+        if (toneId != v.ToneId || moodId != v.MoodId)
+          continue;
+
+        return (kvp.Key, v);
+      }
+
+      return (0, null);
     }
 
     /// <summary>
@@ -340,8 +456,15 @@ namespace isida.Psychic.Automatism
     {
       if (list1 == null && list2 == null)
         return true;
+
+      if (list1 == null && list2 != null && list2.Count == 0)
+        return true;
+      if (list2 == null && list1 != null && list1.Count == 0)
+        return true;
+
       if (list1 == null || list2 == null)
         return false;
+
       if (list1.Count != list2.Count)
         return false;
 
@@ -389,8 +512,34 @@ namespace isida.Psychic.Automatism
     private void LoadActionsImages()
     {
       string filePath = GetActionsImagesFilePath();
-      if (!FileValidator.IsValidActionsImagesFile(filePath))
-        return;
+
+      // Если файл не существует или невалиден, создаем новый с шапкой
+      if (!File.Exists(filePath) || !FileValidator.IsValidActionsImagesFile(filePath))
+      {
+        try
+        {
+          EnsureDataDirectory();
+          var lines = new List<string>
+          {
+            FileValidator.FileHeaders.ActionsImagesFormat,
+            FileValidator.FileHeaders.ActionsImagesActId,
+            FileValidator.FileHeaders.ActionsImagesPhraseId,
+            FileValidator.FileHeaders.ActionsImagesToneId,
+            FileValidator.FileHeaders.ActionsImagesMoodId,
+            FileValidator.FileHeaders.ActionsImagesKind
+          };
+
+          File.WriteAllLines(filePath, lines);
+          _actionsImages.Clear();
+          _lastActionsImageId = 0;
+          return;
+        }
+        catch (Exception ex)
+        {
+          LogError($"Ошибка создания файла образов действий: {ex.Message}");
+          throw;
+        }
+      }
 
       try
       {
@@ -403,7 +552,7 @@ namespace isida.Psychic.Automatism
           foreach (var line in File.ReadLines(filePath))
           {
             var trimmedLine = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmedLine))
+            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
               continue;
 
             var parts = trimmedLine.Split('|');
@@ -430,7 +579,10 @@ namespace isida.Psychic.Automatism
 
             var saveDoWritingFile = _doWritingFile;
             _doWritingFile = false;
-            CreateNewActionsImageWithId(id, kind, actIdList, phraseIdList, toneId, moodId, false);
+
+            // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
+            CreateNewActionsImageWithIdNoLock(id, kind, actIdList, phraseIdList, toneId, moodId, false);
+
             _doWritingFile = saveDoWritingFile;
           }
         }
@@ -450,45 +602,58 @@ namespace isida.Psychic.Automatism
     /// </summary>
     internal (bool Success, string ErrorMessage) SaveActionsImages()
     {
+      _lock.EnterReadLock();
+      try
+      {
+        return SaveActionsImagesNoLock();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Сохраняет образы действий в файл (без блокировки - для внутреннего использования)
+    /// </summary>
+    private (bool Success, string ErrorMessage) SaveActionsImagesNoLock()
+    {
       try
       {
         var lines = new List<string>();
 
-        _lock.EnterReadLock();
-        try
+        lines.Add(FileValidator.FileHeaders.ActionsImagesFormat);
+        lines.Add(FileValidator.FileHeaders.ActionsImagesActId);
+        lines.Add(FileValidator.FileHeaders.ActionsImagesPhraseId);
+        lines.Add(FileValidator.FileHeaders.ActionsImagesToneId);
+        lines.Add(FileValidator.FileHeaders.ActionsImagesMoodId);
+        lines.Add(FileValidator.FileHeaders.ActionsImagesKind);
+
+        foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
         {
-          foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
-          {
-            var v = kvp.Value;
-            if (v == null)
-              continue;
+          var v = kvp.Value;
+          if (v == null)
+            continue;
 
-            var line = $"{v.Id}|";
+          var line = $"{v.Id}|";
 
-            line += IntListToString(v.ActIdList);
-            line += "|";
-            line += IntListToString(v.PhraseIdList);
-            line += "|";
-            line += $"{v.ToneId}|";
-            line += $"{v.MoodId}|";
-            line += $"{v.Kind}";
+          line += IntListToString(v.ActIdList);
+          line += "|";
+          line += IntListToString(v.PhraseIdList);
+          line += "|";
+          line += $"{v.ToneId}|";
+          line += $"{v.MoodId}|";
+          line += $"{v.Kind}";
 
-            lines.Add(line);
-          }
-        }
-        finally
-        {
-          _lock.ExitReadLock();
+          lines.Add(line);
         }
 
-        if (lines.Count == 0)
-          lines.Add("# ID|ActID|PhraseID|ToneID|MoodID|Kind");
-
+        var minLinesCount = lines.Count == 6 ? 6 : 7;
         var result = FileValidator.SafeSaveFile(
             GetActionsImagesFilePath(),
             lines,
             content => FileValidator.IsValidActionsImagesFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: 1,
+            minLinesCount: minLinesCount,
             fileDescription: "образов действий");
 
         return result;
@@ -509,8 +674,7 @@ namespace isida.Psychic.Automatism
 
       return listStr.Split(',', (char)StringSplitOptions.RemoveEmptyEntries)
           .Select(s => int.TryParse(s.Trim(), out int result) ? result : 0)
-          .Where(x => x != 0)
-          .ToList();
+          .ToList(); // УБРАЛИ .Where(x => x != 0) - сохраняем все значения!
     }
 
     /// <summary>

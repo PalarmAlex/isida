@@ -27,7 +27,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Директория с данными психики (образы действий оператора и агента ИИ)
     /// </summary>
-    public string PsychicImageDataFolder { get; set; }
+    public string PsychicDataFolder { get; set; }
 
     /// <summary>
     /// Базовая директория для всех файлов системы ISIDA
@@ -144,7 +144,7 @@ namespace ISIDA.Common
       ActionsFolder = Path.Combine(BaseDirectory, "DataActions");
       SensorsFolder = Path.Combine(BaseDirectory, "Sensors");
       ReflexesFolder = Path.Combine(BaseDirectory, "Reflexes");
-      PsychicImageDataFolder = Path.Combine(BaseDirectory, "Data", "Psychic", "Automatism");
+      PsychicDataFolder = Path.Combine(BaseDirectory, "Data", "Psychic");
       LogsFolder = Path.Combine(BaseDirectory, "Logs");
       return this;
     }
@@ -163,8 +163,8 @@ namespace ISIDA.Common
         throw new ArgumentException("SensorsFolder не указан");
       if (string.IsNullOrEmpty(ReflexesFolder))
         throw new ArgumentException("ReflexesFolder не указан");
-      if (string.IsNullOrEmpty(PsychicImageDataFolder))
-        throw new ArgumentException("PsychicImageDataFolder не указан");
+      if (string.IsNullOrEmpty(PsychicDataFolder))
+        throw new ArgumentException("PsychicDataFolder не указан");
     }
   }
 
@@ -491,8 +491,9 @@ namespace ISIDA.Common
 
         // Шаг 16: Система образов действий оператора и агента ИИ
         initializationStep = 16;
-        ActionsImagesSystem.InitializeInstance(config.PsychicImageDataFolder);
+        ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
+        context.InfluenceActions.SetActionsImagesSystem(context.ActionsImages);
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

@@ -60,6 +60,14 @@ namespace ISIDA.Common
       public const string PropertiesFormat = "# Формат: Ключ|Значение";
       public const string PropertiesIsSleeping = "IsSleeping|";
       public const string PropertiesIsDead = "IsDead|";
+
+      // Образы действий психики
+      public const string ActionsImagesFormat = "# ID|ActID|PhraseID|ToneID|MoodID|Kind";
+      public const string ActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
+      public const string ActionsImagesPhraseId = "# PhraseID: ID фраз (через запятую)";
+      public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
+      public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
+      public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
     }
 
     private static string _logFilePath;
@@ -575,6 +583,15 @@ namespace ISIDA.Common
       if (lineList.Count < 1)
         return false;
 
+      // Проверяем, что файл содержит только комментарии/пустые строки (шапку)
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
       foreach (var line in lineList)
       {
         var trimmed = line?.Trim();
@@ -582,13 +599,36 @@ namespace ISIDA.Common
           continue;
 
         var parts = trimmed.Split('|');
+
+        // Проверяем минимальное количество полей
         if (parts.Length < 6)
           return false;
 
-        if (!int.TryParse(parts[0], out _))
+        // Проверяем ID (первое поле должно быть числом)
+        if (!int.TryParse(parts[0], out int id) || id <= 0)
           return false;
 
-        return true;
+        // ToneId должен быть валидным (-1, 0, 1)
+        if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+        {
+          if (int.TryParse(parts[3], out int toneId))
+          {
+            if (toneId < -1 || toneId > 1)
+              return false;
+          }
+        }
+
+        // Kind должен быть 0 или 1
+        if (parts.Length > 5 && !string.IsNullOrWhiteSpace(parts[5]))
+        {
+          if (int.TryParse(parts[5], out int kind))
+          {
+            if (kind < 0 || kind > 1)
+              return false;
+          }
+        }
+
+        return true; // Достаточно одной валидной строки данных
       }
 
       return true; // только шапка — допустимо

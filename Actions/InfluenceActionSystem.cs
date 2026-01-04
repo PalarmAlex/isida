@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Gomeostas.GomeostasSystem;
+using isida.Psychic.Automatism;
 
 namespace ISIDA.Actions
 {
@@ -24,6 +25,7 @@ namespace ISIDA.Actions
     private PerceptionImagesSystem _perceptionImagesSystem;
     private bool _disposed = false;
     private readonly GomeostasSystem _gomeostas;
+    private ActionsImagesSystem _actionsImagesSystem;
 
     /// <summary>Событие активации триггерного стимула (действия с пульта)</summary>
     public event Action<int, bool> TriggerStimulusActivated;
@@ -42,11 +44,19 @@ namespace ISIDA.Actions
       throw new InvalidOperationException("InfluenceAction не инициализирован. Вызовите InitializeInstance() с путями.");
 
     /// <summary>
-    /// Устанавливает систему образов восприятия (должна быть вызвана после инициализации PerceptionImagesSystem)
+    /// Устанавливает систему образов восприятия
     /// </summary>
     public void SetPerceptionImagesSystem(PerceptionImagesSystem perceptionImagesSystem)
     {
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+    }
+
+    /// <summary>
+    /// Устанавливает систему образов действий (должна быть вызвана после инициализации ActionsImagesSystem)
+    /// </summary>
+    public void SetActionsImagesSystem(ActionsImagesSystem actionsImagesSystem)
+    {
+      _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
     }
 
     /// <summary>
@@ -387,7 +397,9 @@ namespace ISIDA.Actions
     public (bool Success, string ErrorMessage) ApplyMultipleInfluenceActions(
         List<int> actionIdList,
         List<int> phraseIdList,
-        bool authoritativeMode = false)
+        bool authoritativeMode = false,
+        int toneId = 0,
+        int moodId = 0)
     {
       string errorMessage = string.Empty;
 
@@ -416,6 +428,8 @@ namespace ISIDA.Actions
         ActiveCurTriggerStimulusID = CreatePerceptionImage(actionIdList, phraseIdList ?? new List<int>());
         // для стимула б/у рефлексов фразу игнорируем
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(actionIdList, new List<int>());
+        // создаем образ действий психики
+        CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
 
         if (phraseIdList?.Any() == true)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount);
@@ -446,6 +460,52 @@ namespace ISIDA.Actions
       finally
       {
         _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Создает образ действий оператора с учетом тона и настроения
+    /// </summary>
+    private void CreateActionsImage(List<int> actionIdList, List<int> phraseIdList, int toneId, int moodId)
+    {
+      try
+      {
+        if (_actionsImagesSystem == null || !ActionsImagesSystem.IsInitialized)
+        {
+          Debug.WriteLine("ActionsImagesSystem не инициализирована, образ действий не создан");
+          return;
+        }
+
+        // Проверяем валидность toneId и moodId
+        if (!ActionsImagesSystem.IsValidToneId(toneId))
+        {
+          Debug.WriteLine($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
+          toneId = 0; // Нормальный
+        }
+
+        if (!ActionsImagesSystem.IsValidMoodId(moodId))
+        {
+          Debug.WriteLine($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
+          moodId = 0; // Нормальное
+        }
+
+        // Создаем образ действий оператора
+        // Kind = 0 (объективное действие) - реальное воздействие с пульта
+        var (imageId, actionsImage) = _actionsImagesSystem.CreateNewActionsImage(
+            kind: 0, // объективное действие
+            actIdList: actionIdList,
+            phraseIdList: phraseIdList,
+            toneId: toneId,
+            moodId: moodId,
+            checkUnicum: true // проверяем уникальность
+        );
+
+        if (imageId > 0)
+          Debug.WriteLine($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"Ошибка создания образа действий: {ex.Message}");
       }
     }
 
