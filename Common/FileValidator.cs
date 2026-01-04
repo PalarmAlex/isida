@@ -71,11 +71,26 @@ namespace ISIDA.Common
 
       // Дерево автоматизмов
       public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|PhraseID";
-      public const string AutomatizmTreeFields = "# BaseID: 1-Плохо, 2-Норма, 3-Хорошо; ToneMoodID: 90-по умолчанию";
+      public const string AutomatizmTreeFields1 = "# ID: уникальный идентификатор узла дерева";
+      public const string AutomatizmTreeFields2 = "# ParentID: ID родительского узла (0 для корневых веток)";
+      public const string AutomatizmTreeFields3 = "# BaseID: базовое состояние: -1=Плохо, 0=Норма, 1=Хорошо";
+      public const string AutomatizmTreeFields4 = "# EmotionID: ID эмоции (0 если нет эмоции)";
+      public const string AutomatizmTreeFields5 = "# ActivityID: ID образа сочетания действий с Пульта (0 если нет действия)";
+      public const string AutomatizmTreeFields6 = "# ToneMoodID: ID образа контекста сообщения";
+      public const string AutomatizmTreeFields7 = "# SimbolID: ID первого символа фразы (0 если нет фразы)";
+      public const string AutomatizmTreeFields8 = "# PhraseID: ID фразы (Verbal.ID, 0 если нет фразы)";
 
       // Автоматизмы
       public const string AutomatizmFormat = "# Формат записи: ID|BranchID|Usefulness|ActionsImageID|NextID|Energy|Belief|Count|GomeoIdSuccesArr";
-      public const string AutomatizmFields = "# BranchID: 0-дерево, >1000000-действия, >2000000-фразы; Belief: 0-предположение,1-чужие,2-проверенное";
+      public const string AutomatizmFields1 = "# ID: уникальный идентификатор автоматизма";
+      public const string AutomatizmFields2 = "# BranchID: ID объекта привязки: 0=дерево, >1000000=действия, >2000000=фразы";
+      public const string AutomatizmFields3 = "# Usefulness: (БЕС)ПОЛЕЗНОСТЬ: -10=вред, 0=нейтрально, +10=польза";
+      public const string AutomatizmFields4 = "# ActionsImageID: ID образа действий (ActionsImage.ID)";
+      public const string AutomatizmFields5 = "# NextID: ID следующей цепочки действий (0 если нет цепочки)";
+      public const string AutomatizmFields6 = "# Energy: энергичность действия (1-10, по умолчанию=5)";
+      public const string AutomatizmFields7 = "# Belief: уверенность: 0=предположение, 1=чужие сведения, 2=проверенное собственное знание";
+      public const string AutomatizmFields8 = "# Count: надежность - число использований с подтверждением (бес)полезности";
+      public const string AutomatizmFields9 = "# GomeoIdSuccesArr: ID гомео-параметров, которые улучшает это действие (через запятую)";
     }
 
     private static string _logFilePath;
@@ -715,7 +730,7 @@ namespace ISIDA.Common
           return false;
 
         // Проверяем BaseID (1-3)
-        if (!int.TryParse(parts[2], out int baseId) || baseId < 1 || baseId > 3)
+        if (!int.TryParse(parts[2], out int baseId) || baseId < -1 || baseId > 1)
           return false;
 
         // Проверяем EmotionID (может быть 0)

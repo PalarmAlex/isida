@@ -19,7 +19,7 @@ namespace isida.Psychic.Automatism
     public int ID { get; set; }
 
     /// <summary>
-    /// Базовое состояние: 1 - Плохо, 2 - Норма, 3 - Хорошо
+    /// Базовое состояние: -1 - Плохо, 0 - Норма, 1 - Хорошо
     /// </summary>
     public int BaseID { get; set; }
 
@@ -125,7 +125,6 @@ namespace isida.Psychic.Automatism
     #region Константы и поля
 
     private const string AutomatizmTreeFileName = "automatizm_tree";
-    private const string AutomatizmFileName = "automatizm";
 
     /// <summary>
     /// Основное дерево автоматизмов
@@ -193,10 +192,8 @@ namespace isida.Psychic.Automatism
       if (parent == null)
         return (0, null);
 
-      _lock.EnterWriteLock();
       try
       {
-        // Проверка на уникальность
         if (checkUnicum)
         {
           var existing = FindAutomatizmTreeNodeFromCondition(baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
@@ -223,7 +220,7 @@ namespace isida.Psychic.Automatism
           BaseID = baseId,
           EmotionID = emotionId,
           ActivityID = activityId,
-          ToneMoodID = toneMoodId == 0 ? 90 : toneMoodId, // По умолчанию 90 если 0
+          ToneMoodID = toneMoodId,
           SimbolID = simbolId,
           PhraseID = phraseId
         };
@@ -236,9 +233,10 @@ namespace isida.Psychic.Automatism
 
         return (id, node);
       }
-      finally
+      catch (Exception ex)
       {
-        _lock.ExitWriteLock();
+        LogError($"Ошибка создания узла дерева автоматизмов: {ex.Message}");
+        throw;
       }
     }
 
@@ -309,16 +307,14 @@ namespace isida.Psychic.Automatism
     {
       _notAllowScanInTreeThisTime = true;
 
-      _lock.EnterWriteLock();
       try
       {
+        CreateNewAutomatizmNode(Tree, 0, -1, 0, 0, 0, 0, 0, false);
+        CreateNewAutomatizmNode(Tree, 0, 0, 0, 0, 0, 0, 0, false);
         CreateNewAutomatizmNode(Tree, 0, 1, 0, 0, 0, 0, 0, false);
-        CreateNewAutomatizmNode(Tree, 0, 2, 0, 0, 0, 0, 0, false);
-        CreateNewAutomatizmNode(Tree, 0, 3, 0, 0, 0, 0, 0, false);
       }
       finally
       {
-        _lock.ExitWriteLock();
         _notAllowScanInTreeThisTime = false;
       }
     }
@@ -342,6 +338,17 @@ namespace isida.Psychic.Automatism
     #endregion
 
     #region Активация дерева
+
+    /// <summary>
+    /// Инициализирует структуры дерева
+    /// </summary>
+    private void InitializeTree()
+    {
+      Tree = new AutomatizmNode { ID = 0 };
+      _nodesById.Clear();
+      _nodesById[0] = Tree;
+      _lastAutomatizmNodeId = 0;
+    }
 
     /// <summary>
     /// Активация дерева автоматизмов
@@ -369,7 +376,6 @@ namespace isida.Psychic.Automatism
 
         var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
 
-        // Поиск по дереву
         foreach (var node in Tree.Children)
         {
           if (condArr[0] == node.BaseID)
@@ -381,21 +387,16 @@ namespace isida.Psychic.Automatism
           }
         }
 
-        // Обработка результатов активации
         if (DetectedActiveLastNodeId > 0)
         {
           var conditionsCount = GetConditionsCount(condArr);
           CurrentAutomatizmTreeEnd = condArr.Skip(_currentStepCount).ToList();
 
           if (_currentStepCount < conditionsCount)
-          {
-            // Нарастить недостающее в ветке
             DetectedActiveLastNodeId = FormingBranch(DetectedActiveLastNodeId, _currentStepCount, condArr);
-          }
         }
         else
         {
-          // Вообще нет совпадений
           DetectedActiveLastNodeId = FormingBranch(0, _currentStepCount, condArr);
           CurrentAutomatizmTreeEnd = condArr;
         }
@@ -433,7 +434,7 @@ namespace isida.Psychic.Automatism
             val = child.ActivityID;
             break;
           case 3:
-            val = child.ToneMoodID; // Исправлено: ToneMoodID вместо ToneMoodId
+            val = child.ToneMoodID;
             break;
           case 4:
             val = child.SimbolID;
@@ -473,9 +474,7 @@ namespace isida.Psychic.Automatism
       var lastNodeId = AddNewBranchFromNodes(lastLevel, condArr, lastNode);
 
       if (lastNodeId > 0 && _doWritingFile)
-      {
         SaveAutomatizmTree();
-      }
 
       return lastNodeId;
     }
@@ -557,7 +556,7 @@ namespace isida.Psychic.Automatism
 
     private string GetAutomatizmTreeFilePath()
     {
-      return Path.Combine(_psychicDataPath, $"{AutomatizmTreeFileName}.txt");
+      return Path.Combine(_psychicDataPath, $"{AutomatizmTreeFileName}.dat");
     }
 
     /// <summary>
@@ -576,14 +575,19 @@ namespace isida.Psychic.Automatism
           var lines = new List<string>
             {
               FileValidator.FileHeaders.AutomatizmTreeFormat,
-              FileValidator.FileHeaders.AutomatizmTreeFields
+              FileValidator.FileHeaders.AutomatizmTreeFields1,
+              FileValidator.FileHeaders.AutomatizmTreeFields2,
+              FileValidator.FileHeaders.AutomatizmTreeFields3,
+              FileValidator.FileHeaders.AutomatizmTreeFields4,
+              FileValidator.FileHeaders.AutomatizmTreeFields5,
+              FileValidator.FileHeaders.AutomatizmTreeFields6,
+              FileValidator.FileHeaders.AutomatizmTreeFields7,
+              FileValidator.FileHeaders.AutomatizmTreeFields8
             };
 
           File.WriteAllLines(filePath, lines);
-          Tree = new AutomatizmNode { ID = 0 };
-          _nodesById.Clear();
-          _nodesById[0] = Tree;
-          _lastAutomatizmNodeId = 0;
+
+          InitializeTree();
           return;
         }
         catch (Exception ex)
@@ -595,63 +599,51 @@ namespace isida.Psychic.Automatism
 
       try
       {
-        _lock.EnterWriteLock();
-        try
+        InitializeTree();
+
+        // Пропускаем строки заголовков (первые 9 строк)
+        int lineNumber = 0;
+        foreach (var line in File.ReadLines(filePath))
         {
-          Tree = new AutomatizmNode { ID = 0 };
-          _nodesById.Clear();
-          _nodesById[0] = Tree;
-          _lastAutomatizmNodeId = 0;
+          lineNumber++;
+          if (lineNumber <= 9) // Пропускаем 9 строк заголовков
+            continue;
 
-          foreach (var line in File.ReadLines(filePath))
-          {
-            var trimmedLine = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-              continue;
+          var trimmedLine = line.Trim();
+          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+            continue;
 
-            var parts = trimmedLine.Split('|');
-            if (parts.Length < 8)
-              continue;
+          var parts = trimmedLine.Split('|');
+          if (parts.Length < 8)
+            continue;
 
-            if (!int.TryParse(parts[0], out int id))
-              continue;
+          if (!int.TryParse(parts[0], out int id))
+            continue;
 
-            if (!int.TryParse(parts[1], out int parentId))
-              continue;
+          if (!int.TryParse(parts[1], out int parentId))
+            continue;
 
-            if (!int.TryParse(parts[2], out int baseId))
-              continue;
+          if (!int.TryParse(parts[2], out int baseId))
+            continue;
 
-            if (!int.TryParse(parts[3], out int emotionId))
-              emotionId = 0;
+          if (!int.TryParse(parts[3], out int emotionId))
+            emotionId = 0;
 
-            if (!int.TryParse(parts[4], out int activityId))
-              activityId = 0;
+          if (!int.TryParse(parts[4], out int activityId))
+            activityId = 0;
 
-            if (!int.TryParse(parts[5], out int toneMoodId))
-              toneMoodId = 0;
+          if (!int.TryParse(parts[5], out int toneMoodId))
+            toneMoodId = 0;
 
-            if (!int.TryParse(parts[6], out int simbolId))
-              simbolId = 0;
+          if (!int.TryParse(parts[6], out int simbolId))
+            simbolId = 0;
 
-            if (!int.TryParse(parts[7], out int phraseId))
-              phraseId = 0;
+          if (!int.TryParse(parts[7], out int phraseId))
+            phraseId = 0;
 
-            var saveDoWritingFile = _doWritingFile;
-            _doWritingFile = false;
-
-            var parent = GetNodeById(parentId);
-            if (parent != null)
-            {
-              CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId, false);
-            }
-
-            _doWritingFile = saveDoWritingFile;
-          }
-        }
-        finally
-        {
-          _lock.ExitWriteLock();
+          var parent = GetNodeById(parentId);
+          if (parent != null)
+            CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId, false);
         }
       }
       catch (Exception ex)
@@ -687,7 +679,14 @@ namespace isida.Psychic.Automatism
         var lines = new List<string>
         {
           FileValidator.FileHeaders.AutomatizmTreeFormat,
-          FileValidator.FileHeaders.AutomatizmTreeFields
+          FileValidator.FileHeaders.AutomatizmTreeFields1,
+          FileValidator.FileHeaders.AutomatizmTreeFields2,
+          FileValidator.FileHeaders.AutomatizmTreeFields3,
+          FileValidator.FileHeaders.AutomatizmTreeFields4,
+          FileValidator.FileHeaders.AutomatizmTreeFields5,
+          FileValidator.FileHeaders.AutomatizmTreeFields6,
+          FileValidator.FileHeaders.AutomatizmTreeFields7,
+          FileValidator.FileHeaders.AutomatizmTreeFields8
         };
 
         // Рекурсивный обход дерева для сохранения
@@ -712,11 +711,11 @@ namespace isida.Psychic.Automatism
         }
 
         var result = FileValidator.SafeSaveFile(
-          GetAutomatizmTreeFilePath(),
-          lines,
-          content => FileValidator.IsValidAutomatizmTreeFile(string.Join(Environment.NewLine, content)),
-          minLinesCount: 2,
-          fileDescription: "дерева автоматизмов");
+            GetAutomatizmTreeFilePath(),
+            lines,
+            content => FileValidator.IsValidAutomatizmTreeFile(string.Join(Environment.NewLine, content)),
+            minLinesCount: 9,
+            fileDescription: "дерева автоматизмов");
 
         return result;
       }

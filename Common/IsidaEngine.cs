@@ -11,6 +11,8 @@ using static ISIDA.Reflexes.ConditionedReflexesSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 using static ISIDA.Reflexes.PerceptionImagesSystem;
 using static ISIDA.Reflexes.ReflexChainsSystem;
+using static isida.Psychic.Automatism.AutomatizmTreeSystem;
+using static isida.Psychic.Automatism.AutomatizmSystem;
 using isida.Psychic.Automatism;
 
 namespace ISIDA.Common
@@ -243,6 +245,16 @@ namespace ISIDA.Common
     public ActionsImagesSystem ActionsImages { get; internal set; }
 
     /// <summary>
+    /// Система дерева автоматизмов
+    /// </summary>
+    public AutomatizmTreeSystem AutomatizmTree { get; internal set; }
+
+    /// <summary>
+    /// Система автоматизмов
+    /// </summary>
+    public AutomatizmSystem AutomatizmSystem { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -271,6 +283,8 @@ namespace ISIDA.Common
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(Gomeostas, "Gomeostas");
       SafeDispose(ActionsImages, "ActionsImages");
+      SafeDispose(AutomatizmSystem, "AutomatizmSystem");
+      SafeDispose(AutomatizmTree, "AutomatizmTree");
 
       _disposed = true;
       Debug.WriteLine($"[IsidaContext] Освобождение завершено");
@@ -314,6 +328,8 @@ namespace ISIDA.Common
         GeneticReflexes != null &&
         ConditionedReflexes != null &&
         PerceptionImages != null &&
+        AutomatizmTree != null &&
+        AutomatizmSystem != null &&
         ActionsImages != null &&
         ReflexesActivator != null &&
         ReflexTree != null &&
@@ -494,6 +510,20 @@ namespace ISIDA.Common
         ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
         context.InfluenceActions.SetActionsImagesSystem(context.ActionsImages);
+
+        // Шаг 17: Система дерева автоматизмов
+        initializationStep = 17;
+        AutomatizmTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        context.AutomatizmTree = AutomatizmTreeSystem.Instance;
+
+        // Создать базовую структуру дерева, если она пустая
+        if (context.AutomatizmTree.Tree.Children.Count == 0)
+          context.AutomatizmTree.CreateBasicAutomatizmTree();
+
+        // Шаг 18: Система автоматизмов
+        initializationStep = 18;
+        AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
+        context.AutomatizmSystem = AutomatizmSystem.Instance;
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

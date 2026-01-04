@@ -119,7 +119,7 @@ namespace isida.Psychic.Automatism
 
     #region Константы и поля
 
-    private const string AutomatizmFileName = "automatizm_images";
+    private const string AutomatizmFileName = "automatizm";
 
     /// <summary>
     /// Все автоматизмы по ID
@@ -308,7 +308,6 @@ namespace isida.Psychic.Automatism
       if (automatizm == null)
         return;
 
-      _lock.EnterWriteLock();
       try
       {
         if (belief == 2)
@@ -317,28 +316,25 @@ namespace isida.Psychic.Automatism
           foreach (var kvp in _automatizmsById)
           {
             if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2 && kvp.Value.ID != automatizm.ID)
-            {
               kvp.Value.Belief = 0;
-            }
           }
 
           // Обновляем карту штатных автоматизмов
           _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = automatizm;
         }
         else if (automatizm.Belief == 2 && belief != 2)
-        {
           // Убираем из штатных
           _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
-        }
 
         automatizm.Belief = belief;
 
         if (_doWritingFile)
           SaveAutomatizm();
       }
-      finally
+      catch (Exception ex)
       {
-        _lock.ExitWriteLock();
+        LogError($"Ошибка загрузки файла автоматизмов: {ex.Message}");
+        throw;
       }
     }
 
@@ -580,7 +576,7 @@ namespace isida.Psychic.Automatism
 
     private string GetAutomatizmFilePath()
     {
-      return Path.Combine(_psychicDataPath, $"{AutomatizmFileName}.txt");
+      return Path.Combine(_psychicDataPath, $"{AutomatizmFileName}.dat");
     }
 
     /// <summary>
@@ -597,14 +593,21 @@ namespace isida.Psychic.Automatism
         {
           EnsureDataDirectory();
           var lines = new List<string>
-          {
-            FileValidator.FileHeaders.AutomatizmFormat,
-            FileValidator.FileHeaders.AutomatizmFields
-          };
+            {
+                FileValidator.FileHeaders.AutomatizmFormat,
+                FileValidator.FileHeaders.AutomatizmFields1,
+                FileValidator.FileHeaders.AutomatizmFields2,
+                FileValidator.FileHeaders.AutomatizmFields3,
+                FileValidator.FileHeaders.AutomatizmFields4,
+                FileValidator.FileHeaders.AutomatizmFields5,
+                FileValidator.FileHeaders.AutomatizmFields6,
+                FileValidator.FileHeaders.AutomatizmFields7,
+                FileValidator.FileHeaders.AutomatizmFields8,
+                FileValidator.FileHeaders.AutomatizmFields9
+            };
 
           File.WriteAllLines(filePath, lines);
-          _automatizmsById.Clear();
-          _lastAutomatizmId = 0;
+          InitializeAutomatizms();
           return;
         }
         catch (Exception ex)
@@ -616,99 +619,99 @@ namespace isida.Psychic.Automatism
 
       try
       {
-        _lock.EnterWriteLock();
-        try
+        InitializeAutomatizms();
+
+        var saveNoWarningCreateShow = _noWarningCreateShow;
+        _noWarningCreateShow = true;
+
+        // Пропускаем строки заголовков (первые 10 строк)
+        int lineNumber = 0;
+        foreach (var line in File.ReadLines(filePath))
         {
-          _automatizmsById.Clear();
-          _lastAutomatizmId = 0;
-          _automatizmBelief2FromTreeNodeId.Clear();
-          _automatizmFromActionId.Clear();
-          _automatizmFromPhraseId.Clear();
-          _automatizmSuccessFromId.Clear();
+          lineNumber++;
+          if (lineNumber <= 10) // Пропускаем 10 строк заголовков
+            continue;
 
-          var saveNoWarningCreateShow = _noWarningCreateShow;
-          _noWarningCreateShow = true;
+          var trimmedLine = line.Trim();
+          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+            continue;
 
-          foreach (var line in File.ReadLines(filePath))
+          var parts = trimmedLine.Split('|');
+          if (parts.Length < 8)
+            continue;
+
+          if (!int.TryParse(parts[0], out int id))
+            continue;
+
+          if (!int.TryParse(parts[1], out int branchId))
+            continue;
+
+          if (!int.TryParse(parts[2], out int usefulness))
+            usefulness = 0;
+
+          if (!int.TryParse(parts[3], out int actionsImageId))
+            continue;
+
+          if (!int.TryParse(parts[4], out int nextId))
+            nextId = 0;
+
+          if (!int.TryParse(parts[5], out int energy))
+            energy = 5;
+
+          if (!int.TryParse(parts[6], out int belief))
+            belief = 0;
+
+          if (!int.TryParse(parts[7], out int count))
+            count = 0;
+
+          var gomeoIdSuccesArr = new List<int>();
+          if (parts.Length > 8 && !string.IsNullOrWhiteSpace(parts[8]))
           {
-            var trimmedLine = line.Trim();
-            if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-              continue;
-
-            var parts = trimmedLine.Split('|');
-            if (parts.Length < 8)
-              continue;
-
-            if (!int.TryParse(parts[0], out int id))
-              continue;
-
-            if (!int.TryParse(parts[1], out int branchId))
-              continue;
-
-            if (!int.TryParse(parts[2], out int usefulness))
-              usefulness = 0;
-
-            if (!int.TryParse(parts[3], out int actionsImageId))
-              continue;
-
-            if (!int.TryParse(parts[4], out int nextId))
-              nextId = 0;
-
-            if (!int.TryParse(parts[5], out int energy))
-              energy = 5;
-
-            if (!int.TryParse(parts[6], out int belief))
-              belief = 0;
-
-            if (!int.TryParse(parts[7], out int count))
-              count = 0;
-
-            var gomeoIdSuccesArr = new List<int>();
-            if (parts.Length > 8 && !string.IsNullOrWhiteSpace(parts[8]))
+            var gomeoParts = parts[8].Split(',');
+            foreach (var part in gomeoParts)
             {
-              var gomeoParts = parts[8].Split(',');
-              foreach (var part in gomeoParts)
-              {
-                if (int.TryParse(part.Trim(), out int gomeoId))
-                  gomeoIdSuccesArr.Add(gomeoId);
-              }
+              if (int.TryParse(part.Trim(), out int gomeoId))
+                gomeoIdSuccesArr.Add(gomeoId);
             }
-
-            var saveDoWritingFile = _doWritingFile;
-            _doWritingFile = false;
-
-            var (newId, automatizm) = CreateNewAutomatizm(branchId, actionsImageId, false);
-            if (automatizm != null && newId == id)
-            {
-              automatizm.Usefulness = usefulness;
-              automatizm.NextID = nextId;
-              automatizm.Energy = energy;
-              automatizm.Count = count;
-              automatizm.GomeoIdSuccesArr = gomeoIdSuccesArr;
-
-              SetAutomatizmBelief(automatizm, belief);
-
-              if (usefulness > 0)
-              {
-                _automatizmSuccessFromId[id] = automatizm;
-              }
-            }
-
-            _doWritingFile = saveDoWritingFile;
           }
 
-          _noWarningCreateShow = saveNoWarningCreateShow;
+          // Создаем без блокировки для загрузки
+          var (newId, automatizm) = CreateNewAutomatizm(branchId, actionsImageId, false);
+          if (automatizm != null && newId == id)
+          {
+            automatizm.Usefulness = usefulness;
+            automatizm.NextID = nextId;
+            automatizm.Energy = energy;
+            automatizm.Count = count;
+            automatizm.GomeoIdSuccesArr = gomeoIdSuccesArr;
+
+            SetAutomatizmBelief(automatizm, belief);
+
+            if (usefulness > 0)
+              _automatizmSuccessFromId[id] = automatizm;
+          }
         }
-        finally
-        {
-          _lock.ExitWriteLock();
-        }
+
+        _noWarningCreateShow = saveNoWarningCreateShow;
       }
       catch (Exception ex)
       {
         LogError($"Ошибка загрузки файла автоматизмов: {ex.Message}");
         throw;
       }
+    }
+
+    /// <summary>
+    /// Инициализирует структуры автоматизмов
+    /// </summary>
+    private void InitializeAutomatizms()
+    {
+      _automatizmsById.Clear();
+      _lastAutomatizmId = 0;
+      _automatizmBelief2FromTreeNodeId.Clear();
+      _automatizmFromActionId.Clear();
+      _automatizmFromPhraseId.Clear();
+      _automatizmSuccessFromId.Clear();
     }
 
     /// <summary>
@@ -736,8 +739,16 @@ namespace isida.Psychic.Automatism
       {
         var lines = new List<string>
         {
-          FileValidator.FileHeaders.AutomatizmFormat,
-          FileValidator.FileHeaders.AutomatizmFields
+            FileValidator.FileHeaders.AutomatizmFormat,
+            FileValidator.FileHeaders.AutomatizmFields1,
+            FileValidator.FileHeaders.AutomatizmFields2,
+            FileValidator.FileHeaders.AutomatizmFields3,
+            FileValidator.FileHeaders.AutomatizmFields4,
+            FileValidator.FileHeaders.AutomatizmFields5,
+            FileValidator.FileHeaders.AutomatizmFields6,
+            FileValidator.FileHeaders.AutomatizmFields7,
+            FileValidator.FileHeaders.AutomatizmFields8,
+            FileValidator.FileHeaders.AutomatizmFields9
         };
 
         foreach (var kvp in _automatizmsById.OrderBy(x => x.Key))
@@ -758,7 +769,7 @@ namespace isida.Psychic.Automatism
             GetAutomatizmFilePath(),
             lines,
             content => FileValidator.IsValidAutomatizmFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: 2,
+            minLinesCount: 10,
             fileDescription: "автоматизмов");
 
         return result;
