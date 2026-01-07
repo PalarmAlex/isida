@@ -119,8 +119,8 @@ namespace ISIDA.Reflexes
 
     #region Константы и состояния
 
-    private bool _lastStepSuccessResult = true;
-    private int _chainCooldownUntilPulse = 0;
+    private bool _lastStepSuccessResult = true;         // Результат выполнения последнего шага цепочки(успех/неудача)
+    private int _chainCooldownUntilPulse = 0;           // Пульс, до которого заблокирована активация новых цепочек (период задержки)
 
     /// <summary>
     /// Текущий результат выполнения действия (для цепочек рефлексов)
@@ -142,45 +142,35 @@ namespace ISIDA.Reflexes
       }
     }
 
-    // Текущее восприятие ID образов
-    private int _activeCurBaseID = 0;                   // ID Базового состояния
-    private int _activeCurBaseStyleID = 0;              // ID сочетания базовых контекстов
+    private int _activeCurBaseID = 0;                   // ID текущего базового состояния гомеостаза
+    private int _activeCurBaseStyleID = 0;              // ID текущего образа сочетания стилей поведения
     private int _activeCurTriggerStimulusID = 0;        // ID текущего полного активного образа сочетаний пусковых стимулов
     private int _activeCurReflexTriggerStimulusID = 0;  // ID текущего частичного активного образа сочетаний пусковых стимулов
     private int _activeGlobalCurTriggerStimulusID = 0;  // ID триггера для логов 
 
-    // Предыдущий образ сочетания пусковых стимулов (причина последующих событий)
-    private int _oldActiveCurTriggerStimulusID = 0;
-    private int _oldActiveCurTriggerStimulusPulsCount = 0;
-    private int _activeConditionReflexID = 0;
-    private int _activeGeneticReflexID = 0;
+    private int _activeConditionReflexID = 0;           // ID текущего условного рефлекса
+    private int _activeGeneticReflexID = 0;             // ID текущего безусловного рефлекса
 
-    // Защита от повторных срабатываний
-    private int _activatedPulsCount = 0;
-    private int _reflexActionDuration = 0;
+    private int _activatedPulsCount = 0;                // номер текущего пульса
+    private int _reflexActionDuration = 0;              // время удержания действия рефлекса (в пульсах) для визуализации
     private int _weitPulceCount = 0;
-    private bool _chainAlreadyActivatedInThisContext = false;
+    private bool _chainAlreadyActivatedInThisContext = false;   // Флаг предотвращения повторной активации цепочки в тех же условиях
     private int _lastReflexActivationPulse = 0;
 
-    // Текущие условия запуска цепочки
-    private int _chainBaseID = 0;
-    private int _chainStyleID = 0;
+    private int _chainBaseID = 0;                       // Базовое состояние при активации цепочки                       
+    private int _chainStyleID = 0;                      // Стиль поведения при активации цепочки
 
-    /// <summary>
-    /// Флаг активной цепочки
-    /// </summary>
-    private bool _isChainActive => _activeChainId > 0;
-    private int _activeChainId = 0;
+    private bool _isChainActive => _activeChainId > 0;  // Флаг наличия активной цепочки рефлексов
+    private int _activeChainId = 0;                     // ID текущей активной цепочки рефлексов
 
-    // Список выполненных рефлексов в текущей цепочке
+    // Список выполненных ID рефлексов в текущей цепочке
     private readonly List<int> _completedReflexesInChain = new List<int>();
 
-    // Флаг сна
+    // Флаг режима сна агента
     private bool _isSleeping = false;
 
-    // Списки рефлексов для выполнения
-    private readonly List<int> _geneticReflexesToRun = new List<int>();
-    private readonly List<int> _conditionedReflexesToRun = new List<int>();
+    private readonly List<int> _geneticReflexesToRun = new List<int>();       // Список безусловных рефлексов для выполнения
+    private readonly List<int> _conditionedReflexesToRun = new List<int>();   // Список условных рефлексов для выполнения
 
     #endregion
 
@@ -255,7 +245,6 @@ namespace ISIDA.Reflexes
           if (pulseCount > _weitPulceCount + _reflexActionDuration)
             ActiveFromConditionChange(pulseCount);
         }
-        CleanupOldTriggers(pulseCount);
       }
       ProcessConditionedReflexFormation(pulseCount);
     }
@@ -755,34 +744,6 @@ namespace ISIDA.Reflexes
       _activeCurTriggerStimulusID = _influenceActions.ActiveCurTriggerStimulusID;
       _activeCurReflexTriggerStimulusID = _influenceActions.ActiveCurReflexTriggerStimulusID;
       _activeGlobalCurTriggerStimulusID = _activeCurReflexTriggerStimulusID;
-
-      // Сохраняем предыдущий полный образ как причину
-      SetOldTriggerStimulusValue(_activeCurTriggerStimulusID);
-    }
-
-    /// <summary>
-    /// Сохранение предыдущего образа пусковых стимулов
-    /// </summary>
-    private void SetOldTriggerStimulusValue(int value)
-    {
-      _oldActiveCurTriggerStimulusID = value;
-      _oldActiveCurTriggerStimulusPulsCount = GlobalTimer.GlobalPulsCount;
-    }
-
-    /// <summary>
-    /// Очистка устаревших причин
-    /// </summary>
-    private void CleanupOldTriggers(int currentPulse)
-    {
-      if (_oldActiveCurTriggerStimulusID > 0)
-      {
-        // Проверяем, прошло ли более 10 пульсов (секунд) с момента установки триггера
-        if (currentPulse > (_oldActiveCurTriggerStimulusPulsCount + 10))
-        {
-          _oldActiveCurTriggerStimulusID = 0;
-          _oldActiveCurTriggerStimulusPulsCount = 0;
-        }
-      }
     }
 
     #endregion
@@ -1035,6 +996,7 @@ namespace ISIDA.Reflexes
 
     #region Активация и выполнение цепочек рефлексов
 
+    // Пульс завершения последней цепочки (для контроля задержки)
     private int pulseChainCompleted = 0;
 
     /// <summary>
@@ -1219,8 +1181,6 @@ namespace ISIDA.Reflexes
         _activeGlobalCurTriggerStimulusID = 0;
         _activeGeneticReflexID = 0;
         _activeConditionReflexID = 0;
-        _oldActiveCurTriggerStimulusID = 0;
-        _oldActiveCurTriggerStimulusPulsCount = 0;
         _activatedPulsCount = 0;
         _influenceActions.ActiveCurTriggerStimulusID = 0;
         _influenceActions.ActiveCurReflexTriggerStimulusID = 0;

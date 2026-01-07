@@ -325,9 +325,9 @@ namespace ISIDA.Reflexes
       /// </summary>
       public void ApplyDecay()
       {
-        // Применяем затухание только на каждом 30-м пульсе
+        // Применяем затухание только на каждом 100-м пульсе
         int currentPulse = GetAgentLifetime();
-        if (currentPulse % 30 != 0)
+        if (currentPulse % 100 != 0)
           return;
 
         // Адаптивное затухание: чем прочнее рефлекс, тем медленнее затухание

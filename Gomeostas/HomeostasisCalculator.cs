@@ -470,16 +470,6 @@ namespace ISIDA.Gomeostas
       /// Стиль
       /// </summary>
       public BehaviorStyle Style { get; set; }
-
-      /// <summary>
-      /// Рассчитанный вес с учетом зон
-      /// </summary>
-      public float DynamicWeight { get; set; }
-
-      /// <summary>
-      /// Базовый вес для обратной совместимости
-      /// </summary>
-      public float BaseWeight => Style.Weight;
     }
 
     /// <summary>
@@ -499,12 +489,10 @@ namespace ISIDA.Gomeostas
       var parameterActivations = new List<ResearchLogger.StyleParameterActivation>();
       var (dominantParam, dominantZone, dominanceScore) = FindDominantParameter(parameters, dynamicTime, difSensorPar);
       var finalStyles = baseStyles
-          .OrderByDescending(s => s.Weight)
           .Take(3)
           .Select(style => new StyleWithDynamicWeight
           {
-            Style = style,
-            DynamicWeight = style.Weight
+            Style = style
           })
           .ToList();
 
@@ -551,7 +539,6 @@ namespace ISIDA.Gomeostas
                 ZoneDescription = GetStateDescription(currentZone),
                 StyleId = styleId,
                 StyleName = baseStyle.Name,
-                Weight = baseStyle.Weight,
                 ActivationDetails = $"{param.Id}|{zoneDetails}|Zone{currentZone}"
               });
             }

@@ -656,26 +656,6 @@ namespace ISIDA.Gomeostas
       /// </summary>
       public string Description { get; set; }
 
-      private int weight;
-      /// <summary>
-      /// Вес стиля (от 0 до 100), определяющий его приоритет при выборе активных стилей
-      /// </summary>
-      /// <remarks>
-      /// Чем выше вес, тем выше приоритет стиля при конфликтах
-      /// </remarks>
-      public int Weight
-      {
-        get => weight;
-        set
-        {
-          if (value < 0 || value > 100)
-            throw new ArgumentOutOfRangeException(nameof(value),
-              "Попытка присвоить свойству стиля реагирования [Weight] значение вне допустимых пределов: 0:100");
-
-          weight = value;
-        }
-      }
-
       /// <summary>
       /// Список ID стилей-антагонистов, которые несовместимы с данным стилем
       /// </summary>
@@ -1997,14 +1977,12 @@ namespace ISIDA.Gomeostas
     /// </summary>
     /// <param name="name">Наименование стиля</param>
     /// <param name="description">Описание стиля</param>
-    /// <param name="weight">Вес стиля (0-100)</param>
     /// <param name="antagonistStyles">Список ID стилей-антагонистов</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров</param>
     /// <returns>ID созданного стиля и предупреждения (если есть)</returns>
     public (int StyleId, string[] Warnings) AddBehaviorStyle(
         string name,
         string description,
-        int weight,
         List<int> antagonistStyles = null,
         bool strictValidation = false)
     {
@@ -2015,17 +1993,6 @@ namespace ISIDA.Gomeostas
         throw new ArgumentException("Наименование стиля не может быть пустым", nameof(name));
 
       var warnings = new List<string>();
-      if (weight < 0 || weight > 100)
-      {
-        string message = $"Вес стиля скорректирован с {weight} до {ClampInt(weight, 0, 100)} " +
-                        "(допустимый диапазон: 0-100)";
-
-        if (strictValidation)
-          throw new ArgumentOutOfRangeException(nameof(weight), weight, message);
-
-        warnings.Add(message);
-        weight = ClampInt(weight, 0, 100);
-      }
 
       _lock.EnterWriteLock();
       try
@@ -2040,7 +2007,6 @@ namespace ISIDA.Gomeostas
           Id = newId,
           Name = name,
           Description = description,
-          Weight = weight,
           AntagonistStyles = antagonistStyles ?? new List<int>()
         };
 
@@ -2169,7 +2135,6 @@ namespace ISIDA.Gomeostas
       {
         Id = sw.Style.Id,
         Name = sw.Style.Name,
-        Weight = ClampInt((int)Math.Round(sw.DynamicWeight), 0, 100),
       }).ToList();
 
       // для согласованря по пульсам с логами параметров и системы пишем на следующий пульс, так как они считывают состояния после изменений стилей
@@ -2418,20 +2383,19 @@ namespace ISIDA.Gomeostas
         if (line.StartsWith("#")) continue;
 
         var parts = line.Split('|');
-        if (parts.Length >= 4)
+        if (parts.Length >= 3)
         {
           var style = new BehaviorStyle
           {
             Id = int.Parse(parts[0]),
             Name = parts[1],
             Description = parts[2],
-            Weight = int.Parse(parts[3])
           };
 
           // Загрузка антагонистов
-          if (parts.Length >= 5 && !string.IsNullOrWhiteSpace(parts[4]))
+          if (parts.Length >= 4 && !string.IsNullOrWhiteSpace(parts[3]))
           {
-            style.AntagonistStyles = parts[4].Split(',')
+            style.AntagonistStyles = parts[3].Split(',')
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .Select(int.Parse)
                 .ToList();
@@ -2764,7 +2728,7 @@ namespace ISIDA.Gomeostas
 
         foreach (var style in _agentState.BehaviorStyles.Values.OrderBy(s => s.Id))
         {
-          lines.Add($"{style.Id}|{style.Name}|{style.Description}|{style.Weight}|" +
+          lines.Add($"{style.Id}|{style.Name}|{style.Description}|" +
                   $"{string.Join(",", style.AntagonistStyles)}");
         }
 

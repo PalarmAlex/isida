@@ -61,7 +61,6 @@ namespace isida.Psychic.Automatism
     /// <summary>
     /// Адрес родителя
     /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore]
     public AutomatizmNode ParentNode { get; set; }
   }
 

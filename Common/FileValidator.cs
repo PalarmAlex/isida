@@ -49,7 +49,7 @@ namespace ISIDA.Common
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Стили поведения
-      public const string StylesFormat = "# Формат: ID|Имя|Описание|Вес|Антагонисты";
+      public const string StylesFormat = "# Формат: ID|Имя|Описание|Антагонисты";
       public const string StylesAntagonis = "# Антагонисты: id1,id2,id3";
 
       // Параметры гомеостаза
@@ -444,10 +444,6 @@ namespace ISIDA.Common
 
         var parts = trimmed.Split('|');
         if (parts.Length < 4)
-          return false;
-
-        if (!int.TryParse(parts[0], out _) ||
-            !int.TryParse(parts[3], out int weight) || weight < 0 || weight > 100)
           return false;
 
         return true;

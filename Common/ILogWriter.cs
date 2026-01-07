@@ -24,14 +24,13 @@ namespace ISIDA.Common
     /// <summary>
     /// Записывает лог стилей поведения
     /// </summary>
-    void WriteStyleLog(int pulse, string stage, int styleId, string styleName,
-                      int weight);
+    void WriteStyleLog(int pulse, string stage, int styleId, string styleName);
 
     /// <summary>
     /// Запись активаций параметров
     /// </summary>
     void WriteStyleParameterActivation(int pulse, string stage, int parameterId, string parameterName,
                                       int zoneId, string zoneDescription, int styleId, string styleName,
-                                      int weight, string activationDetails);
+                                      string activationDetails);
   }
 }

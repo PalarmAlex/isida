@@ -151,7 +151,6 @@ namespace ISIDA.Common
     {
       public int Id { get; set; }
       public string Name { get; set; }
-      public int Weight { get; set; }
     }
 
     /// <summary>
@@ -203,11 +202,6 @@ namespace ISIDA.Common
       /// Имя стиля
       /// </summary>
       public string StyleName { get; set; }
-
-      /// <summary>
-      /// Вес стиля
-      /// </summary>
-      public int Weight { get; set; }
 
       /// <summary>
       /// Детали активации
@@ -486,7 +480,6 @@ namespace ISIDA.Common
               {
                 Id = s.Id,
                 Name = s.Name,
-                Weight = s.Weight
               }).ToList(),
               Activations = activations,
               ParameterActivations = parameterActivations.Select(pa =>
@@ -853,7 +846,6 @@ namespace ISIDA.Common
         activation.ZoneDescription,
         activation.StyleId,
         activation.StyleName,
-        activation.Weight,
         activation.ActivationDetails
       );
 
@@ -864,7 +856,6 @@ namespace ISIDA.Common
         ["Stage"] = activation.Stage,
         ["StyleId"] = activation.StyleId.ToString(),
         ["StyleName"] = activation.StyleName,
-        ["Weight"] = activation.Weight.ToString(),
         ["ParameterId"] = activation.ParameterId.ToString(),
         ["ParameterName"] = activation.ParameterName,
         ["ZoneId"] = activation.ZoneId.ToString(),
@@ -925,8 +916,7 @@ namespace ISIDA.Common
           pulse,
           stage,
           style.Id,
-          style.Name,
-          style.Weight
+          style.Name
       );
 
       var logEntry = new Dictionary<string, object>
@@ -936,7 +926,6 @@ namespace ISIDA.Common
         ["Stage"] = stage,
         ["StyleId"] = style.Id.ToString(),
         ["StyleName"] = style.Name,
-        ["Weight"] = style.Weight.ToString(),
         ["ParameterId"] = "",
         ["ParameterName"] = "",
         ["ZoneId"] = "",
