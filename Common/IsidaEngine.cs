@@ -555,6 +555,81 @@ namespace ISIDA.Common
 
       FileValidator.SetLogsPath(logsPath);
     }
+
+    /// <summary>
+    /// Название проекта
+    /// </summary>
+    public const string ProjectName = "ISIDA (Incremental System for Intelligent Development of Agents)";
+
+    /// <summary>
+    /// Версия проекта
+    /// </summary>
+    public const string ProjectVersion = "V1.1.2";
+
+    /// <summary>
+    /// Дата сборки
+    /// </summary>
+    public const string BuildDate = "2024.01.10";
+
+    /// <summary>
+    /// Краткое описание концепции проекта
+    /// </summary>
+    public const string ProjectDescription =
+        "ISIDA (Incremental System for Intelligent Development of Agents) - архитектура для построения интеллектуальных агентов с поэтапным развитием " +
+        "на основе иерархических гомеостатических механизмов и адаптивного поведения.";
+
+    /// <summary>
+    /// Полное теоретическое обоснование проекта
+    /// </summary>
+    public const string TheoreticalBasis =
+      "Теоретическая основа - МВАП с принципами:\n\n" +
+      "1. Инвариантности адаптивности: базовые механизмы развития не зависят от способа реализации.\n" +
+      "2. Схемотехничности: адаптивные системы имеют строго причинно-следственную структуру.\n\n" +
+      "Архитектура основана на поэтапном развитии агента, имитирующем филогенез и онтогенез. \n" +
+      "Развитие начинается с нулевой стадии, затем последовательно формируются более сложные \n" +
+      "навыки под управлением оператора и через взаимодействие со средой.";
+
+    /// <summary>
+    /// Ссылка на документацию проекта
+    /// </summary>
+    public const string DocumentationUrl = "https://scorcher.ru/isida/iadaptive_agents_guide.php";
+
+    /// <summary>
+    /// Авторы проекта
+    /// </summary>
+    public static readonly string[] ProjectAuthors = new string[]
+    {
+        "Основной разработчик: Парусников А.В.",
+        "Концепция: Beast Project Team",
+        "Теоретическая база: МВАП исследовательская группа"
+    };
+
+    /// <summary>
+    /// Получает краткую информацию о проекте для отображения в диалоге "О программе"
+    /// </summary>
+    public static string GetAboutInfo()
+    {
+      return $"{ProjectName} {ProjectVersion}\n" +
+             $"Сборка от {BuildDate}\n\n" +
+             $"{ProjectDescription}\n\n" +
+             $"Документация: {DocumentationUrl}";
+    }
+
+    /// <summary>
+    /// Получает полную информацию о проекте для детального просмотра
+    /// </summary>
+    public static string GetDetailedInfo()
+    {
+      string authors = string.Join("\n", ProjectAuthors);
+
+      return $"{ProjectName}\n" +
+             $"Версия: {ProjectVersion}\n" +
+             $"Дата сборки: {BuildDate}\n\n" +
+             $"ОПИСАНИЕ ПРОЕКТА:\n{ProjectDescription}\n\n" +
+             $"ТЕОРЕТИЧЕСКАЯ ОСНОВА:\n{TheoreticalBasis}\n\n" +
+             $"АВТОРЫ:\n{authors}\n\n" +
+             $"ДОКУМЕНТАЦИЯ: {DocumentationUrl}";
+    }
   }
 
   /// <summary>

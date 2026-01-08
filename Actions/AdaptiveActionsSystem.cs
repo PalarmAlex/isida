@@ -143,7 +143,7 @@ namespace ISIDA.Actions
       private int _vigor = 5;
       /// <summary>
       /// Интенсивность действия — уровень активности, скорости, физической нагрузки.
-      /// Диапазон: 1..10. Используется для модуляции силы реакции через поведенческие стили.
+      /// Диапазон: 1..10. Используется при конкуретной борьбе с антагонистами.
       /// Не определяет тип действия, только его "масштаб".
       /// </summary>
       /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при присвоении значения вне диапазона [1,10]</exception>
@@ -172,7 +172,7 @@ namespace ISIDA.Actions
 
       /// <summary>
       /// Возвращает значимость действия — суммарную силу влияний по модулю.
-      /// Используется для визуализации (размер шрифта, цвет).
+      /// Используется при конкуретной борьбе с антагонистами для визуализации (размер шрифта, цвет).
       /// </summary>
       /// <returns>Сумма абсолютных значений влияний с учетом интенсивности</returns>
       public int GetSignificance()
@@ -597,10 +597,7 @@ namespace ISIDA.Actions
         if (!_actions.TryGetValue(actionId, out var action))
           throw new KeyNotFoundException($"Действие с ID {actionId} не найдено");
 
-        // Получаем модифицированную интенсивность с учетом стилей
         int modifiedVigor = GetModifiedVigor(actionId);
-
-        // Сила действия определяется базовой интенсивностью + модификация от стилей
         int currentActionPower = modifiedVigor;
 
         foreach (var activeAction in _activeActions.ToList())
