@@ -2,6 +2,7 @@
 using ISIDA.Common;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -29,6 +30,7 @@ namespace ISIDA.Gomeostas
     private PerceptionImagesSystem _perceptionImagesSystem;
     private ConditionedReflexesSystem _conditionedReflexesSystem;
     private ResearchLogger _researchLogger;
+    private HomeostasisOverallState _currentOverallState = HomeostasisOverallState.Normal;
 
     #region Инициализация класса
 
@@ -176,7 +178,7 @@ namespace ISIDA.Gomeostas
           return;
         }
 
-        var previousOverallState = _previousOverallState;
+        var previousOverallState = _previousOverallState; 
         var previousActiveStyleIds = new List<int>(_previousActiveStyleIds);
 
         if (_agentState.IsFirstPulse)
@@ -207,12 +209,16 @@ namespace ISIDA.Gomeostas
           }
         }
 
-        // Обновляем активные стили
+        var lastWellStatePulse = _agentState.LastWellStatePulse;
+        var currentAgentState = _calculator.CalculateAgentState(_agentState.Parameters, _dynamicTime, _difSensorPar, ref lastWellStatePulse, _compareLevel);
+        _agentState.LastWellStatePulse = lastWellStatePulse;
+        _currentOverallState = currentAgentState.OverallState;
+
+        UpdateNoveltyDetector(previousOverallState, previousActiveStyleIds);
         UpdateActiveStyles();
 
         // Проверяем критическое состояние ПОСЛЕ обновления
         CheckForCriticalState();
-        UpdateNoveltyDetector(previousOverallState, previousActiveStyleIds);
 
         _agentState.LastUpdated = DateTime.UtcNow;
         _agentState.Lifetime++;
@@ -242,7 +248,7 @@ namespace ISIDA.Gomeostas
 
     internal void OnExternalInfluenceApplied(bool isCriticalImpact = false)
     {
-      UpdateActiveStyles();
+      UpdateActiveStyles(true);
     }
 
     #endregion
@@ -1301,9 +1307,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     private void UpdateNoveltyDetector(HomeostasisOverallState previousOverallState, List<int> previousActiveStyleIds)
     {
-      var homeostasisState = GetHomeostasisStateInternal();
-      var currentOverallState = homeostasisState.OverallState;
-
+      var currentOverallState = _currentOverallState;
       var currentActiveStyleIds = ActiveStyles
           .Where(style => style != null)
           .Select(style => style.Id)
@@ -1312,8 +1316,24 @@ namespace ISIDA.Gomeostas
 
       bool overallStateChanged = currentOverallState != previousOverallState;
       bool activeStylesChanged = !currentActiveStyleIds.SequenceEqual(previousActiveStyleIds);
+      bool holdingEnded = false;
 
-      IsNewConditions = overallStateChanged || activeStylesChanged;
+      // Проверяем все параметры на окончание удержания
+      foreach (var param in _agentState.Parameters)
+      {
+        if (param.LastState != ParameterState.Normal &&
+            param.LastStateChangePulse.HasValue)
+        {
+          int pulsesSinceChange = GlobalTimer.GlobalPulsCount - param.LastStateChangePulse.Value;
+          if (pulsesSinceChange >= _dynamicTime && !_calculator.IsChainActive)
+          {
+            holdingEnded = true;
+            break;
+          }
+        }
+      }
+
+      IsNewConditions = overallStateChanged || activeStylesChanged || holdingEnded;
 
       _previousOverallState = currentOverallState;
       _previousActiveStyleIds = currentActiveStyleIds;
@@ -1944,8 +1964,6 @@ namespace ISIDA.Gomeostas
           ref lastWellStatePulse,
           _compareLevel);
 
-      _agentState.LastWellStatePulse = lastWellStatePulse;
-
       return result;
     }
 
@@ -2102,7 +2120,7 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Обновляет активные стили поведения на основе текущего состояния параметров
     /// </summary>
-    private void UpdateActiveStyles()
+   internal void UpdateActiveStyles(bool pulsAdd = false)
     {
       var (dominant_param, dominantZone, dominanceScore) = _calculator.FindDominantParameter(
         _agentState.Parameters, _dynamicTime, _difSensorPar);
@@ -2137,8 +2155,7 @@ namespace ISIDA.Gomeostas
         Name = sw.Style.Name,
       }).ToList();
 
-      // для согласованря по пульсам с логами параметров и системы пишем на следующий пульс, так как они считывают состояния после изменений стилей
-      _researchLogger?.LogStylesActivationProcess(PulseCount + 1, finalStylesForLogs, activations, parameterActivations);
+      _researchLogger?.LogStylesActivationProcess(pulsAdd ? PulseCount + 1 : PulseCount, finalStylesForLogs, activations, parameterActivations);
       CreateBehaviorStyleImageFromActiveStyles();
     }
 

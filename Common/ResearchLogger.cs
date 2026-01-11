@@ -87,6 +87,9 @@ namespace ISIDA.Common
     // Писатель в память (для UI)
     private static ILogWriter _memoryLogWriter;
 
+    private Dictionary<string, object> _currentPulseLogEntry = null;
+    private int _bufferedPulse = -1;
+
     #endregion
 
     #region Внутренние классы
@@ -434,7 +437,17 @@ namespace ISIDA.Common
 
           if (IsDuplicateState(currentState))
           {
-            WriteLogEntry(currentState);
+            int correctPulse = currentState.Pulse;
+            if (_lastState.CurrentBaseID == -1 || _lastState.CurrentBaseID == 2)
+              correctPulse++;
+
+            var logEntry = CreateLogEntry(currentState, correctPulse);
+            if (_bufferedPulse != correctPulse && _currentPulseLogEntry != null)
+              WriteBufferedLogEntry();
+
+            _currentPulseLogEntry = logEntry;
+            _bufferedPulse = correctPulse;
+
             _lastState = currentState;
           }
 
@@ -448,6 +461,100 @@ namespace ISIDA.Common
         {
           Debug.WriteLine($"Ошибка логирования состояния системы: {ex.Message}");
         }
+      }
+    }
+
+    /// <summary>
+    /// Создает запись лога из состояния
+    /// </summary>
+    private Dictionary<string, object> CreateLogEntry(SystemState state, int correctPulse)
+    {
+      return new Dictionary<string, object>
+      {
+        ["Время"] = state.Time.ToString("yyyy-MM-dd HH:mm:ss"),
+        ["Объект"] = "ResearchLogger",
+        ["Метод"] = "LogSystemState",
+        ["Пульс"] = correctPulse.ToString(),
+        ["Состояние"] = state.CurrentBaseID?.ToString() ?? "",
+        ["Стили"] = state.CurrentBaseStyleID?.ToString() ?? "",
+        ["Триггер"] = state.CurrentTriggerStimulusID?.ToString() ?? "",
+        ["ОР1"] = state.HasCriticalChanges?.ToString() ?? "",
+        ["Б/у рефлекс"] = state.CurrentGeneticReflexID?.ToString() ?? "",
+        ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? ""
+      };
+    }
+
+    /// <summary>
+    /// Записывает буферизованную запись лога
+    /// </summary>
+    private void WriteBufferedLogEntry()
+    {
+      if (_currentPulseLogEntry == null) return;
+
+      try
+      {
+        // Записываем в JSONL
+        if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
+        {
+          var jsonLine = JsonConvert.SerializeObject(_currentPulseLogEntry, new JsonSerializerSettings
+          {
+            Formatting = Formatting.None,
+            NullValueHandling = NullValueHandling.Ignore
+          });
+          _jsonlWriter.WriteLine(jsonLine);
+        }
+
+        // Записываем в CSV
+        if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
+        {
+          WriteCsvLine(_currentPulseLogEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
+        }
+
+        // Для UI - сразу записываем
+        WriteToMemoryLog(_currentPulseLogEntry);
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"Ошибка записи буферизованного лога: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Записывает в память (UI)
+    /// </summary>
+    private void WriteToMemoryLog(Dictionary<string, object> logEntry)
+    {
+      if (_memoryLogWriter == null) return;
+
+      _memoryLogWriter.WriteLog(
+          "ResearchLogger",
+          "LogSystemState",
+          int.Parse(logEntry["Пульс"].ToString()),
+          logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString()) ?
+              int.Parse(logEntry["Состояние"].ToString()) : (int?)null,
+          logEntry.ContainsKey("Стили") && !string.IsNullOrEmpty(logEntry["Стили"].ToString()) ?
+              int.Parse(logEntry["Стили"].ToString()) : (int?)null,
+          logEntry.ContainsKey("Триггер") && !string.IsNullOrEmpty(logEntry["Триггер"].ToString()) ?
+              int.Parse(logEntry["Триггер"].ToString()) : (int?)null,
+          logEntry.ContainsKey("ОР1") && !string.IsNullOrEmpty(logEntry["ОР1"].ToString()) ?
+              int.Parse(logEntry["ОР1"].ToString()) : (int?)null,
+          logEntry.ContainsKey("Б/у рефлекс") && !string.IsNullOrEmpty(logEntry["Б/у рефлекс"].ToString()) ?
+              int.Parse(logEntry["Б/у рефлекс"].ToString()) : (int?)null,
+          logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString()) ?
+              int.Parse(logEntry["Усл. рефлекс"].ToString()) : (int?)null
+      );
+    }
+
+    /// <summary>
+    /// Записывает все буферизованные данные при завершении
+    /// </summary>
+    public void Flush()
+    {
+      lock (_lock)
+      {
+        WriteBufferedLogEntry();
+        _currentPulseLogEntry = null;
+        _bufferedPulse = -1;
       }
     }
 
@@ -716,70 +823,15 @@ namespace ISIDA.Common
     #region Запись логов
 
     /// <summary>
-    /// Записывает запись лога
-    /// </summary>
-    private void WriteLogEntry(SystemState state)
-    {
-      try
-      {
-        // Записываем в память (UI)
-        _memoryLogWriter?.WriteLog(
-            "ResearchLogger",
-            "LogSystemState",
-            state.Pulse,
-            state.CurrentBaseID,
-            NullIfZero(state.CurrentBaseStyleID),
-            NullIfZero(state.CurrentTriggerStimulusID),
-            NullIfZero(state.HasCriticalChanges),
-            NullIfZero(state.CurrentGeneticReflexID),
-            NullIfZero(state.CurrentConditionReflexID)
-        );
-
-        // Записываем в файлы
-        var logEntry = new Dictionary<string, object>
-        {
-          ["Время"] = state.Time.ToString("yyyy-MM-dd HH:mm:ss"),
-          ["Объект"] = "ResearchLogger",
-          ["Метод"] = "LogSystemState",
-          ["Пульс"] = state.Pulse.ToString(),
-          ["Состояние"] = state.CurrentBaseID?.ToString() ?? "",
-          ["Стили"] = state.CurrentBaseStyleID?.ToString() ?? "",
-          ["Триггер"] = state.CurrentTriggerStimulusID?.ToString() ?? "",
-          ["ОР1"] = state.HasCriticalChanges?.ToString() ?? "",
-          ["Б/у рефлекс"] = state.CurrentGeneticReflexID?.ToString() ?? "",
-          ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? ""
-        };
-
-        // Записываем в JSONL
-        if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
-        {
-          var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
-          {
-            Formatting = Formatting.None,
-            NullValueHandling = NullValueHandling.Ignore
-          });
-          _jsonlWriter.WriteLine(jsonLine);
-        }
-
-        // Записываем в CSV
-        if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
-        {
-          WriteCsvLine(logEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
-        }
-      }
-      catch (Exception ex)
-      {
-        Debug.WriteLine($"Ошибка записи лога: {ex.Message}");
-      }
-    }
-
-    /// <summary>
     /// Записывает лог параметров
     /// </summary>
     private void WriteParametersLogEntry(ParametersState state)
     {
       try
       {
+        if (_lastParametersState != null && _lastParametersState.Pulse == state.Pulse)
+          return;
+
         foreach (var param in state.Parameters)
         {
           // Записываем в память (UI)
@@ -1055,6 +1107,7 @@ namespace ISIDA.Common
         _parametersCsvWriter?.Dispose();
         _stylesJsonlWriter?.Dispose();
         _stylesCsvWriter?.Dispose();
+        Flush();
         _disposed = true;
       }
     }

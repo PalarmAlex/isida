@@ -564,7 +564,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V1.1.2";
+    public const string ProjectVersion = "V1.2";
 
     /// <summary>
     /// Дата сборки

@@ -514,9 +514,7 @@ namespace ISIDA.Actions
         foreach (var action in _actions.Values)
         {
           if (action.AntagonistActions.Contains(actionId))
-          {
             action.AntagonistActions.Remove(actionId);
-          }
         }
 
         // Вызываем событие удаления действия

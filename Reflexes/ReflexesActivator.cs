@@ -1146,7 +1146,7 @@ namespace ISIDA.Reflexes
       {
         _reflexTree.DeactivateChain(_activeChainId);
         LogInfo($"Цепочка {_activeChainId} деактивирована");
-        _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount + 1;
+        _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
         pulseChainCompleted = 0;
       }
 

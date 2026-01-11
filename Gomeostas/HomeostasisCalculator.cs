@@ -177,48 +177,56 @@ namespace ISIDA.Gomeostas
       else if (state == ParameterState.Bad) zone = 0;
       else zone = 2; // Normal
 
+      float deviationForZone = 0;
+      float rangeForZone = 100;
+
       float value = param.Value;
       float norma = param.NormaWell;
 
-      float deviation;
-      float range;
-
       if (param.Speed < 0)
       {
-        // Дефицит-ориентированный: значение ВЫШЕ нормы
-        deviation = Math.Max(0, norma - value);
-        range = norma;
+        // Дефицит-ориентированный: плохо когда value < norma
+        if (value < norma)
+        {
+          deviationForZone = norma - value; // насколько ниже нормы
+          rangeForZone = norma; // максимум отклонения = до 0
+        }
       }
       else
       {
-        // Избыток-ориентированный: значение НИЖЕ нормы  
-        deviation = Math.Max(0, value - norma);
-        range = 100 - norma;
+        // Избыток-ориентированный: плохо когда value > norma  
+        if (value > norma)
+        {
+          deviationForZone = value - norma; // насколько выше нормы
+          rangeForZone = 100 - norma; // максимум отклонения = до 100
+        }
       }
 
       // Защита от деления на ноль
-      if (range <= 0.1f) range = 0.1f;
+      if (rangeForZone <= 0.1f) rangeForZone = 0.1f;
 
-      float percent = (deviation / range) * 100;
+      float percentForZone = (deviationForZone / rangeForZone) * 100;
 
-      // Если есть отклонение от нормы, определяем степень
-      if (deviation > 0)
+      // Если есть отклонение от нормы (хуже нормы), определяем степень
+      if (deviationForZone > 0)
       {
-        if (percent < 5) zone = 3;    // Слабое отклонение
-        else if (percent < 15) zone = 4; // Умеренное отклонение
-        else if (percent < 30) zone = 5; // Значительное отклонение
+        if (percentForZone < 5) zone = 3;    // Слабое отклонение
+        else if (percentForZone < 15) zone = 4; // Умеренное отклонение
+        else if (percentForZone < 30) zone = 5; // Значительное отклонение
         else zone = 6;                 // Сильное отклонение
       }
 
-      //Debug.WriteLine($"param: {param.Name}, value: {value:F2}, norma: {norma}, " +
-      //               $"speed: {param.Speed}, deviation: {deviation:F2}, " +
-      //               $"range: {range}, percent: {percent:F1}%, zone: {zone}");
+      float signedDeviation = param.Speed < 0 ? value - norma : norma - value;
+      float absDeviation = Math.Abs(signedDeviation);
+      float maxPossibleDeviation = param.Speed < 0 ? norma : 100 - norma;
+      if (maxPossibleDeviation <= 0.1f) maxPossibleDeviation = 0.1f;
+      float percentForLogs = (absDeviation / maxPossibleDeviation) * 100;
 
-      return (zone, $"{param.Id}|{deviation:F2}|{range}|{percent:F1}");
+      return (zone, $"{param.Id}|{signedDeviation:F2}|{maxPossibleDeviation:F1}|{percentForLogs:F1}");
     }
 
     /// <summary>
-    /// Вычисляет функцию потребности Ui для параметра (обновленная версия для логирования)
+    /// Вычисляет функцию потребности Ui для параметра
     /// </summary>
     public float CalculateUrgencyFunction(ParameterData param)
     {
