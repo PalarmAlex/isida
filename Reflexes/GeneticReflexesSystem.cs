@@ -1204,9 +1204,9 @@ namespace ISIDA.Reflexes
             if (!int.TryParse(parts[1].Trim(), out int level1))
               continue;
 
-            var level2 = parts.Length > 2 ? ParseIntList(parts[2]) : new List<int>();
-            var level3 = parts.Length > 3 ? ParseIntList(parts[3]) : new List<int>();
-            var adaptiveActions = parts.Length > 4 ? ParseIntList(parts[4]) : new List<int>();
+            var level2 = parts.Length > 2 ? AddUtils.ParseIntList(parts[2]) : new List<int>();
+            var level3 = parts.Length > 3 ? AddUtils.ParseIntList(parts[3]) : new List<int>();
+            var adaptiveActions = parts.Length > 4 ? AddUtils.ParseIntList(parts[4]) : new List<int>();
 
             var validationResult = ValidateGeneticReflexParameters(level1, level2, level3, adaptiveActions);
             if (!validationResult.IsValid)
@@ -1350,19 +1350,6 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
-    }
-
-    private List<int> ParseIntList(string listStr)
-    {
-      if (string.IsNullOrWhiteSpace(listStr))
-        return new List<int>();
-
-      return listStr.Split(',')
-          .Where(s => !string.IsNullOrWhiteSpace(s))
-          .Select(s => int.TryParse(s.Trim(), out int result) ? result : (int?)null)
-          .Where(i => i.HasValue)
-          .Select(i => i.Value)
-          .ToList();
     }
 
     #endregion

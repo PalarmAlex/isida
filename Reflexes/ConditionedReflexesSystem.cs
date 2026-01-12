@@ -1014,7 +1014,7 @@ namespace ISIDA.Reflexes
             {
               Id = id,
               Level1 = int.Parse(parts[1]),
-              Level2 = ParseIntList(parts[2]),
+              Level2 = AddUtils.ParseIntList(parts[2]),
               Level3 = int.Parse(parts[3]),
               AssociationStrength = float.Parse(parts[4]),
               LastActivation = int.Parse(parts[5]),
@@ -1168,18 +1168,6 @@ namespace ISIDA.Reflexes
       {
         return (false, ex.Message);
       }
-    }
-
-    private List<int> ParseIntList(string listStr)
-    {
-      if (string.IsNullOrWhiteSpace(listStr))
-        return new List<int>();
-
-      return listStr.Split(',')
-          .Where(s => !string.IsNullOrWhiteSpace(s))
-          .Select(s => int.TryParse(s.Trim(), out int result) ? result : 0)
-          .Where(x => x != 0)
-          .ToList();
     }
 
     #endregion

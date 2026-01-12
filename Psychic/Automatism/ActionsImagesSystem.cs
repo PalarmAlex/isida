@@ -9,7 +9,7 @@ using System.Threading;
 namespace isida.Psychic.Automatism
 {
   /// <summary>
-  /// Система образов действий оператора и агента ИИ
+  /// Система образов действий агента
   /// </summary>
   public sealed class ActionsImagesSystem : IDisposable
   {
@@ -201,11 +201,6 @@ namespace isida.Psychic.Automatism
     private int _lastActionsImageId = 0;
 
     /// <summary>
-    /// Флаг записи в файл
-    /// </summary>
-    private bool _doWritingFile = true;
-
-    /// <summary>
     /// Флаг распознавания фразы из активации дерева автоматизмов
     /// </summary>
     private bool _isUnrecognizedPhraseFromAtmtzmTreeActivation = false;
@@ -273,7 +268,6 @@ namespace isida.Psychic.Automatism
 
       if (checkUnicum)
       {
-        Debug.WriteLine($"Проверка уникальности: kind={kind}, actCount={actIdList?.Count}, phraseCount={phraseIdList?.Count}, tone={toneId}, mood={moodId}");
         var existing = CheckUnicumActionsImage(kind, actIdList, phraseIdList, toneId, moodId);
         if (existing.Image != null)
         {
@@ -298,9 +292,6 @@ namespace isida.Psychic.Automatism
 
         _actionsImages[newId] = image;
         Debug.WriteLine($"Создан новый образ ID={newId}");
-
-        if (_doWritingFile)
-          SaveActionsImages();
 
         return (newId, image);
       }
@@ -344,11 +335,7 @@ namespace isida.Psychic.Automatism
         ToneId = toneId,
         MoodId = moodId
       };
-
       _actionsImages[id] = image;
-
-      if (_doWritingFile)
-        SaveActionsImagesNoLock();
 
       return (id, image);
     }
@@ -385,11 +372,7 @@ namespace isida.Psychic.Automatism
         ToneId = toneId,
         MoodId = moodId
       };
-
       _actionsImages[newId] = image;
-
-      if (_doWritingFile)
-        SaveActionsImagesNoLock();
 
       return (newId, image);
     }
@@ -434,10 +417,10 @@ namespace isida.Psychic.Automatism
         if (kind != v.Kind)
           continue;
 
-        if (!AreListsEqual(actIdList, v.ActIdList))
+        if (!AddUtils.AreListsEqual(actIdList, v.ActIdList))
           continue;
 
-        if (!AreListsEqual(phraseIdList, v.PhraseIdList))
+        if (!AddUtils.AreListsEqual(phraseIdList, v.PhraseIdList))
           continue;
 
         if (toneId != v.ToneId || moodId != v.MoodId)
@@ -447,28 +430,6 @@ namespace isida.Psychic.Automatism
       }
 
       return (0, null);
-    }
-
-    /// <summary>
-    /// Сравнение двух списков на равенство
-    /// </summary>
-    private bool AreListsEqual(List<int> list1, List<int> list2)
-    {
-      if (list1 == null && list2 == null)
-        return true;
-
-      if (list1 == null && list2 != null && list2.Count == 0)
-        return true;
-      if (list2 == null && list1 != null && list1.Count == 0)
-        return true;
-
-      if (list1 == null || list2 == null)
-        return false;
-
-      if (list1.Count != list2.Count)
-        return false;
-
-      return list1.OrderBy(x => x).SequenceEqual(list2.OrderBy(x => x));
     }
 
     /// <summary>
@@ -562,8 +523,8 @@ namespace isida.Psychic.Automatism
             if (!int.TryParse(parts[0], out int id))
               continue;
 
-            var actIdList = ParseIntList(parts[1]);
-            var phraseIdList = ParseIntList(parts[2]);
+            var actIdList = AddUtils.ParseIntList(parts[1]);
+            var phraseIdList = AddUtils.ParseIntList(parts[2]);
 
             int toneId = 0;
             if (!string.IsNullOrWhiteSpace(parts[3]))
@@ -577,13 +538,8 @@ namespace isida.Psychic.Automatism
             if (!string.IsNullOrWhiteSpace(parts[5]))
               int.TryParse(parts[5], out kind);
 
-            var saveDoWritingFile = _doWritingFile;
-            _doWritingFile = false;
-
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
             CreateNewActionsImageWithIdNoLock(id, kind, actIdList, phraseIdList, toneId, moodId, false);
-
-            _doWritingFile = saveDoWritingFile;
           }
         }
         finally
@@ -637,9 +593,9 @@ namespace isida.Psychic.Automatism
 
           var line = $"{v.Id}|";
 
-          line += IntListToString(v.ActIdList);
+          line += AddUtils.IntListToString(v.ActIdList);
           line += "|";
-          line += IntListToString(v.PhraseIdList);
+          line += AddUtils.IntListToString(v.PhraseIdList);
           line += "|";
           line += $"{v.ToneId}|";
           line += $"{v.MoodId}|";
@@ -662,27 +618,6 @@ namespace isida.Psychic.Automatism
       {
         return (false, ex.Message);
       }
-    }
-
-    /// <summary>
-    /// Парсит строку со списком целых чисел
-    /// </summary>
-    private List<int> ParseIntList(string listStr)
-    {
-      if (string.IsNullOrWhiteSpace(listStr))
-        return new List<int>();
-
-      return listStr.Split(',', (char)StringSplitOptions.RemoveEmptyEntries)
-          .Select(s => int.TryParse(s.Trim(), out int result) ? result : 0)
-          .ToList(); // УБРАЛИ .Where(x => x != 0) - сохраняем все значения!
-    }
-
-    /// <summary>
-    /// Преобразует список целых чисел в строку
-    /// </summary>
-    private string IntListToString(List<int> list)
-    {
-      return list != null && list.Count > 0 ? string.Join(",", list) : string.Empty;
     }
 
     /// <summary>

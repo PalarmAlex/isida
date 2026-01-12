@@ -84,6 +84,7 @@
     <Compile Include="Actions\AdaptiveActionsSystem.cs" />
     <Compile Include="Actions\InfluenceActionSystem.cs" />
     <Compile Include="Actions\ParameterInfluence.cs" />
+    <Compile Include="Common\AddUtils.cs" />
     <Compile Include="Common\AntagonistValidator.cs" />
     <Compile Include="Common\FileValidator.cs" />
     <Compile Include="Common\GlobalTimer.cs" />
@@ -101,6 +102,7 @@
     <Compile Include="Psychic\Automatism\ActionsImagesSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmTree.cs" />
+    <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />

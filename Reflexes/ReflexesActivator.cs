@@ -287,6 +287,10 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
+      AutomatizmTreeActivation(_activeCurBaseID, _activeCurBaseStyleID);
+
+
+
       bool psychicBlocked = false;
       if (psychicBlocked)
       {

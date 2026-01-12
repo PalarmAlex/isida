@@ -164,7 +164,6 @@ namespace ISIDA.Reflexes
     public int AddBehaviorStyleImage(List<int> behaviorStylesList)
     {
       // образы нужны уже на стадии 0 - для привязки к дереву рефлексов
-
       if (behaviorStylesList == null || !behaviorStylesList.Any())
         return 0;
 
@@ -183,9 +182,7 @@ namespace ISIDA.Reflexes
             IsAreBehaviorStyleImage(existing, newBehaviorStyleImage));
 
         if (existingImage != null)
-        {
           resultId = existingImage.Id;
-        }
         else
         {
           int newId = ++_lastBehaviorStyleImageId;
@@ -212,9 +209,7 @@ namespace ISIDA.Reflexes
         {
           var saveResult = SaveBehaviorStyleImages();
           if (!saveResult.Success)
-          {
             LogError($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
-          }
         }
         catch (Exception ex)
         {
@@ -515,8 +510,8 @@ namespace ISIDA.Reflexes
             var perceptionImage = new PerceptionImage
             {
               Id = id,
-              InfluenceActionsList = ParseIntList(parts[1]),
-              PhraseIdList = ParseIntList(parts[2])
+              InfluenceActionsList = AddUtils.ParseIntList(parts[1]),
+              PhraseIdList = AddUtils.ParseIntList(parts[2])
             };
 
             _perceptionImages[id] = perceptionImage;
@@ -569,7 +564,7 @@ namespace ISIDA.Reflexes
             var behaviorStyleImage = new BehaviorStyleImage
             {
               Id = id,
-              BehaviorStylesList = ParseIntList(parts[1])
+              BehaviorStylesList = AddUtils.ParseIntList(parts[1])
             };
 
             _behaviorStyleImages[id] = behaviorStyleImage;
@@ -603,7 +598,7 @@ namespace ISIDA.Reflexes
 
         foreach (var image in _perceptionImages.Values.OrderBy(x => x.Id))
         {
-          lines.Add($"{image.Id}|{IntListToString(image.InfluenceActionsList)}|{IntListToString(image.PhraseIdList)}");
+          lines.Add($"{image.Id}|{AddUtils.IntListToString(image.InfluenceActionsList)}|{AddUtils.IntListToString(image.PhraseIdList)}");
         }
 
         var lineCount = 3;
@@ -640,7 +635,7 @@ namespace ISIDA.Reflexes
 
         foreach (var image in _behaviorStyleImages.Values.OrderBy(x => x.Id))
         {
-          lines.Add($"{image.Id}|{IntListToString(image.BehaviorStylesList)}");
+          lines.Add($"{image.Id}|{AddUtils.IntListToString(image.BehaviorStylesList)}");
         }
 
         var lineCount = 3;
@@ -676,29 +671,6 @@ namespace ISIDA.Reflexes
       {
         LogError($"Ошибка сохранения образов стилей и воздействий: {ex.Message}");
       }
-    }
-
-    /// <summary>
-    /// Парсит строку со списком целых чисел
-    /// </summary>
-    private List<int> ParseIntList(string listStr)
-    {
-      if (string.IsNullOrWhiteSpace(listStr))
-        return new List<int>();
-
-      return listStr.Split(',')
-          .Where(s => !string.IsNullOrWhiteSpace(s))
-          .Select(s => int.TryParse(s.Trim(), out int result) ? result : 0)
-          .Where(x => x != 0)
-          .ToList();
-    }
-
-    /// <summary>
-    /// Преобразует список целых чисел в строку
-    /// </summary>
-    private string IntListToString(List<int> list)
-    {
-      return string.Join(",", list ?? new List<int>());
     }
 
     /// <summary>

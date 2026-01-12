@@ -61,13 +61,17 @@ namespace ISIDA.Common
       public const string PropertiesIsSleeping = "IsSleeping|";
       public const string PropertiesIsDead = "IsDead|";
 
-      // Образы действий психики
+      // Образы действий агента для психики
       public const string ActionsImagesFormat = "# ID|ActID|PhraseID|ToneID|MoodID|Kind";
       public const string ActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
       public const string ActionsImagesPhraseId = "# PhraseID: ID фраз (через запятую)";
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
+
+      // Образы действий с пульта для психики
+      public const string InfluenceActionsImagesFormat = "# ID|ActID";
+      public const string InfluenceActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
 
       // Дерево автоматизмов
       public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|PhraseID";
@@ -646,6 +650,73 @@ namespace ISIDA.Common
               return false;
           }
         }
+
+        return true; // Достаточно одной валидной строки данных
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsValidInfluenceActionsImagesFile
+
+    /// <summary>
+    /// Проверяет валидность файла образов действий по пути
+    /// </summary>
+    public static bool IsValidInfluenceActionsImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidInfluenceActionsImagesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла образов действий
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidInfluenceActionsImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      // Проверяем, что файл содержит только комментарии/пустые строки (шапку)
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        // Проверяем минимальное количество полей
+        if (parts.Length < 1)
+          return false;
+
+        // Проверяем ID (первое поле должно быть числом)
+        if (!int.TryParse(parts[0], out int id) || id <= 0)
+          return false;
 
         return true; // Достаточно одной валидной строки данных
       }

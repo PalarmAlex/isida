@@ -44,7 +44,7 @@ namespace isida.Psychic.Automatism
     public int SimbolID { get; set; }
 
     /// <summary>
-    /// ID фразы (Verbal.ID)
+    /// ID фразы
     /// </summary>
     public int PhraseID { get; set; }
 
@@ -361,7 +361,7 @@ namespace isida.Psychic.Automatism
         int phraseId,
         bool isUnrecognizedPhrase = false)
     {
-      if (_notAllowScanInTreeThisTime)
+      if (_notAllowScanInTreeThisTime || GlobalTimer.GlobalPulsCount < 4)
         return 0;
 
       _notAllowScanInTreeThisTime = true;
