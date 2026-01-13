@@ -103,6 +103,7 @@
     <Compile Include="Psychic\Automatism\AutomatizmSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmTree.cs" />
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
+    <Compile Include="Psychic\PsychicSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />

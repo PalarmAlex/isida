@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace isida.Psychic.Automatism
 {
   /// <summary>
-  /// Система образов действий оператора
+  /// Система образов сочетаний действий с пульта (для дерева автоматизмов)
   /// </summary>
   public sealed class InfluenceActionsImagesSystem : IDisposable
   {
@@ -149,34 +149,32 @@ namespace isida.Psychic.Automatism
       if (actIdList == null)
         return (0, null);
 
-      if (checkUnicum)
-      {
-        var existing = CheckUnicumInfluenceActionsImage(actIdList);
-        if (existing.Image != null)
-        {
-          Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
-          return existing;
-        }
-      }
-
-      _lock.EnterWriteLock();
+      _lock.EnterUpgradeableReadLock();
       try
       {
-        int newId = ++_lastActionsImageId;
-        var image = new InfluenceActionsImage
+        if (checkUnicum)
         {
-          Id = newId,
-          ActIdList = actIdList?.ToList() ?? new List<int>()
-        };
+          var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
+          if (existing.Image != null)
+          {
+            Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
+            return existing;
+          }
+        }
 
-        _actionsImages[newId] = image;
-        Debug.WriteLine($"Создан новый образ ID={newId}");
-
-        return (newId, image);
+        _lock.EnterWriteLock();
+        try
+        {
+          return CreateInfluenceActionsImageCore(0, actIdList, false);
+        }
+        finally
+        {
+          _lock.ExitWriteLock();
+        }
       }
       finally
       {
-        _lock.ExitWriteLock();
+        _lock.ExitUpgradeableReadLock();
       }
     }
 
@@ -188,40 +186,22 @@ namespace isida.Psychic.Automatism
         List<int> actIdList,
         bool checkUnicum)
     {
-      if (id == 0)
-        return CreateNewInfluenceActionsImageNoLock(actIdList, checkUnicum);
-
-      if (checkUnicum)
-      {
-        var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
-        if (existing.Image != null)
-          return existing;
-      }
-
-      if (_lastActionsImageId < id)
-        _lastActionsImageId = id;
-
-      var image = new InfluenceActionsImage
-      {
-        Id = id,
-        ActIdList = actIdList?.ToList() ?? new List<int>()
-      };
-      _actionsImages[id] = image;
-
-      return (id, image);
+      return CreateInfluenceActionsImageCore(id, actIdList, checkUnicum);
     }
 
     /// <summary>
-    /// Создать новый образ действий или возвратить существующий (без блокировки - для внутреннего использования)
+    /// Общая логика создания образа действий (без блокировки)
     /// </summary>
-    private (int Id, InfluenceActionsImage Image) CreateNewInfluenceActionsImageNoLock(
+    private (int Id, InfluenceActionsImage Image) CreateInfluenceActionsImageCore(
+        int id,
         List<int> actIdList,
         bool checkUnicum)
     {
-      // Не создавать образ с пустым действием и вербальным сенсором
+      // Не создавать образ с пустым действием
       if (actIdList == null)
         return (0, null);
 
+      // Проверка уникальности (если нужно)
       if (checkUnicum)
       {
         var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
@@ -229,13 +209,26 @@ namespace isida.Psychic.Automatism
           return existing;
       }
 
-      int newId = ++_lastActionsImageId;
+      // Определение ID
+      int newId = id;
+      if (id == 0)
+      {
+        newId = ++_lastActionsImageId;
+      }
+      else if (_lastActionsImageId < id)
+      {
+        _lastActionsImageId = id;
+      }
+
+      // Создание объекта
       var image = new InfluenceActionsImage
       {
         Id = newId,
         ActIdList = actIdList?.ToList() ?? new List<int>()
       };
+
       _actionsImages[newId] = image;
+      Debug.WriteLine($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
@@ -366,7 +359,7 @@ namespace isida.Psychic.Automatism
             var actIdList = AddUtils.ParseIntList(parts[1]);
 
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateNewInfluenceActionsImageWithIdNoLock(id, actIdList, false);
+            CreateInfluenceActionsImageCore(id, actIdList, false);
           }
         }
         finally
@@ -474,6 +467,5 @@ namespace isida.Psychic.Automatism
     }
 
     #endregion
-
   }
 }

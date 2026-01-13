@@ -1,4 +1,6 @@
-﻿using ISIDA.Actions;
+﻿using isida.Psychic;
+using isida.Psychic.Automatism;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
@@ -68,6 +70,7 @@ namespace ISIDA.Reflexes
     private readonly AdaptiveActionsSystem _adaptiveActions;
     private readonly ReflexChainsSystem _reflexChainsSystem;
     private readonly ConditionedReflexFormationService _reflexFormationService;
+    private PsychicSystem _psychicSystem;
 
     private ReflexesActivator(
         GomeostasSystem gomeostas,
@@ -97,6 +100,7 @@ namespace ISIDA.Reflexes
 
       ResetStates();
     }
+
     private void OnTriggerStimulusActivated(int pulseCount, bool authoritativeMode)
     {
       ActiveFromAction(pulseCount, authoritativeMode);
@@ -113,6 +117,14 @@ namespace ISIDA.Reflexes
     public void SetResearchLogger(ResearchLogger logger)
     {
       _researchLogger = logger;
+    }
+
+    /// <summary>
+    /// Установка психики
+    /// </summary>
+    public void SetPsychicSystemm(PsychicSystem psychicSystem)
+    {
+      _psychicSystem = psychicSystem ?? throw new ArgumentNullException(nameof(psychicSystem));
     }
 
     #endregion
@@ -287,11 +299,7 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
-      //AutomatizmTreeActivation(_activeCurBaseID, _activeCurBaseStyleID);
-
-
-
-      bool psychicBlocked = false;
+      bool psychicBlocked = _psychicSystem.SensorActivation(1); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
         LogInfo("Рефлекс заблокирован психикой");
@@ -320,7 +328,7 @@ namespace ISIDA.Reflexes
 
         bool fullMatchFound = _reflexTree.DetectedLevel == 2;
 
-        bool psychicBlocked = false;
+        bool psychicBlocked = _psychicSystem.SensorActivation(2); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
           LogInfo("Рефлекс заблокирован психикой");
@@ -384,7 +392,7 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
-        bool psychicBlocked = false;
+        bool psychicBlocked = _psychicSystem.SensorActivation(3); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
           LogInfo("Рефлекс заблокирован психикой");
@@ -1218,7 +1226,7 @@ namespace ISIDA.Reflexes
     #region IDisposable
 
     /// <summary>
-    /// Освобождает ресурсы, используемые объектом AdaptiveActionsSystem
+    /// Освобождает ресурсы, используемые объектом ReflexesActivator
     /// </summary>
     public void Dispose()
     {

@@ -1,4 +1,5 @@
-﻿using isida.Psychic.Automatism;
+﻿using isida.Psychic;
+using isida.Psychic.Automatism;
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -241,7 +242,7 @@ namespace ISIDA.Common
     public ConditionedReflexFormationService ConditionedReflexFormation { get; internal set; }
 
     /// <summary>
-    /// Система образов действий агента ИИ
+    /// Система образов действий агента или оператора
     /// </summary>
     public ActionsImagesSystem ActionsImages { get; internal set; }
 
@@ -259,6 +260,11 @@ namespace ISIDA.Common
     /// Система автоматизмов
     /// </summary>
     public AutomatizmSystem AutomatizmSystem { get; internal set; }
+
+    /// <summary>
+    /// Система психики
+    /// </summary>
+    public PsychicSystem PsychicSystem { get; internal set; }
 
     /// <summary>
     /// Логгер исследований
@@ -292,6 +298,7 @@ namespace ISIDA.Common
       SafeDispose(ActionsImages, "ActionsImages");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
+      SafeDispose(PsychicSystem, "PsychicSystem");
 
       _disposed = true;
       Debug.WriteLine($"[IsidaContext] Освобождение завершено");
@@ -538,8 +545,18 @@ namespace ISIDA.Common
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
+        // Шаг 20: Система психики
+        initializationStep = 20;
+        PsychicSystem.InitializeInstance(
+          context.AutomatizmSystem, 
+          context.AutomatizmTree, 
+          context.InfluenceActionsImages, 
+          context.Gomeostas);
+        context.PsychicSystem = PsychicSystem.Instance;
+
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
+        context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);

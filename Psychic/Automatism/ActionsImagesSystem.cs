@@ -9,7 +9,7 @@ using System.Threading;
 namespace isida.Psychic.Automatism
 {
   /// <summary>
-  /// Система образов действий агента
+  /// Система образов действий агента или оператора
   /// </summary>
   public sealed class ActionsImagesSystem : IDisposable
   {
@@ -244,6 +244,48 @@ namespace isida.Psychic.Automatism
       }
     }
 
+    private (int Id, ActionsImage Image) CreateActionsImageCore(
+    int id, // 0 для автоинкремента
+    int kind,
+    List<int> actIdList,
+    List<int> phraseIdList,
+    int toneId,
+    int moodId,
+    bool checkUnicum)
+    {
+      if (actIdList == null && (phraseIdList == null || _isUnrecognizedPhraseFromAtmtzmTreeActivation))
+        return (0, null);
+
+      if (checkUnicum)
+      {
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
+        if (existing.Image != null)
+          return existing;
+      }
+
+      int newId = id;
+      if (id == 0)
+        newId = ++_lastActionsImageId;
+      else if (_lastActionsImageId < id)
+        _lastActionsImageId = id;
+
+      // Создание объекта
+      var image = new ActionsImage
+      {
+        Id = newId,
+        Kind = kind,
+        ActIdList = actIdList?.ToList() ?? new List<int>(),
+        PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
+        ToneId = toneId,
+        MoodId = moodId
+      };
+
+      _actionsImages[newId] = image;
+      Debug.WriteLine($"Создан новый образ ID={newId}");
+
+      return (newId, image);
+    }
+
     /// <summary>
     /// Создать новый образ действий или возвратить существующий
     /// </summary>
@@ -262,48 +304,32 @@ namespace isida.Psychic.Automatism
         int moodId,
         bool checkUnicum)
     {
-      // Не создавать образ с пустым действием и вербальным сенсором
-      if (actIdList == null && (phraseIdList == null || _isUnrecognizedPhraseFromAtmtzmTreeActivation))
-        return (0, null);
-
-      if (checkUnicum)
-      {
-        var existing = CheckUnicumActionsImage(kind, actIdList, phraseIdList, toneId, moodId);
-        if (existing.Image != null)
-        {
-          Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
-          return existing;
-        }
-      }
-
-      _lock.EnterWriteLock();
+      _lock.EnterUpgradeableReadLock();
       try
       {
-        int newId = ++_lastActionsImageId;
-        var image = new ActionsImage
+        if (checkUnicum)
         {
-          Id = newId,
-          Kind = kind,
-          ActIdList = actIdList?.ToList() ?? new List<int>(),
-          PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
-          ToneId = toneId,
-          MoodId = moodId
-        };
+          var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
+          if (existing.Image != null)
+            return existing;
+        }
 
-        _actionsImages[newId] = image;
-        Debug.WriteLine($"Создан новый образ ID={newId}");
-
-        return (newId, image);
+        _lock.EnterWriteLock();
+        try
+        {
+          return CreateActionsImageCore(0, kind, actIdList, phraseIdList, toneId, moodId, false);
+        }
+        finally
+        {
+          _lock.ExitWriteLock();
+        }
       }
       finally
       {
-        _lock.ExitWriteLock();
+        _lock.ExitUpgradeableReadLock();
       }
     }
 
-    /// <summary>
-    /// Создать новый образ действий с указанным ID (без блокировки - для внутреннего использования)
-    /// </summary>
     internal (int Id, ActionsImage Image) CreateNewActionsImageWithIdNoLock(
         int id,
         int kind,
@@ -313,89 +339,7 @@ namespace isida.Psychic.Automatism
         int moodId,
         bool checkUnicum)
     {
-      if (id == 0)
-        return CreateNewActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId, checkUnicum);
-
-      if (checkUnicum)
-      {
-        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
-        if (existing.Image != null)
-          return existing;
-      }
-
-      if (_lastActionsImageId < id)
-        _lastActionsImageId = id;
-
-      var image = new ActionsImage
-      {
-        Id = id,
-        Kind = kind,
-        ActIdList = actIdList?.ToList() ?? new List<int>(),
-        PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
-        ToneId = toneId,
-        MoodId = moodId
-      };
-      _actionsImages[id] = image;
-
-      return (id, image);
-    }
-
-    /// <summary>
-    /// Создать новый образ действий или возвратить существующий (без блокировки - для внутреннего использования)
-    /// </summary>
-    private (int Id, ActionsImage Image) CreateNewActionsImageNoLock(
-        int kind,
-        List<int> actIdList,
-        List<int> phraseIdList,
-        int toneId,
-        int moodId,
-        bool checkUnicum)
-    {
-      // Не создавать образ с пустым действием и вербальным сенсором
-      if (actIdList == null && (phraseIdList == null || _isUnrecognizedPhraseFromAtmtzmTreeActivation))
-        return (0, null);
-
-      if (checkUnicum)
-      {
-        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
-        if (existing.Image != null)
-          return existing;
-      }
-
-      int newId = ++_lastActionsImageId;
-      var image = new ActionsImage
-      {
-        Id = newId,
-        Kind = kind,
-        ActIdList = actIdList?.ToList() ?? new List<int>(),
-        PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
-        ToneId = toneId,
-        MoodId = moodId
-      };
-      _actionsImages[newId] = image;
-
-      return (newId, image);
-    }
-
-    /// <summary>
-    /// Проверить уникальность образа действий
-    /// </summary>
-    private (int Id, ActionsImage Image) CheckUnicumActionsImage(
-        int kind,
-        List<int> actIdList,
-        List<int> phraseIdList,
-        int toneId,
-        int moodId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
+      return CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, checkUnicum);
     }
 
     /// <summary>
@@ -539,7 +483,7 @@ namespace isida.Psychic.Automatism
               int.TryParse(parts[5], out kind);
 
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateNewActionsImageWithIdNoLock(id, kind, actIdList, phraseIdList, toneId, moodId, false);
+            CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, false);
           }
         }
         finally

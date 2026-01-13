@@ -52,7 +52,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Устанавливает систему образов действий (должна быть вызвана после инициализации ActionsImagesSystem)
+    /// Устанавливает систему образов действий
     /// </summary>
     public void SetActionsImagesSystem(ActionsImagesSystem actionsImagesSystem)
     {
@@ -476,7 +476,6 @@ namespace ISIDA.Actions
           return;
         }
 
-        // Проверяем валидность toneId и moodId
         if (!ActionsImagesSystem.IsValidToneId(toneId))
         {
           Debug.WriteLine($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
