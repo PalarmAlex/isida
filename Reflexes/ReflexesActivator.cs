@@ -287,7 +287,7 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
-      AutomatizmTreeActivation(_activeCurBaseID, _activeCurBaseStyleID);
+      //AutomatizmTreeActivation(_activeCurBaseID, _activeCurBaseStyleID);
 
 
 

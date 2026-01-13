@@ -1,19 +1,20 @@
-﻿using ISIDA.Actions;
+﻿using isida.Psychic.Automatism;
+using ISIDA.Actions;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
 using System.Diagnostics;
 using System.IO;
+using static isida.Psychic.Automatism.AutomatizmSystem;
+using static isida.Psychic.Automatism.AutomatizmTreeSystem;
+using static isida.Psychic.Automatism.InfluenceActionsImagesSystem;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.ResearchLogger;
 using static ISIDA.Reflexes.ConditionedReflexesSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 using static ISIDA.Reflexes.PerceptionImagesSystem;
 using static ISIDA.Reflexes.ReflexChainsSystem;
-using static isida.Psychic.Automatism.AutomatizmTreeSystem;
-using static isida.Psychic.Automatism.AutomatizmSystem;
-using isida.Psychic.Automatism;
 
 namespace ISIDA.Common
 {
@@ -240,9 +241,14 @@ namespace ISIDA.Common
     public ConditionedReflexFormationService ConditionedReflexFormation { get; internal set; }
 
     /// <summary>
-    /// Система образов действий оператора и агента ИИ
+    /// Система образов действий агента ИИ
     /// </summary>
     public ActionsImagesSystem ActionsImages { get; internal set; }
+
+    /// <summary>
+    /// Система образов действий Оператора
+    /// </summary>
+    public InfluenceActionsImagesSystem InfluenceActionsImages { get; internal set; }
 
     /// <summary>
     /// Система дерева автоматизмов
@@ -279,6 +285,7 @@ namespace ISIDA.Common
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
       SafeDispose(InfluenceActions, "InfluenceActions");
+      SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(AdaptiveActions, "AdaptiveActions");
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(Gomeostas, "Gomeostas");
@@ -331,6 +338,7 @@ namespace ISIDA.Common
         AutomatizmTree != null &&
         AutomatizmSystem != null &&
         ActionsImages != null &&
+        InfluenceActionsImages != null &&
         ReflexesActivator != null &&
         ReflexTree != null &&
         ReflexChains != null &&
@@ -407,35 +415,40 @@ namespace ISIDA.Common
         AdaptiveActionsSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
         context.AdaptiveActions = AdaptiveActionsSystem.Instance;
         context.AdaptiveActions.ReflexActionDisplayDuration = config.ReflexActionDisplayDuration;
-        context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;       
+        context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;
 
         // Шаг 4: Внешние действия
         initializationStep = 4;
         InfluenceActionSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
         context.InfluenceActions = InfluenceActionSystem.Instance;
 
-        // Шаг 5: Сенсорная система
+        // Шаг 5: Образы внешних действий
         initializationStep = 5;
+        InfluenceActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        context.InfluenceActionsImages = InfluenceActionsImagesSystem.Instance;
+
+        // Шаг 6: Сенсорная система
+        initializationStep = 6;
         SensorySystem.InitializeInstance(context.Gomeostas, config.SensorsFolder);
         context.SensorySystem = SensorySystem.Instance;
         context.SensorySystem.VerbalRecognitionThreshold = config.RecognitionThreshold;
 
-        // Шаг 6: Безусловные рефлексы
-        initializationStep = 6;
+        // Шаг 7: Безусловные рефлексы
+        initializationStep = 7;
         GeneticReflexesSystem.InitializeInstance(context.Gomeostas, config.ReflexesFolder);
         context.GeneticReflexes = GeneticReflexesSystem.Instance;
 
-        // Шаг 7: Система цепочек рефлексов
-        initializationStep = 7;
+        // Шаг 8: Система цепочек рефлексов
+        initializationStep = 8;
         ReflexChainsSystem.InitializeInstance(context.GeneticReflexes, context.AdaptiveActions);
         context.ReflexChains = ReflexChainsSystem.Instance;
 
-        // Шаг 8: Вторичная инициализация безусловных рефлексов с системой цепочек
-        initializationStep = 8;
+        // Шаг 9: Вторичная инициализация безусловных рефлексов с системой цепочек
+        initializationStep = 9;
         GeneticReflexesSystem.InitializeWithChains(context.ReflexChains);
 
-        // Шаг 9: Образы восприятия
-        initializationStep = 9;
+        // Шаг 10: Образы восприятия
+        initializationStep = 10;
         PerceptionImagesSystem.InitializeInstance(context.Gomeostas, context.GeneticReflexes);
         context.PerceptionImages = PerceptionImagesSystem.Instance;
 
@@ -443,16 +456,16 @@ namespace ISIDA.Common
         context.InfluenceActions.SetPerceptionImagesSystem(context.PerceptionImages);
         context.SensorySystem.SetDependentSystems(context.GeneticReflexes, context.PerceptionImages);
 
-        // Шаг 10: Условные рефлексы
-        initializationStep = 10;
+        // Шаг 11: Условные рефлексы
+        initializationStep = 11;
         ConditionedReflexesSystem.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
             context.PerceptionImages);
         context.ConditionedReflexes = ConditionedReflexesSystem.Instance;
 
-        // Шаг 11: Дерево рефлексов
-        initializationStep = 11;
+        // Шаг 12: Дерево рефлексов
+        initializationStep = 12;
         ReflexTreeSystem.InitializeInstance(
             context.GeneticReflexes,
             context.ConditionedReflexes,
@@ -460,8 +473,8 @@ namespace ISIDA.Common
             context.ReflexChains);
         context.ReflexTree = ReflexTreeSystem.Instance;
 
-        // Шаг 12: Сервис выполнения рефлексов
-        initializationStep = 12;
+        // Шаг 13: Сервис выполнения рефлексов
+        initializationStep = 13;
         ReflexExecutionService.InitializeInstance(
             context.AdaptiveActions,
             context.InfluenceActions,
@@ -469,16 +482,16 @@ namespace ISIDA.Common
             context.ConditionedReflexes);
         context.ReflexExecution = ReflexExecutionService.Instance;
 
-        // Шаг 13: Сервис формирования условных рефлексов на основе временных корреляций
-        initializationStep = 13;
+        // Шаг 14: Сервис формирования условных рефлексов на основе временных корреляций
+        initializationStep = 14;
         ConditionedReflexFormationService.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
             context.ConditionedReflexes);
         context.ConditionedReflexFormation = ConditionedReflexFormationService.Instance;
 
-        // Шаг 14: Активатор рефлексов
-        initializationStep = 14;
+        // Шаг 15: Активатор рефлексов
+        initializationStep = 15;
         ReflexesActivator.InitializeInstance(
             context.Gomeostas,
             context.GeneticReflexes,
@@ -491,8 +504,8 @@ namespace ISIDA.Common
             context.ConditionedReflexFormation);
         context.ReflexesActivator = ReflexesActivator.Instance;
 
-        // Шаг 15: Логирование и глобальный таймер
-        initializationStep = 15;
+        // Шаг 16: Логирование и глобальный таймер
+        initializationStep = 16;
         context.ResearchLogger = new ResearchLogger(
             context.Gomeostas,
             context.PerceptionImages,
@@ -505,14 +518,14 @@ namespace ISIDA.Common
             enabled: config.LogEnabled
         );
 
-        // Шаг 16: Система образов действий оператора и агента ИИ
-        initializationStep = 16;
+        // Шаг 17: Система образов действий оператора и агента ИИ
+        initializationStep = 17;
         ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
         context.InfluenceActions.SetActionsImagesSystem(context.ActionsImages);
 
-        // Шаг 17: Система дерева автоматизмов
-        initializationStep = 17;
+        // Шаг 18: Система дерева автоматизмов
+        initializationStep = 18;
         AutomatizmTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmTree = AutomatizmTreeSystem.Instance;
 
@@ -520,8 +533,8 @@ namespace ISIDA.Common
         if (context.AutomatizmTree.Tree.Children.Count == 0)
           context.AutomatizmTree.CreateBasicAutomatizmTree();
 
-        // Шаг 18: Система автоматизмов
-        initializationStep = 18;
+        // Шаг 19: Система автоматизмов
+        initializationStep = 19;
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
