@@ -101,14 +101,22 @@ namespace ISIDA.Reflexes
       ResetStates();
     }
 
-    private void OnTriggerStimulusActivated(int pulseCount, bool authoritativeMode)
+    private void OnTriggerStimulusActivated(
+      int pulseCount,
+      List<int> actionIdList,
+      bool authoritativeMode)
     {
-      ActiveFromAction(pulseCount, authoritativeMode);
+      ActiveFromAction(pulseCount, actionIdList, authoritativeMode);
     }
 
-    private void OnPhraseStimulusActivated(int pulseCount)
+    private void OnPhraseStimulusActivated(
+      int pulseCount,
+      List<int> actionIdList,
+      List<int> phraseIdList,
+      int toneId,
+      int moodId)
     {
-      ActiveFromPhrase(pulseCount);
+      ActiveFromPhrase(pulseCount, actionIdList, phraseIdList, toneId, moodId);
     }
 
     /// <summary>
@@ -299,7 +307,7 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
-      bool psychicBlocked = _psychicSystem.SensorActivation(1); // Тип 1 - изменение условий
+      bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, null, null, 0, 0); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
         LogInfo("Рефлекс заблокирован психикой");
@@ -312,7 +320,10 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Активация при действиях с Пульта
     /// </summary>  
-    private void ActiveFromAction(int pulseCount, bool authoritativeMode = false)
+    private void ActiveFromAction(
+      int pulseCount,
+      List<int> actionIdList,
+      bool authoritativeMode = false)
     {
       if (!CanActivate(pulseCount, _isSleeping)) return;
 
@@ -327,8 +338,7 @@ namespace ISIDA.Reflexes
         _reflexTree.ConditionsDetection(conditions);
 
         bool fullMatchFound = _reflexTree.DetectedLevel == 2;
-
-        bool psychicBlocked = _psychicSystem.SensorActivation(2); // Тип 2 - действие с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
           LogInfo("Рефлекс заблокирован психикой");
@@ -379,7 +389,12 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Активация при фразе с Пульта
     /// </summary>
-    private void ActiveFromPhrase(int pulseCount)
+    private void ActiveFromPhrase(
+      int pulseCount,
+      List<int> actionIdList,
+      List<int> phraseIdList,
+      int toneId,
+      int moodId)
     {
       if (!CanActivate(pulseCount, _isSleeping)) return;
 
@@ -392,7 +407,7 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
-        bool psychicBlocked = _psychicSystem.SensorActivation(3); // Тип 3 - фраза с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
           LogInfo("Рефлекс заблокирован психикой");

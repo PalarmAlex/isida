@@ -6,6 +6,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using isida.Psychic;
+using System.Linq;
 
 namespace ISIDA.Common
 {
@@ -59,6 +61,7 @@ namespace ISIDA.Common
     private static ReflexesActivator _reflexesActivator;
     private static ConditionedReflexesSystem _conditionedReflexesSystem;
     private static ConditionedReflexFormationService _reflexFormationService;
+    private static PsychicSystem _psychicSystem;
 
     private static bool HasConditionedReflexesSystem => _conditionedReflexesSystem != null;
     private static bool HasReflexFormationService => _reflexFormationService != null;
@@ -113,19 +116,23 @@ namespace ISIDA.Common
     /// </summary>
     /// <param name="gomeostas">Система гомеостаза</param>
     /// <param name="actionsSystem">Система адаптивных действий</param>
-    /// /// <param name="reflexesActivator">Система запуска условных и безусловных рефлексов</param>
+    /// <param name="reflexesActivator">Система запуска условных и безусловных рефлексов</param>
+    /// <param name="psychicSystem">Система запуска психики</param>
     public static void InitializeSystems(
         GomeostasSystem gomeostas,
         AdaptiveActionsSystem actionsSystem,
-        ReflexesActivator reflexesActivator)
+        ReflexesActivator reflexesActivator,
+        PsychicSystem psychicSystem)
     {
       if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
       if (actionsSystem == null) throw new ArgumentNullException(nameof(actionsSystem));
       if (reflexesActivator == null) throw new ArgumentNullException(nameof(reflexesActivator));
+      if (psychicSystem == null) throw new ArgumentNullException(nameof(psychicSystem));
 
       _gomeostas = gomeostas;
       _actionsSystem = actionsSystem;
       _reflexesActivator = reflexesActivator;
+      _psychicSystem = psychicSystem;
     }
 
     /// <summary>
@@ -438,6 +445,12 @@ namespace ISIDA.Common
           Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Агент мертв на пульсе {GlobalPulsCount}");
           SafeStopWithAgentDeath();
           return;
+        }
+        else
+        {
+          // флаг сна получмть кодга класс сна будет
+          int sleepingType = 0;
+          _psychicSystem.ProcessPsychicPulse(agentState.EvolutionStage, agentState.Lifetime, GlobalPulsCount, sleepingType);
         }
 
         // Увеличение времени жизни в пульсах для условных рефлексов

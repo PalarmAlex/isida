@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Windows.Media.Animation;
 
 namespace isida.Psychic
 {
@@ -39,7 +40,8 @@ namespace isida.Psychic
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
-        InfluenceActionsImagesSystem actionsImagesSystem,
+        InfluenceActionsImagesSystem influenceActionsImagesSystem,
+        ActionsImagesSystem actionsImagesSystem,
         GomeostasSystem gomeostas)
     {
       if (_instance != null)
@@ -48,23 +50,27 @@ namespace isida.Psychic
       _instance = new PsychicSystem(
           automatizmSystem,
           automatizmTreeSystem,
+          influenceActionsImagesSystem,
           actionsImagesSystem,
           gomeostas);
     }
 
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
-    private readonly InfluenceActionsImagesSystem _actionsImagesSystem;
+    private readonly InfluenceActionsImagesSystem _influenceActionsImagesSystem;
+    private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly GomeostasSystem _gomeostas;
 
     private PsychicSystem(
         AutomatizmSystem automatizmSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
-        InfluenceActionsImagesSystem actionsImagesSystem,
+        InfluenceActionsImagesSystem influenceActionsImagesSystem,
+        ActionsImagesSystem actionsImagesSystem,
         GomeostasSystem gomeostas)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
+      _influenceActionsImagesSystem = influenceActionsImagesSystem ?? throw new ArgumentNullException(nameof(influenceActionsImagesSystem));
       _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
@@ -170,6 +176,9 @@ namespace isida.Psychic
     private int _currentSimbolId = 0;
     private int _currentPhraseId = 0;
 
+    // данные для инфо-картины
+    private int _actionsImageId = 0;
+
     // Предыдущие состояния (для сравнения)
     private int _oldBaseId = 0;
     private int _oldEmotionId = 0;
@@ -189,7 +198,7 @@ namespace isida.Psychic
     /// <summary>
     /// Обработка пульса психики
     /// </summary>
-    public void ProcessPsychicPulse(int evolutionStage, int lifeTime, int pulseCount, int sleepingType)
+    internal void ProcessPsychicPulse(int evolutionStage, int lifeTime, int pulseCount, int sleepingType)
     {
       _lock.EnterWriteLock();
       try
@@ -242,10 +251,7 @@ namespace isida.Psychic
           }
         }
         else
-        {
-          // Обработка сна
           ProcessSleep();
-        }
       }
       finally
       {
@@ -257,8 +263,19 @@ namespace isida.Psychic
     /// Активация по событиям с Пульта - основной метод
     /// </summary>
     /// <param name="activationType">Тип активации: 1-изменение условий, 2-действие, 3-фраза</param>
+    /// <param name="currentBaseId">ID состояния агента: -1: плохо, 0: норма, 1: хорошо</param>
+    /// <param name="actionIdList">список ID действий с пульта</param>
+    /// <param name="phraseIdList">список ID фраз с пульта</param>
+    /// <param name="toneId">ID тона сообщения</param>
+    /// <param name="moodId">ID настроения сообщения</param>
     /// <returns>True если нужно заблокировать рефлексы</returns>
-    public bool SensorActivation(int activationType)
+    internal bool SensorActivation(
+      int activationType,  
+      int currentBaseId,
+      List<int> actionIdList,
+      List<int> phraseIdList,
+      int toneId,
+      int moodId)
     {
       if (PulseCount < 4)
         return false;
@@ -270,16 +287,19 @@ namespace isida.Psychic
       }
 
       ActivationTypeSensor = activationType;
+      _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфоркартины
+      int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
 
       // Активация дерева автоматизмов
       int automatizmNodeId = AutomatizmTreeActivation(
           activationType,
-          _currentBaseId,
-          _currentEmotionId,
-          _currentActivityId,
+          currentBaseId,
+          _currentEmotionId, // новый класс по emotions.go. Тот же образ сочетаний контекстов, но с возможностью создавать его не только по стилям гомеостаза
+          currentActivityId,
           _currentToneMoodId,
           _currentSimbolId,
           _currentPhraseId);
+      // _currentToneMoodId, _currentSimbolId, _currentPhraseId - verbal_Broka_img.go
 
       if (automatizmNodeId > 0)
       {
@@ -299,7 +319,7 @@ namespace isida.Psychic
     /// <summary>
     /// Активация дерева автоматизмов
     /// </summary>
-    public int AutomatizmTreeActivation(
+    internal int AutomatizmTreeActivation(
         int activationType,
         int baseId,
         int emotionId,
@@ -419,7 +439,7 @@ namespace isida.Psychic
     private void WakeUpping()
     {
       // Активация самоощущения
-      SensorActivation(1);
+      SensorActivation(1, 0, null, null, 0, 0);
 
       LogInfo("Пробуждение - создание базового самоощущения");
     }
@@ -500,6 +520,103 @@ namespace isida.Psychic
              $"atmzmID=<b>{detectedNodeId}</b>, " +
              $"стадия=<b>{EvolutionStage}</b>, " +
              $"готовность=<b>{ReadyStatus}</b>";
+    }
+
+    #endregion
+
+    #region Создание образов
+
+    /// <summary>
+    /// Создает образ действий оператора с учетом тона и настроения
+    /// </summary>
+    private int CreateActionsImage(List<int> actionIdList, List<int> phraseIdList, int toneId, int moodId)
+    {
+      try
+      {
+        if (_actionsImagesSystem == null || !ActionsImagesSystem.IsInitialized)
+        {
+          LogError("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
+          return 0;
+        }
+
+        if (!ActionsImagesSystem.IsValidToneId(toneId))
+        {
+          LogError($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
+          toneId = 0; // Нормальный
+        }
+
+        if (!ActionsImagesSystem.IsValidMoodId(moodId))
+        {
+          LogError($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
+          moodId = 0; // Нормальное
+        }
+
+        // Создаем образ действий оператора
+        // Kind = 0 (объективное действие) - реальное воздействие с пульта
+        var (imageId, actionsImage) = _actionsImagesSystem.CreateNewActionsImage(
+            kind: 0, // объективное действие
+            actIdList: actionIdList,
+            phraseIdList: phraseIdList,
+            toneId: toneId,
+            moodId: moodId,
+            checkUnicum: true // проверяем уникальность
+        );
+
+        if (imageId > 0)
+          LogInfo($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");
+        else
+          LogWarning("Не удалось создать образ действий");
+
+        return imageId;
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка создания образа действий: {ex.Message}");
+        return 0;
+      }
+    }
+
+    /// <summary>
+    /// Создает образ сочетаний действий с пульта (для дерева автоматизмов)
+    /// </summary>
+    /// <param name="actIdList">Список ID действий с пульта</param>
+    /// <param name="checkUnicum">Проверять уникальность образа</param>
+    /// <returns>ID созданного образа или 0 при ошибке</returns>
+    private int CreateInfluenceActionsImage(List<int> actIdList, bool checkUnicum = true)
+    {
+      try
+      {
+        if (_influenceActionsImagesSystem == null || !InfluenceActionsImagesSystem.IsInitialized)
+        {
+          LogError("InfluenceActionsImagesSystem не инициализирована, образ сочетаний действий не создан");
+          return 0;
+        }
+
+        if (actIdList == null || actIdList.Count == 0)
+        {
+          LogError("Список действий пуст, образ сочетаний действий не создан");
+          return 0;
+        }
+
+        // Создаем образ сочетаний действий с пульта
+        var (imageId, influenceActionsImage) = _influenceActionsImagesSystem.CreateNewInfluenceActionsImage(
+            actIdList: actIdList,
+            checkUnicum: checkUnicum
+        );
+
+        if (imageId > 0)
+          LogInfo($"Создан образ сочетаний действий ID: {imageId}, " +
+                         $"количество действий: {actIdList.Count}");
+        else
+          LogWarning("Не удалось создать образ сочетаний действий");
+
+        return imageId;
+      }
+      catch (Exception ex)
+      {
+        LogError($"Ошибка создания образа сочетаний действий: {ex.Message}");
+        return 0;
+      }
     }
 
     #endregion

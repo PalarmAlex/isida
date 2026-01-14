@@ -71,14 +71,12 @@ namespace isida.Psychic.Automatism
 
     private const string ActionsImagesFileName = "action_images";
     private const int PrefixActionIdValue = 10000000; // если ID действия больше prefixActionIdValue, то это цепочка действий
-
     private static readonly Dictionary<int, string> _toneDictionary = new Dictionary<int, string>
     {
       {-1, "Вялый"},
       {0, "Нормальный"},
       {1, "Повышенный"}
     };
-
     private static readonly Dictionary<int, string> _moodDictionary = new Dictionary<int, string>
     {
       {0, "Нормальное"},
@@ -97,7 +95,7 @@ namespace isida.Psychic.Automatism
     public class ActionsImage
     {
       /// <summary>
-      /// Идентификатор данного сочетания пусковых стимулов
+      /// Идентификатор образа
       /// </summary>
       public int Id { get; set; }
 
@@ -105,7 +103,7 @@ namespace isida.Psychic.Automatism
       /// Тип образа: 0 - объективное действие, 1 - субъективное предположение
       /// </summary>
       /// <remarks>
-      /// Метка о том, что действия не является объективным Стимулом (реально воспринятым из Пульта)
+      /// Метка о том, что действия является объективным Стимулом (реально воспринятым из Пульта)
       /// или реально выполненным действием (предположение, Правило из сновидения)
       /// </remarks>
       public int Kind { get; set; }
@@ -296,7 +294,7 @@ namespace isida.Psychic.Automatism
     /// <param name="moodId">ID настроения</param>
     /// <param name="checkUnicum">Проверять уникальность</param>
     /// <returns>ID образа и сам образ</returns>
-    public (int Id, ActionsImage Image) CreateNewActionsImage(
+    internal (int Id, ActionsImage Image) CreateNewActionsImage(
         int kind,
         List<int> actIdList,
         List<int> phraseIdList,

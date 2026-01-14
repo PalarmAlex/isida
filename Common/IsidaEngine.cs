@@ -529,7 +529,6 @@ namespace ISIDA.Common
         initializationStep = 17;
         ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
-        context.InfluenceActions.SetActionsImagesSystem(context.ActionsImages);
 
         // Шаг 18: Система дерева автоматизмов
         initializationStep = 18;
@@ -550,7 +549,8 @@ namespace ISIDA.Common
         PsychicSystem.InitializeInstance(
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
-          context.InfluenceActionsImages, 
+          context.InfluenceActionsImages,
+          context.ActionsImages,
           context.Gomeostas);
         context.PsychicSystem = PsychicSystem.Instance;
 
@@ -564,7 +564,8 @@ namespace ISIDA.Common
         GlobalTimer.InitializeSystems(
             context.Gomeostas,
             context.AdaptiveActions,
-            context.ReflexesActivator);
+            context.ReflexesActivator,
+            context.PsychicSystem);
 
         GlobalTimer.SetConditionedReflexesSystem(context.ConditionedReflexes);
         GlobalTimer.SetReflexFormationService(context.ConditionedReflexFormation);
