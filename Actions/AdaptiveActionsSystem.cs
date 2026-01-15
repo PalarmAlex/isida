@@ -77,7 +77,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        LogError($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+        Logger.Error($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
         throw;
       }
      }
@@ -867,7 +867,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        LogError($"LoadActions: Ошибка при загрузке адаптивных действий агента: {ex.Message}");
+        Logger.Error($"LoadActions: Ошибка при загрузке адаптивных действий агента: {ex.Message}");
       }
     }
 
@@ -1033,7 +1033,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

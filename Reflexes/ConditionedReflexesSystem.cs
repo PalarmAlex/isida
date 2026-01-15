@@ -115,7 +115,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации ConditionedReflexesSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации ConditionedReflexesSystem: {ex.Message}");
         throw;
       }
     }
@@ -1034,7 +1034,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"LoadConditionedReflexes: Ошибка загрузки условных рефлексов: {ex.Message}");
+        Logger.Error($"LoadConditionedReflexes: Ошибка загрузки условных рефлексов: {ex.Message}");
       }
     }
 
@@ -1084,7 +1084,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"LoadConditionedReflexSettings: Ошибка загрузки настроек условных рефлексов: {ex.Message}");
+        Logger.Error($"LoadConditionedReflexSettings: Ошибка загрузки настроек условных рефлексов: {ex.Message}");
       }
     }
 
@@ -1195,18 +1195,13 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {
         _lock?.Dispose();
         _disposed = true;
       }
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError(message);
     }
 
     #endregion

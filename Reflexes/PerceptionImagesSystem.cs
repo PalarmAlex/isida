@@ -60,7 +60,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации PerceptionImagesSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации PerceptionImagesSystem: {ex.Message}");
         throw;
       }
     }
@@ -209,11 +209,11 @@ namespace ISIDA.Reflexes
         {
           var saveResult = SaveBehaviorStyleImages();
           if (!saveResult.Success)
-            LogError($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
+            Logger.Error($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
         }
         catch (Exception ex)
         {
-          LogError($"Исключение при сохранении образа стилей ID {resultId}: {ex.Message}");
+          Logger.Error($"Исключение при сохранении образа стилей ID {resultId}: {ex.Message}");
         }
       }
 
@@ -290,12 +290,12 @@ namespace ISIDA.Reflexes
           var saveResult = SavePerceptionImages();
           if (!saveResult.Success)
           {
-            LogError($"Ошибка сохранения образа восприятия ID {resultId}: {saveResult.ErrorMessage}");
+            Logger.Error($"Ошибка сохранения образа восприятия ID {resultId}: {saveResult.ErrorMessage}");
           }
         }
         catch (Exception ex)
         {
-          LogError($"Исключение при сохранении образа восприятия ID {resultId}: {ex.Message}");
+          Logger.Error($"Исключение при сохранении образа восприятия ID {resultId}: {ex.Message}");
         }
       }
 
@@ -526,7 +526,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка загрузки файла образов восприятия: {ex.Message}");
+        Logger.Error($"Ошибка загрузки файла образов восприятия: {ex.Message}");
       }
     }
 
@@ -579,7 +579,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка загрузки файла образов стилей реагирования: {ex.Message}");
+        Logger.Error($"Ошибка загрузки файла образов стилей реагирования: {ex.Message}");
       }
     }
 
@@ -669,16 +669,8 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка сохранения образов стилей и воздействий: {ex.Message}");
+        Logger.Error($"Ошибка сохранения образов стилей и воздействий: {ex.Message}");
       }
-    }
-
-    /// <summary>
-    /// Логирование ошибок
-    /// </summary>
-    private static void LogError(string message)
-    {
-      FileValidator.LogError(message);
     }
 
     #endregion
@@ -723,7 +715,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

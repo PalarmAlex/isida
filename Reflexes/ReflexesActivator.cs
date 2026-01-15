@@ -285,7 +285,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка формирования условных рефлексов: {ex.Message}");
+        Logger.Error($"Ошибка формирования условных рефлексов: {ex.Message}");
       }
     }
 
@@ -310,7 +310,7 @@ namespace ISIDA.Reflexes
       bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, null, null, 0, 0); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
-        LogInfo("Рефлекс заблокирован психикой");
+        Logger.Info("Рефлекс заблокирован психикой");
         return;
       }
 
@@ -341,7 +341,7 @@ namespace ISIDA.Reflexes
         bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
-          LogInfo("Рефлекс заблокирован психикой");
+          Logger.Info("Рефлекс заблокирован психикой");
           return;
         }
 
@@ -410,7 +410,7 @@ namespace ISIDA.Reflexes
         bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
-          LogInfo("Рефлекс заблокирован психикой");
+          Logger.Info("Рефлекс заблокирован психикой");
           return;
         }
 
@@ -442,7 +442,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"ActiveFromPhrase: {ex.Message}");
+        Logger.Error($"ActiveFromPhrase: {ex.Message}");
       }
       finally
       {
@@ -511,7 +511,7 @@ namespace ISIDA.Reflexes
                 _lastReflexActivationPulse = pulseCount;
 
                 activatedGeneticReflexesFromConditioned.Add(conditionedReflex.SourceGeneticReflexId);
-                LogInfo($"Pulse: {pulseCount}, Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+                Logger.Info($"Pulse: {pulseCount}, Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
               }
             }
           }
@@ -540,7 +540,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"ExecuteReflexes: {ex.Message}");
+        Logger.Error($"ExecuteReflexes: {ex.Message}");
       }
     }
 
@@ -582,7 +582,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"FindNodeWithChain: {ex.Message}");
+        Logger.Error($"FindNodeWithChain: {ex.Message}");
         return null;
       }
     }
@@ -621,7 +621,7 @@ namespace ISIDA.Reflexes
       {
         if (!CanActivateChain(pulseCount))
         {
-          LogInfo($"Pulse: {pulseCount}, Активация цепочки заблокирована (задержка или уже активна)");
+          Logger.Info($"Pulse: {pulseCount}, Активация цепочки заблокирована (задержка или уже активна)");
           return;
         }
 
@@ -649,15 +649,15 @@ namespace ISIDA.Reflexes
         if (reflexExecuted && _reflexTree.ActivateChain(chainId, firstChainLink.ID, GlobalTimer.GlobalPulsCount))
         {
           _activeChainId = chainId;
-          LogInfo($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса, " +
+          Logger.Info($"Pulse: {pulseCount}, Цепочка {chainId} активирована после рефлекса, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
         }
         else
-          LogError($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
+          Logger.Error($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
       }
       catch (Exception ex)
       {
-        LogError($"Pulse: {pulseCount}, Ошибка запуска цепочки: {ex.Message}");
+        Logger.Error($"Pulse: {pulseCount}, Ошибка запуска цепочки: {ex.Message}");
         DeactivateChain();
       }
     }
@@ -1035,7 +1035,7 @@ namespace ISIDA.Reflexes
 
       if (!CanContinueChain())
       {
-        LogInfo($"Pulse: {pulseCount}, Цепочка {_activeChainId} прервана - изменились условия");
+        Logger.Info($"Pulse: {pulseCount}, Цепочка {_activeChainId} прервана - изменились условия");
         DeactivateChain();
         return;
       }
@@ -1058,7 +1058,7 @@ namespace ISIDA.Reflexes
 
       if (!result.Success)
       {
-        LogError($"Pulse: {pulseCount}, Ошибка выполнения шага цепочки {_activeChainId}");
+        Logger.Error($"Pulse: {pulseCount}, Ошибка выполнения шага цепочки {_activeChainId}");
         DeactivateChain();
         return;
       }
@@ -1076,7 +1076,7 @@ namespace ISIDA.Reflexes
         {
           _completedReflexesInChain.Add(result.ExecutedActionId);
           ResetStepResult();
-          LogInfo($"Pulse: {pulseCount}, Выполнено действие {result.ExecutedActionId} из цепочки {_activeChainId}, " +
+          Logger.Info($"Pulse: {pulseCount}, Выполнено действие {result.ExecutedActionId} из цепочки {_activeChainId}, " +
                  $"результат будет определен на следующем пульсе");
           pulseChainCompleted = pulseCount;
         }
@@ -1084,7 +1084,7 @@ namespace ISIDA.Reflexes
 
       if (result.ChainCompleted)
       {
-        LogInfo($"Pulse: {pulseCount}, Цепочка {_activeChainId} успешно завершена. " +
+        Logger.Info($"Pulse: {pulseCount}, Цепочка {_activeChainId} успешно завершена. " +
                $"Выполнено действий в цепочке: {_completedReflexesInChain.Count}");
         // цепочка сбросится в ProcessReflexPulse() - нужно дать время завершить действие
         //DeactivateChain();
@@ -1172,7 +1172,7 @@ namespace ISIDA.Reflexes
       if (_activeChainId > 0)
       {
         _reflexTree.DeactivateChain(_activeChainId);
-        LogInfo($"Цепочка {_activeChainId} деактивирована");
+        Logger.Info($"Цепочка {_activeChainId} деактивирована");
         _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
         pulseChainCompleted = 0;
       }
@@ -1220,20 +1220,6 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
-    }
-
-    #endregion
-
-    #region Вспомогательные методы
-
-    private static void LogInfo(string message)
-    {
-      Debug.WriteLine($"[ReflexesActivator] INFO: {message}");
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError($"[ReflexesActivator] ERROR: {message}");
     }
 
     #endregion

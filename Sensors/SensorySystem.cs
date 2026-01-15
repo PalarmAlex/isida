@@ -1,4 +1,5 @@
-﻿using ISIDA.Gomeostas;
+﻿using ISIDA.Common;
+using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
 using System.IO;
@@ -152,7 +153,7 @@ namespace ISIDA.Sensors
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации: {ex.Message}");
+        Logger.Error($"Ошибка инициализации: {ex.Message}");
         throw;
       }
     }
@@ -183,7 +184,7 @@ namespace ISIDA.Sensors
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка при каскадной очистке PhraseId: {ex.Message}");
+        Logger.Error($"Ошибка при каскадной очистке PhraseId: {ex.Message}");
       }
     }
 

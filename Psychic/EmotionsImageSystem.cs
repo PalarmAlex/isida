@@ -1,4 +1,5 @@
-﻿using ISIDA.Common;
+﻿using isida.Psychic.Automatism;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,13 +8,15 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static isida.Psychic.Automatism.ActionsImagesSystem;
+using static isida.Psychic.Automatism.InfluenceActionsImagesSystem;
 
-namespace isida.Psychic.Automatism
+namespace isida.Psychic
 {
   /// <summary>
-  /// Система образов сочетаний действий с пульта (для дерева автоматизмов)
+  /// Система управления эмоциями агента
   /// </summary>
-  public sealed class InfluenceActionsImagesSystem : IDisposable
+  public sealed class EmotionsImageSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -21,13 +24,13 @@ namespace isida.Psychic.Automatism
 
     #region Инициализация
 
-    private static InfluenceActionsImagesSystem _instance;
+    private static EmotionsImageSystem _instance;
 
     /// <summary>
     /// Глобальный экземпляр системы образов действий. Должен быть инициализирован через InitializeInstance()
     /// </summary>
-    public static InfluenceActionsImagesSystem Instance => _instance ??
-        throw new InvalidOperationException("InfluenceActionsImagesSystem не инициализирован. Вызовите InitializeInstance().");
+    public static EmotionsImageSystem Instance => _instance ??
+        throw new InvalidOperationException("EmotionsSystem не инициализирован. Вызовите InitializeInstance().");
 
     /// <summary>
     /// Флаг инициализации класса
@@ -42,26 +45,26 @@ namespace isida.Psychic.Automatism
     public static void InitializeInstance(string psychicDataPath = null)
     {
       if (_instance != null)
-        throw new InvalidOperationException("InfluenceActionsImagesSystem уже инициализирован.");
+        throw new InvalidOperationException("EmotionsSystem уже инициализирован.");
 
-      _instance = new InfluenceActionsImagesSystem(psychicDataPath);
+      _instance = new EmotionsImageSystem(psychicDataPath);
     }
 
-    private InfluenceActionsImagesSystem(string psychicDataPath = null)
+    private EmotionsImageSystem(string psychicDataPath = null)
     {
       _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
           ? Path.Combine(
               Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Automatism")
-          : Path.Combine(psychicDataPath, "Automatism");
+              "ISIDA", "Data", "Psychic")
+          : Path.Combine(psychicDataPath);
       try
       {
         EnsureDataDirectory();
-        LoadInfluenceActionsImages();
+        LoadEmotionsImages();
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации InfluenceActionsImagesSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации EmotionsSystem: {ex.Message}");
         throw;
       }
     }
@@ -70,45 +73,45 @@ namespace isida.Psychic.Automatism
 
     #region Константы и структуры
 
-    private const string InfluenceActionsImagesFileName = "influence_action_images";
+    private const string EmotionsImageFileName = "emotions_images";
 
     /// <summary>
-    /// Образ действий оператора или агента ИИ
+    /// Образ эмоций агента ИИ
     /// </summary>
-    public class InfluenceActionsImage
+    public class EmotionsImage
     {
       /// <summary>
-      /// Идентификатор данного сочетания пусковых стимулов
+      /// Идентификатор образа
       /// </summary>
       public int Id { get; set; }
 
       /// <summary>
-      /// Массив ID действий с Пульта
+      /// Массив ID стилей реагирования
       /// </summary>
-      public List<int> ActIdList { get; set; } = new List<int>();
+      public List<int> BaseStylesList { get; set; } = new List<int>();
     }
 
     #endregion
 
     #region Поля и свойства
 
-    private readonly Dictionary<int, InfluenceActionsImage> _actionsImages = new Dictionary<int, InfluenceActionsImage>();
-    private int _lastActionsImageId = 0;
+    private readonly Dictionary<int, EmotionsImage> _emotionsImages = new Dictionary<int, EmotionsImage>();
+    private int _lastEmotionsImageId = 0;
 
     #endregion
 
     #region Управление образами действий
 
     /// <summary>
-    /// Возвращает список всех образов действий
+    /// Возвращает список всех образов эмоций
     /// </summary>
     /// <returns>Копия списка образов действий</returns>
-    public List<InfluenceActionsImage> GetAllInfluenceActionsImagesList()
+    public List<EmotionsImage> GetAllEmotionsImagesList()
     {
       _lock.EnterReadLock();
       try
       {
-        return _actionsImages.Values.ToList();
+        return _emotionsImages.Values.ToList();
       }
       finally
       {
@@ -117,16 +120,16 @@ namespace isida.Psychic.Automatism
     }
 
     /// <summary>
-    /// Получить образ действия по ID
+    /// Получить образ эмоции по ID
     /// </summary>
-    /// <param name="id">ID образа действия</param>
-    /// <returns>Образ действия или null, если не найден</returns>
-    public InfluenceActionsImage GetInfluenceActionsImage(int id)
+    /// <param name="id">ID образа эмоции</param>
+    /// <returns>Образ эмоции или null, если не найден</returns>
+    public EmotionsImage GetEmotionsImage(int id)
     {
       _lock.EnterReadLock();
       try
       {
-        return _actionsImages.TryGetValue(id, out var image) ? image : null;
+        return _emotionsImages.TryGetValue(id, out var image) ? image : null;
       }
       finally
       {
@@ -135,17 +138,17 @@ namespace isida.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создать новый образ действий или возвратить существующий
+    /// Создать новый образ эмоций или возвратить существующий
     /// </summary>
-    /// <param name="actIdList">Массив ID действий</param>
+    /// <param name="baseStylesList">Массив ID стилей</param>
     /// <param name="checkUnicum">Проверять уникальность</param>
     /// <returns>ID образа и сам образ</returns>
-    public (int Id, InfluenceActionsImage Image) CreateNewInfluenceActionsImage(
-        List<int> actIdList,
+    public (int Id, EmotionsImage Image) CreateNewEmotionsImage(
+        List<int> baseStylesList,
         bool checkUnicum)
     {
-      // Не создавать образ с пустым действием
-      if (actIdList == null)
+      // Не создавать образ с пустым стилями
+      if (baseStylesList == null)
         return (0, null);
 
       _lock.EnterUpgradeableReadLock();
@@ -153,10 +156,10 @@ namespace isida.Psychic.Automatism
       {
         if (checkUnicum)
         {
-          var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
+          var existing = CheckUnicumEmotionsImageNoLock(baseStylesList);
           if (existing.Image != null)
           {
-            Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
+            Logger.Error($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -164,7 +167,7 @@ namespace isida.Psychic.Automatism
         _lock.EnterWriteLock();
         try
         {
-          return CreateInfluenceActionsImageCore(0, actIdList, false);
+          return CreateEmotionsImageCore(0, baseStylesList, false);
         }
         finally
         {
@@ -178,32 +181,32 @@ namespace isida.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создать новый образ действий с указанным ID (без блокировки - для внутреннего использования)
+    /// Создать новый образ эмоций с указанным ID (без блокировки - для внутреннего использования)
     /// </summary>
-    internal (int Id, InfluenceActionsImage Image) CreateNewInfluenceActionsImageWithIdNoLock(
+    internal (int Id, EmotionsImage Image) CreateNewEmotionsImageWithIdNoLock(
         int id,
-        List<int> actIdList,
+        List<int> baseStylesList,
         bool checkUnicum)
     {
-      return CreateInfluenceActionsImageCore(id, actIdList, checkUnicum);
+      return CreateEmotionsImageCore(id, baseStylesList, checkUnicum);
     }
 
     /// <summary>
-    /// Общая логика создания образа действий (без блокировки)
+    /// Общая логика создания образа эмоций (без блокировки)
     /// </summary>
-    private (int Id, InfluenceActionsImage Image) CreateInfluenceActionsImageCore(
+    private (int Id, EmotionsImage Image) CreateEmotionsImageCore(
         int id,
-        List<int> actIdList,
+        List<int> baseStylesList,
         bool checkUnicum)
     {
-      // Не создавать образ с пустым действием
-      if (actIdList == null)
+      // Не создавать образ с пустыми стилями
+      if (baseStylesList == null)
         return (0, null);
 
       // Проверка уникальности (если нужно)
       if (checkUnicum)
       {
-        var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
+        var existing = CheckUnicumEmotionsImageNoLock(baseStylesList);
         if (existing.Image != null)
           return existing;
       }
@@ -211,32 +214,32 @@ namespace isida.Psychic.Automatism
       // Определение ID
       int newId = id;
       if (id == 0)
-        newId = ++_lastActionsImageId;
-      else if (_lastActionsImageId < id)
-        _lastActionsImageId = id;
+        newId = ++_lastEmotionsImageId;
+      else if (_lastEmotionsImageId < id)
+        _lastEmotionsImageId = id;
 
       // Создание объекта
-      var image = new InfluenceActionsImage
+      var image = new EmotionsImage
       {
         Id = newId,
-        ActIdList = actIdList?.ToList() ?? new List<int>()
+        BaseStylesList = baseStylesList?.ToList() ?? new List<int>()
       };
 
-      _actionsImages[newId] = image;
+      _emotionsImages[newId] = image;
       Debug.WriteLine($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
     /// <summary>
-    /// Проверить уникальность образа действий
+    /// Проверить уникальность образа эмоций
     /// </summary>
-    private (int Id, InfluenceActionsImage Image) CheckUnicumInfluenceActionsImage(List<int> actIdList)
+    private (int Id, EmotionsImage Image) CheckUnicumEmotionsImage(List<int> baseStylesList)
     {
       _lock.EnterReadLock();
       try
       {
-        return CheckUnicumInfluenceActionsImageNoLock(actIdList);
+        return CheckUnicumEmotionsImageNoLock(baseStylesList);
       }
       finally
       {
@@ -247,15 +250,15 @@ namespace isida.Psychic.Automatism
     /// <summary>
     /// Проверить уникальность образа действий (без блокировки - для внутреннего использования)
     /// </summary>
-    private (int Id, InfluenceActionsImage Image) CheckUnicumInfluenceActionsImageNoLock(List<int> actIdList)
+    private (int Id, EmotionsImage Image) CheckUnicumEmotionsImageNoLock(List<int> baseStylesList)
     {
-      foreach (var kvp in _actionsImages)
+      foreach (var kvp in _emotionsImages)
       {
         var v = kvp.Value;
         if (v == null)
           continue;
 
-        if (!AddUtils.AreListsEqual(actIdList, v.ActIdList))
+        if (!AddUtils.AreListsEqual(baseStylesList, v.BaseStylesList))
           continue;
 
         return (kvp.Key, v);
@@ -272,8 +275,8 @@ namespace isida.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
-        _actionsImages.Clear();
-        _lastActionsImageId = 0;
+        _emotionsImages.Clear();
+        _lastEmotionsImageId = 0;
       }
       finally
       {
@@ -294,33 +297,33 @@ namespace isida.Psychic.Automatism
         Directory.CreateDirectory(_psychicDataPath);
     }
 
-    private string GetActionsImagesFilePath()
+    private string GetEmotionsImagesFilePath()
     {
-      return Path.Combine(_psychicDataPath, $"{InfluenceActionsImagesFileName}.dat");
+      return Path.Combine(_psychicDataPath, $"{EmotionsImageFileName}.dat");
     }
 
     /// <summary>
     /// Загружает образы действий из файла
     /// </summary>
-    private void LoadInfluenceActionsImages()
+    private void LoadEmotionsImages()
     {
-      string filePath = GetActionsImagesFilePath();
+      string filePath = GetEmotionsImagesFilePath();
 
       // Если файл не существует или невалиден, создаем новый с шапкой
-      if (!File.Exists(filePath) || !FileValidator.IsValidInfluenceActionsImagesFile(filePath))
+      if (!File.Exists(filePath) || !FileValidator.IsValidEmotionsImagesFile(filePath))
       {
         try
         {
           EnsureDataDirectory();
           var lines = new List<string>
           {
-            FileValidator.FileHeaders.InfluenceActionsImagesFormat,
-            FileValidator.FileHeaders.InfluenceActionsImagesActId
+            FileValidator.FileHeaders.EmotionsImagesFormat,
+            FileValidator.FileHeaders.EmotionsImagesBaseId
           };
 
           File.WriteAllLines(filePath, lines);
-          _actionsImages.Clear();
-          _lastActionsImageId = 0;
+          _emotionsImages.Clear();
+          _lastEmotionsImageId = 0;
           return;
         }
         catch (Exception ex)
@@ -335,8 +338,8 @@ namespace isida.Psychic.Automatism
         _lock.EnterWriteLock();
         try
         {
-          _actionsImages.Clear();
-          _lastActionsImageId = 0;
+          _emotionsImages.Clear();
+          _lastEmotionsImageId = 0;
 
           foreach (var line in File.ReadLines(filePath))
           {
@@ -351,10 +354,10 @@ namespace isida.Psychic.Automatism
             if (!int.TryParse(parts[0], out int id))
               continue;
 
-            var actIdList = AddUtils.ParseIntList(parts[1]);
+            var baseStylesList = AddUtils.ParseIntList(parts[1]);
 
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateInfluenceActionsImageCore(id, actIdList, false);
+            CreateEmotionsImageCore(id, baseStylesList, false);
           }
         }
         finally
@@ -364,19 +367,19 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла образов действий: {ex.Message}");
+        Logger.Error($"Ошибка загрузки файла образов эмоций': {ex.Message}");
       }
     }
 
     /// <summary>
-    /// Сохраняет образы действий в файл
+    /// Сохраняет образы эмоций в файл
     /// </summary>
-    internal (bool Success, string ErrorMessage) SaveInfluenceActionsImages()
+    internal (bool Success, string ErrorMessage) SaveEmotionsImages()
     {
       _lock.EnterReadLock();
       try
       {
-        return SaveInfluenceActionsImagesNoLock();
+        return SaveEmotionsImagesNoLock();
       }
       finally
       {
@@ -385,36 +388,36 @@ namespace isida.Psychic.Automatism
     }
 
     /// <summary>
-    /// Сохраняет образы действий в файл (без блокировки - для внутреннего использования)
+    /// Сохраняет образы эмоций в файл (без блокировки - для внутреннего использования)
     /// </summary>
-    private (bool Success, string ErrorMessage) SaveInfluenceActionsImagesNoLock()
+    private (bool Success, string ErrorMessage) SaveEmotionsImagesNoLock()
     {
       try
       {
         var lines = new List<string>
           {
-            FileValidator.FileHeaders.InfluenceActionsImagesFormat,
-            FileValidator.FileHeaders.InfluenceActionsImagesActId
+            FileValidator.FileHeaders.EmotionsImagesFormat,
+            FileValidator.FileHeaders.EmotionsImagesBaseId
           };
 
-        foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
+        foreach (var kvp in _emotionsImages.OrderBy(x => x.Key))
         {
           var v = kvp.Value;
           if (v == null)
             continue;
 
           var line = $"{v.Id}|";
-          line += AddUtils.IntListToString(v.ActIdList);
+          line += AddUtils.IntListToString(v.BaseStylesList);
           lines.Add(line);
         }
 
         var minLinesCount = lines.Count == 2 ? 2 : 3;
         var result = FileValidator.SafeSaveFile(
-            GetActionsImagesFilePath(),
+            GetEmotionsImagesFilePath(),
             lines,
-            content => FileValidator.IsValidInfluenceActionsImagesFile(string.Join(Environment.NewLine, content)),
+            content => FileValidator.IsValidEmotionsImagesFile(string.Join(Environment.NewLine, content)),
             minLinesCount: minLinesCount,
-            fileDescription: "образов действий");
+            fileDescription: "образов эмоций");
 
         return result;
       }
@@ -429,14 +432,14 @@ namespace isida.Psychic.Automatism
     #region IDisposable
 
     /// <summary>
-    /// Освобождает ресурсы, используемые объектом InfluenceActionsImagesSystem
+    /// Освобождает ресурсы, используемые объектом PsychicSystem
     /// </summary>
     public void Dispose()
     {
       if (_disposed) return;
       try
       {
-        SaveInfluenceActionsImages();
+        SaveEmotionsImages();
       }
       catch (Exception ex)
       {

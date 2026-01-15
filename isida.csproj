@@ -90,6 +90,7 @@
     <Compile Include="Common\GlobalTimer.cs" />
     <Compile Include="Common\ILogWriter.cs" />
     <Compile Include="Common\IsidaEngine.cs" />
+    <Compile Include="Common\Logger.cs" />
     <Compile Include="Common\ResearchLogger.cs" />
     <Compile Include="Common\SettingsValidator.cs" />
     <Compile Include="Gomeostas\GomeostasSystem.cs" />
@@ -103,6 +104,7 @@
     <Compile Include="Psychic\Automatism\AutomatizmSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmTree.cs" />
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
+    <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />

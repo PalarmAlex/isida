@@ -70,7 +70,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации ReflexChainsSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации ReflexChainsSystem: {ex.Message}");
         throw;
       }
     }
@@ -253,14 +253,14 @@ namespace ISIDA.Reflexes
         {
           SaveReflexChainsCore();
           OnReflexChainDeleted(chainId);
-          LogInfo($"Цепочка {chainId} удалена. Удалено звеньев: {linkIds.Count}");
+          Logger.Info($"Цепочка {chainId} удалена. Удалено звеньев: {linkIds.Count}");
         }
 
         return removed;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка при удалении цепочки {chainId}: {ex.Message}");
+        Logger.Error($"Ошибка при удалении цепочки {chainId}: {ex.Message}");
         return false;
       }
       finally
@@ -737,20 +737,6 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Вспомогательные методы
-
-    private static void LogInfo(string message)
-    {
-      Debug.WriteLine($"[ReflexChainsSystem] INFO: {message}");
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError($"[ReflexChainsSystem] ERROR: {message}");
-    }
-
-    #endregion
-
     #region IDisposable
 
     /// <summary>Освобождает ресурсы системы цепочек рефлексов</summary>
@@ -764,7 +750,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

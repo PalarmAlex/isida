@@ -126,7 +126,7 @@ namespace ISIDA.Reflexes
         if (geneticReflexId > 0)
         {
           _lastUnconditionedStimulus = record;
-          LogInfo($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}, рефлекс={geneticReflexId}");
+          Logger.Info($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}, рефлекс={geneticReflexId}");
         }
         else
           // Сохраняем как условный стимул
@@ -226,7 +226,7 @@ namespace ISIDA.Reflexes
           {
             _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
             foundMatchingReflex = true;
-            LogInfo($"Усилен условный рефлекс ID={existingReflex.Id}");
+            Logger.Info($"Усилен условный рефлекс ID={existingReflex.Id}");
             break;
           }
         }
@@ -257,12 +257,12 @@ namespace ISIDA.Reflexes
               authoritativeMod: authoritativeMode);
 
           if (newReflexId > 0)
-            LogInfo($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
+            Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
         }
       }
       catch (Exception ex)
       {
-        LogError($"[ProcessConditionedAssociation]. Ошибка: {ex.Message}");
+        Logger.Error($"[ProcessConditionedAssociation]. Ошибка: {ex.Message}");
       }
     }
 
@@ -300,14 +300,14 @@ namespace ISIDA.Reflexes
           _conditionedReflexes.RemoveConditionedReflex(reflexId);
           var (success, errMsg) = _conditionedReflexes.SaveConditionedReflexes();
           if (success)
-            LogInfo($"Удален устаревший условный рефлекс ID={reflexId}");
+            Logger.Info($"Удален устаревший условный рефлекс ID={reflexId}");
           else
-            LogError($"[CleanupOldReflexes]. Не удалось обновить файл условных рефлексов: {errMsg}");
+            Logger.Error($"[CleanupOldReflexes]. Не удалось обновить файл условных рефлексов: {errMsg}");
         }
       }
       catch (Exception ex)
       {
-        LogError($"[CleanupOldReflexes]. Ошибка очистки рефлексов: {ex.Message}");
+        Logger.Error($"[CleanupOldReflexes]. Ошибка очистки рефлексов: {ex.Message}");
       }
     }
 
@@ -321,26 +321,12 @@ namespace ISIDA.Reflexes
       {
         _lastUnconditionedStimulus = null;
         _lastConditionedStimulus = null;
-        LogInfo("История стимулов сброшена");
+        Logger.Info("История стимулов сброшена");
       }
       finally
       {
         _lock.ExitWriteLock();
       }
-    }
-
-    #endregion
-
-    #region Вспомогательные методы
-
-    private static void LogInfo(string message)
-    {
-      Debug.WriteLine($"[ConditionedReflexFormationService] INFO: {message}");
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError($"ERROR: {message}");
     }
 
     #endregion

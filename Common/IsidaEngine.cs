@@ -267,6 +267,11 @@ namespace ISIDA.Common
     public PsychicSystem PsychicSystem { get; internal set; }
 
     /// <summary>
+    /// Система управления эмоциями
+    /// </summary>
+    public EmotionsImageSystem EmotionsImageSystem { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -299,6 +304,7 @@ namespace ISIDA.Common
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
+      SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
 
       _disposed = true;
       Debug.WriteLine($"[IsidaContext] Освобождение завершено");
@@ -553,6 +559,11 @@ namespace ISIDA.Common
           context.ActionsImages,
           context.Gomeostas);
         context.PsychicSystem = PsychicSystem.Instance;
+
+        // Шаг 20: Система эмоций
+        initializationStep = 20;
+        EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
+        context.EmotionsImageSystem = EmotionsImageSystem.Instance;
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

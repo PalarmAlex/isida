@@ -75,7 +75,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"GomeostasSystem: Ошибка инициализации GomeostasSystem: {ex.Message}");
+        Logger.Error($"GomeostasSystem: Ошибка инициализации GomeostasSystem: {ex.Message}");
         throw;
       }
     }
@@ -447,7 +447,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"IsStyleUsedInBehaviorStyleImages: Ошибка при проверке использования стиля {styleId} в образах: {ex.Message}");
+        Logger.Error($"IsStyleUsedInBehaviorStyleImages: Ошибка при проверке использования стиля {styleId} в образах: {ex.Message}");
         return true;
       }
     }
@@ -1495,7 +1495,7 @@ namespace ISIDA.Gomeostas
     private void OnAgentDeath(ParameterData criticalParameter)
     {
       // Логируем причину смерти
-      LogError($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
+      Logger.Error($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
                             $"достиг критического значения {criticalParameter.Value}");
 
       // Можно добавить событие для внешних систем
@@ -1545,14 +1545,14 @@ namespace ISIDA.Gomeostas
       {
         if (!silent)
           // Логируем, но не выбрасываем исключение
-          LogError($"TryEnsureAgentState: Операция заблокирована: {ex.Message}");
+          Logger.Error($"TryEnsureAgentState: Операция заблокирована: {ex.Message}");
 
         return false;
       }
       catch (Exception ex)
       {
         if (!silent)
-          LogError($"TryEnsureAgentState: Ошибка проверки состояния агента: {ex.Message}");
+          Logger.Error($"TryEnsureAgentState: Ошибка проверки состояния агента: {ex.Message}");
 
         return false;
       }
@@ -1942,15 +1942,15 @@ namespace ISIDA.Gomeostas
             _conditionedReflexesSystem.removeAllConditionedReflexes = false;
             var result = _conditionedReflexesSystem.SaveConditionedReflexes();
             if (!result.Success)
-              LogError($"ClearConditionedReflexes: Ошибка очистки условных рефлексов: {result.ErrorMessage}");
+              Logger.Error($"ClearConditionedReflexes: Ошибка очистки условных рефлексов: {result.ErrorMessage}");
             else
-              LogError("ClearConditionedReflexes: условные рефлексы успешно очищены");
+              Logger.Error("ClearConditionedReflexes: условные рефлексы успешно очищены");
           }
         }
       }
       catch (Exception ex)
       {
-        LogError($"ClearConditionedReflexes: Ошибка при очистке образов восприятия: {ex.Message}");
+        Logger.Error($"ClearConditionedReflexes: Ошибка при очистке образов восприятия: {ex.Message}");
       }
     }
 
@@ -2209,7 +2209,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"CreateBehaviorStyleImageFromActiveStyles: Ошибка при создании образа стилей поведения: {ex.Message}");
+        Logger.Error($"CreateBehaviorStyleImageFromActiveStyles: Ошибка при создании образа стилей поведения: {ex.Message}");
         return 0;
       }
     }
@@ -2228,14 +2228,14 @@ namespace ISIDA.Gomeostas
             break;
 
           if (attempt == maxRetries)
-            LogError($"SaveBehaviorStyleImagesWithRetry: Не удалось сохранить образы стилей после {maxRetries} попыток: {result.ErrorMessage}");
+            Logger.Error($"SaveBehaviorStyleImagesWithRetry: Не удалось сохранить образы стилей после {maxRetries} попыток: {result.ErrorMessage}");
           else
             Thread.Sleep(100 * attempt); // Увеличивающаяся задержка
         }
         catch (Exception ex)
         {
           if (attempt == maxRetries)
-            LogError($"SaveBehaviorStyleImagesWithRetry: Критическая ошибка при сохранении образов стилей: {ex.Message}");
+            Logger.Error($"SaveBehaviorStyleImagesWithRetry: Критическая ошибка при сохранении образов стилей: {ex.Message}");
         }
       }
     }
@@ -2510,7 +2510,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"LoadAgentProperties: Ошибка при загрузке свойств агента: {ex.Message}");
+        Logger.Error($"LoadAgentProperties: Ошибка при загрузке свойств агента: {ex.Message}");
       }
     }
 
@@ -2569,7 +2569,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"LoadAgentParameters: Ошибка при загрузке параметров агента: {ex.Message}");
+        Logger.Error($"LoadAgentParameters: Ошибка при загрузке параметров агента: {ex.Message}");
       }
     }
 
@@ -2645,7 +2645,7 @@ namespace ISIDA.Gomeostas
 
         if (!result.Success)
         {
-          LogError($"SaveAgentProperties: Ошибка сохранения свойств агента: {result.ErrorMessage}");
+          Logger.Error($"SaveAgentProperties: Ошибка сохранения свойств агента: {result.ErrorMessage}");
         }
 
         return result;
@@ -2653,7 +2653,7 @@ namespace ISIDA.Gomeostas
       catch (Exception ex)
       {
         string error = $"SaveAgentProperties: Критическая ошибка при сохранении свойств агента: {ex.Message}";
-        LogError(error);
+        Logger.Error(error);
         return (false, error);
       }
     }
@@ -2853,7 +2853,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

@@ -70,7 +70,11 @@ namespace ISIDA.Common
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
 
       // Образы действий с пульта для психики
-      public const string InfluenceActionsImagesFormat = "# ID|ActID";
+      public const string InfluenceActionsImagesFormat = "# ID|BaseStyleID";
+      public const string EmotionsImagesBaseId = "# BaseStyleID: ID стилей (через запятую)";
+
+      // Образы эмоций для психики
+      public const string EmotionsImagesFormat = "# ID|ActID";
       public const string InfluenceActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
 
       // Дерево автоматизмов
@@ -377,6 +381,61 @@ namespace ISIDA.Common
     /// Разрешает файлы, содержащие только шапку (комментарии #)
     /// </summary>
     public static bool IsInfluenceValidActionsFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 3)
+          return false;
+
+        if (!int.TryParse(parts[0], out _))
+          return false;
+
+        return true;
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsEmotionsImagesFile
+
+    /// <summary>
+    /// Проверяет валидность файла эмоций по пути
+    /// </summary>
+    public static bool IsValidEmotionsImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidEmotionsImagesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла эмоций
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidEmotionsImagesFile(IEnumerable<string> lines)
     {
       if (lines == null)
         return false;
@@ -945,9 +1004,7 @@ namespace ISIDA.Common
           filePath, content, validationFunc, minLinesCount, fileDescription);
 
       if (!success)
-      {
         LogError($"SafeSaveFile: Ошибка сохранения {fileDescription} ({filePath}): {error}");
-      }
 
       return (success, error);
     }

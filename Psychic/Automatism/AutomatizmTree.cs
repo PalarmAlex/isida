@@ -114,7 +114,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации AutomatizmTreeSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации AutomatizmTreeSystem: {ex.Message}");
         throw;
       }
     }
@@ -234,7 +234,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка создания узла дерева автоматизмов: {ex.Message}");
+        Logger.Error($"Ошибка создания узла дерева автоматизмов: {ex.Message}");
         throw;
       }
     }
@@ -591,7 +591,7 @@ namespace isida.Psychic.Automatism
         }
         catch (Exception ex)
         {
-          LogError($"Ошибка создания файла дерева автоматизмов: {ex.Message}");
+          Logger.Error($"Ошибка создания файла дерева автоматизмов: {ex.Message}");
           throw;
         }
       }
@@ -647,7 +647,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка загрузки файла дерева автоматизмов: {ex.Message}");
+        Logger.Error($"Ошибка загрузки файла дерева автоматизмов: {ex.Message}");
         throw;
       }
     }
@@ -726,18 +726,6 @@ namespace isida.Psychic.Automatism
 
     #endregion
 
-    #region Вспомогательные методы
-
-    /// <summary>
-    /// Логирование ошибок
-    /// </summary>
-    private static void LogError(string message)
-    {
-      FileValidator.LogError(message);
-    }
-
-    #endregion
-
     #region IDisposable
 
     /// <summary>
@@ -752,7 +740,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

@@ -79,7 +79,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации ReflexTreeSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации ReflexTreeSystem: {ex.Message}");
         throw;
       }
     }
@@ -122,11 +122,11 @@ namespace ISIDA.Reflexes
         int[] conditionArr = new int[] { e.Level1, styleImageId, actionImageId };
         int treeNodeId = FindOrCreateNodeForReflex(conditionArr, e.ReflexId, e.ReflexChainID);
         if (treeNodeId > 0) // сохранение дерева уже есть в FindOrCreateNodeForReflex()
-          LogInfo($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}, цепочка: {e.ReflexChainID}");
+          Logger.Info($"Рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}, цепочка: {e.ReflexChainID}");
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка привязки рефлекса {e.ReflexId} к дереву: {ex.Message}");
+        Logger.Error($"Ошибка привязки рефлекса {e.ReflexId} к дереву: {ex.Message}");
       }
     }
 
@@ -152,13 +152,13 @@ namespace ISIDA.Reflexes
           {
             node.ConditionedReflex = e.ReflexId;
             SaveReflexTreeInternal();
-            LogInfo($"Условный рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
+            Logger.Info($"Условный рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
           }
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка привязки условного рефлекса {e.ReflexId} к дереву: {ex.Message}");
+        Logger.Error($"Ошибка привязки условного рефлекса {e.ReflexId} к дереву: {ex.Message}");
       }
     }
 
@@ -501,7 +501,7 @@ namespace ISIDA.Reflexes
       {
         if (conditionArr == null || conditionArr.Length < 3)
         {
-          LogError("Недопустимый массив условий в FindOrCreateNodeForReflex");
+          Logger.Error("Недопустимый массив условий в FindOrCreateNodeForReflex");
           return 0;
         }
 
@@ -564,12 +564,12 @@ namespace ISIDA.Reflexes
           return newNodeIdFromRoot;
         }
 
-        LogError($"Не удалось создать узел для рефлекса {geneticReflexId} с условиями [{baseID}, {styleID}, {actionID}]");
+        Logger.Error($"Не удалось создать узел для рефлекса {geneticReflexId} с условиями [{baseID}, {styleID}, {actionID}]");
         return 0;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка в FindOrCreateNodeForReflex: {ex.Message}");
+        Logger.Error($"Ошибка в FindOrCreateNodeForReflex: {ex.Message}");
         return 0;
       }
       finally
@@ -633,27 +633,27 @@ namespace ISIDA.Reflexes
         var node = FindNodeByID(nodeId);
         if (node == null)
         {
-          LogError($"Узел с ID {nodeId} не найден");
+          Logger.Error($"Узел с ID {nodeId} не найден");
           return false;
         }
 
         // Проверяем существование цепочки
         if (!_reflexChainsSystem.GetAllReflexChains().ContainsKey(chainId))
         {
-          LogError($"Цепочка с ID {chainId} не найдена");
+          Logger.Error($"Цепочка с ID {chainId} не найдена");
           return false;
         }
 
         node.ReflexChainID = chainId;
 
         SaveReflexTreeInternal();
-        LogInfo($"Цепочка {chainId} привязана к узлу {nodeId}");
+        Logger.Info($"Цепочка {chainId} привязана к узлу {nodeId}");
 
         return true;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка привязки цепочки к узлу: {ex.Message}");
+        Logger.Error($"Ошибка привязки цепочки к узлу: {ex.Message}");
         return false;
       }
       finally
@@ -673,7 +673,7 @@ namespace ISIDA.Reflexes
         var node = FindNodeByID(nodeId);
         if (node == null)
         {
-          LogError($"Узел с ID {nodeId} не найден");
+          Logger.Error($"Узел с ID {nodeId} не найден");
           return false;
         }
 
@@ -681,13 +681,13 @@ namespace ISIDA.Reflexes
         node.ReflexChainID = 0;
 
         SaveReflexTreeInternal();
-        LogInfo($"Цепочка {oldChainId} отвязана от узла {nodeId}");
+        Logger.Info($"Цепочка {oldChainId} отвязана от узла {nodeId}");
 
         return true;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка отвязки цепочки от узла: {ex.Message}");
+        Logger.Error($"Ошибка отвязки цепочки от узла: {ex.Message}");
         return false;
       }
       finally
@@ -846,9 +846,9 @@ namespace ISIDA.Reflexes
       {
         var (success, errorMessage) = SaveReflexTreeInternal();
         if (!success)
-          LogError($"Не удалось сохранить дерево после очистки ссылок на цепочку {chainId}: {errorMessage}");
+          Logger.Error($"Не удалось сохранить дерево после очистки ссылок на цепочку {chainId}: {errorMessage}");
         else
-          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} узлах дерева");
+          Logger.Info($"Очищены ссылки на цепочку {chainId} в {clearedCount} узлах дерева");
       }
     }
 
@@ -894,12 +894,12 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          LogError($"Удалено {removedCount} ссылок на безусловный рефлекс ID {geneticReflexId}");
+          Logger.Error($"Удалено {removedCount} ссылок на безусловный рефлекс ID {geneticReflexId}");
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка удаления ссылок на безусловный рефлекс: {ex.Message}");
+        Logger.Error($"Ошибка удаления ссылок на безусловный рефлекс: {ex.Message}");
       }
       finally
       {
@@ -927,12 +927,12 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          LogError($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} безусловных рефлексов");
+          Logger.Error($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} безусловных рефлексов");
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка удаления множественных ссылок на безусловные рефлексы: {ex.Message}");
+        Logger.Error($"Ошибка удаления множественных ссылок на безусловные рефлексы: {ex.Message}");
       }
       finally
       {
@@ -996,12 +996,12 @@ namespace ISIDA.Reflexes
         if (clearedCount > 0)
         {
           SaveReflexTreeInternal();
-          LogError($"Очищено {clearedCount} ссылок на безусловные рефлексы");
+          Logger.Error($"Очищено {clearedCount} ссылок на безусловные рефлексы");
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка очистки ссылок на безусловные рефлексы: {ex.Message}");
+        Logger.Error($"Ошибка очистки ссылок на безусловные рефлексы: {ex.Message}");
       }
       finally
       {
@@ -1049,12 +1049,12 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          LogInfo($"Удалено {removedCount} ссылок на условный рефлекс ID {conditionedReflexId}");
+          Logger.Info($"Удалено {removedCount} ссылок на условный рефлекс ID {conditionedReflexId}");
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка удаления ссылок на условный рефлекс: {ex.Message}");
+        Logger.Error($"Ошибка удаления ссылок на условный рефлекс: {ex.Message}");
       }
       finally
       {
@@ -1081,12 +1081,12 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          LogInfo($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} условных рефлексов");
+          Logger.Info($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} условных рефлексов");
         }
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка удаления множественных ссылок на условные рефлексы: {ex.Message}");
+        Logger.Error($"Ошибка удаления множественных ссылок на условные рефлексы: {ex.Message}");
       }
       finally
       {
@@ -1257,7 +1257,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error loading reflex tree: {ex.Message}");
+        Logger.Error($"Error loading reflex tree: {ex.Message}");
       }
     }
 
@@ -1365,23 +1365,6 @@ namespace ISIDA.Reflexes
       SaveReflexTreeInternal();
     }
 
-    /// <summary>
-    /// Логирование ошибок
-    /// </summary>
-    private static void LogError(string message)
-    {
-      FileValidator.LogError(message);
-    }
-
-    /// <summary>
-    /// Логирование информации
-    /// </summary>
-    private static void LogInfo(string message)
-    {
-      System.Diagnostics.Debug.WriteLine($"[ReflexTreeSystem] INFO: {message}");
-      FileValidator.LogError($"[ReflexTreeSystem] INFO: {message}");
-    }
-
     #endregion
 
     #region IDisposable
@@ -1413,7 +1396,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

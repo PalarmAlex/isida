@@ -90,7 +90,7 @@ namespace isida.Psychic
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации дерева автоматизмов: {ex.Message}");
+        Logger.Error($"Ошибка инициализации дерева автоматизмов: {ex.Message}");
         throw;
       }
     }
@@ -247,7 +247,7 @@ namespace isida.Psychic
           if (_noAutomatizmAfterStimul > 2 && (_noAutomatizmAfterStimul < PulseCount - 2) && PulseCount > 5)
           {
             _noAutomatizmAfterStimul = 2; // Сигнал детектора отсутствия автоматизма
-            LogInfo("ПРАВИЛА. Уже 2 пульса как нет автоматизма в ответ на Стимул");
+            Logger.Info("ПРАВИЛА. Уже 2 пульса как нет автоматизма в ответ на Стимул");
           }
         }
         else
@@ -282,7 +282,7 @@ namespace isida.Psychic
 
       if (EvolutionStage < 2)
       {
-        LogWarning($"Стадия развития {EvolutionStage} НЕДОСТАТОЧНА ДЛЯ АВТОМАТИЗМОВ");
+        Logger.Warning($"Стадия развития {EvolutionStage} НЕДОСТАТОЧНА ДЛЯ АВТОМАТИЗМОВ");
         return false;
       }
 
@@ -405,7 +405,7 @@ namespace isida.Psychic
         _lastRunAutomatizmPulsCount = PulseCount;
         _lastRunAutomatizm = automatizm;
 
-        LogInfo($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
+        Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
         // Здесь будет логика выполнения действий автоматизма
         // Пока просто логируем
@@ -414,13 +414,13 @@ namespace isida.Psychic
         if (automatizm.BranchID > 1000000 && automatizm.BranchID < 2000000)
         {
           int actionImageId = automatizm.BranchID - 1000000;
-          LogInfo($"Выполнение действия из образа: {actionImageId}");
+          Logger.Info($"Выполнение действия из образа: {actionImageId}");
         }
         // Если это фраза (BranchID > 2000000)
         else if (automatizm.BranchID > 2000000)
         {
           int phraseImageId = automatizm.BranchID - 2000000;
-          LogInfo($"Произнесение фразы из образа: {phraseImageId}");
+          Logger.Info($"Произнесение фразы из образа: {phraseImageId}");
         }
 
         // Сброс детектора отсутствия автоматизма
@@ -441,7 +441,7 @@ namespace isida.Psychic
       // Активация самоощущения
       SensorActivation(1, 0, null, null, 0, 0);
 
-      LogInfo("Пробуждение - создание базового самоощущения");
+      Logger.Info("Пробуждение - создание базового самоощущения");
     }
 
     /// <summary>
@@ -535,19 +535,19 @@ namespace isida.Psychic
       {
         if (_actionsImagesSystem == null || !ActionsImagesSystem.IsInitialized)
         {
-          LogError("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
+          Logger.Error("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
           return 0;
         }
 
         if (!ActionsImagesSystem.IsValidToneId(toneId))
         {
-          LogError($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
+          Logger.Error($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
           toneId = 0; // Нормальный
         }
 
         if (!ActionsImagesSystem.IsValidMoodId(moodId))
         {
-          LogError($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
+          Logger.Error($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
           moodId = 0; // Нормальное
         }
 
@@ -563,15 +563,15 @@ namespace isida.Psychic
         );
 
         if (imageId > 0)
-          LogInfo($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");
+          Logger.Info($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");
         else
-          LogWarning("Не удалось создать образ действий");
+          Logger.Warning("Не удалось создать образ действий");
 
         return imageId;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка создания образа действий: {ex.Message}");
+        Logger.Error($"Ошибка создания образа действий: {ex.Message}");
         return 0;
       }
     }
@@ -588,13 +588,13 @@ namespace isida.Psychic
       {
         if (_influenceActionsImagesSystem == null || !InfluenceActionsImagesSystem.IsInitialized)
         {
-          LogError("InfluenceActionsImagesSystem не инициализирована, образ сочетаний действий не создан");
+          Logger.Error("InfluenceActionsImagesSystem не инициализирована, образ сочетаний действий не создан");
           return 0;
         }
 
         if (actIdList == null || actIdList.Count == 0)
         {
-          LogError("Список действий пуст, образ сочетаний действий не создан");
+          Logger.Error("Список действий пуст, образ сочетаний действий не создан");
           return 0;
         }
 
@@ -605,38 +605,18 @@ namespace isida.Psychic
         );
 
         if (imageId > 0)
-          LogInfo($"Создан образ сочетаний действий ID: {imageId}, " +
+          Logger.Info($"Создан образ сочетаний действий ID: {imageId}, " +
                          $"количество действий: {actIdList.Count}");
         else
-          LogWarning("Не удалось создать образ сочетаний действий");
+          Logger.Warning("Не удалось создать образ сочетаний действий");
 
         return imageId;
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка создания образа сочетаний действий: {ex.Message}");
+        Logger.Error($"Ошибка создания образа сочетаний действий: {ex.Message}");
         return 0;
       }
-    }
-
-    #endregion
-
-    #region Логирование
-
-    // тут надо сохранять логи в файле - подумать над структурой
-    private static void LogInfo(string message)
-    {
-      Debug.WriteLine($"[PsychicSystem] INFO: {message}");
-    }
-
-    private static void LogWarning(string message)
-    {
-      Debug.WriteLine($"[PsychicSystem] WARNING: {message}");
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError($"[PsychicSystem] ERROR: {message}");
     }
 
     #endregion

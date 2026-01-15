@@ -148,7 +148,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
         throw;
       }
     }
@@ -702,7 +702,7 @@ namespace ISIDA.Reflexes
               else
               {
                 updatedCount++;
-                LogInfo($"Обновлена цепочка {reflex.ReflexChainID} для узла {nodeId} (рефлекс ID {reflex.Id})");
+                Logger.Info($"Обновлена цепочка {reflex.ReflexChainID} для узла {nodeId} (рефлекс ID {reflex.Id})");
               }
             }
 
@@ -959,7 +959,7 @@ namespace ISIDA.Reflexes
               {
                 createdCount++;
                 existingReflexesSet.Add(candidateKey);
-                LogError($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действиями [{string.Join(",", adaptiveActions)}]");
+                Logger.Error($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действиями [{string.Join(",", adaptiveActions)}]");
               }
 
               if (reflexWarnings != null && reflexWarnings.Any())
@@ -1068,7 +1068,7 @@ namespace ISIDA.Reflexes
 
         SaveGeneticReflexes(false);
 
-        LogInfo($"Отвязана цепочка {oldChainId} от рефлекса {reflexId}");
+        Logger.Info($"Отвязана цепочка {oldChainId} от рефлекса {reflexId}");
         return true;
       }
       finally
@@ -1154,9 +1154,9 @@ namespace ISIDA.Reflexes
       {
         var (success, errMsg) = SaveGeneticReflexes(false);
         if (!success)
-          LogInfo($"Не удалось обновить файл б/у рефлексов после удаления ссылок цепочек: {errMsg}");
+          Logger.Info($"Не удалось обновить файл б/у рефлексов после удаления ссылок цепочек: {errMsg}");
         else
-          LogInfo($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
+          Logger.Info($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
       }
     }
 
@@ -1252,7 +1252,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"LoadGeneticReflexes: Ошибка при загрузке рефлексов: {ex.Message}");
+        Logger.Error($"LoadGeneticReflexes: Ошибка при загрузке рефлексов: {ex.Message}");
       }
     }
 
@@ -1556,20 +1556,6 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Вспомогательные методы
-
-    private static void LogInfo(string message)
-    {
-      Debug.WriteLine($"[ReflexChainsSystem] INFO: {message}");
-    }
-
-    private static void LogError(string message)
-    {
-      FileValidator.LogError($"[ReflexChainsSystem] ERROR: {message}");
-    }
-
-    #endregion
-
     #region IDisposable
 
     /// <summary>
@@ -1596,7 +1582,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {

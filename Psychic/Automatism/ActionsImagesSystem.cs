@@ -60,7 +60,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка инициализации ActionsImagesSystem: {ex.Message}");
+        Logger.Error($"Ошибка инициализации ActionsImagesSystem: {ex.Message}");
         throw;
       }
     }
@@ -439,7 +439,7 @@ namespace isida.Psychic.Automatism
         }
         catch (Exception ex)
         {
-          LogError($"Ошибка создания файла образов действий: {ex.Message}");
+          Logger.Error($"Ошибка создания файла образов действий: {ex.Message}");
           throw;
         }
       }
@@ -491,7 +491,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Ошибка загрузки файла образов действий: {ex.Message}");
+        Logger.Error($"Ошибка загрузки файла образов действий: {ex.Message}");
       }
     }
 
@@ -562,14 +562,6 @@ namespace isida.Psychic.Automatism
       }
     }
 
-    /// <summary>
-    /// Логирование ошибок
-    /// </summary>
-    private static void LogError(string message)
-    {
-      FileValidator.LogError(message);
-    }
-
     #endregion
 
     #region Вспомогательные методы
@@ -620,7 +612,7 @@ namespace isida.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        LogError($"Error during disposal: {ex.Message}");
+        Logger.Error($"Error during disposal: {ex.Message}");
       }
       finally
       {
