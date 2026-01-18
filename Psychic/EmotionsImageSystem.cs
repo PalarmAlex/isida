@@ -222,7 +222,8 @@ namespace ISIDA.Psychic
       };
 
       _emotionsImages[newId] = image;
-      Logger.Info($"Создан новый образ ID={newId}");
+      if (checkUnicum)
+        Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

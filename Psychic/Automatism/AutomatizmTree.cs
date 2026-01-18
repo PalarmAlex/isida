@@ -44,9 +44,9 @@ namespace ISIDA.Psychic.Automatism
     public int SimbolID { get; set; }
 
     /// <summary>
-    /// ID фразы
+    /// ID вербального образа
     /// </summary>
-    public int PhraseID { get; set; }
+    public int VerbID { get; set; }
 
     /// <summary>
     /// Дочерние узлы (ветвление)
@@ -161,11 +161,6 @@ namespace ISIDA.Psychic.Automatism
     private int _lastAutomatizmNodeId = 0;
 
     /// <summary>
-    /// Флаг записи в файл
-    /// </summary>
-    private bool _doWritingFile = true;
-
-    /// <summary>
     /// Запрет на сканирование дерева в это время
     /// </summary>
     private bool _notAllowScanInTreeThisTime = false;
@@ -185,7 +180,7 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int phraseId,
+        int verbID,
         bool checkUnicum = true)
     {
       if (parent == null)
@@ -195,7 +190,7 @@ namespace ISIDA.Psychic.Automatism
       {
         if (checkUnicum)
         {
-          var existing = FindAutomatizmTreeNodeFromCondition(baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
+          var existing = FindAutomatizmTreeNodeFromCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
           if (existing.Node != null)
             return existing;
         }
@@ -221,14 +216,11 @@ namespace ISIDA.Psychic.Automatism
           ActivityID = activityId,
           ToneMoodID = toneMoodId,
           SimbolID = simbolId,
-          PhraseID = phraseId
+          VerbID = verbID
         };
 
         parent.Children.Add(node);
         _nodesById[id] = node;
-
-        if (_doWritingFile)
-          SaveAutomatizmTree();
 
         return (id, node);
       }
@@ -248,14 +240,14 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int phraseId)
+        int verbID)
     {
       _lock.EnterReadLock();
       try
       {
         foreach (var child in Tree.Children)
         {
-          var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
+          var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
           if (result.Node != null)
             return result;
         }
@@ -277,11 +269,11 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int phraseId)
+        int verbID)
     {
       if (node.BaseID == baseId && node.EmotionID == emotionId &&
           node.ActivityID == activityId && toneMoodId == node.ToneMoodID &&
-          node.SimbolID == simbolId && node.PhraseID == phraseId)
+          node.SimbolID == simbolId && node.VerbID == verbID)
       {
         return (node.ID, node);
       }
@@ -291,7 +283,7 @@ namespace ISIDA.Psychic.Automatism
 
       foreach (var child in node.Children)
       {
-        var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
+        var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
         if (result.Node != null)
           return result;
       }
@@ -358,7 +350,7 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int phraseId,
+        int verbID,
         bool isUnrecognizedPhrase = false)
     {
       if (_notAllowScanInTreeThisTime || GlobalTimer.GlobalPulsCount < 4)
@@ -373,7 +365,7 @@ namespace ISIDA.Psychic.Automatism
         CurrentAutomatizmTreeEnd = null;
         _currentStepCount = 0;
 
-        var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, phraseId);
+        var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
 
         foreach (var node in Tree.Children)
         {
@@ -439,7 +431,7 @@ namespace ISIDA.Psychic.Automatism
             val = child.SimbolID;
             break;
           case 5:
-            val = child.PhraseID;
+            val = child.VerbID;
             break;
         }
 
@@ -472,9 +464,6 @@ namespace ISIDA.Psychic.Automatism
 
       var lastNodeId = AddNewBranchFromNodes(lastLevel, condArr, lastNode);
 
-      if (lastNodeId > 0 && _doWritingFile)
-        SaveAutomatizmTree();
-
       return lastNodeId;
     }
 
@@ -492,7 +481,7 @@ namespace ISIDA.Psychic.Automatism
       int activityId = level > 1 ? conditions[2] : 0;
       int toneMoodId = level > 2 ? conditions[3] : 0;
       int simbolId = level > 3 ? conditions[4] : 0;
-      int phraseId = level > 4 ? conditions[5] : 0;
+      int verbID = level > 4 ? conditions[5] : 0;
 
       switch (level)
       {
@@ -512,7 +501,7 @@ namespace ISIDA.Psychic.Automatism
           (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, 0, true);
           break;
         case 5:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, true);
           break;
       }
 
@@ -637,12 +626,12 @@ namespace ISIDA.Psychic.Automatism
           if (!int.TryParse(parts[6], out int simbolId))
             simbolId = 0;
 
-          if (!int.TryParse(parts[7], out int phraseId))
-            phraseId = 0;
+          if (!int.TryParse(parts[7], out int verbID))
+            verbID = 0;
 
           var parent = GetNodeById(parentId);
           if (parent != null)
-            CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, phraseId, false);
+            CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, false);
         }
       }
       catch (Exception ex)
@@ -695,7 +684,7 @@ namespace ISIDA.Psychic.Automatism
             return;
 
           var line = $"{node.ID}|{node.ParentID}|{node.BaseID}|{node.EmotionID}|" +
-                     $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.PhraseID}";
+                     $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.VerbID}";
           lines.Add(line);
 
           foreach (var child in node.Children)

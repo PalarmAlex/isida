@@ -2,6 +2,7 @@
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
+using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Documents;
 using System.Windows.Media.Animation;
+using static ISIDA.Psychic.VerbalBrocaImagesSystem;
 
 namespace ISIDA.Psychic
 {
@@ -44,6 +46,8 @@ namespace ISIDA.Psychic
         InfluenceActionsImagesSystem influenceActionsImagesSystem,
         ActionsImagesSystem actionsImagesSystem,
         EmotionsImageSystem emotionsImageSystem,
+        SensorySystem sensorySystem,
+        VerbalBrocaImagesSystem verbalBrocaImages,
         GomeostasSystem gomeostas)
     {
       if (_instance != null)
@@ -55,6 +59,8 @@ namespace ISIDA.Psychic
           influenceActionsImagesSystem,
           actionsImagesSystem,
           emotionsImageSystem,
+          sensorySystem,
+          verbalBrocaImages,
           gomeostas);
     }
 
@@ -64,6 +70,8 @@ namespace ISIDA.Psychic
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly GomeostasSystem _gomeostas;
     private readonly EmotionsImageSystem _emotionsImageSystem;
+    private readonly SensorySystem _sensorySystem;
+    private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
 
     private PsychicSystem(
         AutomatizmSystem automatizmSystem,
@@ -71,6 +79,8 @@ namespace ISIDA.Psychic
         InfluenceActionsImagesSystem influenceActionsImagesSystem,
         ActionsImagesSystem actionsImagesSystem,
         EmotionsImageSystem emotionsImageSystem,
+        SensorySystem sensorySystem,
+        VerbalBrocaImagesSystem verbalBrocaImages,
         GomeostasSystem gomeostas)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
@@ -78,6 +88,8 @@ namespace ISIDA.Psychic
       _influenceActionsImagesSystem = influenceActionsImagesSystem ?? throw new ArgumentNullException(nameof(influenceActionsImagesSystem));
       _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
       _emotionsImageSystem = emotionsImageSystem ?? throw new ArgumentNullException(nameof(emotionsImageSystem));
+      _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
+      _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Инициализация базового дерева автоматизмов
@@ -180,7 +192,7 @@ namespace ISIDA.Psychic
     private int _currentActivityId = 0;
     private int _currentToneMoodId = 0;
     private int _currentSimbolId = 0;
-    private int _currentPhraseId = 0;
+    private int _currentVerbId = 0;
 
     // данные для инфо-картины
     private int _actionsImageId = 0;
@@ -303,6 +315,16 @@ namespace ISIDA.Psychic
       _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфокартины
       int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
       (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
+      int toneMood = GetToneMoodID(toneId, moodId);
+
+      int firstSimbol = 0;
+      int verbId = 0;
+
+      if (phraseIdList.Any())
+      {
+        firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(phraseIdList[0]);
+        (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
+      }
 
       // Активация дерева автоматизмов
       int automatizmNodeId = AutomatizmTreeActivation(
@@ -310,10 +332,9 @@ namespace ISIDA.Psychic
           currentBaseId,
           currentEmotionId,
           currentActivityId,
-          _currentToneMoodId,
-          _currentSimbolId,
-          _currentPhraseId);
-      // _currentToneMoodId, _currentSimbolId, _currentPhraseId - verbal_Broka_img.go
+          toneMood,
+          firstSimbol,
+          verbId);
 
       if (automatizmNodeId > 0)
       {
@@ -340,7 +361,7 @@ namespace ISIDA.Psychic
         int activityId,
         int toneMoodId,
         int simbolId,
-        int phraseId,
+        int verbId,
         bool isUnrecognizedPhrase = false)
     {
       if (PulseCount < 4)
@@ -359,7 +380,7 @@ namespace ISIDA.Psychic
       _currentActivityId = activityId;
       _currentToneMoodId = toneMoodId;
       _currentSimbolId = simbolId;
-      _currentPhraseId = phraseId;
+      _currentVerbId = verbId;
 
       // Сброс детектора для действий оператора
       if (activationType > 1)
@@ -372,7 +393,7 @@ namespace ISIDA.Psychic
           activityId,
           toneMoodId,
           simbolId,
-          phraseId,
+          verbId,
           isUnrecognizedPhrase);
 
       return detectedNodeId;
@@ -467,13 +488,159 @@ namespace ISIDA.Psychic
       if (IsSleepingDream)
       {
         // Фаза сновидений
-        // Здесь можно добавить обработку сновидений
+        // добавить обработку сновидений
       }
       else
       {
         // Глубокий сон
         // Минимальная активность психики
       }
+    }
+
+    #endregion
+
+    #region Методы работы с ToneMood ID
+
+    /// <summary>
+    /// Получить уникальный составной ID из тона и настроения
+    /// </summary>
+    /// <param name="tone">Тон: -1, 0, 1</param>
+    /// <param name="mood">Настроение: 0-7</param>
+    /// <returns>Уникальный числовой ID</returns>
+    /// <remarks>
+    /// Создает уникальный ID вида: первые 2 цифры - тон (смещенный в диапазон 1-3), 
+    /// последние 2 цифры - настроение. Пример: нормальный(0) + хорошее(1) = 201
+    /// </remarks>
+    public static int GetToneMoodID(int tone, int mood)
+    {
+      // Проверка диапазонов используя статические методы валидации
+      if (!ActionsImagesSystem.IsValidToneId(tone))
+        throw new ArgumentOutOfRangeException(nameof(tone), $"Некорректный ID тона: {tone}");
+      if (!ActionsImagesSystem.IsValidMoodId(mood))
+        throw new ArgumentOutOfRangeException(nameof(mood), $"Некорректный ID настроения: {mood}");
+
+      // Смещаем тон из -1..1 в 1..3 для избежания отрицательных значений
+      int shiftedTone = tone + 2; // -1→1, 0→2, 1→3
+
+      // Создаем составной ID: тон * 100 + настроение
+      return shiftedTone * 100 + mood;
+    }
+
+    /// <summary>
+    /// Получить тон и настроение из уникального составного ID
+    /// </summary>
+    /// <param name="toneMoodID">Уникальный составной ID</param>
+    /// <returns>Кортеж (tone, mood)</returns>
+    public static (int tone, int mood) GetToneMoodFromID(int toneMoodID)
+    {
+      // ID должен быть в диапазоне 100..307
+      if (toneMoodID < 100 || toneMoodID > 307)
+        throw new ArgumentOutOfRangeException(nameof(toneMoodID),
+            $"Некорректный ToneMoodID: {toneMoodID}");
+
+      // Настроение - последние 2 цифры (или 1 цифра)
+      int mood = toneMoodID % 100;
+
+      // Тон - первые цифры
+      int shiftedTone = toneMoodID / 100;
+
+      // Обратное смещение: из 1..3 в -1..1
+      int tone = shiftedTone - 2;
+
+      // Проверка корректности
+      if (!ActionsImagesSystem.IsValidToneId(tone))
+        throw new ArgumentException($"Некорректный тон в ID {toneMoodID}: {tone}");
+      if (!ActionsImagesSystem.IsValidMoodId(mood))
+        throw new ArgumentException($"Некорректное настроение в ID {toneMoodID}: {mood}");
+
+      return (tone, mood);
+    }
+
+    /// <summary>
+    /// Получить строковое представление ToneMood ID
+    /// </summary>
+    /// <param name="toneMoodID">Уникальный составной ID</param>
+    /// <returns>Строковое описание тона и настроения</returns>
+    public static string GetToneMoodString(int toneMoodID)
+    {
+      var (tone, mood) = GetToneMoodFromID(toneMoodID);
+      return GetToneMoodStringDirect(tone, mood);
+    }
+
+    /// <summary>
+    /// Получить строковое представление напрямую из тона и настроения
+    /// </summary>
+    /// <param name="tone">Тон: -1, 0, 1</param>
+    /// <param name="mood">Настроение: 0-7</param>
+    /// <returns>Строковое описание</returns>
+    public static string GetToneMoodStringDirect(int tone, int mood)
+    {
+      string toneStr = ActionsImagesSystem.GetToneText(tone);
+      string moodStr = ActionsImagesSystem.GetMoodText(mood);
+
+      // Если не нашли в словарях, показываем значения как есть
+      if (string.IsNullOrEmpty(toneStr))
+        toneStr = $"Тон({tone})";
+      if (string.IsNullOrEmpty(moodStr))
+        moodStr = $"Настроение({mood})";
+
+      return $"{toneStr} - {moodStr}";
+    }
+
+    /// <summary>
+    /// Получить строку тона по ID
+    /// </summary>
+    /// <param name="toneId">ID тона: -1, 0, 1</param>
+    /// <returns>Строковое описание тона</returns>
+    public static string GetToneString(int toneId)
+    {
+      string toneStr = ActionsImagesSystem.GetToneText(toneId);
+      return !string.IsNullOrEmpty(toneStr) ? toneStr : $"Тон({toneId})";
+    }
+
+    /// <summary>
+    /// Получить строку настроения по ID
+    /// </summary>
+    /// <param name="moodId">ID настроения: 0-7</param>
+    /// <returns>Строковое описание настроения</returns>
+    public static string GetMoodString(int moodId)
+    {
+      string moodStr = ActionsImagesSystem.GetMoodText(moodId);
+      return !string.IsNullOrEmpty(moodStr) ? moodStr : $"Настроение({moodId})";
+    }
+
+    /// <summary>
+    /// Получить список всех доступных тонов
+    /// </summary>
+    /// <returns>Словарь тонов (ID -> Описание)</returns>
+    public static Dictionary<int, string> GetToneList()
+    {
+      return ActionsImagesSystem.GetToneList();
+    }
+
+    /// <summary>
+    /// Получить список всех доступных настроений
+    /// </summary>
+    /// <returns>Словарь настроений (ID -> Описание)</returns>
+    public static Dictionary<int, string> GetMoodList()
+    {
+      return ActionsImagesSystem.GetMoodList();
+    }
+
+    /// <summary>
+    /// Проверяет, существует ли тон с указанным ID
+    /// </summary>
+    public static bool IsValidToneId(int toneId)
+    {
+      return ActionsImagesSystem.IsValidToneId(toneId);
+    }
+
+    /// <summary>
+    /// Проверяет, существует ли настроение с указанным ID
+    /// </summary>
+    public static bool IsValidMoodId(int moodId)
+    {
+      return ActionsImagesSystem.IsValidMoodId(moodId);
     }
 
     #endregion

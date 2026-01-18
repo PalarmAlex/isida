@@ -1,13 +1,11 @@
 ﻿using ISIDA.Common;
+using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using static ISIDA.Psychic.EmotionsImageSystem;
+using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 
 namespace ISIDA.Psychic
 {
@@ -36,7 +34,7 @@ namespace ISIDA.Psychic
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
-    /// Инициализирует глобальный экземпляр системы образов действий
+    /// Инициализирует глобальный экземпляр системы вербальных сенсоров
     /// </summary>
     /// <param name="psychicDataPath">Путь к каталогу данных психики</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
@@ -254,7 +252,8 @@ namespace ISIDA.Psychic
       };
 
       _verbalbrocaImages[newId] = image;
-      Logger.Info($"Создан новый образ ID={newId}");
+      if (checkUnicum)
+        Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

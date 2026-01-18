@@ -223,7 +223,8 @@ namespace ISIDA.Psychic.Automatism
       };
 
       _actionsImages[newId] = image;
-      Logger.Info($"Создан новый образ ID={newId}");
+      if (checkUnicum)
+        Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

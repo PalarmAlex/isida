@@ -85,7 +85,7 @@ namespace ISIDA.Common
       public const string VerbalBrocaMoodId = "# MoodId: ID настроения при передаче фразы с Пульта или Ответного действия";
 
       // Дерево автоматизмов
-      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|PhraseID";
+      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|VerbID";
       public const string AutomatizmTreeFields1 = "# ID: уникальный идентификатор узла дерева";
       public const string AutomatizmTreeFields2 = "# ParentID: ID родительского узла (0 для корневых веток)";
       public const string AutomatizmTreeFields3 = "# BaseID: базовое состояние: -1=Плохо, 0=Норма, 1=Хорошо";
@@ -93,7 +93,7 @@ namespace ISIDA.Common
       public const string AutomatizmTreeFields5 = "# ActivityID: ID образа сочетания действий с Пульта (0 если нет действия)";
       public const string AutomatizmTreeFields6 = "# ToneMoodID: ID образа контекста сообщения";
       public const string AutomatizmTreeFields7 = "# SimbolID: ID первого символа фразы (0 если нет фразы)";
-      public const string AutomatizmTreeFields8 = "# PhraseID: ID фразы (Verbal.ID, 0 если нет фразы)";
+      public const string AutomatizmTreeFields8 = "# VerbID: ID вербального образа (0 если нет фразы)";
 
       // Автоматизмы
       public const string AutomatizmFormat = "# Формат записи: ID|BranchID|Usefulness|ActionsImageID|NextID|Energy|Belief|Count|GomeoIdSuccesArr";
@@ -954,7 +954,7 @@ namespace ISIDA.Common
           return false;
 
         // Проверяем ToneMoodID (может быть 0 или 90)
-        if (!int.TryParse(parts[5], out int toneMoodId) || (toneMoodId != 0 && toneMoodId != 90 && toneMoodId < 1))
+        if (!int.TryParse(parts[5], out int toneMoodId) || (toneMoodId != 0 && toneMoodId < 1))
           return false;
 
         // Проверяем SimbolID (может быть 0)

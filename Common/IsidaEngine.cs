@@ -561,21 +561,23 @@ namespace ISIDA.Common
         EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
         context.EmotionsImageSystem = EmotionsImageSystem.Instance;
 
-        // Шаг 21: Система психики
+        // Шаг 21: Система вербальных образов
         initializationStep = 21;
+        VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
+
+        // Шаг 22: Система психики
+        initializationStep = 22;
         PsychicSystem.InitializeInstance(
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
           context.InfluenceActionsImages,
           context.ActionsImages,
           context.EmotionsImageSystem,
+          context.SensorySystem,
+          context.VerbalBrocaImagesSystem,
           context.Gomeostas);
         context.PsychicSystem = PsychicSystem.Instance;
-
-        // Шаг 22: Система вербальных образов
-        initializationStep = 22;
-        VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
-        context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

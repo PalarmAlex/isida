@@ -4,7 +4,6 @@ using ISIDA.Reflexes;
 using System;
 using System.IO;
 using System.Threading;
-using static ISIDA.Common.FileValidator;
 
 namespace ISIDA.Sensors
 {

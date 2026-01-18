@@ -268,7 +268,10 @@ namespace ISIDA.Sensors
       }
     }
 
-    private int GetFirstSymbolFromWordId(int wordId)
+    /// <summary>
+    /// Получить первый символ слова
+    /// </summary>
+    public int GetFirstSymbolFromWordId(int wordId)
     {
       // Получаем слово по ID
       var word = GetWordFromWordIdInternal(wordId);
