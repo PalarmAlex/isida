@@ -106,6 +106,7 @@
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
+    <Compile Include="Psychic\VerbalBrocaImagesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />

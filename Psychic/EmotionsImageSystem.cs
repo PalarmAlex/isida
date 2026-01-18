@@ -1,17 +1,13 @@
-﻿using isida.Psychic.Automatism;
+﻿using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
-using static isida.Psychic.Automatism.ActionsImagesSystem;
-using static isida.Psychic.Automatism.InfluenceActionsImagesSystem;
 
-namespace isida.Psychic
+namespace ISIDA.Psychic
 {
   /// <summary>
   /// Система управления эмоциями агента
@@ -232,22 +228,6 @@ namespace isida.Psychic
     }
 
     /// <summary>
-    /// Проверить уникальность образа эмоций
-    /// </summary>
-    private (int Id, EmotionsImage Image) CheckUnicumEmotionsImage(List<int> baseStylesList)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return CheckUnicumEmotionsImageNoLock(baseStylesList);
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
     /// Проверить уникальность образа действий (без блокировки - для внутреннего использования)
     /// </summary>
     private (int Id, EmotionsImage Image) CheckUnicumEmotionsImageNoLock(List<int> baseStylesList)
@@ -318,7 +298,7 @@ namespace isida.Psychic
           var lines = new List<string>
           {
             FileValidator.FileHeaders.EmotionsImagesFormat,
-            FileValidator.FileHeaders.EmotionsImagesBaseId
+            FileValidator.FileHeaders.EmotionsImagesBaseIdList
           };
 
           File.WriteAllLines(filePath, lines);
@@ -397,7 +377,7 @@ namespace isida.Psychic
         var lines = new List<string>
           {
             FileValidator.FileHeaders.EmotionsImagesFormat,
-            FileValidator.FileHeaders.EmotionsImagesBaseId
+            FileValidator.FileHeaders.EmotionsImagesBaseIdList
           };
 
         foreach (var kvp in _emotionsImages.OrderBy(x => x.Key))

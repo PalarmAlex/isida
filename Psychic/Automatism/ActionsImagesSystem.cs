@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-namespace isida.Psychic.Automatism
+namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Система образов действий агента или оператора
@@ -425,8 +425,8 @@ namespace isida.Psychic.Automatism
           var lines = new List<string>
           {
             FileValidator.FileHeaders.ActionsImagesFormat,
-            FileValidator.FileHeaders.ActionsImagesActId,
-            FileValidator.FileHeaders.ActionsImagesPhraseId,
+            FileValidator.FileHeaders.ActionsImagesActIdList,
+            FileValidator.FileHeaders.ActionsImagesPhraseIdList,
             FileValidator.FileHeaders.ActionsImagesToneId,
             FileValidator.FileHeaders.ActionsImagesMoodId,
             FileValidator.FileHeaders.ActionsImagesKind
@@ -518,14 +518,15 @@ namespace isida.Psychic.Automatism
     {
       try
       {
-        var lines = new List<string>();
-
-        lines.Add(FileValidator.FileHeaders.ActionsImagesFormat);
-        lines.Add(FileValidator.FileHeaders.ActionsImagesActId);
-        lines.Add(FileValidator.FileHeaders.ActionsImagesPhraseId);
-        lines.Add(FileValidator.FileHeaders.ActionsImagesToneId);
-        lines.Add(FileValidator.FileHeaders.ActionsImagesMoodId);
-        lines.Add(FileValidator.FileHeaders.ActionsImagesKind);
+        var lines = new List<string>
+        {
+          FileValidator.FileHeaders.ActionsImagesFormat,
+          FileValidator.FileHeaders.ActionsImagesActIdList,
+          FileValidator.FileHeaders.ActionsImagesPhraseIdList,
+          FileValidator.FileHeaders.ActionsImagesToneId,
+          FileValidator.FileHeaders.ActionsImagesMoodId,
+          FileValidator.FileHeaders.ActionsImagesKind
+        };
 
         foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
         {

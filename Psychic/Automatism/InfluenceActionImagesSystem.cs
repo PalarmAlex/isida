@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace isida.Psychic.Automatism
+namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Система образов сочетаний действий с пульта (для дерева автоматизмов)
@@ -315,7 +315,7 @@ namespace isida.Psychic.Automatism
           var lines = new List<string>
           {
             FileValidator.FileHeaders.InfluenceActionsImagesFormat,
-            FileValidator.FileHeaders.InfluenceActionsImagesActId
+            FileValidator.FileHeaders.InfluenceActionsImagesActIdList
           };
 
           File.WriteAllLines(filePath, lines);
@@ -394,7 +394,7 @@ namespace isida.Psychic.Automatism
         var lines = new List<string>
           {
             FileValidator.FileHeaders.InfluenceActionsImagesFormat,
-            FileValidator.FileHeaders.InfluenceActionsImagesActId
+            FileValidator.FileHeaders.InfluenceActionsImagesActIdList
           };
 
         foreach (var kvp in _actionsImages.OrderBy(x => x.Key))

@@ -1,15 +1,16 @@
-﻿using isida.Psychic.Automatism;
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Windows.Documents;
 using System.Windows.Media.Animation;
 
-namespace isida.Psychic
+namespace ISIDA.Psychic
 {
   /// <summary>
   /// Центральная система психики - координатор автоматизмов и рефлексов
@@ -42,6 +43,7 @@ namespace isida.Psychic
         AutomatizmTreeSystem automatizmTreeSystem,
         InfluenceActionsImagesSystem influenceActionsImagesSystem,
         ActionsImagesSystem actionsImagesSystem,
+        EmotionsImageSystem emotionsImageSystem,
         GomeostasSystem gomeostas)
     {
       if (_instance != null)
@@ -52,6 +54,7 @@ namespace isida.Psychic
           automatizmTreeSystem,
           influenceActionsImagesSystem,
           actionsImagesSystem,
+          emotionsImageSystem,
           gomeostas);
     }
 
@@ -60,18 +63,21 @@ namespace isida.Psychic
     private readonly InfluenceActionsImagesSystem _influenceActionsImagesSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly GomeostasSystem _gomeostas;
+    private readonly EmotionsImageSystem _emotionsImageSystem;
 
     private PsychicSystem(
         AutomatizmSystem automatizmSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
         InfluenceActionsImagesSystem influenceActionsImagesSystem,
         ActionsImagesSystem actionsImagesSystem,
+        EmotionsImageSystem emotionsImageSystem,
         GomeostasSystem gomeostas)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
       _influenceActionsImagesSystem = influenceActionsImagesSystem ?? throw new ArgumentNullException(nameof(influenceActionsImagesSystem));
       _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
+      _emotionsImageSystem = emotionsImageSystem ?? throw new ArgumentNullException(nameof(emotionsImageSystem));
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Инициализация базового дерева автоматизмов
@@ -198,7 +204,12 @@ namespace isida.Psychic
     /// <summary>
     /// Обработка пульса психики
     /// </summary>
-    internal void ProcessPsychicPulse(int evolutionStage, int lifeTime, int pulseCount, int sleepingType)
+    internal void ProcessPsychicPulse(
+      int evolutionStage, 
+      int lifeTime, 
+      List<int> activetStyleIds, 
+      int pulseCount, 
+      int sleepingType)
     {
       _lock.EnterWriteLock();
       try
@@ -235,7 +246,7 @@ namespace isida.Psychic
           if (EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
           {
             // Начало мышления
-            WakeUpping();
+            WakeUpping(activetStyleIds);
             ReadyStatus = 2; // Готов к общению
 
             // Первый запуск дерева автоматизмов
@@ -264,6 +275,7 @@ namespace isida.Psychic
     /// </summary>
     /// <param name="activationType">Тип активации: 1-изменение условий, 2-действие, 3-фраза</param>
     /// <param name="currentBaseId">ID состояния агента: -1: плохо, 0: норма, 1: хорошо</param>
+    /// <param name="stileIdList">список ID активных стилей</param>
     /// <param name="actionIdList">список ID действий с пульта</param>
     /// <param name="phraseIdList">список ID фраз с пульта</param>
     /// <param name="toneId">ID тона сообщения</param>
@@ -272,6 +284,7 @@ namespace isida.Psychic
     internal bool SensorActivation(
       int activationType,  
       int currentBaseId,
+      List<int> stileIdList, // хотя через пульсы передается StileIdList, от действия может поменяться stileIdList на текущем пульсе
       List<int> actionIdList,
       List<int> phraseIdList,
       int toneId,
@@ -287,14 +300,15 @@ namespace isida.Psychic
       }
 
       ActivationTypeSensor = activationType;
-      _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфоркартины
+      _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфокартины
       int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
+      (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
 
       // Активация дерева автоматизмов
       int automatizmNodeId = AutomatizmTreeActivation(
           activationType,
           currentBaseId,
-          _currentEmotionId, // новый класс по emotions.go. Тот же образ сочетаний контекстов, но с возможностью создавать его не только по стилям гомеостаза
+          currentEmotionId,
           currentActivityId,
           _currentToneMoodId,
           _currentSimbolId,
@@ -436,10 +450,10 @@ namespace isida.Psychic
     /// <summary>
     /// Пробуждение - создание базового самоощущения
     /// </summary>
-    private void WakeUpping()
+    private void WakeUpping(List<int> activetStyleIds)
     {
       // Активация самоощущения
-      SensorActivation(1, 0, null, null, 0, 0);
+      SensorActivation(1, 0, activetStyleIds, null, null, 0, 0);
 
       Logger.Info("Пробуждение - создание базового самоощущения");
     }

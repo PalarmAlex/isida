@@ -6,7 +6,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using isida.Psychic;
+using ISIDA.Psychic;
 using System.Linq;
 
 namespace ISIDA.Common
@@ -450,7 +450,9 @@ namespace ISIDA.Common
         {
           // флаг сна получмть кодга класс сна будет
           int sleepingType = 0;
-          _psychicSystem.ProcessPsychicPulse(agentState.EvolutionStage, agentState.Lifetime, GlobalPulsCount, sleepingType);
+          var currentStyles = agentState.ActiveStyles;
+          var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
+          _psychicSystem.ProcessPsychicPulse(agentState.EvolutionStage, agentState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
         }
 
         // Увеличение времени жизни в пульсах для условных рефлексов

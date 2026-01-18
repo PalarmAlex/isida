@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 
-namespace isida.Psychic.Automatism
+namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Автоматизм - может совершать внешние действия или внутренние произвольные действия

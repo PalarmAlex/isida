@@ -62,20 +62,27 @@ namespace ISIDA.Common
       public const string PropertiesIsDead = "IsDead|";
 
       // Образы действий агента для психики
-      public const string ActionsImagesFormat = "# ID|ActID|PhraseID|ToneID|MoodID|Kind";
-      public const string ActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
-      public const string ActionsImagesPhraseId = "# PhraseID: ID фраз (через запятую)";
+      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind";
+      public const string ActionsImagesActIdList = "# ActIdList: ID образа действий с Пульта (через запятую)";
+      public const string ActionsImagesPhraseIdList = "# PhraseIdList: ID фраз (через запятую)";
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
 
       // Образы действий с пульта для психики
-      public const string InfluenceActionsImagesFormat = "# ID|BaseStyleID";
-      public const string EmotionsImagesBaseId = "# BaseStyleID: ID стилей (через запятую)";
+      public const string InfluenceActionsImagesFormat = "# ID|ActIdList";
+      public const string InfluenceActionsImagesActIdList = "# ActIdList: ID действий с Пульта (через запятую)";
 
       // Образы эмоций для психики
-      public const string EmotionsImagesFormat = "# ID|ActID";
-      public const string InfluenceActionsImagesActId = "# ActID: ID действий с Пульта (через запятую)";
+      public const string EmotionsImagesFormat = "# ID|BaseStyleIdList";
+      public const string EmotionsImagesBaseIdList = "# BaseStyleIdList: ID стилей (через запятую)";
+
+      // Вербальные образы для психики
+      public const string VerbalBrocaFileNameImagesFormat = "# ID|SimbolID|PhraseIdList|ToneId|MoodId";
+      public const string VerbalBrocaSimbolID = "# SimbolID: ID первого символа фразы (0 если нет фразы)";
+      public const string VerbalBrocaPhraseIdList = "# PhraseIdList: Массив ID фраз (через запятую)";
+      public const string VerbalBrocaToneId = "# ToneId: ID тона сообщения с Пульта или Ответного действия";
+      public const string VerbalBrocaMoodId = "# MoodId: ID настроения при передаче фразы с Пульта или Ответного действия";
 
       // Дерево автоматизмов
       public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|PhraseID";
@@ -706,6 +713,85 @@ namespace ISIDA.Common
           if (int.TryParse(parts[5], out int kind))
           {
             if (kind < 0 || kind > 1)
+              return false;
+          }
+        }
+
+        return true; // Достаточно одной валидной строки данных
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsValidVerbalBrocaImagesFile
+
+    /// <summary>
+    /// Проверяет валидность файла вербальных образов по пути
+    /// </summary>
+    public static bool IsValidVerbalBrocaImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidVerbalBrocaImagesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла вербальных образов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidVerbalBrocaImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 5)
+        return false;
+
+      // Проверяем, что файл содержит только комментарии/пустые строки (шапку)
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        // Проверяем минимальное количество полей
+        if (parts.Length < 5)
+          return false;
+
+        if (!int.TryParse(parts[0], out int id) || id <= 0)
+          return false;
+
+        if (!int.TryParse(parts[1], out int simbolID) || simbolID <= 0)
+          return false;
+
+        // ToneId должен быть валидным (-1, 0, 1)
+        if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+        {
+          if (int.TryParse(parts[3], out int toneId))
+          {
+            if (toneId < -1 || toneId > 1)
               return false;
           }
         }

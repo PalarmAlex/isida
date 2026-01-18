@@ -1,5 +1,5 @@
-﻿using isida.Psychic;
-using isida.Psychic.Automatism;
+﻿using ISIDA.Psychic;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -7,9 +7,9 @@ using ISIDA.Sensors;
 using System;
 using System.Diagnostics;
 using System.IO;
-using static isida.Psychic.Automatism.AutomatizmSystem;
-using static isida.Psychic.Automatism.AutomatizmTreeSystem;
-using static isida.Psychic.Automatism.InfluenceActionsImagesSystem;
+using static ISIDA.Psychic.Automatism.AutomatizmSystem;
+using static ISIDA.Psychic.Automatism.AutomatizmTreeSystem;
+using static ISIDA.Psychic.Automatism.InfluenceActionsImagesSystem;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.ResearchLogger;
 using static ISIDA.Reflexes.ConditionedReflexesSystem;
@@ -272,6 +272,11 @@ namespace ISIDA.Common
     public EmotionsImageSystem EmotionsImageSystem { get; internal set; }
 
     /// <summary>
+    /// Система управления вербальными образами
+    /// </summary>
+    public VerbalBrocaImagesSystem VerbalBrocaImagesSystem { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -305,6 +310,7 @@ namespace ISIDA.Common
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
+      SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
 
       _disposed = true;
       Debug.WriteLine($"[IsidaContext] Освобождение завершено");
@@ -550,20 +556,26 @@ namespace ISIDA.Common
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
-        // Шаг 20: Система психики
+        // Шаг 20: Система эмоций
         initializationStep = 20;
+        EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
+        context.EmotionsImageSystem = EmotionsImageSystem.Instance;
+
+        // Шаг 21: Система психики
+        initializationStep = 21;
         PsychicSystem.InitializeInstance(
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
           context.InfluenceActionsImages,
           context.ActionsImages,
+          context.EmotionsImageSystem,
           context.Gomeostas);
         context.PsychicSystem = PsychicSystem.Instance;
 
-        // Шаг 20: Система эмоций
-        initializationStep = 20;
-        EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
-        context.EmotionsImageSystem = EmotionsImageSystem.Instance;
+        // Шаг 22: Система вербальных образов
+        initializationStep = 22;
+        VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

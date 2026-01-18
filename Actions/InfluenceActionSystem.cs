@@ -1,4 +1,4 @@
-﻿using isida.Psychic.Automatism;
+﻿using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;

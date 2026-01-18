@@ -1,18 +1,11 @@
-﻿using isida.Psychic;
-using isida.Psychic.Automatism;
+﻿using ISIDA.Psychic;
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
-using ISIDA.Sensors;
 using System;
-using System.Buffers.Text;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
-using static ISIDA.Actions.AdaptiveActionsSystem;
-using static ISIDA.Gomeostas.GomeostasSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 
 namespace ISIDA.Reflexes
@@ -166,7 +159,7 @@ namespace ISIDA.Reflexes
     private int _activeCurBaseStyleID = 0;              // ID текущего образа сочетания стилей поведения
     private int _activeCurTriggerStimulusID = 0;        // ID текущего полного активного образа сочетаний пусковых стимулов
     private int _activeCurReflexTriggerStimulusID = 0;  // ID текущего частичного активного образа сочетаний пусковых стимулов
-    private int _activeGlobalCurTriggerStimulusID = 0;  // ID триггера для логов 
+    private int _activeGlobalCurTriggerStimulusID = 0;  // ID триггера для логов
 
     private int _activeConditionReflexID = 0;           // ID текущего условного рефлекса
     private int _activeGeneticReflexID = 0;             // ID текущего безусловного рефлекса
@@ -191,6 +184,7 @@ namespace ISIDA.Reflexes
 
     private readonly List<int> _geneticReflexesToRun = new List<int>();       // Список безусловных рефлексов для выполнения
     private readonly List<int> _conditionedReflexesToRun = new List<int>();   // Список условных рефлексов для выполнения
+    private List<int> _activetStyleIds = new List<int>();                     // Список текущих активных стилей
 
     #endregion
 
@@ -307,7 +301,7 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
-      bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, null, null, 0, 0); // Тип 1 - изменение условий
+      bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, _activetStyleIds, null, null, 0, 0); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
         Logger.Info("Рефлекс заблокирован психикой");
@@ -338,7 +332,7 @@ namespace ISIDA.Reflexes
         _reflexTree.ConditionsDetection(conditions);
 
         bool fullMatchFound = _reflexTree.DetectedLevel == 2;
-        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
@@ -407,7 +401,7 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
-        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
@@ -755,6 +749,9 @@ namespace ISIDA.Reflexes
       var homeostasisState = _gomeostas.GetHomeostasisState();
       _activeCurBaseID = (int)homeostasisState.OverallState;
 
+      var currentStyles = _gomeostas.GetActiveStyles();
+      _activetStyleIds = currentStyles.Select(s => s.Id).ToList();
+
       // Образ сочетания базовых контекстов (стилей поведения)
       _activeCurBaseStyleID = _gomeostas.ActiveBehaviorStyleImageId;
 
@@ -954,13 +951,12 @@ namespace ISIDA.Reflexes
       // Проверка Level2 - стили поведения
       if (reflex.Level2 != null && reflex.Level2.Any())
       {
-        // Получаем текущие активные стили
-        var currentStyles = _gomeostas.GetActiveStyles();
-        var currentStyleIds = currentStyles.Select(s => s.Id).ToList();
+        if (_activetStyleIds == null || !_activetStyleIds.Any())
+          return false;
 
         // Точное совпадение всех элементов Level2 с текущими активными стилями
-        if (!reflex.Level2.All(styleId => currentStyleIds.Contains(styleId)) ||
-            !currentStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
+        if (!reflex.Level2.All(styleId => _activetStyleIds.Contains(styleId)) ||
+            !_activetStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
           return false;
       }
 
@@ -990,16 +986,12 @@ namespace ISIDA.Reflexes
       if (reflex.Level1 != _activeCurBaseID)
         return false;
 
-      // Проверка Level2 - стили поведения
-      var currentStyles = _gomeostas.GetActiveStyles();
-      var currentStyleIds = currentStyles.Select(s => s.Id).ToList();
-
-      if (currentStyleIds == null || !currentStyleIds.Any())
+      if (_activetStyleIds == null || !_activetStyleIds.Any())
         return false;
 
       // Точное совпадение Level2 с текущими активными стилями
-      if (!reflex.Level2.All(styleId => currentStyleIds.Contains(styleId)) ||
-          !currentStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
+      if (!reflex.Level2.All(styleId => _activetStyleIds.Contains(styleId)) ||
+          !_activetStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
         return false;
 
       // Проверка Level3 - пусковой стимул
