@@ -539,7 +539,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Не удалось очистиь активные акции: {ex.Message}");
+        Logger.Error($"Не удалось очистиь активные акции: {ex.Message}");
         throw;
       }
     }
@@ -555,7 +555,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Не удалось очистиь активные слова: {ex.Message}");
+        Logger.Error($"Не удалось очистиь активные слова: {ex.Message}");
         throw;
       }
     }

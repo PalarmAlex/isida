@@ -148,7 +148,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          System.Diagnostics.Debug.WriteLine($"SetLogsPath error: {ex.Message}");
+          Logger.Error($"SetLogsPath error: {ex.Message}");
         }
       }
     }

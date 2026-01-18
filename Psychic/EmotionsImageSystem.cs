@@ -222,7 +222,7 @@ namespace ISIDA.Psychic
       };
 
       _emotionsImages[newId] = image;
-      Debug.WriteLine($"Создан новый образ ID={newId}");
+      Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

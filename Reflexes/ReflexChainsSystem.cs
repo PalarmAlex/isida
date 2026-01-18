@@ -640,7 +640,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Error loading reflex chains: {ex.Message}");
+        Logger.Error($"Error loading reflex chains: {ex.Message}");
         CreateDefaultReflexChainsFile();
       }
     }
@@ -724,12 +724,12 @@ namespace ISIDA.Reflexes
           fileDescription: "цепочек рефлексов");
 
       if (!result.Success)
-        Debug.WriteLine($"Ошибка сохранения цепочек: {result.ErrorMessage}");
+        Logger.Error($"Ошибка сохранения цепочек: {result.ErrorMessage}");
       else
       {
-        Debug.WriteLine($"Цепочки сохранены. Файл сохранен, строк: {lines.Count}");
+        Logger.Info($"Цепочки сохранены. Файл сохранен, строк: {lines.Count}");
         if (_reflexChains.Count > 0)
-          Debug.WriteLine($"Цепочек сохранено: {_reflexChains.Count}");
+          Logger.Info($"Цепочек сохранено: {_reflexChains.Count}");
       }
 
       return result;

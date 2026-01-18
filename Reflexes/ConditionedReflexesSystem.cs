@@ -794,7 +794,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка удаления условного рефлекса {reflexId}: {ex.Message}");
+        Logger.Error($"Ошибка удаления условного рефлекса {reflexId}: {ex.Message}");
         return false;
       }
       finally
@@ -846,7 +846,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"UpdateAgentLifetime: Ошибка обновления времени жизни: {ex.Message}");
+        Logger.Error($"UpdateAgentLifetime: Ошибка обновления времени жизни: {ex.Message}");
         _currentAgentLifetime = 0;
       }
     }

@@ -289,7 +289,7 @@ namespace ISIDA.Common
     {
       if (_disposed) return;
 
-      Debug.WriteLine("[IsidaContext] Начинается безопасное освобождение ресурсов...");
+      Logger.Info("[IsidaContext] Начинается безопасное освобождение ресурсов...");
 
       SafeDispose(ResearchLogger, "ResearchLogger");
       SafeDispose(ReflexesActivator, "ReflexesActivator");
@@ -313,33 +313,33 @@ namespace ISIDA.Common
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
 
       _disposed = true;
-      Debug.WriteLine($"[IsidaContext] Освобождение завершено");
+      Logger.Info($"[IsidaContext] Освобождение завершено");
     }
 
     private static void SafeDispose(IDisposable disposable, string name)
     {
       if (disposable == null)
       {
-        Debug.WriteLine($"[SafeDispose] - {name} равен null");
+        Logger.Warning($"[SafeDispose] - {name} равен null");
         return;
       }
 
       try
       {
         disposable.Dispose();
-        Debug.WriteLine($"[SafeDispose] ✓ {name} освобожден");
+        Logger.Info($"[SafeDispose] ✓ {name} освобожден");
       }
       catch (ObjectDisposedException)
       {
-        Debug.WriteLine($"[SafeDispose] - {name} уже освобожден");
+        Logger.Warning($"[SafeDispose] - {name} уже освобожден");
       }
       catch (InvalidOperationException)
       {
-        Debug.WriteLine($"[SafeDispose] ! {name}: InvalidOperationException при освобождении");
+        Logger.Warning($"[SafeDispose] ! {name}: InvalidOperationException при освобождении");
       }
       catch (Exception)
       {
-        Debug.WriteLine($"[SafeDispose] ✗ {name}: Неожиданная ошибка при освобождении");
+        Logger.Error($"[SafeDispose] ✗ {name}: Неожиданная ошибка при освобождении");
       }
     }
 

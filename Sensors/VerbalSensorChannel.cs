@@ -786,7 +786,7 @@ namespace ISIDA.Sensors
         // Нормализуем входной текст
         var inputTextNormalized = text.Trim().ToLower();
 
-        //Debug.WriteLine($"=== Распознавание текста: '{text}' ===");
+        //Logger.Info($"=== Распознавание текста: '{text}' ===");
 
         // обрабатываем текст (добавляем слова и фразы в дерево/песочницу)
         ProcessText(text, maxPhraseLength);
@@ -794,7 +794,7 @@ namespace ISIDA.Sensors
         // получаем все фразы из дерева после обработки
         var allPhrases = GetAllPhrasesInternal();
 
-        //Debug.WriteLine($"Доступные фразы в дереве: {string.Join("; ", allPhrases.Values)}");
+        //Logger.Info($"Доступные фразы в дереве: {string.Join("; ", allPhrases.Values)}");
 
         // Ищем точное совпадение
         foreach (var phrase in allPhrases)
@@ -803,13 +803,13 @@ namespace ISIDA.Sensors
 
           if (phraseNormalized == inputTextNormalized)
           {
-            //Debug.WriteLine($"✓ Найдено точное совпадение: '{phrase.Value}' -> ID {phrase.Key}");
+            //Logger.Info($"✓ Найдено точное совпадение: '{phrase.Value}' -> ID {phrase.Key}");
             recognizedPhraseIds.Add(phrase.Key);
             return recognizedPhraseIds;
           }
         }
 
-        //Debug.WriteLine($"✗ Точное совпадение не найдено");
+        //Logger.Info($"✗ Точное совпадение не найдено");
 
         // Если точного совпадения нет, ищем наиболее длинную подходящую фразу
         var candidatePhrases = new List<(int id, string phrase, int length)>();
@@ -822,7 +822,7 @@ namespace ISIDA.Sensors
           if (inputTextNormalized.Contains(phraseNormalized))
           {
             candidatePhrases.Add((phrase.Key, phrase.Value, phrase.Value.Length));
-            //Debug.WriteLine($"~ Найдено частичное совпадение: '{phrase.Value}' в '{text}'");
+            //Logger.Info($"~ Найдено частичное совпадение: '{phrase.Value}' в '{text}'");
           }
         }
 
@@ -830,15 +830,15 @@ namespace ISIDA.Sensors
         if (candidatePhrases.Any())
         {
           var bestMatch = candidatePhrases.OrderByDescending(x => x.length).First();
-          //Debug.WriteLine($"★ Выбрана фраза: '{bestMatch.phrase}' (ID: {bestMatch.id}, длина: {bestMatch.length})");
+          //Logger.Info($"★ Выбрана фраза: '{bestMatch.phrase}' (ID: {bestMatch.id}, длина: {bestMatch.length})");
           recognizedPhraseIds.Add(bestMatch.id);
         }
         else
         {
-          //Debug.WriteLine($"✗ Не найдено подходящих фраз для текста: '{text}'");
+          //Logger.Error($"✗ Не найдено подходящих фраз для текста: '{text}'");
         }
 
-        //Debug.WriteLine($"=== Завершено распознавание ===");
+        //Logger.Info($"=== Завершено распознавание ===");
         return recognizedPhraseIds;
       }
       catch (Exception ex)

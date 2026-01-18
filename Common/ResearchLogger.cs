@@ -459,7 +459,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Debug.WriteLine($"Ошибка логирования состояния системы: {ex.Message}");
+          Logger.Error($"Ошибка логирования состояния системы: {ex.Message}");
         }
       }
     }
@@ -515,7 +515,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка записи буферизованного лога: {ex.Message}");
+        Logger.Error($"Ошибка записи буферизованного лога: {ex.Message}");
       }
     }
 
@@ -602,7 +602,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Debug.WriteLine($"Ошибка логирования процесса стилей: {ex.Message}");
+          Logger.Error($"Ошибка логирования процесса стилей: {ex.Message}");
         }
       }
     }
@@ -667,7 +667,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка сбора состояния параметров: {ex.Message}");
+        Logger.Error($"Ошибка сбора состояния параметров: {ex.Message}");
       }
 
       return state;
@@ -722,7 +722,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения флага критического изменения гомеостаза: {ex.Message}");
+        Logger.Error($"Ошибка получения флага критического изменения гомеостаза: {ex.Message}");
         return null;
       }
     }
@@ -740,7 +740,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения базового состояния: {ex.Message}");
+        Logger.Error($"Ошибка получения базового состояния: {ex.Message}");
         return null;
       }
     }
@@ -765,7 +765,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения образа стилей: {ex.Message}");
+        Logger.Error($"Ошибка получения образа стилей: {ex.Message}");
         return null;
       }
     }
@@ -781,7 +781,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения образа триггеров: {ex.Message}");
+        Logger.Error($"Ошибка получения образа триггеров: {ex.Message}");
         return null;
       }
     }
@@ -797,7 +797,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения безусловного рефлекса: {ex.Message}");
+        Logger.Error($"Ошибка получения безусловного рефлекса: {ex.Message}");
         return null;
       }
     }
@@ -813,7 +813,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка получения условного рефлекса: {ex.Message}");
+        Logger.Error($"Ошибка получения условного рефлекса: {ex.Message}");
         return null;
       }
     }
@@ -883,7 +883,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка записи лога параметров: {ex.Message}");
+        Logger.Error($"Ошибка записи лога параметров: {ex.Message}");
       }
     }
 
@@ -957,7 +957,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"Ошибка записи лога стилей: {ex.Message}");
+        Logger.Error($"Ошибка записи лога стилей: {ex.Message}");
       }
     }
 

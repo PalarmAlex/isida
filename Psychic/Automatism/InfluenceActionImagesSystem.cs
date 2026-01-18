@@ -156,7 +156,7 @@ namespace ISIDA.Psychic.Automatism
           var existing = CheckUnicumInfluenceActionsImageNoLock(actIdList);
           if (existing.Image != null)
           {
-            Debug.WriteLine($"Найден существующий образ ID={existing.Id}");
+            Logger.Info($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -223,7 +223,7 @@ namespace ISIDA.Psychic.Automatism
       };
 
       _actionsImages[newId] = image;
-      Debug.WriteLine($"Создан новый образ ID={newId}");
+      Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

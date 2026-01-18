@@ -169,7 +169,7 @@ namespace ISIDA.Gomeostas
       {
         if (_agentState.IsDead)
         {
-          Debug.WriteLine("GomeostasSystem.UpdateStateOnly: Агент уже мертв, обновление невозможно");
+          Logger.Warning("Агент уже мертв, обновление невозможно");
           return;
         }
 
@@ -199,7 +199,7 @@ namespace ISIDA.Gomeostas
           }
           catch (Exception paramEx)
           {
-            Debug.WriteLine($"GomeostasSystem.UpdateStateOnly: Ошибка в параметре {param.Name}: {paramEx.Message}");
+            Logger.Error($"Ошибка в параметре {param.Name}: {paramEx.Message}");
             throw;
           }
         }
@@ -220,7 +220,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"GomeostasSystem.UpdateStateOnly: КРИТИЧЕСКАЯ ОШИБКА: {ex}");
+        Logger.Error($"КРИТИЧЕСКАЯ ОШИБКА: {ex}");
         throw; // Пробрасываем дальше
       }
       finally
@@ -1473,7 +1473,7 @@ namespace ISIDA.Gomeostas
 
           if (param.Value <= param.CriticalMinValue || param.Value >= param.CriticalMaxValue)
           {
-            Debug.WriteLine($"GomeostasSystem.CheckForCriticalState: КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
+            Logger.Error($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
             _agentState.IsDead = true;
             OnAgentDeath(param);
             return;
@@ -1482,7 +1482,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"GomeostasSystem.CheckForCriticalState: Ошибка: {ex.Message}");
+        Logger.Error($"Ошибка: {ex.Message}");
         throw;
       }
     }

@@ -252,10 +252,8 @@ namespace ISIDA.Psychic.Automatism
 
         if (!_noWarningCreateShow)
         {
-          Debug.WriteLine("Создан новый автоматизм.");
+          Logger.Info($"Создан новый автоматизм Id={automatizm.ID}");
         }
-
-        if (_doWritingFile)
           SaveAutomatizm();
 
         return (id, automatizm);

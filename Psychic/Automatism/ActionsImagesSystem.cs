@@ -279,7 +279,7 @@ namespace ISIDA.Psychic.Automatism
       };
 
       _actionsImages[newId] = image;
-      Debug.WriteLine($"Создан новый образ ID={newId}");
+      Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }

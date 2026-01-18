@@ -181,7 +181,7 @@ namespace ISIDA.Common
       if (shouldStop)
       {
         StopTimers();
-        Debug.WriteLine("GlobalTimer.Stop: Остановка по запросу пользователя завершена");
+        Logger.Info("Остановка по запросу пользователя завершена");
       }
     }
 
@@ -239,7 +239,7 @@ namespace ISIDA.Common
       {
         if (!_isRunning || _timer == null)
         {
-          Debug.WriteLine("GlobalTimer.TimerCallback: Таймер остановлен, пропускаем callback");
+          Logger.Warning("Таймер остановлен, пропускаем callback");
           return;
         }
       }
@@ -258,7 +258,7 @@ namespace ISIDA.Common
           {
             if (!_isRunning)
             {
-              Debug.WriteLine("GlobalTimer.TimerCallback: Таймер остановлен во время fade");
+              Logger.Warning("Таймер остановлен во время fade");
               return;
             }
           }
@@ -271,7 +271,7 @@ namespace ISIDA.Common
         {
           if (!_isRunning)
           {
-            Debug.WriteLine("GlobalTimer.TimerCallback: Таймер остановлен перед ProcessAgentPulse");
+            Logger.Warning("Таймер остановлен перед ProcessAgentPulse");
             return;
           }
           GlobalPulsCount++;
@@ -284,7 +284,7 @@ namespace ISIDA.Common
         {
           if (!_isRunning)
           {
-            Debug.WriteLine("GlobalTimer.TimerCallback: Таймер остановлен перед изменением интервала");
+            Logger.Warning("Таймер остановлен перед изменением интервала");
             return;
           }
           _timer?.Change(GrayDurationMs, Timeout.Infinite);
@@ -292,7 +292,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"GlobalTimer.TimerCallback: Общая ошибка в TimerCallback: {ex.Message}");
+        Logger.Warning($"Общая ошибка в TimerCallback: {ex.Message}");
         OnPulseError?.Invoke($"Общая ошибка таймера: {ex.Message}");
         Stop();
       }
@@ -303,7 +303,7 @@ namespace ISIDA.Common
     /// </summary>
     private static void SafeStopWithAgentDeath()
     {
-      Debug.WriteLine("SafeStopWithAgentDeath: Начало остановки из-за смерти агента");
+      Logger.Info("Начало остановки из-за смерти агента");
 
       bool shouldStop = false;
       lock (_timerLock)
@@ -322,7 +322,7 @@ namespace ISIDA.Common
 
         // Останавливаем таймеры
         StopTimers();
-        Debug.WriteLine("SafeStopWithAgentDeath: Остановка завершена");
+        Logger.Info("Остановка завершена");
       }
     }
 
@@ -331,7 +331,7 @@ namespace ISIDA.Common
     /// </summary>
     private static void SafeStopWithError(string errorMessage)
     {
-      Debug.WriteLine($"SafeStopWithError: Начало остановки из-за ошибки: {errorMessage}");
+      Logger.Info($"Начало остановки из-за ошибки: {errorMessage}");
 
       bool shouldStop = false;
       lock (_timerLock)
@@ -351,7 +351,7 @@ namespace ISIDA.Common
         // Останавливаем таймеры
         StopTimers();
 
-        Debug.WriteLine("SafeStopWithError: Остановка завершена");
+        Logger.Info("Остановка завершена");
       }
     }
 
@@ -381,7 +381,7 @@ namespace ISIDA.Common
         // Dispose таймеров ВНЕ lock чтобы избежать deadlock
         timerToDispose?.Dispose();
         autosaveTimerToDispose?.Dispose();
-        Debug.WriteLine("StopTimers: Таймеры disposed");
+        Logger.Warning("Таймеры disposed");
 
         TriggerAutosave();
 
@@ -393,11 +393,11 @@ namespace ISIDA.Common
           PulsationStateChanged?.Invoke();
         }
 
-        Debug.WriteLine("StopTimers: Остановка завершена успешно");
+        Logger.Info("Остановка завершена успешно");
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"StopTimers: Ошибка при остановке: {ex.Message}");
+        Logger.Error($"Ошибка при остановке: {ex.Message}");
       }
     }
 
@@ -412,7 +412,7 @@ namespace ISIDA.Common
         {
           if (!_isRunning)
           {
-            Debug.WriteLine("GlobalTimer.ProcessAgentPulse: Таймер остановлен, пропускаем пульс");
+            Logger.Warning("Таймер остановлен, пропускаем пульс");
             return;
           }
         }
@@ -422,7 +422,7 @@ namespace ISIDA.Common
         }
         catch (Exception gomeostasEx)
         {
-          Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: КРИТИЧЕСКАЯ ОШИБКА в UpdateStateOnly: {gomeostasEx}");
+          Logger.Error($"КРИТИЧЕСКАЯ ОШИБКА в UpdateStateOnly: {gomeostasEx}");
           SafeStopWithError($"Критическая ошибка гомеостаза: {gomeostasEx.Message}");
           return;
         }
@@ -434,7 +434,7 @@ namespace ISIDA.Common
         }
         catch (Exception stateEx)
         {
-          Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка получения состояния агента: {stateEx.Message}");
+          Logger.Error($"Ошибка получения состояния агента: {stateEx.Message}");
           SafeStopWithError($"Ошибка получения состояния: {stateEx.Message}");
           return;
         }
@@ -442,7 +442,7 @@ namespace ISIDA.Common
         // Если агент мертв - прерываем обработку
         if (agentState?.IsDead == true)
         {
-          Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Агент мертв на пульсе {GlobalPulsCount}");
+          Logger.Warning($"Агент мертв на пульсе {GlobalPulsCount}");
           SafeStopWithAgentDeath();
           return;
         }
@@ -464,7 +464,7 @@ namespace ISIDA.Common
           }
           catch (Exception conditionedEx)
           {
-            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в IncrementPulse: {conditionedEx.Message}");
+            Logger.Error($"Ошибка в IncrementPulse: {conditionedEx.Message}");
             // Важно: НЕ сбрасываем _conditionedReflexesSystem в null при ошибке,
             // так как это может быть временной проблемой
           }
@@ -478,7 +478,7 @@ namespace ISIDA.Common
           }
           catch (Exception reflexEx)
           {
-            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в ProcessReflexPulse: {reflexEx.Message}");
+            Logger.Error($"Ошибка в ProcessReflexPulse: {reflexEx.Message}");
             // Продолжаем выполнение, даже если рефлексы сломались
           }
         }
@@ -494,7 +494,7 @@ namespace ISIDA.Common
           }
           catch (Exception cleanupEx)
           {
-            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка очистки рефлексов: {cleanupEx.Message}");
+            Logger.Error($"Ошибка очистки рефлексов: {cleanupEx.Message}");
           }
         }
 
@@ -506,7 +506,7 @@ namespace ISIDA.Common
           }
           catch (Exception actionEx)
           {
-            Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в CleanupExpiredReflexActions: {actionEx.Message}");
+            Logger.Error($"Ошибка в CleanupExpiredReflexActions: {actionEx.Message}");
             // Продолжаем выполнение, даже если действия сломались
           }
         }
@@ -516,7 +516,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: НЕОБРАБОТАННАЯ КРИТИЧЕСКАЯ ОШИБКА: {ex}");
+        Logger.Error($"НЕОБРАБОТАННАЯ КРИТИЧЕСКАЯ ОШИБКА: {ex}");
         SafeStopWithError($"Критическая ошибка обработки пульса: {ex.Message}");
       }
       finally
@@ -528,7 +528,7 @@ namespace ISIDA.Common
         }
         catch (Exception finalEx)
         {
-          Debug.WriteLine($"GlobalTimer.ProcessAgentPulse: Ошибка в finally блоке: {finalEx.Message}");
+          Logger.Error($"Ошибка в finally блоке: {finalEx.Message}");
         }
       }
     }
