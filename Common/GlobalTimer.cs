@@ -397,7 +397,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка при остановке: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -422,7 +422,7 @@ namespace ISIDA.Common
         }
         catch (Exception gomeostasEx)
         {
-          Logger.Error($"КРИТИЧЕСКАЯ ОШИБКА в UpdateStateOnly: {gomeostasEx}");
+          Logger.Error($"{gomeostasEx}");
           SafeStopWithError($"Критическая ошибка гомеостаза: {gomeostasEx.Message}");
           return;
         }
@@ -434,7 +434,7 @@ namespace ISIDA.Common
         }
         catch (Exception stateEx)
         {
-          Logger.Error($"Ошибка получения состояния агента: {stateEx.Message}");
+          Logger.Error($"{stateEx.Message}");
           SafeStopWithError($"Ошибка получения состояния: {stateEx.Message}");
           return;
         }
@@ -448,7 +448,7 @@ namespace ISIDA.Common
         }
         else
         {
-          // флаг сна получмть кодга класс сна будет
+          // флаг сна получмть когда класс сна будет
           int sleepingType = 0;
           var currentStyles = agentState.ActiveStyles;
           var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
@@ -464,7 +464,7 @@ namespace ISIDA.Common
           }
           catch (Exception conditionedEx)
           {
-            Logger.Error($"Ошибка в IncrementPulse: {conditionedEx.Message}");
+            Logger.Error($"{conditionedEx.Message}");
             // Важно: НЕ сбрасываем _conditionedReflexesSystem в null при ошибке,
             // так как это может быть временной проблемой
           }
@@ -478,7 +478,7 @@ namespace ISIDA.Common
           }
           catch (Exception reflexEx)
           {
-            Logger.Error($"Ошибка в ProcessReflexPulse: {reflexEx.Message}");
+            Logger.Error($"{reflexEx.Message}");
             // Продолжаем выполнение, даже если рефлексы сломались
           }
         }
@@ -494,7 +494,7 @@ namespace ISIDA.Common
           }
           catch (Exception cleanupEx)
           {
-            Logger.Error($"Ошибка очистки рефлексов: {cleanupEx.Message}");
+            Logger.Error($"{cleanupEx.Message}");
           }
         }
 
@@ -506,7 +506,7 @@ namespace ISIDA.Common
           }
           catch (Exception actionEx)
           {
-            Logger.Error($"Ошибка в CleanupExpiredReflexActions: {actionEx.Message}");
+            Logger.Error($"{actionEx.Message}");
             // Продолжаем выполнение, даже если действия сломались
           }
         }
@@ -516,7 +516,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"НЕОБРАБОТАННАЯ КРИТИЧЕСКАЯ ОШИБКА: {ex}");
+        Logger.Error($"{ex.Message}");
         SafeStopWithError($"Критическая ошибка обработки пульса: {ex.Message}");
       }
       finally
@@ -524,11 +524,11 @@ namespace ISIDA.Common
         try
         {
           _gomeostas.IsNewConditions = false;
-          _reflexesActivator.ResetStates();
+          _reflexesActivator.ResetStates(GlobalPulsCount);
         }
         catch (Exception finalEx)
         {
-          Logger.Error($"Ошибка в finally блоке: {finalEx.Message}");
+          Logger.Error($"{finalEx.Message}");
         }
       }
     }

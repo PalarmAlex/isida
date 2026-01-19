@@ -114,7 +114,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации AutomatizmTreeSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -226,7 +226,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка создания узла дерева автоматизмов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -580,7 +580,7 @@ namespace ISIDA.Psychic.Automatism
         }
         catch (Exception ex)
         {
-          Logger.Error($"Ошибка создания файла дерева автоматизмов: {ex.Message}");
+          Logger.Error($"{ex.Message}");
           throw;
         }
       }
@@ -636,7 +636,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла дерева автоматизмов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -729,7 +729,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

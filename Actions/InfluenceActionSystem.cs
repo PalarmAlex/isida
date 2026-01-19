@@ -486,7 +486,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        FileValidator.LogError($"ApplySingleInfluenceActionInternal: Исключение in ApplySingleInfluenceActionInternal: {ex}");
+        FileValidator.LogError($"{ex.Message}");
         return (false, ex.Message);
       }
     }

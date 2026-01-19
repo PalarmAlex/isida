@@ -70,7 +70,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации ReflexChainsSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -260,7 +260,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка при удалении цепочки {chainId}: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return false;
       }
       finally
@@ -640,7 +640,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error loading reflex chains: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         CreateDefaultReflexChainsFile();
       }
     }
@@ -716,15 +716,15 @@ namespace ISIDA.Reflexes
         }
       }
 
-      var result = FileValidator.SafeSaveFile(
+      var result = SafeSaveFile(
           GetReflexChainsFilePath(),
           lines,
-          FileValidator.IsValidReflexChainsFile,
+          IsValidReflexChainsFile,
           minLinesCount: 10,
           fileDescription: "цепочек рефлексов");
 
       if (!result.Success)
-        Logger.Error($"Ошибка сохранения цепочек: {result.ErrorMessage}");
+        Logger.Warning($"Ошибка сохранения цепочек: {result.ErrorMessage}");
       else
       {
         Logger.Info($"Цепочки сохранены. Файл сохранен, строк: {lines.Count}");
@@ -750,7 +750,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

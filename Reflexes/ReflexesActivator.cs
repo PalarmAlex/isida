@@ -91,7 +91,7 @@ namespace ISIDA.Reflexes
       _influenceActions.TriggerStimulusActivated += OnTriggerStimulusActivated;
       _influenceActions.PhraseStimulusActivated += OnPhraseStimulusActivated;
 
-      ResetStates();
+      ResetStates(GlobalTimer.GlobalPulsCount);
     }
 
     private void OnTriggerStimulusActivated(
@@ -237,7 +237,7 @@ namespace ISIDA.Reflexes
       _isSleeping = isSleeping;
 
       if (_gomeostas.IsNewConditions || (pulseChainCompleted !=0 && pulseCount > pulseChainCompleted + _reflexActionDuration))
-        DeactivateChain();
+        DeactivateChain(pulseCount);
 
       ProcessActiveChain(pulseCount);
 
@@ -279,7 +279,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка формирования условных рефлексов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -341,7 +341,7 @@ namespace ISIDA.Reflexes
 
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
-        DeactivateChain();
+        DeactivateChain(pulseCount);
 
         if (!fullMatchFound && _reflexTree.DetectedLastNodeID > 0)
         {
@@ -411,7 +411,7 @@ namespace ISIDA.Reflexes
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
         _adaptiveActions.ClearActivePhrases();
-        DeactivateChain();
+        DeactivateChain(pulseCount);
         ExecuteReflexes(pulseCount);
 
         if (_activeCurTriggerStimulusID != 0)
@@ -436,7 +436,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"ActiveFromPhrase: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {
@@ -534,7 +534,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"ExecuteReflexes: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -576,7 +576,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"FindNodeWithChain: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return null;
       }
     }
@@ -647,12 +647,12 @@ namespace ISIDA.Reflexes
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
         }
         else
-          Logger.Error($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
+          Logger.Warning($"Pulse: {pulseCount}, Не удалось активировать цепочку {chainId}");
       }
       catch (Exception ex)
       {
-        Logger.Error($"Pulse: {pulseCount}, Ошибка запуска цепочки: {ex.Message}");
-        DeactivateChain();
+        Logger.Error($"{ex.Message}");
+        DeactivateChain(pulseCount);
       }
     }
 
@@ -1028,14 +1028,14 @@ namespace ISIDA.Reflexes
       if (!CanContinueChain())
       {
         Logger.Info($"Pulse: {pulseCount}, Цепочка {_activeChainId} прервана - изменились условия");
-        DeactivateChain();
+        DeactivateChain(pulseCount);
         return;
       }
 
       var activeChain = _reflexTree.GetActiveChains();
       if (!activeChain.TryGetValue(_activeChainId, out var chain))
       {
-        DeactivateChain();
+        DeactivateChain(pulseCount);
         return;
       }
 
@@ -1050,8 +1050,8 @@ namespace ISIDA.Reflexes
 
       if (!result.Success)
       {
-        Logger.Error($"Pulse: {pulseCount}, Ошибка выполнения шага цепочки {_activeChainId}");
-        DeactivateChain();
+        Logger.Warning($"Pulse: {pulseCount}, Ошибка выполнения шага цепочки {_activeChainId}");
+        DeactivateChain(pulseCount);
         return;
       }
 
@@ -1079,7 +1079,7 @@ namespace ISIDA.Reflexes
         Logger.Info($"Pulse: {pulseCount}, Цепочка {_activeChainId} успешно завершена. " +
                $"Выполнено действий в цепочке: {_completedReflexesInChain.Count}");
         // цепочка сбросится в ProcessReflexPulse() - нужно дать время завершить действие
-        //DeactivateChain();
+        //DeactivateChain(pulseCount);
       }
     }
 
@@ -1159,12 +1159,12 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Деактивация цепочки
     /// </summary>
-    private void DeactivateChain()
+    private void DeactivateChain(int pulseCount)
     {
       if (_activeChainId > 0)
       {
         _reflexTree.DeactivateChain(_activeChainId);
-        Logger.Info($"Цепочка {_activeChainId} деактивирована");
+        Logger.Info($"Pulse: {pulseCount}, Цепочка {_activeChainId} деактивирована");
         _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
         pulseChainCompleted = 0;
       }
@@ -1184,7 +1184,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Сброс состояний
     /// </summary>
-    public void ResetStates()
+    public void ResetStates(int pulseCount)
     {
       _lock.EnterWriteLock();
       try
@@ -1193,7 +1193,7 @@ namespace ISIDA.Reflexes
         {
           _activeCurBaseID = 0;
           _activeCurBaseStyleID = 0;
-          DeactivateChain();
+          DeactivateChain(pulseCount);
         }
         _activeCurTriggerStimulusID = 0;
         _activeCurReflexTriggerStimulusID = 0;

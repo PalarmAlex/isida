@@ -60,7 +60,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации VerbalBrocaImagesSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -176,7 +176,7 @@ namespace ISIDA.Psychic
           var existing = CheckUnicumVerbalBrocaImageNoLock(simbolID, phraseIdList, toneId, moodId);
           if (existing.Image != null)
           {
-            Logger.Error($"Найден существующий образ ID={existing.Id}");
+            Logger.Info($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -349,7 +349,7 @@ namespace ISIDA.Psychic
         }
         catch (Exception ex)
         {
-          Logger.Error($"Ошибка создания файла вербального образа: {ex.Message}");
+          Logger.Error($"{ex.Message}");
           throw;
         }
       }
@@ -400,7 +400,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла вербальных образов': {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -484,7 +484,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

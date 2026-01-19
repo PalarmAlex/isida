@@ -54,14 +54,14 @@ namespace ISIDA.Psychic
         throw new InvalidOperationException("PsychicSystem уже инициализирован.");
 
       _instance = new PsychicSystem(
-          automatizmSystem,
-          automatizmTreeSystem,
-          influenceActionsImagesSystem,
-          actionsImagesSystem,
-          emotionsImageSystem,
-          sensorySystem,
-          verbalBrocaImages,
-          gomeostas);
+        automatizmSystem,
+        automatizmTreeSystem,
+        influenceActionsImagesSystem,
+        actionsImagesSystem,
+        emotionsImageSystem,
+        sensorySystem,
+        verbalBrocaImages,
+        gomeostas);
     }
 
     private readonly AutomatizmSystem _automatizmSystem;
@@ -72,16 +72,17 @@ namespace ISIDA.Psychic
     private readonly EmotionsImageSystem _emotionsImageSystem;
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
+    private OrientationReflexSystem _orientationReflexSystem;
 
     private PsychicSystem(
-        AutomatizmSystem automatizmSystem,
-        AutomatizmTreeSystem automatizmTreeSystem,
-        InfluenceActionsImagesSystem influenceActionsImagesSystem,
-        ActionsImagesSystem actionsImagesSystem,
-        EmotionsImageSystem emotionsImageSystem,
-        SensorySystem sensorySystem,
-        VerbalBrocaImagesSystem verbalBrocaImages,
-        GomeostasSystem gomeostas)
+      AutomatizmSystem automatizmSystem,
+      AutomatizmTreeSystem automatizmTreeSystem,
+      InfluenceActionsImagesSystem influenceActionsImagesSystem,
+      ActionsImagesSystem actionsImagesSystem,
+      EmotionsImageSystem emotionsImageSystem,
+      SensorySystem sensorySystem,
+      VerbalBrocaImagesSystem verbalBrocaImages,
+      GomeostasSystem gomeostas)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
@@ -97,18 +98,32 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
+    /// Установка системы ориентировочного рефлекса
+    /// </summary>
+    public void SetOrientationReflexSystem(OrientationReflexSystem orientationReflexSystem)
+    {
+      if (orientationReflexSystem == null)
+        throw new ArgumentNullException(nameof(orientationReflexSystem));
+
+      if (!orientationReflexSystem.AreDependenciesSet)
+        throw new InvalidOperationException("Зависимости OrientationReflexSystem не установлены. Вызовите SetDependencies().");
+
+      _orientationReflexSystem = orientationReflexSystem;
+    }
+
+    /// <summary>
     /// Инициализирует базовое дерево автоматизмов
     /// </summary>
     private void InitializeBasicAutomatizmTree()
     {
       try
       {
-        // Создать первые три ветки базовых состояний, если их нет
+        // Создать первые три ветки базовых состояний, если их нет9
         _automatizmTreeSystem.CreateBasicAutomatizmTree();
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации дерева автоматизмов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -311,41 +326,51 @@ namespace ISIDA.Psychic
         return false;
       }
 
-      ActivationTypeSensor = activationType;
-      _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфокартины
-      int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
-      (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
-      int toneMood = GetToneMoodID(toneId, moodId);
-
-      int firstSimbol = 0;
-      int verbId = 0;
-
-      if (phraseIdList.Any())
+      try
       {
-        firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(phraseIdList[0]);
-        (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
-      }
+        ActivationTypeSensor = activationType;
+        _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфокартины
+        int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
+        (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
+        int toneMood = GetToneMoodID(toneId, moodId);
 
-      // Активация дерева автоматизмов
-      int automatizmNodeId = AutomatizmTreeActivation(
-          activationType,
-          currentBaseId,
-          currentEmotionId,
-          currentActivityId,
-          toneMood,
-          firstSimbol,
-          verbId);
+        int firstSimbol = 0;
+        int verbId = 0;
 
-      if (automatizmNodeId > 0)
-      {
-        // Получить автоматизм из узла
-        var automatizm = GetAutomatizmFromNode(automatizmNodeId);
-        if (automatizm != null)
+        if (phraseIdList?.Any() == true) // так как список может быть Null
         {
-          // Выполнить автоматизм
-          ExecuteAutomatizm(automatizm);
-          return true; // Блокировать рефлексы
+          firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(phraseIdList[0]);
+          (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
         }
+
+        // Активация дерева автоматизмов
+        int automatizmNodeId = AutomatizmTreeActivation(
+            activationType,
+            currentBaseId,
+            currentEmotionId,
+            currentActivityId,
+            toneMood,
+            firstSimbol,
+            verbId);
+
+        if (automatizmNodeId > 0)
+        {
+          // Получить автоматизм из узла
+          var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
+          var automatizm = _orientationReflexSystem.OrientationReflex(foundAutomatizm?.ID ?? 0);
+
+          if (automatizm != null)
+          {
+            // Выполнить автоматизм
+            ExecuteAutomatizm(automatizm);
+
+            return true; // Блокировать рефлексы
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
       }
 
       return false; // Не блокировать рефлексы
@@ -716,19 +741,19 @@ namespace ISIDA.Psychic
       {
         if (_actionsImagesSystem == null || !ActionsImagesSystem.IsInitialized)
         {
-          Logger.Error("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
+          Logger.Warning("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
           return 0;
         }
 
         if (!ActionsImagesSystem.IsValidToneId(toneId))
         {
-          Logger.Error($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
+          Logger.Warning($"Некорректный toneId: {toneId}, используется значение по умолчанию (0)");
           toneId = 0; // Нормальный
         }
 
         if (!ActionsImagesSystem.IsValidMoodId(moodId))
         {
-          Logger.Error($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
+          Logger.Warning($"Некорректный moodId: {moodId}, используется значение по умолчанию (0)");
           moodId = 0; // Нормальное
         }
 
@@ -752,7 +777,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка создания образа действий: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return 0;
       }
     }
@@ -769,13 +794,13 @@ namespace ISIDA.Psychic
       {
         if (_influenceActionsImagesSystem == null || !InfluenceActionsImagesSystem.IsInitialized)
         {
-          Logger.Error("InfluenceActionsImagesSystem не инициализирована, образ сочетаний действий не создан");
+          Logger.Warning("InfluenceActionsImagesSystem не инициализирована, образ сочетаний действий не создан");
           return 0;
         }
 
         if (actIdList == null || actIdList.Count == 0)
         {
-          Logger.Error("Список действий пуст, образ сочетаний действий не создан");
+          Logger.Warning("Список действий пуст, образ сочетаний действий не создан");
           return 0;
         }
 
@@ -795,7 +820,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка создания образа сочетаний действий: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return 0;
       }
     }

@@ -77,7 +77,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"AdaptiveActionsSystem: Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
      }
@@ -539,7 +539,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"Не удалось очистиь активные акции: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -555,7 +555,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"Не удалось очистиь активные слова: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -867,7 +867,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"LoadActions: Ошибка при загрузке адаптивных действий агента: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -1033,7 +1033,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

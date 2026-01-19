@@ -838,7 +838,7 @@ namespace ISIDA.Sensors
         }
         else
         {
-          //Logger.Error($"✗ Не найдено подходящих фраз для текста: '{text}'");
+          //Logger.Warning($"✗ Не найдено подходящих фраз для текста: '{text}'");
         }
 
         //Logger.Info($"=== Завершено распознавание ===");

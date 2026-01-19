@@ -148,7 +148,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации AdaptiveActionsSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -959,7 +959,7 @@ namespace ISIDA.Reflexes
               {
                 createdCount++;
                 existingReflexesSet.Add(candidateKey);
-                Logger.Error($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действиями [{string.Join(",", adaptiveActions)}]");
+                Logger.Info($"Создан рефлекс ID: {reflexId} для состояния {baseState} и стилей [{string.Join(",", styleIds)}] с действиями [{string.Join(",", adaptiveActions)}]");
               }
 
               if (reflexWarnings != null && reflexWarnings.Any())
@@ -967,7 +967,7 @@ namespace ISIDA.Reflexes
             }
             catch (Exception ex)
             {
-              warnings.Add($"Ошибка создания рефлекса для состояния {baseState} и стилей [{string.Join(",", styleCombination.Select(s => s.Id))}]: {ex.Message}");
+              warnings.Add($"{ex.Message}");
             }
           }
         }
@@ -1252,7 +1252,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"LoadGeneticReflexes: Ошибка при загрузке рефлексов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -1582,7 +1582,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

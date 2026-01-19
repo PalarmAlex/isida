@@ -60,7 +60,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации EmotionsSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -155,7 +155,7 @@ namespace ISIDA.Psychic
           var existing = CheckUnicumEmotionsImageNoLock(baseStylesList);
           if (existing.Image != null)
           {
-            Logger.Error($"Найден существующий образ ID={existing.Id}");
+            Logger.Info($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -309,7 +309,7 @@ namespace ISIDA.Psychic
         }
         catch (Exception ex)
         {
-          Logger.Error($"Ошибка создания файла образов действий: {ex.Message}");
+          Logger.Error($"{ex.Message}");
           throw;
         }
       }
@@ -348,7 +348,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла образов эмоций': {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -424,7 +424,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

@@ -60,7 +60,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации PerceptionImagesSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -209,11 +209,11 @@ namespace ISIDA.Reflexes
         {
           var saveResult = SaveBehaviorStyleImages();
           if (!saveResult.Success)
-            Logger.Error($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
+            Logger.Warning($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
         }
         catch (Exception ex)
         {
-          Logger.Error($"Исключение при сохранении образа стилей ID {resultId}: {ex.Message}");
+          Logger.Error($"{ex.Message}");
         }
       }
 
@@ -290,12 +290,12 @@ namespace ISIDA.Reflexes
           var saveResult = SavePerceptionImages();
           if (!saveResult.Success)
           {
-            Logger.Error($"Ошибка сохранения образа восприятия ID {resultId}: {saveResult.ErrorMessage}");
+            Logger.Warning($"Ошибка сохранения образа восприятия ID {resultId}: {saveResult.ErrorMessage}");
           }
         }
         catch (Exception ex)
         {
-          Logger.Error($"Исключение при сохранении образа восприятия ID {resultId}: {ex.Message}");
+          Logger.Error($"{ex.Message}");
         }
       }
 
@@ -526,7 +526,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла образов восприятия: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -579,7 +579,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка загрузки файла образов стилей реагирования: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -669,7 +669,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка сохранения образов стилей и воздействий: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -715,7 +715,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

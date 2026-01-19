@@ -148,7 +148,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"SetLogsPath error: {ex.Message}");
+          Logger.Error($"{ex.Message}");
         }
       }
     }
@@ -458,7 +458,7 @@ namespace ISIDA.Common
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 3)
+        if (parts.Length < 2)
           return false;
 
         if (!int.TryParse(parts[0], out _))
@@ -565,7 +565,7 @@ namespace ISIDA.Common
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 9)
+        if (parts.Length < 11)
           return false;
 
         if (!int.TryParse(parts[0], out _) ||
@@ -961,8 +961,8 @@ namespace ISIDA.Common
         if (!int.TryParse(parts[6], out int simbolId) || simbolId < 0)
           return false;
 
-        // Проверяем PhraseID (может быть 0)
-        if (!int.TryParse(parts[7], out int phraseId) || phraseId < 0)
+        // Проверяем VerbID (может быть 0)
+        if (!int.TryParse(parts[7], out int verbId) || verbId < 0)
           return false;
 
         return true; // Достаточно одной валидной строки данных

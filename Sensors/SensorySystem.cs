@@ -152,7 +152,7 @@ namespace ISIDA.Sensors
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка инициализации: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -183,7 +183,7 @@ namespace ISIDA.Sensors
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка при каскадной очистке PhraseId: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 

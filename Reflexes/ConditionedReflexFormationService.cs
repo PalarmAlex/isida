@@ -262,7 +262,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"[ProcessConditionedAssociation]. Ошибка: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -302,12 +302,12 @@ namespace ISIDA.Reflexes
           if (success)
             Logger.Info($"Удален устаревший условный рефлекс ID={reflexId}");
           else
-            Logger.Error($"[CleanupOldReflexes]. Не удалось обновить файл условных рефлексов: {errMsg}");
+            Logger.Warning($"{errMsg}");
         }
       }
       catch (Exception ex)
       {
-        Logger.Error($"[CleanupOldReflexes]. Ошибка очистки рефлексов: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 

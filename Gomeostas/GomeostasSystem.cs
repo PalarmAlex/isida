@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.FileValidator;
+using static ISIDA.Psychic.InformationEnvironmentSystem;
 
 namespace ISIDA.Gomeostas
 {
@@ -70,7 +71,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"GomeostasSystem: Ошибка инициализации GomeostasSystem: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -199,7 +200,7 @@ namespace ISIDA.Gomeostas
           }
           catch (Exception paramEx)
           {
-            Logger.Error($"Ошибка в параметре {param.Name}: {paramEx.Message}");
+            Logger.Error($"{paramEx.Message}");
             throw;
           }
         }
@@ -220,8 +221,8 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"КРИТИЧЕСКАЯ ОШИБКА: {ex}");
-        throw; // Пробрасываем дальше
+        Logger.Error($"{ex.Message}");
+        throw;
       }
       finally
       {
@@ -442,7 +443,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"IsStyleUsedInBehaviorStyleImages: Ошибка при проверке использования стиля {styleId} в образах: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return true;
       }
     }
@@ -1473,7 +1474,7 @@ namespace ISIDA.Gomeostas
 
           if (param.Value <= param.CriticalMinValue || param.Value >= param.CriticalMaxValue)
           {
-            Logger.Error($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
+            Logger.Warning($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
             _agentState.IsDead = true;
             OnAgentDeath(param);
             return;
@@ -1482,7 +1483,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         throw;
       }
     }
@@ -1490,7 +1491,7 @@ namespace ISIDA.Gomeostas
     private void OnAgentDeath(ParameterData criticalParameter)
     {
       // Логируем причину смерти
-      Logger.Error($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
+      Logger.Info($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
                             $"достиг критического значения {criticalParameter.Value}");
 
       // Можно добавить событие для внешних систем
@@ -1539,15 +1540,14 @@ namespace ISIDA.Gomeostas
       catch (InvalidOperationException ex) when (ex.Message.Contains("Агент мертв") || ex.Message.Contains("Агент спит"))
       {
         if (!silent)
-          // Логируем, но не выбрасываем исключение
-          Logger.Error($"TryEnsureAgentState: Операция заблокирована: {ex.Message}");
+          Logger.Error($"{ex.Message}");
 
         return false;
       }
       catch (Exception ex)
       {
         if (!silent)
-          Logger.Error($"TryEnsureAgentState: Ошибка проверки состояния агента: {ex.Message}");
+          Logger.Error($"{ex.Message}");
 
         return false;
       }
@@ -1937,15 +1937,15 @@ namespace ISIDA.Gomeostas
             _conditionedReflexesSystem.removeAllConditionedReflexes = false;
             var result = _conditionedReflexesSystem.SaveConditionedReflexes();
             if (!result.Success)
-              Logger.Error($"ClearConditionedReflexes: Ошибка очистки условных рефлексов: {result.ErrorMessage}");
+              Logger.Warning($"{result.ErrorMessage}");
             else
-              Logger.Error("ClearConditionedReflexes: условные рефлексы успешно очищены");
+              Logger.Info("Условные рефлексы успешно очищены");
           }
         }
       }
       catch (Exception ex)
       {
-        Logger.Error($"ClearConditionedReflexes: Ошибка при очистке образов восприятия: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -2204,7 +2204,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"CreateBehaviorStyleImageFromActiveStyles: Ошибка при создании образа стилей поведения: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return 0;
       }
     }
@@ -2223,14 +2223,14 @@ namespace ISIDA.Gomeostas
             break;
 
           if (attempt == maxRetries)
-            Logger.Error($"SaveBehaviorStyleImagesWithRetry: Не удалось сохранить образы стилей после {maxRetries} попыток: {result.ErrorMessage}");
+            Logger.Warning($"{result.ErrorMessage}");
           else
             Thread.Sleep(100 * attempt); // Увеличивающаяся задержка
         }
         catch (Exception ex)
         {
           if (attempt == maxRetries)
-            Logger.Error($"SaveBehaviorStyleImagesWithRetry: Критическая ошибка при сохранении образов стилей: {ex.Message}");
+            Logger.Error($"{ex.Message}");
         }
       }
     }
@@ -2505,7 +2505,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"LoadAgentProperties: Ошибка при загрузке свойств агента: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -2564,7 +2564,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"LoadAgentParameters: Ошибка при загрузке параметров агента: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
     }
 
@@ -2640,14 +2640,14 @@ namespace ISIDA.Gomeostas
 
         if (!result.Success)
         {
-          Logger.Error($"SaveAgentProperties: Ошибка сохранения свойств агента: {result.ErrorMessage}");
+          Logger.Error($"{result.ErrorMessage}");
         }
 
         return result;
       }
       catch (Exception ex)
       {
-        string error = $"SaveAgentProperties: Критическая ошибка при сохранении свойств агента: {ex.Message}";
+        string error = $"{ex.Message}";
         Logger.Error(error);
         return (false, error);
       }
@@ -2848,7 +2848,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"Error during disposal: {ex.Message}");
+        Logger.Error($"{ex.Message}");
       }
       finally
       {
