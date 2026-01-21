@@ -345,7 +345,7 @@ namespace ISIDA.Reflexes
         List<int> level3,
         List<int> adaptiveActions)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       var warnings = new List<string>();
@@ -431,7 +431,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     public string[] UpdateGeneticReflex(GeneticReflex reflex)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (reflex == null)
@@ -598,7 +598,7 @@ namespace ISIDA.Reflexes
     /// <returns>Кортеж (успех, количество обновленных рефлексов, сообщение об ошибке)</returns>
     public (bool Success, int UpdatedCount, string ErrorMessage) UpdateAllGeneticReflex()
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         return (false, 0, "Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (PerceptionImagesSystem.Instance == null)
@@ -756,7 +756,7 @@ namespace ISIDA.Reflexes
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveGeneticReflex(int reflexId)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (!_geneticReflexes.ContainsKey(reflexId))
@@ -889,7 +889,7 @@ namespace ISIDA.Reflexes
     /// <returns>Кортеж (успех, количество созданных рефлексов, сообщение об ошибке)</returns>
     public (bool Success, int CreatedCount, string ErrorMessage) CreateGeneticReflexesForAllStatesAndStyles(GomeostasSystem gomeostasSystem)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         return (false, 0, "Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (gomeostasSystem == null)
@@ -1262,7 +1262,7 @@ namespace ISIDA.Reflexes
     /// <returns>Кортеж (успех, сообщение об ошибке)</returns>
     public (bool Success, string ErrorMessage) SaveGeneticReflexes(bool IsValidate = true)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       _lock.EnterWriteLock();

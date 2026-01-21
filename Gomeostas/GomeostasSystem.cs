@@ -1,5 +1,6 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Psychic;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -18,13 +19,14 @@ using static ISIDA.Psychic.InformationEnvironmentSystem;
 namespace ISIDA.Gomeostas
 {
   /// <summary>
-  /// Система управления гомеостазом для одного агента
+  /// Система управления гомеостазом агента
   /// </summary>
   public sealed class GomeostasSystem : IDisposable
   {
     private readonly StyleCombinationsManager _styleCombinationsManager;
     private PerceptionImagesSystem _perceptionImagesSystem;
     private ConditionedReflexesSystem _conditionedReflexesSystem;
+    private readonly InformationEnvironmentSystem _informationEnvironmentSystem;
     private ResearchLogger _researchLogger;
     private HomeostasisOverallState _currentOverallState = HomeostasisOverallState.Normal;
 
@@ -42,7 +44,7 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
-    public GomeostasSystem(string gomeostasFolderPath = null)
+    public GomeostasSystem(InformationEnvironmentSystem informationEnvironmentSystem, string gomeostasFolderPath = null)
     {
       try
       {
@@ -50,6 +52,8 @@ namespace ISIDA.Gomeostas
         GomeostasFolderPath = gomeostasFolderPath ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "ISIDA", "Data", "Gomeostas");
+
+        _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
 
         // Инициализируем словари
         _styleAntagonistsIndex = new Dictionary<int, List<BehaviorStyle>>();
@@ -98,13 +102,14 @@ namespace ISIDA.Gomeostas
     /// Инициализирует глобальный экземпляр системы гомеостаза с указанными путями.
     /// Должен быть вызван один раз при старте приложения.
     /// </summary>
+    /// <param name="informationEnvironmentSystem">Система управления инфо-картиной агента</param>
     /// <param name="gomeostasFolderPath">Путь к каталогу данных гомеостаза. Если null, используется путь по умолчанию.</param>
-    public static void InitializeInstance(string gomeostasFolderPath = null)
+    public static void InitializeInstance(InformationEnvironmentSystem informationEnvironmentSystem, string gomeostasFolderPath = null)
     {
       if (Instance != null)
         throw new InvalidOperationException("Instance уже инициализирован.");
 
-      Instance = new GomeostasSystem(gomeostasFolderPath);
+      Instance = new GomeostasSystem(informationEnvironmentSystem, gomeostasFolderPath);
     }
 
     #endregion
@@ -182,8 +187,8 @@ namespace ISIDA.Gomeostas
 
         // Сохраняем предыдущее состояние ДО обновления
         SaveParametersState();
-        HasCriticalChanges = _calculator.HasCriticalParameterChanges(
-            _agentState.Parameters, _previousParametersState);
+        HasCriticalChanges = _calculator.HasCriticalParameterChanges(_agentState.Parameters, _previousParametersState);
+        _informationEnvironmentSystem.SetVeryActualSituation(HasCriticalChanges);
 
         // ритмичное убывание/нарастание параметров в зависимости от типа: дефицит/избыток ориентированные
         foreach (var param in _agentState.Parameters)
@@ -218,6 +223,7 @@ namespace ISIDA.Gomeostas
 
         _agentState.LastUpdated = DateTime.UtcNow;
         _agentState.Lifetime++;
+        _informationEnvironmentSystem.SetLifeTime(_agentState.Lifetime);
       }
       catch (Exception ex)
       {
@@ -1646,7 +1652,7 @@ namespace ISIDA.Gomeostas
         float _criticalMaxValue = 100f,
         bool strictValidation = false)
     {
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -1696,7 +1702,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public void RemoveParameter(int paramId)
     {
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       _lock.EnterWriteLock();
@@ -1853,7 +1859,7 @@ namespace ISIDA.Gomeostas
       {
         EnsureAgentState(AgentCheck.NotDead);
 
-        int currentStage = _agentState.EvolutionStage;
+        int currentStage = AppGlobalState.EvolutionStage;
 
         // Проверка на попытку перепрыгнуть через стадию вперед
         if (newStage > currentStage + 1)
@@ -1868,6 +1874,7 @@ namespace ISIDA.Gomeostas
           ClearSubsequentStagesData(newStage);
 
         _agentState.EvolutionStage = newStage;
+        AppGlobalState.EvolutionStage = newStage;
         return (true, "Стадия успешно изменена");
       }
       finally
@@ -1999,7 +2006,7 @@ namespace ISIDA.Gomeostas
         List<int> antagonistStyles = null,
         bool strictValidation = false)
     {
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа со стилями реагирования разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -2043,7 +2050,7 @@ namespace ISIDA.Gomeostas
     /// <returns>True, если стиль был успешно удален, иначе False</returns>
     public bool RemoveBehaviorStyle(int styleId)
     {  
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа со стилями реагирования разрешена только в стадии 0");
 
       if (!_agentState.BehaviorStyles.ContainsKey(styleId))
@@ -2495,7 +2502,10 @@ namespace ISIDA.Gomeostas
             else if (parts[0] == "Lifetime" && int.TryParse(parts[1], out int lifetime))
               _agentState.Lifetime = lifetime;
             else if (parts[0] == "EvolutionStage" && int.TryParse(parts[1], out int stage))
+            {
               _agentState.EvolutionStage = stage;
+              AppGlobalState.EvolutionStage = stage;
+            }
             else if (parts[0] == "PainValue" && int.TryParse(parts[1], out int pain))
               _agentState.PainValue = pain;
             else if (parts[0] == "JoyValue" && int.TryParse(parts[1], out int joy))
@@ -2718,7 +2728,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAgentBehaviorStyles(bool IsValidate = true)
     {
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       try
@@ -2771,7 +2781,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAllData()
     {
-      if (_agentState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       var errors = new List<string>();
@@ -2841,7 +2851,9 @@ namespace ISIDA.Gomeostas
 
       try
       {
-        SaveAllData();
+        if (AppGlobalState.EvolutionStage == 0)
+          SaveAllData();
+
         _styleCombinationsManager?.Dispose();
         _conditionedReflexesSystem?.Dispose();
         _perceptionImagesSystem?.Dispose();

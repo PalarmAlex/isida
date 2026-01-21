@@ -192,6 +192,15 @@ namespace ISIDA.Psychic
     public int LifeTime { get; private set; } = 0;
 
     /// <summary>
+    /// Установить LifeTime
+    /// </summary>
+    public void SetLifeTime(int lifeTime)
+    {
+      LifeTime = lifeTime;
+      CurrentInformationEnvironment.LifeTime = lifeTime;
+    }
+
+    /// <summary>
     /// Флаг сна
     /// </summary>
     public bool IsSleeping { get; set; } = false;
@@ -205,6 +214,15 @@ namespace ISIDA.Psychic
     /// Флаг очень актуальной ситуации
     /// </summary>
     public bool VeryActualSituation { get; set; } = false;
+
+    /// <summary>
+    /// Установить признак опасной ситуации
+    /// </summary>
+    public void SetVeryActualSituation(bool hasCriticalChanges)
+    {
+      VeryActualSituation = hasCriticalChanges;
+      CurrentInformationEnvironment.VeryActualSituation = hasCriticalChanges;
+    }
 
     /// <summary>
     /// Текущие целевые ID гомеостаза
@@ -268,16 +286,16 @@ namespace ISIDA.Psychic
     /// Отражение Базового состояния и Активных Базовых контекстов
     /// только при ориентировочном рефлексе и осмыслении результатов - обновление самоощущения!
     /// </remarks>
-    public void GetCurrentInformationEnvironment()
+    public void GetCurrentInformationEnvironment(int currentEmotionId)
     {
       SaveOldIE();
 
       CurrentInformationEnvironment.LifeTime = LifeTime;
       CurrentInformationEnvironment.IsSleep = IsSleeping;
+      CurrentInformationEnvironment.PsyEmotionId = currentEmotionId;
 
-      // Заглушки для вызовов к другим модулям:
-      // bsIDarr := gomeostas.GetCurContextActiveIDarr();
-      // CurrentInformationEnvironment.PsyEmotionId, _ = createNewBaseStyle(0, bsIDarr, true);
+
+
       // CurrentInformationEnvironment.VeryActualSituation, CurrentInformationEnvironment.CurTargetArrID = gomeostas.FindTargetGomeostazID();
       // CurrentInformationEnvironment.Danger = GetAttentionDanger();
       // CurrentInformationEnvironment.Mood = GetCurMood();
@@ -289,10 +307,10 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Обновляет состояние информационной среды
     /// </summary>
-    public void RefreshCurrentInformationEnvironment()
+    public void RefreshCurrentInformationEnvironment(int currentEmotionId)
     {
       // Информация просто перекрывается новой
-      GetCurrentInformationEnvironment();
+      GetCurrentInformationEnvironment(currentEmotionId);
 
       // Обновляем глобальные переменные
       VeryActualSituation = CurrentInformationEnvironment.VeryActualSituation;
@@ -326,7 +344,7 @@ namespace ISIDA.Psychic
     {
       try
       {
-        Logger.Info($"Информационная среда обновлена LifeTime={LifeTime}");
+
       }
       catch (Exception ex)
       {

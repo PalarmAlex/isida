@@ -1,17 +1,20 @@
-﻿using ISIDA.Psychic;
-using ISIDA.Psychic.Automatism;
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Xml.Linq;
+using static ISIDA.Actions.AdaptiveActionsSystem;
+using static ISIDA.Common.ResearchLogger;
 using static ISIDA.Psychic.Automatism.AutomatizmSystem;
 using static ISIDA.Psychic.Automatism.AutomatizmTreeSystem;
 using static ISIDA.Psychic.Automatism.InfluenceActionsImagesSystem;
-using static ISIDA.Actions.AdaptiveActionsSystem;
-using static ISIDA.Common.ResearchLogger;
 using static ISIDA.Reflexes.ConditionedReflexesSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 using static ISIDA.Reflexes.PerceptionImagesSystem;
@@ -287,6 +290,7 @@ namespace ISIDA.Common
     public ResearchLogger ResearchLogger { get; internal set; }
 
     private bool _disposed = false;
+
     /// <summary>
     /// Освобождает ресурсы, используемые контекстом ISIDA
     /// </summary>
@@ -296,26 +300,48 @@ namespace ISIDA.Common
 
       Logger.Info("[IsidaContext] Начинается безопасное освобождение ресурсов...");
 
+      try
+      {
+        GlobalTimer.Stop();
+        Thread.Sleep(200);
+        GlobalTimer.ClearSystems();
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"Ошибка при остановке GlobalTimer: {ex.Message}");
+      }
+
+      try
+      {
+        Gomeostas?.SaveAgentProperties();
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"Ошибка при сохранении свойств агента: {ex.Message}");
+      }
+
+      //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
+      Logger.Info($"ConditionedReflexFormation успешно освобожден");
+
       SafeDispose(ResearchLogger, "ResearchLogger");
+      SafeDispose(PsychicSystem, "PsychicSystem");
+      SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
+      SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
+      SafeDispose(AutomatizmSystem, "AutomatizmSystem");
+      SafeDispose(AutomatizmTree, "AutomatizmTree");
+      SafeDispose(ActionsImages, "ActionsImages");
+      SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(ReflexesActivator, "ReflexesActivator");
-      SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
       SafeDispose(ReflexExecution, "ReflexExecution");
       SafeDispose(ReflexTree, "ReflexTree");
       SafeDispose(ReflexChains, "ReflexChains");
       SafeDispose(ConditionedReflexes, "ConditionedReflexes");
+      SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
-      SafeDispose(InfluenceActions, "InfluenceActions");
-      SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(AdaptiveActions, "AdaptiveActions");
-      SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(Gomeostas, "Gomeostas");
-      SafeDispose(ActionsImages, "ActionsImages");
-      SafeDispose(AutomatizmSystem, "AutomatizmSystem");
-      SafeDispose(AutomatizmTree, "AutomatizmTree");
-      SafeDispose(PsychicSystem, "PsychicSystem");
-      SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
-      SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
+      SafeDispose(InfluenceActions, "InfluenceActions");
       SafeDispose(InformationEnvironmentSystem, "InformationEnvironmentSystem");
 
       _disposed = true;
@@ -326,27 +352,38 @@ namespace ISIDA.Common
     {
       if (disposable == null)
       {
-        Logger.Warning($"{name} равен null");
+        Logger.Warning($"{name} равен null, пропускаем");
         return;
       }
 
       try
       {
         disposable.Dispose();
-        Logger.Info($"{name} освобожден");
+        Logger.Info($"{name} успешно освобожден");
       }
       catch (ObjectDisposedException)
       {
-        Logger.Warning($"{name} уже освобожден");
+        Logger.Warning($"{name} уже освобожден (ObjectDisposedException). Тип: {disposable.GetType().Name}");
       }
       catch (InvalidOperationException ex)
       {
-        Logger.Warning($"{ex.Message}");
+        Logger.Error($"{name}: InvalidOperationException: {ex.Message}\n{ex.StackTrace}");
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error($"Критическая ошибка при освобождении {name}: {ex.Message}");
       }
+    }
+
+    /// <summary>
+    /// Интерфейс для объектов с флагом освобождения
+    /// </summary>
+    public interface IDisposableState
+    {
+      /// <summary>
+      /// Флаг освобождения объекта
+      /// </summary>
+      bool IsDisposed { get; }
     }
 
     /// <summary>
@@ -433,7 +470,7 @@ namespace ISIDA.Common
 
         // Шаг 3: Гомеостаз
         initializationStep = 3;
-        GomeostasSystem.InitializeInstance(config.GomeostasFolder);
+        GomeostasSystem.InitializeInstance(context.InformationEnvironmentSystem, config.GomeostasFolder);
         context.Gomeostas = GomeostasSystem.Instance;
         context.Gomeostas.DefaultStileId = config.DefaultStileId;
         context.Gomeostas.CompareLevel = config.CompareLevel;

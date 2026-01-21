@@ -28,6 +28,15 @@ namespace ISIDA.Common
     private static readonly object _timerLock = new object();
     private static bool _isRunning = false;
     private static int _secondsSinceLastSave = 0;
+    private static ResearchLogger _researchLogger;
+
+    /// <summary>
+    /// Установка ссылки на логер
+    /// </summary>
+    public static void SetResearchLogger(ResearchLogger logger)
+    {
+      _researchLogger = logger;
+    }
 
     /// <summary>
     /// Событие завершения обработки пульса
@@ -147,7 +156,7 @@ namespace ISIDA.Common
           throw new InvalidOperationException("GlobalTimer: системы не инициализированы. Вызовите InitializeSystems().");
 
         var agentState = _gomeostas.GetAgentState();
-        if (agentState.EvolutionStage < 1)
+        if (AppGlobalState.EvolutionStage < 1)
           throw new InvalidOperationException("Запуск пульсации разрешен только начиная со стадии 1");
 
         IsPulsationRunning = true;
@@ -180,7 +189,14 @@ namespace ISIDA.Common
 
       if (shouldStop)
       {
-        StopTimers();
+        // Ждем полной остановки (1 секунду)
+        for (int i = 0; i < 10; i++)
+        {
+          if (!IsPulsationRunning)
+            break;
+          Thread.Sleep(100);
+        }
+
         Logger.Info("Остановка по запросу пользователя завершена");
       }
     }
@@ -194,13 +210,42 @@ namespace ISIDA.Common
       _secondsSinceLastSave = 0;
     }
 
+    /// <summary>
+    /// Очищает все ссылки на системы (вызывать при завершении приложения)
+    /// </summary>
+    public static void ClearSystems()
+    {
+      lock (_timerLock)
+      {
+        StopTimers(notifyUI: false);
+
+        // Очищаем все статические ссылки
+        _gomeostas = null;
+        _actionsSystem = null;
+        _reflexesActivator = null;
+        _conditionedReflexesSystem = null;
+        _reflexFormationService = null;
+        _psychicSystem = null;
+
+        // Очищаем подписки на события
+        OnPulseCompleted = null;
+        OnPulseError = null;
+        OnPulseStateChanged = null;
+        OnPulseBrightnessChanged = null;
+        PulsationStateChanged = null;
+        OnAutosave = null;
+
+        Logger.Info("GlobalTimer: все системы очищены");
+      }
+    }
+
     #endregion
 
     #region Приватные методы
 
-    /// <summary>
-    /// Callback таймера автосохранения
-    /// </summary>
+      /// <summary>
+      /// Callback таймера автосохранения
+      /// </summary>
     private static void AutosaveCallback(object state)
     {
       lock (_timerLock)
@@ -239,7 +284,8 @@ namespace ISIDA.Common
       {
         if (!_isRunning || _timer == null)
         {
-          Logger.Warning("Таймер остановлен, пропускаем callback");
+          Logger.Info("Таймер остановлен, пропускаем callback");
+          Monitor.Pulse(_timerLock); // Сигнализируем о завершении
           return;
         }
       }
@@ -257,10 +303,7 @@ namespace ISIDA.Common
           lock (_timerLock)
           {
             if (!_isRunning)
-            {
-              Logger.Warning("Таймер остановлен во время fade");
               return;
-            }
           }
           OnPulseBrightnessChanged?.Invoke(i * 0.1);
           Thread.Sleep(FadeDurationMs / 10);
@@ -288,12 +331,17 @@ namespace ISIDA.Common
             return;
           }
           _timer?.Change(GrayDurationMs, Timeout.Infinite);
+          Monitor.Pulse(_timerLock);
         }
       }
       catch (Exception ex)
       {
         Logger.Warning($"Общая ошибка в TimerCallback: {ex.Message}");
         OnPulseError?.Invoke($"Общая ошибка таймера: {ex.Message}");
+        lock (_timerLock)
+        {
+          Monitor.Pulse(_timerLock); // Все равно сигнализируем
+        }
         Stop();
       }
     }
@@ -365,7 +413,17 @@ namespace ISIDA.Common
 
       lock (_timerLock)
       {
+        // Устанавливаем флаг остановки ПЕРВЫМ делом
+        _isRunning = false;
         IsPulsationRunning = false;
+
+        // Ждем завершения текущего пульса (если он выполняется)
+        // Даем небольшой таймаут для безопасного завершения
+        for (int i = 0; i < 10; i++)
+        {
+          if (Monitor.Wait(_timerLock, 50))
+            break; // Пульс завершился
+        }
 
         // Сохраняем ссылки на таймеры для dispose вне lock
         timerToDispose = _timer;
@@ -381,8 +439,12 @@ namespace ISIDA.Common
         // Dispose таймеров ВНЕ lock чтобы избежать deadlock
         timerToDispose?.Dispose();
         autosaveTimerToDispose?.Dispose();
-        Logger.Warning("Таймеры disposed");
+        Logger.Info("Таймеры остановлены и disposed");
 
+        _reflexFormationService = null;
+        _conditionedReflexesSystem = null;
+
+        // Вызываем автосохранение ПОСЛЕ остановки таймеров
         TriggerAutosave();
 
         // Уведомляем UI только если нужно
@@ -391,6 +453,21 @@ namespace ISIDA.Common
           OnPulseStateChanged?.Invoke(false);
           OnPulseBrightnessChanged?.Invoke(0);
           PulsationStateChanged?.Invoke();
+        }
+
+        if (notifyUI)
+        {
+          OnPulseStateChanged?.Invoke(false);
+          OnPulseBrightnessChanged?.Invoke(0);
+          PulsationStateChanged?.Invoke();
+
+          // ОЧИСТКА ПОДПИСОК НА СОБЫТИЯ
+          OnPulseCompleted = null;
+          OnPulseError = null;
+          OnPulseStateChanged = null;
+          OnPulseBrightnessChanged = null;
+          PulsationStateChanged = null;
+          OnAutosave = null;
         }
 
         Logger.Info("Остановка завершена успешно");
@@ -452,7 +529,7 @@ namespace ISIDA.Common
           int sleepingType = 0;
           var currentStyles = agentState.ActiveStyles;
           var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
-          _psychicSystem.ProcessPsychicPulse(agentState.EvolutionStage, agentState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
+          _psychicSystem.ProcessPsychicPulse(AppGlobalState.EvolutionStage, agentState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
         }
 
         // Увеличение времени жизни в пульсах для условных рефлексов
@@ -511,7 +588,7 @@ namespace ISIDA.Common
           }
         }
 
-        if (!agentState.IsDead)
+        if ((_researchLogger != null && !_researchLogger.IsDisposed) && !agentState.IsDead)
           OnPulseCompleted?.Invoke(GlobalPulsCount);
       }
       catch (Exception ex)

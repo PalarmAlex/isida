@@ -269,7 +269,7 @@ namespace ISIDA.Reflexes
     private void ProcessConditionedReflexFormation(int pulseCount)
     {
       if (_isSleeping) return;
-      if (_gomeostas.GetAgentState().EvolutionStage < 1) return;
+      if (AppGlobalState.EvolutionStage < 1) return;
 
       try
       {

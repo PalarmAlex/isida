@@ -191,7 +191,7 @@ namespace ISIDA.Actions
         List<int> antagonistInfluence = null,
         bool strictValidation = false)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с гомеостатическими воздействиями разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -249,7 +249,7 @@ namespace ISIDA.Actions
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях</exception>
     public string[] UpdateAction(GomeostasisInfluenceAction action, bool strictValidation = false)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с гомкостатическими возействиями разрешена только в стадии 0");
 
       if (action == null)
@@ -297,7 +297,7 @@ namespace ISIDA.Actions
       _lock.EnterWriteLock();
       try
       {
-        if (_gomeostas.GetAgentState().EvolutionStage > 0)
+        if (AppGlobalState.EvolutionStage > 0)
           throw new InvalidOperationException("Работа с гомеостатическими воздействиями разрешена только в стадии 0");
 
         if (!_influenceActions.ContainsKey(actionId))
@@ -723,7 +723,7 @@ namespace ISIDA.Actions
     /// <returns>Кортеж (успех, сообщение об ошибке)</returns>
     public (bool Success, string ErrorMessage) SaveInfluenceActions(bool IsValidate = true)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с гомеостатическими воздействиями разрешена только в стадии 0");
       
       if (IsValidate)
@@ -886,7 +886,8 @@ namespace ISIDA.Actions
       if (_disposed) return;
       try
       {
-        SaveInfluenceActions();
+        if (AppGlobalState.EvolutionStage == 0)
+          SaveInfluenceActions();
       }
       catch (Exception ex)
       {

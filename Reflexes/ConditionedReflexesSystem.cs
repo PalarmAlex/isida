@@ -570,7 +570,7 @@ namespace ISIDA.Reflexes
         int sourceGeneticReflexId,
         bool authoritativeMod = false)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage < 1)
+      if (AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
       var warnings = new List<string>();
@@ -774,7 +774,7 @@ namespace ISIDA.Reflexes
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveConditionedReflex(int reflexId)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage < 1)
+      if (AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
       _lock.EnterWriteLock();
@@ -811,7 +811,7 @@ namespace ISIDA.Reflexes
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveAllConditionedReflexes()
     {
-      if (!removeAllConditionedReflexes && _gomeostas.GetAgentState().EvolutionStage < 1)
+      if (!removeAllConditionedReflexes && AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
       _lock.EnterWriteLock();

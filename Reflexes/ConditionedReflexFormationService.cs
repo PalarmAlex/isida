@@ -122,14 +122,9 @@ namespace ISIDA.Reflexes
           GeneticReflexId = geneticReflexId
         };
 
-        // Если это безусловный стимул (есть связанные действия или ID рефлекса), сохраняем его
         if (geneticReflexId > 0)
-        {
           _lastUnconditionedStimulus = record;
-          Logger.Info($"Записан безусловный стимул ID={stimulusImageId} в пульс {pulse}, рефлекс={geneticReflexId}");
-        }
         else
-          // Сохраняем как условный стимул
           _lastConditionedStimulus = record;
       }
       finally
@@ -321,7 +316,6 @@ namespace ISIDA.Reflexes
       {
         _lastUnconditionedStimulus = null;
         _lastConditionedStimulus = null;
-        Logger.Info("История стимулов сброшена");
       }
       finally
       {

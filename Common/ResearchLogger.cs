@@ -84,6 +84,11 @@ namespace ISIDA.Common
     private bool _parametersHeadersWritten = false;
     private bool _stylesHeadersWritten = false;
 
+    /// <summary>
+    /// Флаг освобождения ресурсов
+    /// </summary>
+    public bool IsDisposed => _disposed;
+
     // Писатель в память (для UI)
     private static ILogWriter _memoryLogWriter;
 
@@ -489,7 +494,7 @@ namespace ISIDA.Common
     /// </summary>
     private void WriteBufferedLogEntry()
     {
-      if (_currentPulseLogEntry == null) return;
+      if (_currentPulseLogEntry == null || _disposed) return;
 
       try
       {
@@ -524,7 +529,7 @@ namespace ISIDA.Common
     /// </summary>
     private void WriteToMemoryLog(Dictionary<string, object> logEntry)
     {
-      if (_memoryLogWriter == null) return;
+      if (_memoryLogWriter == null || _disposed) return;
 
       _memoryLogWriter.WriteLog(
           "ResearchLogger",

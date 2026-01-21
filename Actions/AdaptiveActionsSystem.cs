@@ -384,7 +384,7 @@ namespace ISIDA.Actions
         bool strictValidation = false,
         int Vigor = 5)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -449,7 +449,7 @@ namespace ISIDA.Actions
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях</exception>
     public string[] UpdateAction(AdaptiveAction action, bool strictValidation = false)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
 
       if (action == null)
@@ -491,7 +491,7 @@ namespace ISIDA.Actions
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveAction(int actionId)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
 
       if (!_actions.ContainsKey(actionId))
@@ -876,7 +876,7 @@ namespace ISIDA.Actions
     /// </summary>
     public (bool Success, string ErrorMessage) SaveActions(bool IsValidate = true)
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
 
       _lock.EnterWriteLock();
@@ -1029,7 +1029,8 @@ namespace ISIDA.Actions
       if (_disposed) return;
       try
       {
-        SaveActions();
+        if (AppGlobalState.EvolutionStage == 0)
+          SaveActions();
       }
       catch (Exception ex)
       {

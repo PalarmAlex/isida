@@ -283,10 +283,7 @@ namespace ISIDA.Psychic
 
           // Детектор отсутствия автоматизма на стимул
           if (_noAutomatizmAfterStimul > 2 && (_noAutomatizmAfterStimul < PulseCount - 2) && PulseCount > 5)
-          {
             _noAutomatizmAfterStimul = 2; // Сигнал детектора отсутствия автоматизма
-            Logger.Info("ПРАВИЛА. Уже 2 пульса как нет автоматизма в ответ на Стимул");
-          }
         }
         else
           ProcessSleep();
@@ -357,7 +354,7 @@ namespace ISIDA.Psychic
         {
           // Получить автоматизм из узла
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
-          var automatizm = _orientationReflexSystem.OrientationReflex(foundAutomatizm?.ID ?? 0);
+          var automatizm = _orientationReflexSystem.OrientationReflex(foundAutomatizm?.ID ?? 0, currentEmotionId);
 
           if (automatizm != null)
           {

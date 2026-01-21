@@ -86,8 +86,10 @@
     <Compile Include="Actions\ParameterInfluence.cs" />
     <Compile Include="Common\AddUtils.cs" />
     <Compile Include="Common\AntagonistValidator.cs" />
+    <Compile Include="Common\AppGlobalState.cs" />
     <Compile Include="Common\FileValidator.cs" />
     <Compile Include="Common\GlobalTimer.cs" />
+    <Compile Include="Common\IDisposableState.cs" />
     <Compile Include="Common\ILogWriter.cs" />
     <Compile Include="Common\IsidaEngine.cs" />
     <Compile Include="Common\Logger.cs" />

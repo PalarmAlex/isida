@@ -193,7 +193,7 @@ namespace ISIDA.Sensors
     /// </summary>
     public void ClearAllTrees()
     {
-      if (_gomeostas.GetAgentState().EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Очистка сенсорных деревьев разрешена только в стадии 0");
 
       _lock.EnterWriteLock();

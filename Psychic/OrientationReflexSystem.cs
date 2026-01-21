@@ -78,19 +78,19 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс
     /// </summary>
-    internal Automatizm OrientationReflex(int automatizmID)
+    internal Automatizm OrientationReflex(int automatizmID, int currentEmotionId)
     {
       try
       {
         Automatizm atmtzm = null;
 
         if (automatizmID == 0)
-          atmtzm = OrientationReflex_1(automatizmID);
+          atmtzm = OrientationReflex_1(automatizmID, currentEmotionId);
         else
         {
           atmtzm = _automatizmSystem.GetAutomatizmById(automatizmID);
           if (atmtzm != null)
-            atmtzm = OrientationReflex_2(automatizmID);
+            atmtzm = OrientationReflex_2(automatizmID, currentEmotionId);
         }
 
         if (atmtzm != null)
@@ -113,11 +113,11 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 1 уровня: нет автоматизма, нужно быстро создать его по гомеостатическим целям
     /// </summary>
-    internal Automatizm OrientationReflex_1(int automatizmID)
+    internal Automatizm OrientationReflex_1(int automatizmID, int currentEmotionId)
     {
       try
       {
-        _informationEnvironmentSystem.GetCurrentInformationEnvironment();
+        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId);
 
 
 
@@ -133,10 +133,12 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 2 уровня: автоматизм есть, надо его проверить в текущих условиях
     /// </summary>
-    internal Automatizm OrientationReflex_2(int automatizmID)
+    internal Automatizm OrientationReflex_2(int automatizmID, int currentEmotionId)
     {
       try
       {
+        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId);
+
         return null;
       }
       catch (Exception ex)
