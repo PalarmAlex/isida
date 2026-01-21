@@ -749,7 +749,7 @@ namespace ISIDA.Reflexes
       var homeostasisState = _gomeostas.GetHomeostasisState();
       _activeCurBaseID = (int)homeostasisState.OverallState;
 
-      var currentStyles = _gomeostas.GetActiveStyles();
+      var currentStyles = AppGlobalState.ActiveStyles;
       _activetStyleIds = currentStyles.Select(s => s.Id).ToList();
 
       // Образ сочетания базовых контекстов (стилей поведения)

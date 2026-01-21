@@ -841,7 +841,7 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        _currentAgentLifetime = _gomeostas.GetAgentState().Lifetime;
+        _currentAgentLifetime = AppGlobalState.Lifetime;
         ApplyDecay(); // Затухание применяется на каждом пульсе
       }
       catch (Exception ex)

@@ -155,7 +155,6 @@ namespace ISIDA.Common
         if (_gomeostas == null || _actionsSystem == null)
           throw new InvalidOperationException("GlobalTimer: системы не инициализированы. Вызовите InitializeSystems().");
 
-        var agentState = _gomeostas.GetAgentState();
         if (AppGlobalState.EvolutionStage < 1)
           throw new InvalidOperationException("Запуск пульсации разрешен только начиная со стадии 1");
 
@@ -504,20 +503,8 @@ namespace ISIDA.Common
           return;
         }
 
-        GomeostasSystem.AgentStateInfo agentState = null;
-        try
-        {
-          agentState = _gomeostas.GetAgentState();
-        }
-        catch (Exception stateEx)
-        {
-          Logger.Error($"{stateEx.Message}");
-          SafeStopWithError($"Ошибка получения состояния: {stateEx.Message}");
-          return;
-        }
-
         // Если агент мертв - прерываем обработку
-        if (agentState?.IsDead == true)
+        if (AppGlobalState.IsDead)
         {
           Logger.Warning($"Агент мертв на пульсе {GlobalPulsCount}");
           SafeStopWithAgentDeath();
@@ -527,13 +514,13 @@ namespace ISIDA.Common
         {
           // флаг сна получмть когда класс сна будет
           int sleepingType = 0;
-          var currentStyles = agentState.ActiveStyles;
+          var currentStyles = AppGlobalState.ActiveStyles;
           var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
-          _psychicSystem.ProcessPsychicPulse(AppGlobalState.EvolutionStage, agentState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
+          _psychicSystem.ProcessPsychicPulse(AppGlobalState.EvolutionStage, AppGlobalState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
         }
 
         // Увеличение времени жизни в пульсах для условных рефлексов
-        if (!agentState.IsDead && HasConditionedReflexesSystem)
+        if (!AppGlobalState.IsDead && HasConditionedReflexesSystem)
         {
           try
           {
@@ -547,11 +534,11 @@ namespace ISIDA.Common
           }
         }
 
-        if (!agentState.IsSleeping)
+        if (!AppGlobalState.IsSleeping)
         {
           try
           {
-            _reflexesActivator.ProcessReflexPulse(GlobalPulsCount, agentState.IsSleeping);
+            _reflexesActivator.ProcessReflexPulse(GlobalPulsCount, AppGlobalState.IsSleeping);
           }
           catch (Exception reflexEx)
           {
@@ -561,7 +548,7 @@ namespace ISIDA.Common
         }
 
         // периодическая очистка условных рефлексов
-        if (!agentState.IsDead && !agentState.IsSleeping &&
+        if (!AppGlobalState.IsDead && !AppGlobalState.IsSleeping &&
             HasReflexFormationService &&
             GlobalPulsCount % 100 == 0)
         {
@@ -575,7 +562,7 @@ namespace ISIDA.Common
           }
         }
 
-        if (!agentState.IsDead)
+        if (!AppGlobalState.IsDead)
         {
           try
           {
@@ -588,7 +575,7 @@ namespace ISIDA.Common
           }
         }
 
-        if ((_researchLogger != null && !_researchLogger.IsDisposed) && !agentState.IsDead)
+        if ((_researchLogger != null && !_researchLogger.IsDisposed) && !AppGlobalState.IsDead)
           OnPulseCompleted?.Invoke(GlobalPulsCount);
       }
       catch (Exception ex)

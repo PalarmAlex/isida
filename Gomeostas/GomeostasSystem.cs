@@ -223,6 +223,7 @@ namespace ISIDA.Gomeostas
 
         _agentState.LastUpdated = DateTime.UtcNow;
         _agentState.Lifetime++;
+        AppGlobalState.Lifetime++;
         _informationEnvironmentSystem.SetLifeTime(_agentState.Lifetime);
       }
       catch (Exception ex)
@@ -1482,6 +1483,7 @@ namespace ISIDA.Gomeostas
           {
             Logger.Warning($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
             _agentState.IsDead = true;
+            AppGlobalState.IsDead = true;
             OnAgentDeath(param);
             return;
           }
@@ -1781,6 +1783,7 @@ namespace ISIDA.Gomeostas
       {
         EnsureAgentState(AgentCheck.NotDead | AgentCheck.NotSleeping);
         _agentState.IsSleeping = isSleeping;
+        AppGlobalState.IsSleeping = isSleeping;
       }
       finally
       {
@@ -1798,6 +1801,7 @@ namespace ISIDA.Gomeostas
       {
         EnsureAgentState(AgentCheck.NotDead);
         _agentState.Lifetime = lifeTime;
+        AppGlobalState.Lifetime = lifeTime;
       }
       finally
       {
@@ -2081,6 +2085,7 @@ namespace ISIDA.Gomeostas
           if (ActiveStyles[i] != null && ActiveStyles[i].Id == styleId)
             ActiveStyles[i] = null;
         }
+        AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
         // БЫСТРОЕ УДАЛЕНИЕ ЧЕРЕЗ ИНДЕКСЫ:
         // Удаляем из антагонистов других стилей
@@ -2150,6 +2155,7 @@ namespace ISIDA.Gomeostas
         if (i >= ActiveStyles.Length) break;
         ActiveStyles[i++] = style;
       }
+      AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
       var finalStylesForLogs = finalStylesWithWeights.Select(sw => new BehaviorStyle
       {
@@ -2496,11 +2502,20 @@ namespace ISIDA.Gomeostas
             if (parts[0] == "Name" && !string.IsNullOrEmpty(parts[1]))
               _agentState.Name = parts[1];
             else if (parts[0] == "IsSleeping" && bool.TryParse(parts[1], out bool isSleeping))
+            {
               _agentState.IsSleeping = isSleeping;
+              AppGlobalState.IsSleeping = isSleeping;
+            }
             else if (parts[0] == "IsDead" && bool.TryParse(parts[1], out bool isDead))
+            {
               _agentState.IsDead = isDead;
+              AppGlobalState.IsDead = isDead;
+            }
             else if (parts[0] == "Lifetime" && int.TryParse(parts[1], out int lifetime))
+            {
               _agentState.Lifetime = lifetime;
+              AppGlobalState.Lifetime = lifetime;
+            }              
             else if (parts[0] == "EvolutionStage" && int.TryParse(parts[1], out int stage))
             {
               _agentState.EvolutionStage = stage;

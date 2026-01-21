@@ -762,7 +762,7 @@ namespace ISIDA.Common
           return activeStyles;
         else
         {
-          var currentStyles = _gomeostas.GetActiveStyles();
+          var currentStyles = AppGlobalState.ActiveStyles;
           var currentStyleIds = currentStyles.Select(s => s.Id).ToList();
           activeStyles = _perception.AddBehaviorStyleImage(currentStyleIds);
           return activeStyles;

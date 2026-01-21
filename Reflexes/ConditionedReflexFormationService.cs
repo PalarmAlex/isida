@@ -266,7 +266,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     private List<int> GetCurrentStyleIds()
     {
-      var currentStyles = _gomeostas.GetActiveStyles();
+      var currentStyles = AppGlobalState.ActiveStyles;
       return currentStyles.Select(s => s.Id).ToList();
     }
 
