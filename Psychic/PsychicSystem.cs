@@ -326,7 +326,7 @@ namespace ISIDA.Psychic
       try
       {
         ActivationTypeSensor = activationType;
-        _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId); // для инфокартины
+        _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
         int toneMood = GetToneMoodID(toneId, moodId);
@@ -340,7 +340,6 @@ namespace ISIDA.Psychic
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
         }
 
-        // Активация дерева автоматизмов
         int automatizmNodeId = AutomatizmTreeActivation(
             activationType,
             currentBaseId,
@@ -352,13 +351,14 @@ namespace ISIDA.Psychic
 
         if (automatizmNodeId > 0)
         {
-          // Получить автоматизм из узла
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
-          var automatizm = _orientationReflexSystem.OrientationReflex(foundAutomatizm?.ID ?? 0, currentEmotionId);
+          var automatizm = _orientationReflexSystem.OrientationReflex(
+            foundAutomatizm?.ID ?? 0, 
+            currentEmotionId,
+            _actionsImageId);
 
           if (automatizm != null)
           {
-            // Выполнить автоматизм
             ExecuteAutomatizm(automatizm);
 
             return true; // Блокировать рефлексы

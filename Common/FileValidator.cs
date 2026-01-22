@@ -45,8 +45,9 @@ namespace ISIDA.Common
       public const string InfluenceAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Адаптивные действия
-      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты";
+      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
+      public const string TargetParameters = "# Target параметры: id1,id2,id3";
 
       // Стили поведения
       public const string StylesFormat = "# Формат: ID|Имя|Описание|Антагонисты";
@@ -348,16 +349,22 @@ namespace ISIDA.Common
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 5)
+        if (parts.Length < 6)
           return false;
 
         if (!int.TryParse(parts[0], out _))
           return false;
 
+        if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
+        {
+          if (!int.TryParse(parts[3], out int vigor) || vigor < 1 || vigor > 10)
+            return false;
+        }
+
         return true;
       }
 
-      return true; // только шапка — допустимо
+      return true;
     }
 
     #endregion

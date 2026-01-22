@@ -1536,7 +1536,6 @@ namespace ISIDA.Gomeostas
 
     /// <summary>
     /// Проверка статуса агента без выброса исключений: существует, активен, жив
-    /// Проверка параметра агента: существует ли параметр с таким ID
     /// </summary>
     public bool TryEnsureAgentState(AgentCheck checks, int? paramId = null, bool silent = false)
     {

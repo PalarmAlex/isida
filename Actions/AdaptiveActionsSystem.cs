@@ -140,7 +140,16 @@ namespace ISIDA.Actions
       /// </summary>
       public List<int> AntagonistActions { get; set; } = new List<int>();
 
+      /// <summary>
+      /// Список ID параметров гомеостаза, которые действие можено ПОТЕНЦИАЛЬНО улучшить
+      /// </summary>
+      /// <remarks>
+      /// Крик о помощи, плач - непосредственно не воздействуют на гомеостаз, но провоцируют положительно воздействовать на него других
+      /// </remarks>
+      public List<int> TargetGomeoParamIdArr { get; set; }
+
       private int _vigor = 5;
+
       /// <summary>
       /// Интенсивность действия — уровень активности, скорости, физической нагрузки.
       /// Диапазон: 1..10. Используется при конкуретной борьбе с антагонистами.
@@ -160,10 +169,10 @@ namespace ISIDA.Actions
         }
       }
 
-      /// <summary>
-      /// Время последней активации действия (для расчета времени удержания действия)
-      /// </summary>
-      public DateTime LastActivated { get; set; } = DateTime.MinValue;
+      ///// <summary>
+      ///// Время последней активации действия (для расчета времени удержания действия)
+      ///// </summary>
+      //public DateTime LastActivated { get; set; } = DateTime.MinValue;
 
       /// <summary>
       /// Ссылка на систему действий (для доступа к модифицированной интенсивности)
@@ -373,6 +382,7 @@ namespace ISIDA.Actions
     /// <param name="name">Наименование действия</param>
     /// <param name="description">Описание действия</param>
     /// <param name="antagonistActions">Список ID антагонистических действий, которые несовместимы с данным действием</param>
+    /// <param name="targetGomeoParamIdArr">Список ID параметров гомеостаза, которые потенциально может улучшить действие</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <param name="Vigor">Интенсивность действия [1...10], по умолчанию = 5</param>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
@@ -381,6 +391,7 @@ namespace ISIDA.Actions
         string name,
         string description,
         List<int> antagonistActions = null,
+        List<int> targetGomeoParamIdArr = null,
         bool strictValidation = false,
         int Vigor = 5)
     {
@@ -397,6 +408,7 @@ namespace ISIDA.Actions
         Name = name,
         Description = description,
         AntagonistActions = antagonistActions ?? new List<int>(),
+        TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>(),
         Vigor = Vigor,
         ActionsSystem = this
       };
@@ -425,7 +437,8 @@ namespace ISIDA.Actions
           Name = name,
           Description = description,
           Vigor = Vigor,
-          AntagonistActions = antagonistActions ?? new List<int>()
+          AntagonistActions = antagonistActions ?? new List<int>(),
+          TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>()
         };
 
         _actions.Add(newId, action);
@@ -576,7 +589,7 @@ namespace ISIDA.Actions
         _activeActions.Remove(action);
         _activeActionPhrases.Remove(action.Id);
         action.ActivationSource = 0;
-        action.LastActivated = DateTime.MinValue;
+        //action.LastActivated = DateTime.MinValue;
       }
     }
 
@@ -807,13 +820,12 @@ namespace ISIDA.Actions
 
             var parts = trimmedLine.Split('|');
 
-            if (parts.Length < 3) // Минимум: ID|Name|Description
+            if (parts.Length < 3)
               continue;
 
             if (!int.TryParse(parts[0], out int id))
               continue;
 
-            // Парсим интенсивность (по умолчанию 5)
             int vigor = 5;
             if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
             {
@@ -830,20 +842,37 @@ namespace ISIDA.Actions
               ActionsSystem = this
             };
 
-            // Антагонисты (теперь часть 4 вместо 5)
             if (parts.Length >= 5 && !string.IsNullOrWhiteSpace(parts[4]))
             {
               action.AntagonistActions = parts[4]
-                  .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                  .Where(s => !string.IsNullOrWhiteSpace(s))
-                  .Select(s =>
-                  {
-                    if (int.TryParse(s.Trim(), out int aid)) return aid;
-                    return 0;
-                  })
-                  .Where(aid => aid != 0)
-                  .ToList();
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s =>
+                {
+                  if (int.TryParse(s.Trim(), out int aid)) return aid;
+                  return 0;
+                })
+                .Where(aid => aid != 0)
+                .ToList();
             }
+            else
+              action.AntagonistActions = new List<int>();
+
+            if (parts.Length >= 6 && !string.IsNullOrWhiteSpace(parts[5]))
+            {
+             action.TargetGomeoParamIdArr = parts[5]
+              .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+              .Where(s => !string.IsNullOrWhiteSpace(s))
+              .Select(s =>
+              {
+                if (int.TryParse(s.Trim(), out int paramId)) return paramId;
+                return 0;
+              })
+              .Where(paramId => paramId != 0)
+              .ToList();
+            }
+            else
+              action.TargetGomeoParamIdArr = new List<int>();
 
             _actions[action.Id] = action;
             if (action.Id > _lastActionId)
@@ -856,7 +885,8 @@ namespace ISIDA.Actions
           var lines = new List<string>
             {
                 FileHeaders.ActionsFormat,
-                FileHeaders.ActionsAntagonists
+                FileHeaders.ActionsAntagonists,
+                FileHeaders.TargetParameters
             };
           File.WriteAllLines(path, lines);
 
@@ -891,38 +921,45 @@ namespace ISIDA.Actions
           if (!string.IsNullOrEmpty(warnings))
           {
             var resultMsg = MessageBox.Show(
-                $"{warnings}\n\nПродолжить сохранение?",
-                "Предупреждения",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+              $"{warnings}\n\nПродолжить сохранение?",
+              "Предупреждения",
+              MessageBoxButton.YesNo,
+              MessageBoxImage.Warning);
 
             if (resultMsg == MessageBoxResult.No)
               return (false, warnings);
           }
         }
+
         EnsureDataDirectory();
         var lines = new List<string>
         {
-            FileHeaders.ActionsFormat,
-            FileHeaders.ActionsAntagonists
+          FileHeaders.ActionsFormat,
+          FileHeaders.ActionsAntagonists,
+          FileHeaders.TargetParameters
         };
 
         foreach (var action in _actions.Values.OrderBy(a => a.Id))
         {
+          string targetParams = action.TargetGomeoParamIdArr != null
+            ? string.Join(",", action.TargetGomeoParamIdArr)
+            : "";
+
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
-                   $"{action.Vigor}|" +
-                   $"{string.Join(",", action.AntagonistActions)}");
+            $"{action.Vigor}|" +
+            $"{string.Join(",", action.AntagonistActions)}|" +
+            $"{targetParams}");
         }
 
-        var linCount = 4; // Минимум: шапка + 1 действие
+        var minLinesCount = 4;
         if (lines.Count == 3)
-          linCount = 3; // только шапка
+          minLinesCount = 3;
 
         var result = SafeSaveFile(
             GetActionsFilePath(),
             lines,
             content => IsValidActionsFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: linCount,
+            minLinesCount: minLinesCount,
             fileDescription: "адаптивных действий");
 
         return result;
@@ -995,26 +1032,33 @@ namespace ISIDA.Actions
     {
       errorMessage = string.Empty;
       warnings = string.Empty;
+
       var errors = new List<string>();
       var warningList = new List<string>();
-      bool isValidRequiresExternalResources = false;
 
-      // Проверка самоантагонистов
       if (action.AntagonistActions?.Contains(action.Id) == true)
         errors.Add("Действие блокирует само себя в списке антагонистов");
 
-      // зависимые параметры не проверяем
-      if (!isValidRequiresExternalResources)
+      if (action.TargetGomeoParamIdArr != null)
       {
-        // Проверка Vigor
-        if (action.Vigor < 1 || action.Vigor > 10)
-          errors.Add($"Интенсивность действия вне допустимых пределов: {action.Vigor} (допустимый диапазон: 1..10)");
+        foreach (var paramId in action.TargetGomeoParamIdArr)
+        {
+          var param = _gomeostas.GetParameter(paramId);
+          if (param == null)
+            errors.Add($"Параметр с ID {paramId} не найден");
+        }
       }
+
+      if (action.Vigor < 1 || action.Vigor > 10)
+        errors.Add($"Интенсивность действия вне допустимых пределов: {action.Vigor} (допустимый диапазон: 1..10)");
+
+      if (errors.Any())
+        errorMessage = string.Join("\n", errors);
 
       if (warningList.Any())
         warnings = string.Join("\n", warningList);
 
-      return true;
+      return !errors.Any();
     }
 
     #endregion

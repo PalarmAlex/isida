@@ -286,14 +286,14 @@ namespace ISIDA.Psychic
     /// Отражение Базового состояния и Активных Базовых контекстов
     /// только при ориентировочном рефлексе и осмыслении результатов - обновление самоощущения!
     /// </remarks>
-    public void GetCurrentInformationEnvironment(int currentEmotionId)
+    public void GetCurrentInformationEnvironment(int currentEmotionId, int actionsImageId)
     {
       SaveOldIE();
 
       CurrentInformationEnvironment.LifeTime = LifeTime;
       CurrentInformationEnvironment.IsSleep = IsSleeping;
       CurrentInformationEnvironment.PsyEmotionId = currentEmotionId;
-
+      CurrentInformationEnvironment.ActionsImageID = actionsImageId;
 
 
       // CurrentInformationEnvironment.VeryActualSituation, CurrentInformationEnvironment.CurTargetArrID = gomeostas.FindTargetGomeostazID();
@@ -307,10 +307,10 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Обновляет состояние информационной среды
     /// </summary>
-    public void RefreshCurrentInformationEnvironment(int currentEmotionId)
+    public void RefreshCurrentInformationEnvironment(int currentEmotionId, int actionsImageId)
     {
       // Информация просто перекрывается новой
-      GetCurrentInformationEnvironment(currentEmotionId);
+      GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
       // Обновляем глобальные переменные
       VeryActualSituation = CurrentInformationEnvironment.VeryActualSituation;

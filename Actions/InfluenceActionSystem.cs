@@ -353,7 +353,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        FileValidator.LogError($"IsActionUsedInPerceptionImages: Ошибка при проверке использования воздействия {actionId} в образах восприятия: {ex.Message}");
+        Logger.Error($"{ex.Message}");
         return true;
       }
     }

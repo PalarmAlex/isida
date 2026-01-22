@@ -78,19 +78,19 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс
     /// </summary>
-    internal Automatizm OrientationReflex(int automatizmID, int currentEmotionId)
+    internal Automatizm OrientationReflex(int automatizmID, int currentEmotionId, int actionsImageId)
     {
       try
       {
         Automatizm atmtzm = null;
 
         if (automatizmID == 0)
-          atmtzm = OrientationReflex_1(automatizmID, currentEmotionId);
+          atmtzm = OrientationReflex_1(automatizmID, currentEmotionId, actionsImageId);
         else
         {
           atmtzm = _automatizmSystem.GetAutomatizmById(automatizmID);
           if (atmtzm != null)
-            atmtzm = OrientationReflex_2(automatizmID, currentEmotionId);
+            atmtzm = OrientationReflex_2(automatizmID, currentEmotionId, actionsImageId);
         }
 
         if (atmtzm != null)
@@ -113,11 +113,11 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 1 уровня: нет автоматизма, нужно быстро создать его по гомеостатическим целям
     /// </summary>
-    internal Automatizm OrientationReflex_1(int automatizmID, int currentEmotionId)
+    internal Automatizm OrientationReflex_1(int automatizmID, int currentEmotionId, int actionsImageId)
     {
       try
       {
-        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId);
+        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
 
 
@@ -133,11 +133,11 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 2 уровня: автоматизм есть, надо его проверить в текущих условиях
     /// </summary>
-    internal Automatizm OrientationReflex_2(int automatizmID, int currentEmotionId)
+    internal Automatizm OrientationReflex_2(int automatizmID, int currentEmotionId, int actionsImageId)
     {
       try
       {
-        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId);
+        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
         return null;
       }
