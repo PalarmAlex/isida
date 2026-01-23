@@ -508,6 +508,7 @@ namespace ISIDA.Gomeostas
       {
         CollectParameterStyleActivations(baseStyles, new List<ParameterData> { dominantParam },
             parameterActivations, dynamicTime, difSensorPar);
+        AppGlobalState.DominantParam = dominantParam.Id;
       }
 
       return (finalStyles, activations, parameterActivations, dominantParam);

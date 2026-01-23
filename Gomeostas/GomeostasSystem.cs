@@ -1498,7 +1498,6 @@ namespace ISIDA.Gomeostas
 
     private void OnAgentDeath(ParameterData criticalParameter)
     {
-      // Логируем причину смерти
       Logger.Info($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
                             $"достиг критического значения {criticalParameter.Value}");
 

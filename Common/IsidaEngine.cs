@@ -285,6 +285,11 @@ namespace ISIDA.Common
     public InformationEnvironmentSystem InformationEnvironmentSystem { get; internal set; }
 
     /// <summary>
+    /// Система управления гомеостатическими целями
+    /// </summary>
+    public PurposeGeneticImageSystem PurposeGeneticImageSystem { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -329,6 +334,7 @@ namespace ISIDA.Common
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
+      SafeDispose(AutomatizmTree, "PurposeGeneticImageSystem");
       SafeDispose(ActionsImages, "ActionsImages");
       SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(ReflexesActivator, "ReflexesActivator");
@@ -399,6 +405,7 @@ namespace ISIDA.Common
         PerceptionImages != null &&
         AutomatizmTree != null &&
         AutomatizmSystem != null &&
+        PurposeGeneticImageSystem != null &&
         ActionsImages != null &&
         InfluenceActionsImages != null &&
         ReflexesActivator != null &&
@@ -625,10 +632,15 @@ namespace ISIDA.Common
           context.SensorySystem,
           context.VerbalBrocaImagesSystem,
           context.Gomeostas);
-        context.PsychicSystem = PsychicSystem.Instance;
+          context.PsychicSystem = PsychicSystem.Instance;
 
         // Шаг 24: Система ориентировочного рефлпекса
         initializationStep = 24;
+        PurposeGeneticImageSystem.InitializeInstance(context.InformationEnvironmentSystem, context.ActionsImages);
+        context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
+
+        // Шаг 25: Система ориентировочного рефлпекса
+        initializationStep = 25;
         OrientationReflexSystem.InitializeInstance(context.InformationEnvironmentSystem);
         var orientationReflex = OrientationReflexSystem.Instance;
         orientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);

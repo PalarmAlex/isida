@@ -110,6 +110,7 @@
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
+    <Compile Include="Psychic\PurposeGeneticSystem.cs" />
     <Compile Include="Psychic\VerbalBrocaImagesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />

@@ -244,6 +244,7 @@ namespace ISIDA.Actions
       set
       {
         _defaultAdaptiveActionId = value;
+        AppGlobalState.DefaultAdaptiveActionId = value;
       }
     }
     private int _lastActionId = 0;
@@ -521,6 +522,7 @@ namespace ISIDA.Actions
 
         // Удаляем из активных действий
         _activeActions.RemoveAll(a => a.Id == actionId);
+        AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
         _activeActionPhrases.Remove(actionId);
 
         // Удаляем ссылки на это действие как антагониста в других действиях
@@ -549,6 +551,7 @@ namespace ISIDA.Actions
       try
       {
         _activeActions.Clear();
+        AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
       }
       catch (Exception ex)
       {
@@ -589,8 +592,8 @@ namespace ISIDA.Actions
         _activeActions.Remove(action);
         _activeActionPhrases.Remove(action.Id);
         action.ActivationSource = 0;
-        //action.LastActivated = DateTime.MinValue;
       }
+      AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
     }
 
     /// <summary>
@@ -640,6 +643,7 @@ namespace ISIDA.Actions
           _activeActions.Add(action);
           _activeActionPhrases[actionId] = phraseId;
           action.ActivationPulse = GlobalTimer.GlobalPulsCount;
+          AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
         }
 
         return true;
