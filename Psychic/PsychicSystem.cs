@@ -209,9 +209,6 @@ namespace ISIDA.Psychic
     private int _currentSimbolId = 0;
     private int _currentVerbId = 0;
 
-    // данные для инфо-картины
-    private int _actionsImageId = 0;
-
     // Предыдущие состояния (для сравнения)
     private int _oldBaseId = 0;
     private int _oldEmotionId = 0;
@@ -319,14 +316,14 @@ namespace ISIDA.Psychic
 
       if (EvolutionStage < 2)
       {
-        Logger.Warning($"Стадия развития {EvolutionStage} НЕДОСТАТОЧНА ДЛЯ АВТОМАТИЗМОВ");
+        Logger.Warning($"Стадия развития {EvolutionStage} недостаточна для автоматизмов");
         return false;
       }
 
       try
       {
         ActivationTypeSensor = activationType;
-        _actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
+        int actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
         int toneMood = GetToneMoodID(toneId, moodId);
@@ -338,8 +335,12 @@ namespace ISIDA.Psychic
         {
           firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(phraseIdList[0]);
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
+          AppGlobalState.CurActiveVerbalId = verbId;
         }
+        else
+          AppGlobalState.CurActiveVerbalId = 0;
 
+        Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
             activationType,
             currentBaseId,
@@ -351,18 +352,18 @@ namespace ISIDA.Psychic
 
         if (automatizmNodeId > 0)
         {
+          AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
-          var automatizm = _orientationReflexSystem.OrientationReflex(
+          atmz = _orientationReflexSystem.OrientationReflex(
             foundAutomatizm?.ID ?? 0, 
             currentEmotionId,
-            _actionsImageId);
+            actionsImageId);
+        }
 
-          if (automatizm != null)
-          {
-            ExecuteAutomatizm(automatizm);
-
-            return true; // Блокировать рефлексы
-          }
+        if (atmz != null)
+        {
+          ExecuteAutomatizm(atmz);
+          return true; // Блокировать рефлексы
         }
       }
       catch (Exception ex)
@@ -483,6 +484,10 @@ namespace ISIDA.Psychic
         // Сброс детектора отсутствия автоматизма
         if (_noAutomatizmAfterStimul > 0)
           _noAutomatizmAfterStimul = 0;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
       }
       finally
       {

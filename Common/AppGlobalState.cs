@@ -12,10 +12,41 @@ public static class AppGlobalState
   private static int _evolutionStage = 0;
   private static int _lifetime = 0;
   private static int _dominantParam = 0;
+  private static int automatizmNodeId = 0;
+  private static int _curActiveVerbalId = 0;
   private static bool _isDead = false;
   private static bool _isSleeping = false;
+  private static bool _flgConditionReflexes = false;
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
+
+
+  /// <summary>
+  /// ID текущего активного вербального образа 
+  /// </summary>
+  public static int CurActiveVerbalId
+  {
+    get => _curActiveVerbalId;
+    set => _curActiveVerbalId = value;
+  }
+
+  /// <summary>
+  /// Флаг наличия условных рефлексов
+  /// </summary>
+  public static bool FlgConditionReflexes
+  {
+    get => _flgConditionReflexes;
+    set => _flgConditionReflexes = value;
+  }
+
+  /// <summary>
+  /// Последний распознанный узел дерева автоматизмов
+  /// </summary>
+  public static int AutomatizmNodeId
+  {
+    get => automatizmNodeId;
+    set => automatizmNodeId = value;
+  }
 
   /// <summary>
   /// Адаптивное действие по умолчанию

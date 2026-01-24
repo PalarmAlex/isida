@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -71,23 +72,25 @@ namespace ISIDA.Psychic.Automatism
 
     private const string ActionsImagesFileName = "action_images";
     private const int PrefixActionIdValue = 10000000; // если ID действия больше prefixActionIdValue, то это цепочка действий
-    private static readonly Dictionary<int, string> _toneDictionary = new Dictionary<int, string>
-    {
-      {-1, "Вялый"},
-      {0, "Нормальный"},
-      {1, "Повышенный"}
-    };
-    private static readonly Dictionary<int, string> _moodDictionary = new Dictionary<int, string>
-    {
-      {0, "Нормальное"},
-      {1, "Хорошее"},
-      {2, "Плохое"},
-      {3, "Игривое"},
-      {4, "Учитель"},
-      {5, "Агрессивное"},
-      {6, "Защитное"},
-      {7, "Протест"}
-    };
+    private static readonly Dictionary<int, (string Description, bool IsThreatening)> _toneDictionary =
+      new Dictionary<int, (string, bool)>
+      {
+        {-1, ("Вялый", false)},
+        {0, ("Нормальный", false)},
+        {1, ("Повышенный", true)} // Угрожающий тон
+      };
+    private static readonly Dictionary<int, (string Description, bool IsThreatening)> _moodDictionary =
+      new Dictionary<int, (string, bool)>
+      {
+        {0, ("Нормальное", false)},
+        {1, ("Хорошее", false)},
+        {2, ("Плохое", true)},        // Плохое настроение - может быть угрожающим
+        {3, ("Игривое", false)},
+        {4, ("Учитель", false)},
+        {5, ("Агрессивное", true)},   // Агрессивное настроение - угрожающее
+        {6, ("Защитное", false)},     // Защитное - не угроза, а реакция на угрозу
+        {7, ("Протест", true)}        // Протест - может быть угрожающим
+      };
 
     /// <summary>
     /// Образ действий оператора или агента ИИ
@@ -140,7 +143,9 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>Текстовое описание тона или пустую строку, если не найден</returns>
     public static string GetToneText(int toneId)
     {
-      return _toneDictionary.TryGetValue(toneId, out var text) ? text : string.Empty;
+      return _toneDictionary.TryGetValue(toneId, out var toneInfo)
+          ? toneInfo.Description
+          : string.Empty;
     }
 
     /// <summary>
@@ -150,7 +155,9 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>Текстовое описание настроения или пустую строку, если не найден</returns>
     public static string GetMoodText(int moodId)
     {
-      return _moodDictionary.TryGetValue(moodId, out var text) ? text : string.Empty;
+      return _moodDictionary.TryGetValue(moodId, out var moodInfo)
+          ? moodInfo.Description
+          : string.Empty;
     }
 
     /// <summary>
@@ -159,7 +166,9 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>Словарь тонов (ID -> Описание)</returns>
     public static Dictionary<int, string> GetToneList()
     {
-      return new Dictionary<int, string>(_toneDictionary);
+      return _toneDictionary.ToDictionary(
+          kvp => kvp.Key,
+          kvp => kvp.Value.Description);
     }
 
     /// <summary>
@@ -168,7 +177,9 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>Словарь настроений (ID -> Описание)</returns>
     public static Dictionary<int, string> GetMoodList()
     {
-      return new Dictionary<int, string>(_moodDictionary);
+      return _moodDictionary.ToDictionary(
+          kvp => kvp.Key,
+          kvp => kvp.Value.Description);
     }
 
     /// <summary>
@@ -191,7 +202,107 @@ namespace ISIDA.Psychic.Automatism
       return _moodDictionary.ContainsKey(moodId);
     }
 
+    /// <summary>
+    /// Получает полную информацию о тоне
+    /// </summary>
+    public static (string Description, bool IsThreatening) GetToneInfo(int toneId)
+    {
+      return _toneDictionary.TryGetValue(toneId, out var info)
+          ? info
+          : (string.Empty, false);
+    }
+
+    /// <summary>
+    /// Получает полную информацию о настроении
+    /// </summary>
+    public static (string Description, bool IsThreatening) GetMoodInfo(int moodId)
+    {
+      return _moodDictionary.TryGetValue(moodId, out var info)
+          ? info
+          : (string.Empty, false);
+    }
+
     #endregion
+
+    #region Методы для проверки угрозы
+
+    /// <summary>
+    /// Проверяет, является ли тон угрожающим
+    /// </summary>
+    /// <param name="toneId">ID тона для проверки</param>
+    /// <returns>True, если тон угрожающий</returns>
+    public static bool IsToneThreatening(int toneId)
+    {
+      return _toneDictionary.TryGetValue(toneId, out var toneInfo)
+          ? toneInfo.IsThreatening
+          : false;
+    }
+
+    /// <summary>
+    /// Проверяет, является ли настроение угрожающим
+    /// </summary>
+    /// <param name="moodId">ID настроения для проверки</param>
+    /// <returns>True, если настроение угрожающее</returns>
+    public static bool IsMoodThreatening(int moodId)
+    {
+      return _moodDictionary.TryGetValue(moodId, out var moodInfo)
+          ? moodInfo.IsThreatening
+          : false;
+    }
+
+    /// <summary>
+    /// Проверяет, содержит ли комбинация тона и настроения угрозу
+    /// </summary>
+    /// <param name="toneId">ID тона</param>
+    /// <param name="moodId">ID настроения</param>
+    /// <returns>True, если есть угроза в тоне или настроении</returns>
+    public static bool HasThreat(int toneId, int moodId)
+    {
+      return IsToneThreatening(toneId) || IsMoodThreatening(moodId);
+    }
+
+    /// <summary>
+    /// Получает уровень угрозы на основе тона и настроения
+    /// </summary>
+    /// <param name="toneId">ID тона</param>
+    /// <param name="moodId">ID настроения</param>
+    /// <returns>Уровень угрозы: 0 - нет угрозы, 1 - низкая, 2 - высокая</returns>
+    public static int GetThreatLevel(int toneId, int moodId)
+    {
+      bool toneThreat = IsToneThreatening(toneId);
+      bool moodThreat = IsMoodThreatening(moodId);
+
+      if (toneThreat && moodThreat) return 2; // Высокая угроза
+      if (toneThreat || moodThreat) return 1; // Низкая угроза
+      return 0; // Нет угрозы
+    }
+
+    /// <summary>
+    /// Получает рекомендацию по реакции на комбинацию тона и настроения
+    /// </summary>
+    public static string GetThreatReactionAdvice(int toneId, int moodId)
+    {
+      int threatLevel = GetThreatLevel(toneId, moodId);
+      string result = "";
+
+      switch (threatLevel)
+      {
+        case 1:
+          result = "Обнаружена потенциальная угроза. Рекомендуется осторожность.";
+          break;
+        case 2:
+          result = "Высокая угроза! Рекомендуется немедленная защитная реакция.";
+          break;
+        default:
+          result = "Угрозы не обнаружено. Безопасное взаимодействие.";
+          break;
+      }
+
+      return result;
+    }
+
+    #endregion
+
 
     #region Поля и свойства
 

@@ -4,10 +4,12 @@ using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TreeView;
 
 namespace ISIDA.Psychic
 {
@@ -17,9 +19,12 @@ namespace ISIDA.Psychic
   public sealed class PurposeGeneticImageSystem: IDisposable
   {
     private readonly InformationEnvironmentSystem _informationEnvironmentSystem;
+    private readonly AutomatizmSystem _automatizmSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
+
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
+    private int oldAutomatizmId = 0;
 
     #region Инициализация
 
@@ -42,22 +47,25 @@ namespace ISIDA.Psychic
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
       InformationEnvironmentSystem informationEnvironmentSystem,
-      ActionsImagesSystem actionsImagesSystem)
+      ActionsImagesSystem actionsImagesSystem,
+      AutomatizmSystem automatizmSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("PurposeGeneticSystem уже инициализирован.");
 
-      _instance = new PurposeGeneticImageSystem(informationEnvironmentSystem, actionsImagesSystem);
+      _instance = new PurposeGeneticImageSystem(informationEnvironmentSystem, actionsImagesSystem, automatizmSystem);
     }
 
     private PurposeGeneticImageSystem(
       InformationEnvironmentSystem informationEnvironmentSystem,
-      ActionsImagesSystem actionsImagesSystem)
+      ActionsImagesSystem actionsImagesSystem,
+      AutomatizmSystem automatizmSystem)
     {
       try
       {
         _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
         _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
+        _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       }
       catch (Exception ex)
       {
@@ -117,12 +125,12 @@ namespace ISIDA.Psychic
 
     #endregion
 
-    #region Управление образами
+    #region Управление образами целей
 
     /// <summary>
     /// Получить текущий гомеостатический образ
     /// </summary>
-    public PurposeGeneticImage GetActionsImage()
+    public PurposeGeneticImage GetPurposeGeneticImage()
     {
       _lock.EnterReadLock();
       try
@@ -155,6 +163,11 @@ namespace ISIDA.Psychic
 
         return purposeGenetic;
       }
+      catch (Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
+        return null;
+      }
       finally
       {
         _lock.ExitReadLock();
@@ -170,6 +183,97 @@ namespace ISIDA.Psychic
         return new List<AdaptiveActionsSystem.AdaptiveAction>();
 
       return AppGlobalState.ActiveAdaptiveActions.ToList();
+    }
+
+    /// <summary>
+    /// Получить автоматизм по гомеостатической цели
+    /// </summary>
+    public Automatizm GetAutomatizmByGeneticPurpose()
+    {
+      try
+      {
+        var purposeGenetic = GetPurposeGeneticImage();
+        Automatizm atmz = null;
+        
+        if (purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
+        {
+          if(purposeGenetic.ActionImage != null)
+            atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
+        }
+        return atmz;
+      }
+      catch(Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
+        return null;
+      }
+    }
+
+    /// <summary>
+    /// Обработка автоматизма, рвущегося на выполнение - простейший вариант
+    /// </summary>
+    public Automatizm GetBasicAutomatizmByPurpose(int atmtzmID)
+    {
+      try
+      {
+        var atmz = _automatizmSystem.GetAutomatizmById(atmtzmID);
+        if(atmz == null)
+        {
+          Logger.Error($"Не найден автоматизм ID={atmtzmID}");
+          return null;
+        }
+
+        var purposeGenetic = GetPurposeGeneticImage();
+        ActionsImage actImg = null;
+        actImg = _actionsImagesSystem.GetActionsImage(atmz.ActionsImageID);
+        bool IsHasThreat = HasThreat(actImg.ToneId, actImg.MoodId);
+
+        if (IsHasThreat || purposeGenetic.VeryActual)
+        {
+          if(oldAutomatizmId != atmz.ID)
+          {
+            oldAutomatizmId = atmz.ID;
+            return atmz;
+          }
+        }
+
+        return null;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
+        return null;
+      }     
+    }
+
+    /// <summary>
+    /// Создать и запустить автоматизм по гомеостатической цели
+    /// </summary>
+    public Automatizm CreateAutomatizmByGeneticPurpose(PurposeGeneticImage purposeGenetic)
+    {
+      if(purposeGenetic == null || purposeGenetic.ActionImage == null)
+        return null;
+
+      try
+      {
+        int branchID = AppGlobalState.AutomatizmNodeId;
+        var aArr = purposeGenetic.ActionImage.ActIdList;
+        var sArr = purposeGenetic.ActionImage.PhraseIdList;
+        int toneId = purposeGenetic.ActionImage.ToneId;
+        int moodId = purposeGenetic.ActionImage.MoodId;
+
+        int actionImageId = 0;
+        (actionImageId, _) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, aArr, sArr, toneId, moodId, true);
+        Automatizm atmz = null;
+        (_, atmz) = _automatizmSystem.CreateNewAutomatizm(branchID, actionImageId);
+
+        return atmz;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"{ex.Message}");
+        return null;
+      }
     }
 
     #endregion

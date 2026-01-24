@@ -588,15 +588,12 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        // Если в ReflexTreeSystem есть метод GetAllNodes() - используем его
-        // Иначе используем рефлексию или другие способы доступа
-        return _reflexTree.GetAllNodes(); // Предполагаем, что такой метод существует
+        return _reflexTree.GetAllNodes();
       }
       catch
       {
-        // Альтернативный способ: через поиск по ID
         var nodes = new List<ReflexTreeSystem.ReflexNode>();
-        for (int i = 1; i <= 1000; i++) // Максимальный ID узлов
+        for (int i = 1; i <= 1000; i++)
         {
           var node = _reflexTree.FindNodeByID(i);
           if (node != null)
@@ -860,6 +857,7 @@ namespace ISIDA.Reflexes
     {
       _geneticReflexesToRun.Clear();
       _conditionedReflexesToRun.Clear();
+      AppGlobalState.FlgConditionReflexes = false;
 
       if (_isChainActive)
         return;
@@ -906,7 +904,12 @@ namespace ISIDA.Reflexes
             .FirstOrDefault(r => r.Id == node.ConditionedReflex);
         if (reflex != null && reflex.CanBeActivated() &&
             IsReflexConditionsMet(reflex))
+        {
           _conditionedReflexesToRun.Add(node.ConditionedReflex);
+          AppGlobalState.FlgConditionReflexes = true;
+        }
+        else
+          AppGlobalState.FlgConditionReflexes = false;
       }
     }
 
@@ -1207,6 +1210,7 @@ namespace ISIDA.Reflexes
         _lastReflexActivationPulse = 0;
         _geneticReflexesToRun.Clear();
         _conditionedReflexesToRun.Clear();
+        AppGlobalState.FlgConditionReflexes = false;
       }
       finally
       {

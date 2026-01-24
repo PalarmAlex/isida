@@ -221,7 +221,12 @@ namespace ISIDA.Actions
       /// <summary>
       /// Действие от условного рефлекса
       /// </summary>
-      ConditionedReflex = 2
+      ConditionedReflex = 2,
+
+      /// <summary>
+      /// Действие от автоматизма
+      /// </summary>
+      Automatizm = 3
     }
 
     private readonly Dictionary<int, AdaptiveAction> _actions = new Dictionary<int, AdaptiveAction>();

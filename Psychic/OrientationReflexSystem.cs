@@ -18,6 +18,7 @@ namespace ISIDA.Psychic
     private bool _disposed = false;
 
     private readonly InformationEnvironmentSystem _informationEnvironmentSystem;
+    private readonly PurposeGeneticImageSystem _purposeGeneticImageSystem;
     private AutomatizmSystem _automatizmSystem;
     private AutomatizmTreeSystem _automatizmTreeSystem;
     
@@ -39,12 +40,14 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Инициализирует глобальный экземпляр системы
     /// </summary>
-    public static void InitializeInstance(InformationEnvironmentSystem informationEnvironmentSystem)
+    public static void InitializeInstance(
+      InformationEnvironmentSystem informationEnvironmentSystem,
+      PurposeGeneticImageSystem purposeGeneticImageSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("OrientationReflexSystem уже инициализирован.");
 
-      _instance = new OrientationReflexSystem(informationEnvironmentSystem);
+      _instance = new OrientationReflexSystem(informationEnvironmentSystem, purposeGeneticImageSystem);
     }
 
     /// <summary>
@@ -61,9 +64,12 @@ namespace ISIDA.Psychic
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
     }
 
-    private OrientationReflexSystem(InformationEnvironmentSystem informationEnvironmentSystem)
+    private OrientationReflexSystem(
+      InformationEnvironmentSystem informationEnvironmentSystem,
+      PurposeGeneticImageSystem purposeGeneticImageSystem)
     {
       _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
+      _purposeGeneticImageSystem = purposeGeneticImageSystem ?? throw new ArgumentNullException(nameof(purposeGeneticImageSystem));
     }
 
     /// <summary>
@@ -117,11 +123,13 @@ namespace ISIDA.Psychic
     {
       try
       {
+        Automatizm atmz = null;
+
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+        if (AppGlobalState.EvolutionStage < 3)
+          atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
-
-
-        return null;
+        return atmz;
       }
       catch(Exception ex)
       {
@@ -137,9 +145,12 @@ namespace ISIDA.Psychic
     {
       try
       {
-        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+        Automatizm atmz = null;
 
-        return null;
+        _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+        atmz = _purposeGeneticImageSystem.GetBasicAutomatizmByPurpose(automatizmID);
+
+        return atmz;
       }
       catch (Exception ex)
       {

@@ -634,14 +634,19 @@ namespace ISIDA.Common
           context.Gomeostas);
           context.PsychicSystem = PsychicSystem.Instance;
 
-        // Шаг 24: Система ориентировочного рефлпекса
+        // Шаг 24: Система управления гомеостатическими целями
         initializationStep = 24;
-        PurposeGeneticImageSystem.InitializeInstance(context.InformationEnvironmentSystem, context.ActionsImages);
+        PurposeGeneticImageSystem.InitializeInstance(
+          context.InformationEnvironmentSystem, 
+          context.ActionsImages,
+          context.AutomatizmSystem);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
         // Шаг 25: Система ориентировочного рефлпекса
         initializationStep = 25;
-        OrientationReflexSystem.InitializeInstance(context.InformationEnvironmentSystem);
+        OrientationReflexSystem.InitializeInstance(
+          context.InformationEnvironmentSystem,
+          context.PurposeGeneticImageSystem);
         var orientationReflex = OrientationReflexSystem.Instance;
         orientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
         // Связывание систем

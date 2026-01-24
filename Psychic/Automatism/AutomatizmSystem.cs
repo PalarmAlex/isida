@@ -55,7 +55,7 @@ namespace ISIDA.Psychic.Automatism
     public int Count { get; set; }
 
     /// <summary>
-    /// Какие ID гомео-параметров улучшает это действие
+    /// Какие ID гомео-параметров фактически улучшило действие этого автоматизма
     /// </summary>
     public List<int> GomeoIdSuccesArr { get; set; } = new List<int>();
   }
@@ -200,14 +200,13 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создает новый автоматизм
+    /// Создает новый автоматизм или возвращает его, если такой уже есть
     /// </summary>
     public (int Id, Automatizm Automatizm) CreateNewAutomatizm(
         int branchId,
         int actionsImageId,
         bool checkUnicum = true)
     {
-      // Не создавать автоматизм с нулевым образом
       if (actionsImageId == 0)
         return (0, null);
 
@@ -229,7 +228,10 @@ namespace ISIDA.Psychic.Automatism
           ID = id,
           BranchID = branchId,
           ActionsImageID = actionsImageId,
-          Energy = 5
+          Energy = 5,
+          Usefulness = 0,
+          Belief = 0,
+          Count = 0
         };
 
         _automatizmsById[id] = automatizm;
@@ -251,10 +253,7 @@ namespace ISIDA.Psychic.Automatism
         }
 
         if (!_noWarningCreateShow)
-        {
           Logger.Info($"Создан новый автоматизм Id={automatizm.ID}");
-        }
-          SaveAutomatizm();
 
         return (id, automatizm);
       }
