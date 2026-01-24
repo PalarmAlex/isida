@@ -387,9 +387,11 @@ namespace ISIDA.Gomeostas
       bool hasBad = false;         // Флаг наличия хотя бы одного параметра в состоянии Bad
       bool hasWell = false;        // Флаг наличия хотя бы одного параметра в состоянии Well
       var parametersState = new List<ParameterStateInfo>(); // Состояния отдельных параметров
+      var badParameterIds = new List<int>(); // список Bad параметров
 
       relativeThreshold = relativeThreshold / 100f; // нормализуем интегральный порог к [0,1] 
 
+      // Параметры в состоянии Normal не учитываются в суммарных отклонениях
       foreach (var param in parameters)
       {
         var paramState = CalculateParameterState(param, dynamicTime, difSensorPar);
@@ -403,6 +405,7 @@ namespace ISIDA.Gomeostas
           badSum += weightedValue;
           totalPossibleBad += normalizedWeight;
           hasBad = true;
+          badParameterIds.Add(param.Id);
         }
         else if (paramState.State == ParameterState.Well)
         {
@@ -410,7 +413,6 @@ namespace ISIDA.Gomeostas
           totalPossibleWell += normalizedWeight;
           hasWell = true;
         }
-        // Параметры в состоянии Normal не учитываются в суммарных отклонениях
       }
 
       HomeostasisOverallState overallState = HomeostasisOverallState.Normal;
@@ -458,6 +460,7 @@ namespace ISIDA.Gomeostas
       else
         lastWellStatePulse = null;
 
+      AppGlobalState.CurrentOverallState = (AppGlobalState.HomeostasisState)overallState;
       var result = new AgentHomeostasisState
       {
         OverallState = overallState,
@@ -508,7 +511,7 @@ namespace ISIDA.Gomeostas
       {
         CollectParameterStyleActivations(baseStyles, new List<ParameterData> { dominantParam },
             parameterActivations, dynamicTime, difSensorPar);
-        AppGlobalState.DominantParam = dominantParam.Id;
+        AppGlobalState.DominantParam = dominantParam.Id;        
       }
 
       return (finalStyles, activations, parameterActivations, dominantParam);

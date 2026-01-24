@@ -364,6 +364,7 @@ namespace ISIDA.Psychic.Automatism
         ActiveBranchNodeArr.Clear();
         CurrentAutomatizmTreeEnd = null;
         _currentStepCount = 0;
+        AppGlobalState.CurrentFindAtmzStepCount = _currentStepCount;
 
         var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
 
@@ -443,11 +444,13 @@ namespace ISIDA.Psychic.Automatism
         else
         {
           _currentStepCount = level - 1;
+          AppGlobalState.CurrentFindAtmzStepCount = _currentStepCount;
           continue;
         }
 
         level++;
         _currentStepCount = level;
+        AppGlobalState.CurrentFindAtmzStepCount = _currentStepCount;
         ConditionAutomatizmFound(level, remaining, child);
         return;
       }

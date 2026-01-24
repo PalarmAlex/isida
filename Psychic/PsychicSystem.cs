@@ -73,6 +73,7 @@ namespace ISIDA.Psychic
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
     private OrientationReflexSystem _orientationReflexSystem;
+    private AutomatismExecutionService _automatismExecutionService;
 
     private PsychicSystem(
       AutomatizmSystem automatizmSystem,
@@ -93,8 +94,21 @@ namespace ISIDA.Psychic
       _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
-      // Инициализация базового дерева автоматизмов
       InitializeBasicAutomatizmTree();
+    }
+
+    /// <summary>
+    /// Установка сервиса выполнения автоматизмов
+    /// </summary>
+    public void SetAutomatismExecutionService(AutomatismExecutionService executionService)
+    {
+      if (executionService == null)
+        throw new ArgumentNullException(nameof(executionService));
+
+      if (!executionService.AreDependenciesSet)
+        throw new InvalidOperationException("Зависимости AutomatismExecutionService не установлены");
+
+      _automatismExecutionService = executionService;
     }
 
     /// <summary>
@@ -425,7 +439,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Получить автоматизм из узла дерева
     /// </summary>
-    private Automatizm GetAutomatizmFromNode(int nodeId)
+    internal Automatizm GetAutomatizmFromNode(int nodeId)
     {
       if (nodeId <= 0)
         return null;
@@ -456,6 +470,12 @@ namespace ISIDA.Psychic
       if (automatizm == null)
         return;
 
+      if (_automatismExecutionService == null)
+      {
+        Logger.Warning("Сервис выполнения автоматизмов не установлен");
+        return;
+      }
+
       _lock.EnterWriteLock();
       try
       {
@@ -463,10 +483,12 @@ namespace ISIDA.Psychic
         _lastRunAutomatizmPulsCount = PulseCount;
         _lastRunAutomatizm = automatizm;
 
-        Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
+        var result = _automatismExecutionService.ExecuteAutomatizm(automatizm.ID);
 
-        // Здесь будет логика выполнения действий автоматизма
-        // Пока просто логируем
+        if (result.Success)
+          Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
+        else
+          Logger.Warning($"Ошибка выполнения автоматизма {automatizm.ID}: {result.ErrorMessage}");
 
         // Если это действие с пульта (BranchID > 1000000)
         if (automatizm.BranchID > 1000000 && automatizm.BranchID < 2000000)

@@ -4,12 +4,9 @@ using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Remoting.Messaging;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TreeView;
 
 namespace ISIDA.Psychic
 {
@@ -21,6 +18,7 @@ namespace ISIDA.Psychic
     private readonly InformationEnvironmentSystem _informationEnvironmentSystem;
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
+    private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -48,24 +46,31 @@ namespace ISIDA.Psychic
     public static void InitializeInstance(
       InformationEnvironmentSystem informationEnvironmentSystem,
       ActionsImagesSystem actionsImagesSystem,
-      AutomatizmSystem automatizmSystem)
+      AutomatizmSystem automatizmSystem,
+      AdaptiveActionsSystem adaptiveActionsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("PurposeGeneticSystem уже инициализирован.");
 
-      _instance = new PurposeGeneticImageSystem(informationEnvironmentSystem, actionsImagesSystem, automatizmSystem);
+      _instance = new PurposeGeneticImageSystem(
+        informationEnvironmentSystem, 
+        actionsImagesSystem, 
+        automatizmSystem, 
+        adaptiveActionsSystem);
     }
 
     private PurposeGeneticImageSystem(
       InformationEnvironmentSystem informationEnvironmentSystem,
       ActionsImagesSystem actionsImagesSystem,
-      AutomatizmSystem automatizmSystem)
+      AutomatizmSystem automatizmSystem,
+      AdaptiveActionsSystem adaptiveActionsSystem)
     {
       try
       {
         _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
         _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
         _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
+        _adaptiveActionsSystem = adaptiveActionsSystem ?? throw new ArgumentNullException(nameof(adaptiveActionsSystem));
       }
       catch (Exception ex)
       {
@@ -219,7 +224,7 @@ namespace ISIDA.Psychic
         var atmz = _automatizmSystem.GetAutomatizmById(atmtzmID);
         if(atmz == null)
         {
-          Logger.Error($"Не найден автоматизм ID={atmtzmID}");
+          Logger.Info($"Нет автоматизма ID={atmtzmID}");
           return null;
         }
 
@@ -228,16 +233,54 @@ namespace ISIDA.Psychic
         actImg = _actionsImagesSystem.GetActionsImage(atmz.ActionsImageID);
         bool IsHasThreat = HasThreat(actImg.ToneId, actImg.MoodId);
 
-        if (IsHasThreat || purposeGenetic.VeryActual)
+        // значимая новизна: не полное распознавание + опасные признаки в Tone и/или Mood
+        if (IsHasThreat && AppGlobalState.CurrentFindAtmzStepCount == 3)
+          return atmz;
+
+        // опасная ситуация
+        if (purposeGenetic.VeryActual)
         {
-          if(oldAutomatizmId != atmz.ID)
-          {
+          if (oldAutomatizmId == atmz.ID)
+            return null;  // чтобы не долбить одно и тоже постоянно     
+          else
             oldAutomatizmId = atmz.ID;
-            return atmz;
+        }
+        else
+        {
+          // если автоматизм протух, и состояние агента Bad, создаем новый на базе гомеостатических целей
+          if(atmz.Usefulness < 0)
+          {
+            if(AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad)
+            {
+              int dominantParamId = AppGlobalState.DominantParam;
+              var activeActions = _adaptiveActionsSystem.GetActiveAdaptiveActionsList();
+              var actionsForDominantParam = activeActions
+                  .Where(action => action.TargetGomeoParamIdArr != null &&
+                                   action.TargetGomeoParamIdArr.Contains(dominantParamId))
+                  .ToList();
+
+              // Выбираем 1 действие с максимальным Vigor
+              AdaptiveAction bestAction = null;
+              var actionIdList = new List<int>();
+              if (actionsForDominantParam.Count > 0)
+              {
+                bestAction = actionsForDominantParam
+                    .OrderByDescending(a => a.Vigor)
+                    .FirstOrDefault();
+
+                actionIdList = new List<int> { bestAction.Id };
+              }
+              else
+                actionIdList = new List<int> { AppGlobalState.DefaultAdaptiveActionId };
+
+              ActionsImage actionImage = null;
+              (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
+              purposeGenetic.ActionImage = actionImage;
+              atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
+            }
           }
         }
-
-        return null;
+        return atmz;
       }
       catch (Exception ex)
       {

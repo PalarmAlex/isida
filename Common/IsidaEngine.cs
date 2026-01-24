@@ -290,6 +290,16 @@ namespace ISIDA.Common
     public PurposeGeneticImageSystem PurposeGeneticImageSystem { get; internal set; }
 
     /// <summary>
+    /// Сервис выполнения автоматизмов
+    /// </summary>
+    public AutomatismExecutionService AutomatismExecution { get; internal set; }
+
+    /// <summary>
+    /// Система ориентировочного рефлекса
+    /// </summary>
+    public OrientationReflexSystem OrientationReflex { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -348,6 +358,8 @@ namespace ISIDA.Common
       SafeDispose(AdaptiveActions, "AdaptiveActions");
       SafeDispose(Gomeostas, "Gomeostas");
       SafeDispose(InfluenceActions, "InfluenceActions");
+      SafeDispose(AutomatismExecution, "AutomatismExecution");
+      SafeDispose(OrientationReflex, "OrientationReflex");
       SafeDispose(InformationEnvironmentSystem, "InformationEnvironmentSystem");
 
       _disposed = true;
@@ -639,18 +651,36 @@ namespace ISIDA.Common
         PurposeGeneticImageSystem.InitializeInstance(
           context.InformationEnvironmentSystem, 
           context.ActionsImages,
-          context.AutomatizmSystem);
+          context.AutomatizmSystem,
+          context.AdaptiveActions);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
-        // Шаг 25: Система ориентировочного рефлпекса
+        // Шаг 25: Сервис выполнения автоматизмов
         initializationStep = 25;
+        AutomatismExecutionService.InitializeInstance(
+            context.AdaptiveActions,
+            context.ActionsImages);
+        context.AutomatismExecution = AutomatismExecutionService.Instance;
+
+        // Шаг 26: Система ориентировочного рефлекса
+        initializationStep = 26;
         OrientationReflexSystem.InitializeInstance(
-          context.InformationEnvironmentSystem,
-          context.PurposeGeneticImageSystem);
-        var orientationReflex = OrientationReflexSystem.Instance;
-        orientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
+            context.InformationEnvironmentSystem,
+            context.PurposeGeneticImageSystem);
+        context.OrientationReflex = OrientationReflexSystem.Instance;
+        context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
+
+        // Шаг 27: Сервис выполнения автоматизмов
+        initializationStep = 27;
+        AutomatismExecutionService.InitializeWithDependencies(
+            context.AutomatizmSystem,
+            context.PsychicSystem,
+            context.OrientationReflex);
+        context.AutomatismExecution = AutomatismExecutionService.Instance;
+
         // Связывание систем
-        PsychicSystem.Instance.SetOrientationReflexSystem(orientationReflex);
+        PsychicSystem.Instance.SetOrientationReflexSystem(context.OrientationReflex);
+        PsychicSystem.Instance.SetAutomatismExecutionService(context.AutomatismExecution);
 
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);

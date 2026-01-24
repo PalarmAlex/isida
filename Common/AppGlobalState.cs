@@ -14,12 +14,50 @@ public static class AppGlobalState
   private static int _dominantParam = 0;
   private static int automatizmNodeId = 0;
   private static int _curActiveVerbalId = 0;
+  private static int _currentFindAtmzStepCount = 0;
+  private static HomeostasisState _currentOverallState = HomeostasisState.Normal;
   private static bool _isDead = false;
   private static bool _isSleeping = false;
   private static bool _flgConditionReflexes = false;
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
 
+  /// <summary>
+  /// Состояние гомеостаза агента
+  /// </summary>
+  public enum HomeostasisState
+  {
+    /// <summary>
+    /// Плохо
+    /// </summary>
+    Bad = -1,
+    /// <summary>
+    /// Норма
+    /// </summary>
+    Normal = 0,
+    /// <summary>
+    /// Хорошо
+    /// </summary>
+    Well = 1
+  }
+
+  /// <summary>
+  /// Текущее интегральное состояние агента
+  /// </summary>
+  public static HomeostasisState CurrentOverallState
+  {
+    get => _currentOverallState;
+    internal set => _currentOverallState = value;
+  }
+
+  /// <summary>
+  /// Текущий шаг при поиске автоматизма в узлах ветки дерева автоматизмов
+  /// </summary>
+  public static int CurrentFindAtmzStepCount
+  {
+    get => _currentFindAtmzStepCount;
+    set => _currentFindAtmzStepCount = value;
+  }
 
   /// <summary>
   /// ID текущего активного вербального образа 
