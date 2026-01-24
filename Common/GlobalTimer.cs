@@ -28,7 +28,7 @@ namespace ISIDA.Common
     private static readonly object _timerLock = new object();
     private static bool _isRunning = false;
     private static int _secondsSinceLastSave = 0;
-    private static ResearchLogger _researchLogger;
+    private static ResearchLogger _researchLogger; // это нужно для корректной выгрузки в IsidaEngine!!!
 
     /// <summary>
     /// Установка ссылки на логер
@@ -266,6 +266,9 @@ namespace ISIDA.Common
     /// </summary>
     private static void TriggerAutosave()
     {
+      if (_researchLogger != null && _researchLogger.IsDisposed)
+        return;
+
       try
       {
         _gomeostas.SaveAgentProperties();
@@ -273,7 +276,7 @@ namespace ISIDA.Common
       }
       catch
       {
-
+        // Игнорируем ошибки при завершении
       }
     }
 

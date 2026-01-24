@@ -317,8 +317,10 @@ namespace ISIDA.Common
 
       try
       {
+        ResearchLogger?.SuspendLogging();
         GlobalTimer.Stop();
         Thread.Sleep(200);
+        SafeDispose(ResearchLogger, "ResearchLogger");
         GlobalTimer.ClearSystems();
       }
       catch (Exception ex)
@@ -338,7 +340,6 @@ namespace ISIDA.Common
       //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
-      SafeDispose(ResearchLogger, "ResearchLogger");
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
@@ -603,6 +604,7 @@ namespace ISIDA.Common
             clearOnStart: config.ClearLogsOnStart,
             enabled: config.LogEnabled
         );
+        GlobalTimer.SetResearchLogger(context.ResearchLogger);
 
         // Шаг 18: Система образов действий оператора и агента ИИ
         initializationStep = 18;

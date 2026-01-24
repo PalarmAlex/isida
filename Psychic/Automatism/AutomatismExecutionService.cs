@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
+using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 
 namespace ISIDA.Psychic.Automatism
 {
@@ -124,8 +125,7 @@ namespace ISIDA.Psychic.Automatism
         if (automatizm.Usefulness < 0)
           return (false, $"Автоматизм {automatizmId} имеет отрицательную полезность и не может быть выполнен");
 
-        // Получаем действия из автоматизма
-        var actionIds = GetActionsForAutomatizm(automatizmId);
+        var actionIds = GetActionsForAutomatizm(automatizm);
         if (actionIds == null || !actionIds.Any())
           return (false, $"Автоматизм {automatizmId} не содержит связанных действий");
 
@@ -261,25 +261,16 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Получает список действий для автоматизма
     /// </summary>
-    public List<int> GetActionsForAutomatizm(int automatizmId)
+    public List<int> GetActionsForAutomatizm(Automatizm atmz)
     {
       try
       {
-        if (!AreDependenciesSet)
+        if (!AreDependenciesSet || atmz == null)
           return new List<int>();
 
-        var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
-        if (automatizm == null)
-          return new List<int>();
-
-        // Автоматизмы в данной архитектуре могут содержать действия через BranchID
-        // BranchID > 1000000 - действие с пульта
-        // BranchID > 2000000 - фраза
-        // Здесь может потребоваться дополнительная логика в зависимости от реализации Automatizm
-
-        // Временная заглушка - возвращаем пустой список
-        // TODO: Реализовать получение действий из автоматизма
-        return new List<int>();
+        ActionsImage actImg = null;
+        actImg = _actionsImagesSystem.GetActionsImage(atmz.ActionsImageID);
+        return actImg.ActIdList;
       }
       catch
       {
@@ -287,34 +278,34 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    /// <summary>
-    /// Получает ID действия из автоматизма
-    /// </summary>
-    public int GetActionIdFromAutomatizm(int automatizmId)
-    {
-      var actions = GetActionsForAutomatizm(automatizmId);
-      return actions.FirstOrDefault();
-    }
+    ///// <summary>
+    ///// Получает ID действия из автоматизма
+    ///// </summary>
+    //public int GetActionIdFromAutomatizm(int automatizmId)
+    //{
+    //  var actions = GetActionsForAutomatizm(automatizmId);
+    //  return actions.FirstOrDefault();
+    //}
 
-    /// <summary>
-    /// Получает автоматизм по ID действия
-    /// </summary>
-    public Automatizm GetAutomatizmForAction(int actionId)
-    {
-      try
-      {
-        if (!AreDependenciesSet)
-          return null;
+    ///// <summary>
+    ///// Получает автоматизм по ID действия
+    ///// </summary>
+    //public Automatizm GetAutomatizmForAction(int actionId)
+    //{
+    //  try
+    //  {
+    //    if (!AreDependenciesSet)
+    //      return null;
 
-        // Ищем автоматизмы, связанные с данным действием
-        // TODO: Реализовать поиск автоматизма по действию
-        return null;
-      }
-      catch
-      {
-        return null;
-      }
-    }
+    //    // Ищем автоматизмы, связанные с данным действием
+    //    // TODO: Реализовать поиск автоматизма по действию
+    //    return null;
+    //  }
+    //  catch
+    //  {
+    //    return null;
+    //  }
+    //}
 
     #endregion
 

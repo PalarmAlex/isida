@@ -496,6 +496,10 @@ namespace ISIDA.Common
     {
       if (_currentPulseLogEntry == null || _disposed) return;
 
+      if ((_currentFormat.HasFlag(LogFormat.JsonL) && (_jsonlWriter == null)) ||
+          (_currentFormat.HasFlag(LogFormat.Csv) && (_csvWriter == null)))
+        return;
+
       try
       {
         // Записываем в JSONL
@@ -557,9 +561,23 @@ namespace ISIDA.Common
     {
       lock (_lock)
       {
+        if (_disposed) return;
+
         WriteBufferedLogEntry();
         _currentPulseLogEntry = null;
         _bufferedPulse = -1;
+      }
+    }
+
+    /// <summary>
+    /// Временное отключение логирования
+    /// </summary>
+    public void SuspendLogging()
+    {
+      lock (_lock)
+      {
+        _enabled = false;
+        Flush();
       }
     }
 
