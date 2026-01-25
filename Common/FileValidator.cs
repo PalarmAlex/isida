@@ -149,7 +149,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
         }
       }
     }

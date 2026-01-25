@@ -77,7 +77,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
      }
@@ -560,7 +560,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -576,7 +576,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -906,7 +906,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -1087,7 +1087,7 @@ namespace ISIDA.Actions
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {

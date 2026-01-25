@@ -464,7 +464,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
         }
       }
     }
@@ -524,7 +524,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -625,7 +625,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
         }
       }
     }
@@ -690,7 +690,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
 
       return state;
@@ -745,7 +745,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -763,7 +763,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -788,7 +788,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -804,7 +804,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -820,7 +820,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -836,7 +836,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -906,7 +906,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -980,7 +980,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 

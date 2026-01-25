@@ -279,7 +279,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -436,7 +436,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {
@@ -534,7 +534,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -576,7 +576,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -648,7 +648,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         DeactivateChain(pulseCount);
       }
     }

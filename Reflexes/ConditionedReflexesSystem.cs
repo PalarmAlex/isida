@@ -115,7 +115,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -794,7 +794,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return false;
       }
       finally
@@ -846,7 +846,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         _currentAgentLifetime = 0;
       }
     }
@@ -1034,7 +1034,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -1084,7 +1084,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -1195,7 +1195,7 @@ namespace ISIDA.Reflexes
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {

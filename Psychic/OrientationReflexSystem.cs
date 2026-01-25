@@ -111,7 +111,7 @@ namespace ISIDA.Psychic
       }
       catch(Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -133,7 +133,7 @@ namespace ISIDA.Psychic
       }
       catch(Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -154,7 +154,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return null;
       }
     }
@@ -174,7 +174,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
   }

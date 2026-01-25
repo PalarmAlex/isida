@@ -694,7 +694,7 @@ namespace ISIDA.Common
         // Шаг 28: Сервис переключения стадий эволюции
         initializationStep = 28;
         EvolutionStageService.InitializeInstance(
-            context.Gomeostas,
+            context.AutomatizmSystem,
             context.ConditionedReflexes);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);

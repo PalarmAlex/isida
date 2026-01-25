@@ -75,7 +75,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -236,7 +236,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
       finally
@@ -458,7 +458,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return true;
       }
     }
@@ -1508,7 +1508,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -1563,14 +1563,14 @@ namespace ISIDA.Gomeostas
       catch (InvalidOperationException ex) when (ex.Message.Contains("Агент мертв") || ex.Message.Contains("Агент спит"))
       {
         if (!silent)
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
 
         return false;
       }
       catch (Exception ex)
       {
         if (!silent)
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
 
         return false;
       }
@@ -2164,7 +2164,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return 0;
       }
     }
@@ -2190,7 +2190,7 @@ namespace ISIDA.Gomeostas
         catch (Exception ex)
         {
           if (attempt == maxRetries)
-            Logger.Error($"{ex.Message}");
+            Logger.Error(ex.Message);
         }
       }
     }
@@ -2477,7 +2477,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -2536,7 +2536,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -2821,7 +2821,7 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {

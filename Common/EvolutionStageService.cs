@@ -18,7 +18,7 @@ namespace ISIDA.Common
   /// </summary>
   public sealed class EvolutionStageService : IDisposable
   {
-    private readonly GomeostasSystem _gomeostasSystem;
+    private readonly AutomatizmSystem _automatizmSystem;
     private readonly ConditionedReflexesSystem _conditionedReflexesSystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -43,22 +43,22 @@ namespace ISIDA.Common
     /// Инициализирует глобальный экземпляр системы
     /// </summary>
     public static void InitializeInstance(
-        GomeostasSystem gomeostasSystem,
+        AutomatizmSystem automatizmSystem,
         ConditionedReflexesSystem conditionedReflexesSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("EvolutionStageService уже инициализирован.");
 
       _instance = new EvolutionStageService(
-        gomeostasSystem,
+        automatizmSystem,
         conditionedReflexesSystem);
     }
 
     private EvolutionStageService(
-        GomeostasSystem gomeostasSystem,
+        AutomatizmSystem automatizmSystem,
         ConditionedReflexesSystem conditionedReflexesSystem)
     {
-      _gomeostasSystem = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
+      _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
     }
 
@@ -134,7 +134,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return EvolutionStageChangeResult.CreateFailure(
             $"Ошибка при переключении стадии: {ex.Message}");
       }
@@ -161,7 +161,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"Ошибка очистки данных стадии {stage}: {ex.Message}");
+          Logger.Error(ex.Message);
           // Продолжаем очистку остальных стадий
         }
       }
@@ -184,7 +184,7 @@ namespace ISIDA.Common
         }
         catch (Exception ex)
         {
-          Logger.Error($"Ошибка очистки данных стадии {stage}: {ex.Message}");
+          Logger.Error(ex.Message);
           // Продолжаем очистку остальных стадий
         }
       }
@@ -206,6 +206,7 @@ namespace ISIDA.Common
           break;
 
         case 2:
+          ClearAllAutomatizm();
           break;
 
         case 3:
@@ -241,7 +242,7 @@ namespace ISIDA.Common
 
           var result = _conditionedReflexesSystem.SaveConditionedReflexes();
           if (!result.Success)
-            Logger.Warning($"Не удалось сохранить очищенные условные рефлексы: {result.ErrorMessage}");
+            Logger.Warning($"Не удалось обновить файл условных рефлексов после очистки: {result.ErrorMessage}");
           else
             Logger.Info("Условные рефлексы успешно очищены и сохранены");
         }
@@ -250,7 +251,34 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка очистки условных рефлексов: {ex.Message}");
+        Logger.Error(ex.Message);
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Очистка автоматизмов
+    /// </summary>
+    private void ClearAllAutomatizm()
+    {
+      // чистить дерево автоматизмов не надо - там нет ссылок на автоматизмы
+      try
+      {
+        if (_automatizmSystem != null && AutomatizmSystem.IsInitialized)
+        {
+          _automatizmSystem.DeleteAllAutomatizm();
+          var result = _automatizmSystem.SaveAutomatizm();
+          if (!result.Success)
+            Logger.Warning($"Не удалось обновить файл автоматизмов после очистки: {result.ErrorMessage}");
+          else
+            Logger.Info("Автоматизмы успешно очищены");
+        }
+        else
+          Logger.Info("Система автоматизмов не инициализирована, очистка не требуется");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -333,7 +361,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 

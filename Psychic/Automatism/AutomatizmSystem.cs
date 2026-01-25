@@ -110,7 +110,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -152,11 +152,6 @@ namespace ISIDA.Psychic.Automatism
     /// ID последнего созданного автоматизма
     /// </summary>
     private int _lastAutomatizmId = 0;
-
-    /// <summary>
-    /// Флаг записи в файл
-    /// </summary>
-    private bool _doWritingFile = true;
 
     /// <summary>
     /// Не выдавать сообщение о новом автоматизме
@@ -324,13 +319,10 @@ namespace ISIDA.Psychic.Automatism
           _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
 
         automatizm.Belief = belief;
-
-        if (_doWritingFile)
-          SaveAutomatizm();
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -350,22 +342,13 @@ namespace ISIDA.Psychic.Automatism
         automatizm.Count++;
 
         if (gomeoIdSuccesArr != null)
-        {
           automatizm.GomeoIdSuccesArr = gomeoIdSuccesArr.ToList();
-        }
 
         // Обновляем списки успешных/неуспешных
         if (usefulness > 0)
-        {
           _automatizmSuccessFromId[automatizmId] = automatizm;
-        }
         else if (_automatizmSuccessFromId.ContainsKey(automatizmId))
-        {
           _automatizmSuccessFromId.Remove(automatizmId);
-        }
-
-        if (_doWritingFile)
-          SaveAutomatizm();
       }
       finally
       {
@@ -384,7 +367,6 @@ namespace ISIDA.Psychic.Automatism
         if (!_automatizmsById.TryGetValue(id, out var automatizm))
           return;
 
-        // Удаляем из всех коллекций
         _automatizmsById.Remove(id);
         _automatizmSuccessFromId.Remove(id);
         _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
@@ -409,9 +391,49 @@ namespace ISIDA.Psychic.Automatism
               _automatizmFromPhraseId.Remove(imgId);
           }
         }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
 
-        if (_doWritingFile)
-          SaveAutomatizm();
+    /// <summary>
+    /// Удалить все автоматизмы
+    /// </summary>
+    public bool DeleteAllAutomatizm()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (AppGlobalState.EvolutionStage < 2)
+          throw new InvalidOperationException("Автоматзмы доступны только начиная со стадии 2");
+
+        var deletedAutomatizmIds = _automatizmsById.Keys.ToList();
+
+        bool removed = true;
+        foreach (var atmzId in deletedAutomatizmIds)
+        {
+          removed = _automatizmsById.Remove(atmzId);
+          if (!removed)
+            break;
+        }
+
+        if (removed)
+        {
+          _lastAutomatizmId = 0;
+          _automatizmSuccessFromId.Clear();
+          _automatizmBelief2FromTreeNodeId.Clear();
+          _automatizmFromActionId.Clear();
+          _automatizmFromPhraseId.Clear();
+        }
+
+        return removed;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return false;
       }
       finally
       {
@@ -609,7 +631,7 @@ namespace ISIDA.Psychic.Automatism
         }
         catch (Exception ex)
         {
-          Logger.Error($"{ex.Message}");
+          Logger.Error(ex.Message);
           throw;
         }
       }
@@ -693,7 +715,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -793,7 +815,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {

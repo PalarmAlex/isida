@@ -476,7 +476,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
@@ -519,7 +519,7 @@ namespace ISIDA.Common
           int sleepingType = 0;
           var currentStyles = AppGlobalState.ActiveStyles;
           var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
-          _psychicSystem.ProcessPsychicPulse(AppGlobalState.EvolutionStage, AppGlobalState.Lifetime, activetStyleIds, GlobalPulsCount, sleepingType);
+          _psychicSystem.ProcessPsychicPulse(activetStyleIds, GlobalPulsCount, sleepingType);
         }
 
         // Увеличение времени жизни в пульсах для условных рефлексов
@@ -583,7 +583,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         SafeStopWithError($"Критическая ошибка обработки пульса: {ex.Message}");
       }
       finally

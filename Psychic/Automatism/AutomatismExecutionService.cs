@@ -333,7 +333,7 @@ namespace ISIDA.Psychic.Automatism
       }
       catch (Exception ex)
       {
-        Logger.Warning($"Ошибка обновления статистики автоматизма {automatizmId}: {ex.Message}");
+        Logger.Warning(ex.Message);
       }
     }
 

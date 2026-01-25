@@ -137,7 +137,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         throw;
       }
     }
@@ -145,14 +145,6 @@ namespace ISIDA.Psychic
     #endregion
 
     #region Состояния и свойства
-
-    /// <summary>
-    /// Стадия развития психики
-    /// 0-1: Нет психики
-    /// 2-3: Базовая психика
-    /// 4+: Осознанная психика
-    /// </summary>
-    public int EvolutionStage { get; private set; } = 0;
 
     /// <summary>
     /// Текущий пульс психики
@@ -243,23 +235,19 @@ namespace ISIDA.Psychic
     /// Обработка пульса психики
     /// </summary>
     internal void ProcessPsychicPulse(
-      int evolutionStage, 
-      int lifeTime, 
-      List<int> activetStyleIds, 
-      int pulseCount, 
+      List<int> activetStyleIds,
+      int pulseCount,
       int sleepingType)
     {
       _lock.EnterWriteLock();
       try
       {
-        if (evolutionStage < 2) // Недостаточная стадия развития
+        if (AppGlobalState.EvolutionStage < 2) // Недостаточная стадия развития
           return;
 
-        LifeTime = lifeTime;
-        EvolutionStage = evolutionStage;
         PulseCount = pulseCount;
+        LifeTime = AppGlobalState.Lifetime;
 
-        // Обработка состояния сна
         if (sleepingType > 0)
         {
           IsSleeping = true;
@@ -281,7 +269,7 @@ namespace ISIDA.Psychic
           }
 
           // Осознание при включении и бодрствовании
-          if (EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
+          if (AppGlobalState.EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
           {
             // Начало мышления
             WakeUpping(activetStyleIds);
@@ -328,9 +316,9 @@ namespace ISIDA.Psychic
       if (PulseCount < 4)
         return false;
 
-      if (EvolutionStage < 2)
+      if (AppGlobalState.EvolutionStage < 2)
       {
-        Logger.Warning($"Стадия развития {EvolutionStage} недостаточна для автоматизмов");
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов");
         return false;
       }
       
@@ -385,7 +373,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
 
       return false; // Не блокировать рефлексы
@@ -512,7 +500,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {
@@ -751,7 +739,7 @@ namespace ISIDA.Psychic
       return $"Инфо: BaseID=<b>{_currentBaseId}</b>, " +
              $"EmotionID=<b>{_currentEmotionId}</b>, " +
              $"atmzmID=<b>{detectedNodeId}</b>, " +
-             $"стадия=<b>{EvolutionStage}</b>, " +
+             $"стадия=<b>{AppGlobalState.EvolutionStage}</b>, " +
              $"готовность=<b>{ReadyStatus}</b>";
     }
 
@@ -807,7 +795,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return 0;
       }
     }
@@ -850,7 +838,7 @@ namespace ISIDA.Psychic
       }
       catch (Exception ex)
       {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
         return 0;
       }
     }
