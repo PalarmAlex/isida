@@ -170,7 +170,7 @@ namespace ISIDA.Psychic.Automatism
     #region Управление узлами дерева
 
     /// <summary>
-    /// Создает новый узел дерева автоматизмов
+    /// Создает новый узел дерева автоматизмов.
     /// </summary>
     public (int Id, AutomatizmNode Node) CreateNewAutomatizmNode(
         AutomatizmNode parent,
