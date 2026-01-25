@@ -25,10 +25,10 @@ namespace ISIDA.Gomeostas
   {
     private readonly StyleCombinationsManager _styleCombinationsManager;
     private PerceptionImagesSystem _perceptionImagesSystem;
-    private ConditionedReflexesSystem _conditionedReflexesSystem;
     private readonly InformationEnvironmentSystem _informationEnvironmentSystem;
     private ResearchLogger _researchLogger;
     private HomeostasisOverallState _currentOverallState = HomeostasisOverallState.Normal;
+    private EvolutionStageService _evolutionStageService;
 
     #region Инициализация класса
 
@@ -86,6 +86,14 @@ namespace ISIDA.Gomeostas
     public void SetResearchLogger(ResearchLogger logger)
     {
       _researchLogger = logger;
+    }
+
+    /// <summary>
+    /// Установка сервиса переключения стадий развития агента
+    /// </summary>
+    public void SetEvolutionStageService(EvolutionStageService service)
+    {
+      _evolutionStageService = service;
     }
 
     /// <summary>
@@ -1342,6 +1350,15 @@ namespace ISIDA.Gomeostas
       _previousActiveStyleIds = currentActiveStyleIds;
     }
 
+    /// <summary>
+    /// Установка стадии развития агента
+    /// </summary>
+    public EvolutionStageService EvolutionStageService
+    {
+      get => _evolutionStageService;
+      private set => _evolutionStageService = value;
+    }
+
     #endregion
 
     /// <summary>
@@ -1652,7 +1669,7 @@ namespace ISIDA.Gomeostas
         float _criticalMaxValue = 100f,
         bool strictValidation = false)
     {
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -1702,7 +1719,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public void RemoveParameter(int paramId)
     {
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       _lock.EnterWriteLock();
@@ -1846,115 +1863,47 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public void SetEvolutionStage(int stage)
     {
-      var result = SetEvolutionStageWithValidation(stage);
-      if (!result.Success)
-        throw new InvalidOperationException(result.Message);
+      var result = SetEvolutionStage(stage, false, false);
+
+      if (!result.Success && !result.RequiresConfirmation)
+        throw new InvalidOperationException($"Не удалось установить стадию: {result.Message}");
     }
 
     /// <summary>
-    /// Установить стадию развития агента с проверкой последовательности
+    /// Установить стадию развития агента
     /// </summary>
-    public (bool Success, string Message) SetEvolutionStageWithValidation(int newStage, bool force = false)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        EnsureAgentState(AgentCheck.NotDead);
-
-        int currentStage = AppGlobalState.EvolutionStage;
-
-        // Проверка на попытку перепрыгнуть через стадию вперед
-        if (newStage > currentStage + 1)
-          return (false, $"Недопустимый переход! Можно переходить только на следующую стадию (с {currentStage} на {currentStage + 1}).");
-
-        // Проверка на возврат на предыдущую стадию
-        if (newStage < currentStage && !force)
-          return (false, $"Внимание! Возврат на предыдущую стадию ({newStage}) приведет к очистке данных всех последующих стадий (с {newStage + 1} по 5). Продолжить?");
-
-        // Если force = true или это обычный переход - выполняем очистку и установку
-        if (newStage < currentStage)
-          ClearSubsequentStagesData(newStage);
-
-        _agentState.EvolutionStage = newStage;
-        AppGlobalState.EvolutionStage = newStage;
-        return (true, "Стадия успешно изменена");
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Очистка данных последующих стадий
-    /// </summary>
-    private void ClearSubsequentStagesData(int currentStage)
+    public EvolutionStageChangeResult SetEvolutionStage(int stage, bool force = false, bool skipDataClearing = false)
     {
       try
       {
-        for (int stage = currentStage + 1; stage <= 5; stage++)
+        if (_evolutionStageService == null)
         {
-          ClearStageData(stage);
+          string errorMsg = "Сервис переключения стадий не инициализирован";
+          Logger.Error(errorMsg);
+          return EvolutionStageChangeResult.CreateFailure(errorMsg);
         }
+
+        int currentStage = _agentState.EvolutionStage;
+        var result = _evolutionStageService.ChangeEvolutionStage(stage, force, skipDataClearing);
+        if (result.Success)
+        {
+          _agentState.EvolutionStage = stage;
+          Logger.Info($"Стадия успешно изменена с {currentStage} на {stage}");
+        }
+        else
+        {
+          if (result.RequiresConfirmation)
+            Logger.Info($"Переход на стадию {stage} требует подтверждения: {result.Message}");
+          else
+            Logger.Warning($"Не удалось изменить стадию: {result.Message}");
+        }
+
+        return result;
       }
       catch (Exception ex)
       {
-        throw new InvalidOperationException("Ошибка очистки данных стадий", ex);
-      }
-    }
-
-    /// <summary>
-    /// Очистка данных конкретной стадии
-    /// </summary>
-    private void ClearStageData(int stage)
-    {
-      switch (stage)
-      {
-        case 1:
-          ClearConditionedReflexes();
-          break;
-        case 2:
-
-          break;
-        case 3:
-
-          break;
-        case 4:
-
-          break;
-        case 5:
-
-          break;
-      }
-    }
-
-    /// <summary>
-    /// Очищает все условные рефлексы
-    /// </summary>
-    private void ClearConditionedReflexes()
-    {
-      try
-      {
-        // TODO: Убрать Instance. Очистка только  после проверки, что у-рефлексы есть, чтобы не плодить пустых сообщений
-        if (ConditionedReflexesSystem.IsInitialized)
-        {
-          _conditionedReflexesSystem = ConditionedReflexesSystem.Instance;
-          if (_conditionedReflexesSystem != null)
-          {
-            _conditionedReflexesSystem.removeAllConditionedReflexes = true;
-            _conditionedReflexesSystem.RemoveAllConditionedReflexes();
-            _conditionedReflexesSystem.removeAllConditionedReflexes = false;
-            var result = _conditionedReflexesSystem.SaveConditionedReflexes();
-            if (!result.Success)
-              Logger.Warning($"{result.ErrorMessage}");
-            else
-              Logger.Info("Условные рефлексы успешно очищены");
-          }
-        }
-      }
-      catch (Exception ex)
-      {
-        Logger.Error($"{ex.Message}");
+        Logger.Error(ex.Message);
+        return EvolutionStageChangeResult.CreateFailure(ex.Message);
       }
     }
 
@@ -2008,7 +1957,7 @@ namespace ISIDA.Gomeostas
         List<int> antagonistStyles = null,
         bool strictValidation = false)
     {
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа со стилями реагирования разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
@@ -2052,7 +2001,7 @@ namespace ISIDA.Gomeostas
     /// <returns>True, если стиль был успешно удален, иначе False</returns>
     public bool RemoveBehaviorStyle(int styleId)
     {  
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа со стилями реагирования разрешена только в стадии 0");
 
       if (!_agentState.BehaviorStyles.ContainsKey(styleId))
@@ -2741,7 +2690,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAgentBehaviorStyles(bool IsValidate = true)
     {
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       try
@@ -2794,7 +2743,7 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAllData()
     {
-      if (AppGlobalState.EvolutionStage > 0)
+      if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с параметрами разрешена только в стадии 0");
 
       var errors = new List<string>();
@@ -2868,7 +2817,6 @@ namespace ISIDA.Gomeostas
           SaveAllData();
 
         _styleCombinationsManager?.Dispose();
-        _conditionedReflexesSystem?.Dispose();
         _perceptionImagesSystem?.Dispose();
       }
       catch (Exception ex)

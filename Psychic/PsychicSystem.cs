@@ -333,6 +333,9 @@ namespace ISIDA.Psychic
         Logger.Warning($"Стадия развития {EvolutionStage} недостаточна для автоматизмов");
         return false;
       }
+      
+      if ((actionIdList == null || actionIdList.Count == 0) && (phraseIdList == null || phraseIdList.Count == 0))
+        return false;
 
       try
       {
@@ -768,6 +771,9 @@ namespace ISIDA.Psychic
           Logger.Warning("InfluenceActionsImagesSystem не инициализирована, образ действий не создан");
           return 0;
         }
+
+        if (actionIdList == null || !actionIdList.Any())
+          return 0;
 
         if (!ActionsImagesSystem.IsValidToneId(toneId))
         {

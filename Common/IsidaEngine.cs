@@ -300,6 +300,11 @@ namespace ISIDA.Common
     public OrientationReflexSystem OrientationReflex { get; internal set; }
 
     /// <summary>
+    /// Сервис управления переключением между стадиями эволюции
+    /// </summary>
+    public EvolutionStageService EvolutionStageService { get; internal set; }
+
+    /// <summary>
     /// Логгер исследований
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
@@ -357,6 +362,7 @@ namespace ISIDA.Common
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
       SafeDispose(AdaptiveActions, "AdaptiveActions");
+      SafeDispose(EvolutionStageService, "EvolutionStageService");
       SafeDispose(Gomeostas, "Gomeostas");
       SafeDispose(InfluenceActions, "InfluenceActions");
       SafeDispose(AutomatismExecution, "AutomatismExecution");
@@ -679,14 +685,19 @@ namespace ISIDA.Common
             context.PsychicSystem,
             context.OrientationReflex);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
-
-        // Связывание систем
-        PsychicSystem.Instance.SetOrientationReflexSystem(context.OrientationReflex);
-        PsychicSystem.Instance.SetAutomatismExecutionService(context.AutomatismExecution);
-
+        context.PsychicSystem.SetOrientationReflexSystem(context.OrientationReflex);
+        context.PsychicSystem.SetAutomatismExecutionService(context.AutomatismExecution);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
+
+        // Шаг 28: Сервис переключения стадий эволюции
+        initializationStep = 28;
+        EvolutionStageService.InitializeInstance(
+            context.Gomeostas,
+            context.ConditionedReflexes);
+        context.EvolutionStageService = EvolutionStageService.Instance;
+        context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);
