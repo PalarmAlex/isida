@@ -121,7 +121,6 @@ namespace ISIDA.Psychic.Automatism
 
     #endregion
 
-
     #region Константы и поля
 
     private const string AutomatizmTreeFileName = "automatizm_tree";
