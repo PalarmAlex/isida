@@ -725,12 +725,6 @@ namespace ISIDA.Reflexes
 
       if (!result.Success)
         Logger.Warning($"Ошибка сохранения цепочек: {result.ErrorMessage}");
-      else
-      {
-        Logger.Info($"Цепочки сохранены. Файл сохранен, строк: {lines.Count}");
-        if (_reflexChains.Count > 0)
-          Logger.Info($"Цепочек сохранено: {_reflexChains.Count}");
-      }
 
       return result;
     }

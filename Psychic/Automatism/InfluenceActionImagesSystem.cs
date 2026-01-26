@@ -117,6 +117,23 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Получить список ID действий образа
+    /// </summary>
+    public IReadOnlyList<int> GetInfluenceActionIds(int id)
+    {
+      try
+      {
+        var actImg = GetInfluenceActionsImage(id);
+        return actImg?.ActIdList?.AsReadOnly() ?? new List<int>().AsReadOnly();
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return new List<int>().AsReadOnly();
+      }
+    }
+
+    /// <summary>
     /// Получить образ действия по ID
     /// </summary>
     /// <param name="id">ID образа действия</param>

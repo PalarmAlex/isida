@@ -99,6 +99,23 @@ namespace ISIDA.Psychic
     #region Управление образами действий
 
     /// <summary>
+    /// Получить список ID эмоций образа
+    /// </summary>
+    public IReadOnlyList<int> GetBaseEmotionIds(int emotionsImageId)
+    {
+      try
+      {
+        var emotionImg = GetEmotionsImage(emotionsImageId);
+        return emotionImg?.BaseStylesList?.AsReadOnly() ?? new List<int>().AsReadOnly();
+      }
+      catch(Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return new List<int>().AsReadOnly();
+      }
+    }
+
+    /// <summary>
     /// Возвращает список всех образов эмоций
     /// </summary>
     /// <returns>Копия списка образов действий</returns>

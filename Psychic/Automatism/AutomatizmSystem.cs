@@ -582,6 +582,8 @@ namespace ISIDA.Psychic.Automatism
 
     #endregion
 
+
+
     #region Работа с файлами
 
     /// <summary>
