@@ -147,10 +147,9 @@ namespace ISIDA.Psychic
           TargetId = AppGlobalState.DominantParam
         };
 
-        var activeActions = GetActiveAdaptiveActions();
-        var actionIdList = activeActions.Select(a => a.Id).ToList();
+        var actionIdList = GetActiveAdaptiveActions();
         ActionsImage actionImage = null;
-        if (activeActions.Count > 0)
+        if (actionIdList.Count > 0)
         {
           (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
           purposeGenetic.ActionImage = actionImage;
@@ -182,12 +181,23 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Получает список активных адаптивных действий
     /// </summary>
-    public List<AdaptiveActionsSystem.AdaptiveAction> GetActiveAdaptiveActions()
+    public List<int> GetActiveAdaptiveActions()
     {
-      if (AppGlobalState.ActiveAdaptiveActions == null)
-        return new List<AdaptiveActionsSystem.AdaptiveAction>();
-
-      return AppGlobalState.ActiveAdaptiveActions.ToList();
+      if (AppGlobalState.ActiveAdaptiveActions == null || AppGlobalState.ActiveAdaptiveActions.Count == 0)
+      {
+        var conditionActionsIdArr = (List<int>)AppGlobalState.ConditionedReflexesActions;
+        if (conditionActionsIdArr != null && conditionActionsIdArr.Count > 0)
+          return conditionActionsIdArr;
+        else
+        {
+          var geneticActionsIdArr = (List<int>)AppGlobalState.GeneticReflexesActions;
+          if (geneticActionsIdArr != null && geneticActionsIdArr.Count > 0)
+            return geneticActionsIdArr;
+        }
+        return new List<int>();
+      }
+      else
+        return AppGlobalState.ActiveAdaptiveActions.Select(a => a.Id).ToList();
     }
 
     /// <summary>

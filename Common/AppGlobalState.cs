@@ -1,5 +1,6 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 
@@ -19,6 +20,8 @@ public static class AppGlobalState
   private static bool _isDead = false;
   private static bool _isSleeping = false;
   private static bool _flgConditionReflexes = false;
+  private static List<int> _geneticReflexesActions = new List<int>();
+  private static List<int> _conditionReflexesActions = new List<int>();
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
 
@@ -141,6 +144,56 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Текущие активные безусловные рефлексы
+  /// </summary>
+  public static IReadOnlyList<int> GeneticReflexesActions
+  {
+    get => _geneticReflexesActions;
+  }
+
+  /// <summary>
+  /// Обновить текущие активные безусловные рефлексы
+  /// </summary>
+  internal static void UpdateGlobalGeneticReflexesActions(List<int> actIdArr)
+  {
+    _geneticReflexesActions.Clear();
+
+    if (actIdArr != null)
+    {
+      foreach (var act in actIdArr)
+      {
+        if (act != 0)
+          _geneticReflexesActions.Add(act);
+      }
+    }
+  }
+
+  /// <summary>
+  /// Текущие активные условные рефлексы
+  /// </summary>
+  public static IReadOnlyList<int> ConditionedReflexesActions
+  {
+    get => _conditionReflexesActions;
+  }
+
+  /// <summary>
+  /// Обновить текущие активные условные рефлексы
+  /// </summary>
+  internal static void UpdateGlobalConditionedReflexesActions(List<int> actIdArr)
+  {
+    _conditionReflexesActions.Clear();
+
+    if (actIdArr != null)
+    {
+      foreach (var acr in actIdArr)
+      {
+        if (acr != 0)
+          _conditionReflexesActions.Add(acr);
+      }
+    }
+  }
+
+  /// <summary>
   /// Текущие активные стили поведения агента
   /// </summary>
   public static IReadOnlyList<GomeostasSystem.BehaviorStyle> ActiveStyles
@@ -189,5 +242,4 @@ public static class AppGlobalState
       }
     }
   }
-
 }

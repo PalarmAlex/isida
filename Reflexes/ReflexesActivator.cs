@@ -301,6 +301,7 @@ namespace ISIDA.Reflexes
       var conditions = GetCurrentConditionsWithoutTrigger();
       _reflexTree.ConditionsDetection(conditions);
 
+      CollectReflexesForExecution();
       bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, _activetStyleIds, null, null, 0, 0); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
@@ -330,14 +331,7 @@ namespace ISIDA.Reflexes
 
         var conditions = GetCurrentGeneticConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
-
         bool fullMatchFound = _reflexTree.DetectedLevel == 2;
-        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
-        if (psychicBlocked)
-        {
-          Logger.Info("Рефлекс заблокирован психикой");
-          return;
-        }
 
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
@@ -347,6 +341,14 @@ namespace ISIDA.Reflexes
         {
           _geneticReflexesToRun.Clear();
           _geneticReflexesToRun.Add(-1);
+          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        }
+        CollectReflexesForExecution();
+        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
+        if (psychicBlocked)
+        {
+          Logger.Info("Рефлекс заблокирован психикой");
+          return;
         }
 
         ExecuteReflexes(pulseCount);
@@ -401,6 +403,7 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
+        CollectReflexesForExecution();
         bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
@@ -466,8 +469,6 @@ namespace ISIDA.Reflexes
         }
         return;
       }
-
-      CollectReflexesForExecution();
 
       // если установлен рефлекс по умолчанию - запускаем его
       if (_geneticReflexesToRun.Any() && _geneticReflexesToRun[0] == -1)
@@ -858,6 +859,8 @@ namespace ISIDA.Reflexes
       _geneticReflexesToRun.Clear();
       _conditionedReflexesToRun.Clear();
       AppGlobalState.FlgConditionReflexes = false;
+      GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
+      GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
 
       if (_isChainActive)
         return;
@@ -874,8 +877,10 @@ namespace ISIDA.Reflexes
         // Цепочка будет обработана в ExecuteReflexes()
         // Собираем только стартовый рефлекс
         if (detectedNode.GeneticReflexID > 0)
+        {
           _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
-
+          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        }
         return;
       }
 
@@ -886,7 +891,10 @@ namespace ISIDA.Reflexes
       {
         CollectGeneticReflexesWithTriggers(detectedNode);
         if (!_geneticReflexesToRun.Any())
-          _geneticReflexesToRun.Add(-1); // рефлекс по умолчанию
+        {
+          _geneticReflexesToRun.Add(-1); // рефлекс по умолчанию         
+          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        }
       }
 
       if (!_conditionedReflexesToRun.Any() && !_geneticReflexesToRun.Any())
@@ -910,6 +918,8 @@ namespace ISIDA.Reflexes
         }
         else
           AppGlobalState.FlgConditionReflexes = false;
+
+        GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
       }
     }
 
@@ -922,8 +932,12 @@ namespace ISIDA.Reflexes
       {
         var reflex = _geneticReflexes.GetAllGeneticReflexes()
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
+
         if (reflex != null && IsReflexConditionsMet(reflex))
+        {
           _geneticReflexesToRun.Add(node.GeneticReflexID);
+          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        }
       }
     }
 
@@ -938,7 +952,10 @@ namespace ISIDA.Reflexes
             .FirstOrDefault(r => r.Id == node.GeneticReflexID);
 
         if (reflex != null && IsReflexConditionsMet(reflex))
+        {
           _geneticReflexesToRun.Add(node.GeneticReflexID);
+          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        }
       }
     }
 
@@ -1012,6 +1029,44 @@ namespace ISIDA.Reflexes
       // Всегда возвращаем активные воздействия, если они есть
       var activeActions = _influenceActions.GetActiveInfluenceActions();
       return activeActions?.Select(a => a.Id).ToArray() ?? new int[0];
+    }
+
+    #endregion
+
+    #region Получение списков действий активируемых рефлексов
+
+    /// <summary>
+    /// Сохраняет список действий для безусловного рефлекса в глобальную переменную
+    /// </summary>
+    public void GetActionsForGeneticReflexToRun(List<int> reflexIdarr)
+    {
+      List<int> actionIdList = new List<int>();
+      List<int> actIdList = new List<int>();
+
+      foreach (int id in reflexIdarr)
+      {
+        actIdList = _reflexExecutionService.GetActionsForGeneticReflex(id);
+        actionIdList.AddRange(actIdList);
+      }
+
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(actionIdList);
+    }
+
+    /// <summary>
+    /// Сохраняет список действий для условного рефлекса в глобальную переменную
+    /// </summary>
+    public void GetActionsForConditionReflexToRun(List<int> reflexIdarr)
+    {
+      List<int> actionIdList = new List<int>();
+      List<int> actIdList = new List<int>();
+
+      foreach (int id in reflexIdarr)
+      {
+        actIdList = _reflexExecutionService.GetActionsForConditionedReflexFromSource(id);
+        actionIdList.AddRange(actIdList);
+      }
+
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(actionIdList);
     }
 
     #endregion
@@ -1211,6 +1266,8 @@ namespace ISIDA.Reflexes
         _geneticReflexesToRun.Clear();
         _conditionedReflexesToRun.Clear();
         AppGlobalState.FlgConditionReflexes = false;
+        GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
+        GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
       }
       finally
       {
