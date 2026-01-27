@@ -176,26 +176,23 @@ namespace ISIDA.Common
     /// </summary>
     public static void Stop()
     {
-      bool shouldStop = false;
+      bool wasRunning = false;
       lock (_timerLock)
       {
+        wasRunning = _isRunning;
         if (_isRunning)
         {
-          shouldStop = true;
           _isRunning = false;
+          IsPulsationRunning = false; // Сначала устанавливаем флаг
         }
       }
 
-      if (shouldStop)
+      if (wasRunning)
       {
-        // Ждем полной остановки (1 секунду)
-        for (int i = 0; i < 10; i++)
-        {
-          if (!IsPulsationRunning)
-            break;
-          Thread.Sleep(100);
-        }
-
+        // Уведомляем UI
+        PulsationStateChanged?.Invoke();
+        // Останавливаем таймеры (не уведомляем UI повторно)
+        StopTimers(notifyUI: false);
         Logger.Info("Остановка по запросу пользователя завершена");
       }
     }
@@ -417,15 +414,7 @@ namespace ISIDA.Common
       {
         // Устанавливаем флаг остановки ПЕРВЫМ делом
         _isRunning = false;
-        IsPulsationRunning = false;
-
-        // Ждем завершения текущего пульса (если он выполняется)
-        // Даем небольшой таймаут для безопасного завершения
-        for (int i = 0; i < 10; i++)
-        {
-          if (Monitor.Wait(_timerLock, 50))
-            break; // Пульс завершился
-        }
+        IsPulsationRunning = false; // Уже установлено в Stop(), но для безопасности
 
         // Сохраняем ссылки на таймеры для dispose вне lock
         timerToDispose = _timer;
@@ -443,9 +432,6 @@ namespace ISIDA.Common
         autosaveTimerToDispose?.Dispose();
         Logger.Info("Таймеры остановлены и disposed");
 
-        _reflexFormationService = null;
-        _conditionedReflexesSystem = null;
-
         // Вызываем автосохранение ПОСЛЕ остановки таймеров
         TriggerAutosave();
 
@@ -454,15 +440,11 @@ namespace ISIDA.Common
         {
           OnPulseStateChanged?.Invoke(false);
           OnPulseBrightnessChanged?.Invoke(0);
-          PulsationStateChanged?.Invoke();
+          PulsationStateChanged?.Invoke(); // Только если notifyUI = true
         }
 
         if (notifyUI)
         {
-          OnPulseStateChanged?.Invoke(false);
-          OnPulseBrightnessChanged?.Invoke(0);
-          PulsationStateChanged?.Invoke();
-
           // ОЧИСТКА ПОДПИСОК НА СОБЫТИЯ
           OnPulseCompleted = null;
           OnPulseError = null;
