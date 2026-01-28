@@ -218,7 +218,6 @@ namespace ISIDA.Psychic.Automatism
       {
         try
         {
-          // Устанавливаем источник активации перед выполнением
           var action = _adaptiveActionsSystem.GetAllAdaptiveActions()
               .FirstOrDefault(a => a.Id == actionId);
 
@@ -243,7 +242,6 @@ namespace ISIDA.Psychic.Automatism
         }
       }
 
-      // Обновляем статистику автоматизма при успешном выполнении
       if (successfulActions.Any() && automatizmId > 0)
         UpdateAutomatizmStatistics(automatizmId, successfulActions.Count == actionIds.Count);
 
@@ -322,10 +320,8 @@ namespace ISIDA.Psychic.Automatism
         if (automatizm == null)
           return;
 
-        // Увеличиваем счетчик использования
         automatizm.Count++;
 
-        // Обновляем полезность в зависимости от успешности выполнения
         if (success && automatizm.Usefulness < 10)
           automatizm.Usefulness++;
         else if (!success && automatizm.Usefulness > -10)

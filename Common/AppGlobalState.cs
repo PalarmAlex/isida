@@ -1,4 +1,5 @@
 ﻿using ISIDA.Actions;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -16,14 +17,102 @@ public static class AppGlobalState
   private static int automatizmNodeId = 0;
   private static int _curActiveVerbalId = 0;
   private static int _currentFindAtmzStepCount = 0;
+  private static int _lastRunAutomatizmPulsCount = 0;
+  private static int _waitingPeriodForActionsVal = 0;
   private static HomeostasisState _currentOverallState = HomeostasisState.Normal;
   private static bool _isDead = false;
   private static bool _isSleeping = false;
   private static bool _flgConditionReflexes = false;
+  private static bool _waitingForOperatorEvaluation = false;
+  private static int _lastEvaluatedAutomatizmId = 0;
+  private static int _lastAutomatizmEvaluationTime = 0;
   private static List<int> _geneticReflexesActions = new List<int>();
   private static List<int> _conditionReflexesActions = new List<int>();
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
+  private static AppGlobalState.HomeostasisState _stateBeforeOperatorImpact = AppGlobalState.HomeostasisState.Normal;
+
+
+  /// <summary>
+  /// Флаг ожидания оценки от оператора (true - ждем, false - не ждем)
+  /// </summary>
+  public static bool WaitingForOperatorEvaluation
+  {
+    get => _waitingForOperatorEvaluation;
+    set => _waitingForOperatorEvaluation = value;
+  }
+
+  /// <summary>
+  /// ID последнего автоматизма, который ожидает оценки оператора
+  /// </summary>
+  public static int LastEvaluatedAutomatizmId
+  {
+    get => _lastEvaluatedAutomatizmId;
+    set => _lastEvaluatedAutomatizmId = value;
+  }
+
+  /// <summary>
+  /// Состояние агента перед воздействием оператора (для оценки)
+  /// </summary>
+  public static HomeostasisState StateBeforeOperatorImpact
+  {
+    get => _stateBeforeOperatorImpact;
+    set => _stateBeforeOperatorImpact = value;
+  }
+
+  /// <summary>
+  /// Время (пульс) последней оценки автоматизма оператором
+  /// </summary>
+  public static int LastAutomatizmEvaluationTime
+  {
+    get => _lastAutomatizmEvaluationTime;
+    set => _lastAutomatizmEvaluationTime = value;
+  }
+
+  /// <summary>
+  /// Сохранить состояние перед воздействием оператора для оценки
+  /// </summary>
+  public static void SaveStateForEvaluation(HomeostasisState currentState)
+  {
+    StateBeforeOperatorImpact = currentState;
+    Logger.Info($"Сохранено состояние для оценки: {currentState}");
+  }
+
+  /// <summary>
+  /// Проверить, является ли текущий момент временем оценки предыдущего автоматизма
+  /// </summary>
+  public static bool IsEvaluationTime()
+  {
+    if (!_waitingForOperatorEvaluation ||
+        LastRunAutomatizmPulsCount <= 0 ||
+        WaitingPeriodForActionsVal <= 0)
+      return false;
+
+    int currentPulse = GlobalTimer.GlobalPulsCount;
+    int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
+
+    // Только если мы активно ждем И время в пределах ожидания
+    return timeSinceAutomatizm <= WaitingPeriodForActionsVal &&
+           timeSinceAutomatizm > 0;
+  }
+
+  /// <summary>
+  /// Пульс, на котором был запущен текущий автоматизм
+  /// </summary>
+  public static int LastRunAutomatizmPulsCount
+  {
+    get => _lastRunAutomatizmPulsCount;
+    set => _lastRunAutomatizmPulsCount = value;
+  }
+
+  /// <summary>
+  /// Период ожидания реакции оператора на действия автоматизма в пульсах
+  /// </summary>
+  public static int WaitingPeriodForActionsVal
+  {
+    get => _waitingPeriodForActionsVal;
+    set => _waitingPeriodForActionsVal = value;
+  }
 
   /// <summary>
   /// Состояние гомеостаза агента

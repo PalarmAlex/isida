@@ -15,6 +15,7 @@ using static ISIDA.Common.ResearchLogger;
 using static ISIDA.Psychic.Automatism.AutomatizmSystem;
 using static ISIDA.Psychic.Automatism.AutomatizmTreeSystem;
 using static ISIDA.Psychic.Automatism.InfluenceActionsImagesSystem;
+using static ISIDA.Psychic.AutomatismResultTracker;
 using static ISIDA.Reflexes.ConditionedReflexesSystem;
 using static ISIDA.Reflexes.GeneticReflexesSystem;
 using static ISIDA.Reflexes.PerceptionImagesSystem;
@@ -124,6 +125,11 @@ namespace ISIDA.Common
     public int RecognitionThreshold { get; set; } = 3;
 
     /// <summary>
+    /// Период ожидания реакции оператора на действия автоматизма в пульсах
+    /// </summary>
+    public int WaitingPeriodForActionsVal { get; set; } = 30;
+
+    /// <summary>
     /// Реализация интерфейса ILogWriter для записи логов в память
     /// </summary>
     /// <remarks>
@@ -184,6 +190,11 @@ namespace ISIDA.Common
   /// </remarks>
   public class IsidaContext : IDisposable
   {
+    /// <summary>
+    /// Система отслеживания результатов выполнения автоамтизмов
+    /// </summary>
+    public AutomatismResultTracker AutomatismResult { get; internal set; }
+
     /// <summary>
     /// Система гомеостаза
     /// </summary>
@@ -348,6 +359,7 @@ namespace ISIDA.Common
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
+      SafeDispose(EmotionsImageSystem, "AutomatismResult");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(AutomatizmTree, "PurposeGeneticImageSystem");
@@ -690,6 +702,7 @@ namespace ISIDA.Common
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
+        AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
         // Шаг 28: Сервис переключения стадий эволюции
         initializationStep = 28;
@@ -698,6 +711,11 @@ namespace ISIDA.Common
             context.ConditionedReflexes);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
+
+        // Шаг 29: Сервис отслеживания выполнения резульатов автоматизмов
+        initializationStep = 29;
+        AutomatismResultTracker.InitializeInstance(context.AutomatizmSystem);
+        context.AutomatismResult = AutomatismResultTracker.Instance;
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);
