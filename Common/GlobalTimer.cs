@@ -532,21 +532,6 @@ namespace ISIDA.Common
           }
         }
 
-        // периодическая очистка условных рефлексов
-        if (!AppGlobalState.IsDead && !AppGlobalState.IsSleeping &&
-            HasReflexFormationService &&
-            GlobalPulsCount % 100 == 0)
-        {
-          try
-          {
-            _reflexFormationService.CleanupOldReflexes(GlobalPulsCount);
-          }
-          catch (Exception cleanupEx)
-          {
-            Logger.Error($"{cleanupEx.Message}");
-          }
-        }
-
         if (!AppGlobalState.IsDead)
         {
           try

@@ -137,7 +137,6 @@ namespace ISIDA.Reflexes
       private float _activationThreshold = 0.6f;
       private int _timeWindowPulses = 5;
       private float _minAssociationStrength = 0.1f;
-      private int _baseInactivationTime = 1000;
 
       /// <summary>
       /// Уникальный идентификатор рефлекса
@@ -193,25 +192,6 @@ namespace ISIDA.Reflexes
       /// Флаг установившегося рефлекса (когда-либо достигал высокой прочности)
       /// </summary>
       public bool IsEstablished => MaxAchievedStrength > 0.8f;
-
-      /// <summary>
-      /// Расчетное время жизни без активации (зависит от прочности рефлекса)
-      /// </summary>
-      public int CalculatedInactivationTime
-      {
-        get
-        {
-          int baseTime = _baseInactivationTime;
-
-          // Прочные рефлексы живут значительно дольше
-          if (IsEstablished)
-            baseTime *= 10;
-
-          // Учитываем максимальную достигнутую прочность
-          // Максимальное увеличение в 10 раз при MaxAchievedStrength = 1.0
-          return (int)(baseTime * (1 + MaxAchievedStrength * 10));
-        }
-      }
 
       /// <summary>
       /// Коэффициент обучения α (0.1-0.3)
@@ -289,21 +269,6 @@ namespace ISIDA.Reflexes
       }
 
       /// <summary>
-      /// Базовое время жизни без активации (100-10000 пульсов)
-      /// </summary>
-      public int BaseInactivationTime
-      {
-        get => _baseInactivationTime;
-        set
-        {
-          var validation = SettingsValidator.ValidateBaseInactivationTime(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _baseInactivationTime = value;
-        }
-      }
-
-      /// <summary>
       /// Усиливает ассоциацию по модели Рескорла-Вагнера
       /// </summary>
       public void StrengthenAssociation()
@@ -369,18 +334,7 @@ namespace ISIDA.Reflexes
       /// </summary>
       public bool ShouldBeRemoved(int currentLifetime)
       {
-        if (AssociationStrength < _minAssociationStrength)
-          return true;
-
-        int referenceTime = LastActivation > 0 ? LastActivation : BirthTime;
-        int timeSinceReference = currentLifetime - referenceTime;
-
-        // Для новых рефлексов даем время на "акклиматизацию"
-        // Новые рефлексы не удаляем слишком быстро
-        if (timeSinceReference < 100) // Минимум 100 пульсов на "акклиматизацию"
-          return false;
-
-        return timeSinceReference > CalculatedInactivationTime;
+        return AssociationStrength < _minAssociationStrength;
       }
 
       /// <summary>
@@ -450,11 +404,6 @@ namespace ISIDA.Reflexes
       /// Временное окно корреляции τ (пульсов)
       /// </summary>
       public int TimeWindowPulses { get; set; } = 5;
-
-      /// <summary>
-      /// Время жизни рефлекса без активации (в пульсах)
-      /// </summary>
-      public int MaxInactivationTime { get; set; } = 1000;
     }
 
     #endregion
@@ -1076,9 +1025,6 @@ namespace ISIDA.Reflexes
             case "TimeWindowPulses":
               _settings.TimeWindowPulses = int.Parse(value);
               break;
-            case "MaxInactivationTime":
-              _settings.MaxInactivationTime = int.Parse(value);
-              break;
           }
         }
       }
@@ -1145,15 +1091,13 @@ namespace ISIDA.Reflexes
             "# LearningRate: коэффициент обучения α (0.1-0.3)",
             "# DecayRate: коэффициент затухания η (0.95-0.99)",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
-            "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
-            "# MaxInactivationTime: время жизни без активации (пульсы)"
+            "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)"
           };
 
         lines.Add($"LearningRate={_settings.LearningRate}");
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
         lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
-        lines.Add($"MaxInactivationTime={_settings.MaxInactivationTime}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

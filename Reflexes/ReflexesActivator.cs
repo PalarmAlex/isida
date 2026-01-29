@@ -260,27 +260,6 @@ namespace ISIDA.Reflexes
             ActiveFromConditionChange(pulseCount);
         }
       }
-      ProcessConditionedReflexFormation(pulseCount);
-    }
-
-    /// <summary>
-    /// Обработка формирования условных рефлексов на каждом пульсе
-    /// </summary>
-    private void ProcessConditionedReflexFormation(int pulseCount)
-    {
-      if (_isSleeping) return;
-      if (AppGlobalState.EvolutionStage < 1) return;
-
-      try
-      {
-        // Очистка устаревших рефлексов (раз в 100 пульсов)
-        if (pulseCount % 100 == 0)
-          _reflexFormationService.CleanupOldReflexes(pulseCount);
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
-      }
     }
 
     /// <summary>

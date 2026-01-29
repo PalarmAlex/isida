@@ -359,7 +359,7 @@ namespace ISIDA.Common
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
-      SafeDispose(EmotionsImageSystem, "AutomatismResult");
+      SafeDispose(AutomatismResult, "AutomatismResult");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(AutomatizmTree, "PurposeGeneticImageSystem");
@@ -653,8 +653,13 @@ namespace ISIDA.Common
         VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
-        // Шаг 23: Система психики
+        // Шаг 23: Сервис отслеживания выполнения резульатов автоматизмов
         initializationStep = 23;
+        AutomatismResultTracker.InitializeInstance(context.AutomatizmSystem);
+        context.AutomatismResult = AutomatismResultTracker.Instance;
+
+        // Шаг 24: Система психики
+        initializationStep = 24;
         PsychicSystem.InitializeInstance(
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
@@ -663,11 +668,12 @@ namespace ISIDA.Common
           context.EmotionsImageSystem,
           context.SensorySystem,
           context.VerbalBrocaImagesSystem,
-          context.Gomeostas);
+          context.Gomeostas,
+          context.AutomatismResult);
           context.PsychicSystem = PsychicSystem.Instance;
 
-        // Шаг 24: Система управления гомеостатическими целями
-        initializationStep = 24;
+        // Шаг 25: Система управления гомеостатическими целями
+        initializationStep = 25;
         PurposeGeneticImageSystem.InitializeInstance(
           context.InformationEnvironmentSystem, 
           context.ActionsImages,
@@ -675,23 +681,23 @@ namespace ISIDA.Common
           context.AdaptiveActions);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
-        // Шаг 25: Сервис выполнения автоматизмов
-        initializationStep = 25;
+        // Шаг 26: Сервис выполнения автоматизмов
+        initializationStep = 26;
         AutomatismExecutionService.InitializeInstance(
             context.AdaptiveActions,
             context.ActionsImages);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
 
-        // Шаг 26: Система ориентировочного рефлекса
-        initializationStep = 26;
+        // Шаг 27: Система ориентировочного рефлекса
+        initializationStep = 27;
         OrientationReflexSystem.InitializeInstance(
             context.InformationEnvironmentSystem,
             context.PurposeGeneticImageSystem);
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
 
-        // Шаг 27: Сервис выполнения автоматизмов
-        initializationStep = 27;
+        // Шаг 28: Сервис выполнения автоматизмов
+        initializationStep = 28;
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
@@ -704,18 +710,13 @@ namespace ISIDA.Common
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
-        // Шаг 28: Сервис переключения стадий эволюции
-        initializationStep = 28;
+        // Шаг 29: Сервис переключения стадий эволюции
+        initializationStep = 29;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
-
-        // Шаг 29: Сервис отслеживания выполнения резульатов автоматизмов
-        initializationStep = 29;
-        AutomatismResultTracker.InitializeInstance(context.AutomatizmSystem);
-        context.AutomatismResult = AutomatismResultTracker.Instance;
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);

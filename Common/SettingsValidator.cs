@@ -45,9 +45,6 @@ namespace ISIDA.Common
         case "MinAssociationStrength":
           return ValidateMinAssociationStrength((float)value);
 
-        case "MaxInactivationTime":
-          return ValidateMaxInactivationTime((int)value);
-
         default:
           return (true, string.Empty);
       }
@@ -143,16 +140,6 @@ namespace ISIDA.Common
       const string paramName = "Минимальная крепость связи";
       const string range = "[0.01:0.3]";
       return ValidateValueCustom(value, paramName, 0.01f, 0.3f, range);
-    }
-
-    /// <summary>
-    /// Валидация времени жизни без активации
-    /// </summary>
-    public static (bool isValid, string errorMessage) ValidateMaxInactivationTime(int? value)
-    {
-      const string paramName = "Время жизни без активации";
-      const string range = "[100:10000] пульсов";
-      return ValidateValueCustom(value, paramName, 100, 10000, range);
     }
 
     #endregion

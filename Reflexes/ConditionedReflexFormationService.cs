@@ -275,38 +275,6 @@ namespace ISIDA.Reflexes
     #region Управление жизненным циклом рефлексов
 
     /// <summary>
-    /// Проверяет и удаляет устаревшие рефлексы
-    /// </summary>
-    public void CleanupOldReflexes(int currentPulse)
-    {
-      try
-      {
-        var allReflexes = _conditionedReflexes.GetAllConditionedReflexes();
-        var reflexesToRemove = new List<int>();
-
-        foreach (var reflex in allReflexes)
-        {
-          if (reflex.ShouldBeRemoved(currentPulse))
-            reflexesToRemove.Add(reflex.Id);
-        }
-
-        foreach (var reflexId in reflexesToRemove)
-        {
-          _conditionedReflexes.RemoveConditionedReflex(reflexId);
-          var (success, errMsg) = _conditionedReflexes.SaveConditionedReflexes();
-          if (success)
-            Logger.Info($"Удален устаревший условный рефлекс ID={reflexId}");
-          else
-            Logger.Warning($"{errMsg}");
-        }
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
-      }
-    }
-
-    /// <summary>
     /// Сбрасывает историю стимулов
     /// </summary>
     public void ResetHistory()
