@@ -10,6 +10,10 @@ using System.Collections.Generic;
 /// </summary>
 public static class AppGlobalState
 {
+  private static int _currentActiveAutomatizmId = 0;
+  private static int _lastAutomatizmPulse = 0;
+  private static int _lastOrientationReflexType = 0;
+  private static int _lastOrientationReflexPulse = 0;
   private static int _defaultAdaptiveActionIdage = 0;
   private static int _evolutionStage = 0;
   private static int _lifetime = 0;
@@ -30,8 +34,101 @@ public static class AppGlobalState
   private static List<int> _conditionReflexesActions = new List<int>();
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
-  private static AppGlobalState.HomeostasisState _stateBeforeOperatorImpact = AppGlobalState.HomeostasisState.Normal;
+  private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
 
+  /// <summary>
+  /// ID текущего активного автоматизма
+  /// </summary>
+  public static int CurrentActiveAutomatizmId
+  {
+    get => _currentActiveAutomatizmId;
+    set => _currentActiveAutomatizmId = value;
+  }
+
+  /// <summary>
+  /// Пульс, на котором был активирован последний автоматизм
+  /// </summary>
+  public static int LastAutomatizmPulse
+  {
+    get => _lastAutomatizmPulse;
+    set => _lastAutomatizmPulse = value;
+  }
+
+  /// <summary>
+  /// Обновить информацию об активации автоматизма
+  /// </summary>
+  public static void UpdateAutomatizmInfo(int automatizmId, int pulse)
+  {
+    CurrentActiveAutomatizmId = automatizmId;
+    LastAutomatizmPulse = pulse;
+
+    // Записываем в лог для отладки
+    Logger.Info($"Автоматизм активирован: ID={automatizmId} на пульсе {pulse}");
+  }
+
+  /// <summary>
+  /// Сбросить информацию об автоматизме
+  /// </summary>
+  public static void ResetAutomatizmInfo()
+  {
+    CurrentActiveAutomatizmId = 0;
+    LastAutomatizmPulse = 0;
+  }
+
+  /// <summary>
+  /// Получить информацию об активации автоматизма
+  /// </summary>
+  public static (int Id, int Pulse) GetAutomatizmInfo()
+  {
+    return (CurrentActiveAutomatizmId, LastAutomatizmPulse);
+  }
+
+  /// <summary>
+  /// Тип последнего активированного ориентировочного рефлекса (0 = нет, 1 = ОР1, 2 = ОР2)
+  /// </summary>
+  public static int LastOrientationReflexType
+  {
+    get => _lastOrientationReflexType;
+    internal set => _lastOrientationReflexType = value;
+  }
+
+  /// <summary>
+  /// Пульс, на котором был активирован последний ориентировочный рефлекс
+  /// </summary>
+  public static int LastOrientationReflexPulse
+  {
+    get => _lastOrientationReflexPulse;
+    internal set => _lastOrientationReflexPulse = value;
+  }
+
+  /// <summary>
+  /// Обновить информацию об активации ориентировочного рефлекса
+  /// </summary>
+  /// <param name="type">Тип рефлекса: 1 = ОР1, 2 = ОР2</param>
+  /// <param name="pulse">Пульс активации</param>
+  public static void UpdateOrientationReflexInfo(int type, int pulse)
+  {
+    LastOrientationReflexType = type;
+    LastOrientationReflexPulse = pulse;
+  }
+
+  /// <summary>
+  /// Получить информацию об активации ориентировочного рефлекса
+  /// </summary>
+  /// <returns>Кортеж (тип, пульс)</returns>
+  public static (int Type, int Pulse) GetOrientationReflexInfo()
+  {
+    return (LastOrientationReflexType, LastOrientationReflexPulse);
+  }
+
+  /// <summary>
+  /// Сбросить информацию об ориентировочном рефлексе
+  /// </summary>
+  public static void ResetOrientationReflexInfo()
+  {
+    LastOrientationReflexType = 0;
+    LastOrientationReflexPulse = 0;
+  }
 
   /// <summary>
   /// Флаг ожидания оценки от оператора (true - ждем, false - не ждем)
@@ -106,7 +203,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Период ожидания реакции оператора на действия автоматизма в пульсах
+  /// ЭТО НАСТРОЙКА, НЕ СБРАСЫВАТЬ! Период ожидания реакции оператора на действия автоматизма в пульсах
   /// </summary>
   public static int WaitingPeriodForActionsVal
   {

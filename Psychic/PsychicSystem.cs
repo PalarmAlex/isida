@@ -510,6 +510,7 @@ namespace ISIDA.Psychic
         _lastRunAutomatizmPulsCount = PulseCount;
         _lastRunAutomatizm = automatizm;
 
+        AppGlobalState.UpdateAutomatizmInfo(automatizm.ID, PulseCount);
         AppGlobalState.LastEvaluatedAutomatizmId = automatizm.ID;
         AppGlobalState.SaveStateForEvaluation(AppGlobalState.CurrentOverallState);
 
@@ -547,6 +548,7 @@ namespace ISIDA.Psychic
 
           Logger.Warning($"Ошибка выполнения автоматизма {automatizm.ID}: {result.ErrorMessage}");
           AppGlobalState.LastRunAutomatizmPulsCount = 0;
+          AppGlobalState.ResetAutomatizmInfo();
           return false;
         }
 
@@ -572,6 +574,7 @@ namespace ISIDA.Psychic
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
+        AppGlobalState.ResetAutomatizmInfo();
         return false;
       }
       finally
@@ -604,7 +607,7 @@ namespace ISIDA.Psychic
       AppGlobalState.LastRunAutomatizmPulsCount = 0;
       AppGlobalState.LastEvaluatedAutomatizmId = 0;
       AppGlobalState.WaitingForOperatorEvaluation = false;
-      AppGlobalState.WaitingPeriodForActionsVal = 0; // это наверное не надо сбрасывать, это конфигурация
+      AppGlobalState.ResetAutomatizmInfo();
     }
 
     /// <summary>

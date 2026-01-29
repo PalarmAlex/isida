@@ -111,7 +111,10 @@ namespace ISIDA.Common
       public int? CurrentTriggerStimulusID { get; set; }
       public int? CurrentGeneticReflexID { get; set; }
       public int? CurrentConditionReflexID { get; set; }
+      public int? CurrentAutomatizmID { get; set; }
       public int? HasCriticalChanges { get; set; }
+      public int? OrientationReflexType { get; set; }
+      public int? OrientationReflexPulse { get; set; }
     }
 
     /// <summary>
@@ -452,8 +455,10 @@ namespace ISIDA.Common
 
             _currentPulseLogEntry = logEntry;
             _bufferedPulse = correctPulse;
-
             _lastState = currentState;
+
+            if (currentState.OrientationReflexType.HasValue && currentState.OrientationReflexType.Value > 0)
+              AppGlobalState.ResetOrientationReflexInfo();
           }
 
           if (!IsDuplicateParametersState(currentParametersState))
@@ -474,6 +479,13 @@ namespace ISIDA.Common
     /// </summary>
     private Dictionary<string, object> CreateLogEntry(SystemState state, int correctPulse)
     {
+      string orTypeString = "";
+      if (state.OrientationReflexType.HasValue && state.OrientationReflexType.Value > 0)
+      {
+        orTypeString = state.OrientationReflexType.Value == 1 ? "ОР1" :
+                      state.OrientationReflexType.Value == 2 ? "ОР2" : "";
+      }
+
       return new Dictionary<string, object>
       {
         ["Время"] = state.Time.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -483,9 +495,10 @@ namespace ISIDA.Common
         ["Состояние"] = state.CurrentBaseID?.ToString() ?? "",
         ["Стили"] = state.CurrentBaseStyleID?.ToString() ?? "",
         ["Триггер"] = state.CurrentTriggerStimulusID?.ToString() ?? "",
-        ["ОР1"] = state.HasCriticalChanges?.ToString() ?? "",
+        ["ОР"] = orTypeString,
         ["Б/у рефлекс"] = state.CurrentGeneticReflexID?.ToString() ?? "",
-        ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? ""
+        ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? "",
+        ["Автоматизм"] = state.CurrentAutomatizmID?.ToString() ?? ""
       };
     }
 
@@ -535,6 +548,16 @@ namespace ISIDA.Common
     {
       if (_memoryLogWriter == null || _disposed) return;
 
+      int? orType = null;
+      if (logEntry.ContainsKey("ОР") && !string.IsNullOrEmpty(logEntry["ОР"].ToString()))
+      {
+        string orValue = logEntry["ОР"].ToString();
+        if (orValue == "ОР1")
+          orType = 1;
+        else if (orValue == "ОР2")
+          orType = 2;
+      }
+
       _memoryLogWriter.WriteLog(
           "ResearchLogger",
           "LogSystemState",
@@ -545,12 +568,13 @@ namespace ISIDA.Common
               int.Parse(logEntry["Стили"].ToString()) : (int?)null,
           logEntry.ContainsKey("Триггер") && !string.IsNullOrEmpty(logEntry["Триггер"].ToString()) ?
               int.Parse(logEntry["Триггер"].ToString()) : (int?)null,
-          logEntry.ContainsKey("ОР1") && !string.IsNullOrEmpty(logEntry["ОР1"].ToString()) ?
-              int.Parse(logEntry["ОР1"].ToString()) : (int?)null,
+          orType,
           logEntry.ContainsKey("Б/у рефлекс") && !string.IsNullOrEmpty(logEntry["Б/у рефлекс"].ToString()) ?
               int.Parse(logEntry["Б/у рефлекс"].ToString()) : (int?)null,
           logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString()) ?
-              int.Parse(logEntry["Усл. рефлекс"].ToString()) : (int?)null
+              int.Parse(logEntry["Усл. рефлекс"].ToString()) : (int?)null,
+          logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString()) ?
+              int.Parse(logEntry["Автоматизм"].ToString()) : (int?)null
       );
     }
 
@@ -635,6 +659,8 @@ namespace ISIDA.Common
     /// </summary>
     private SystemState CollectSystemState(int pulse)
     {
+      var orInfo = AppGlobalState.GetOrientationReflexInfo();
+      var atmInfo = AppGlobalState.GetAutomatizmInfo();
       var state = new SystemState
       {
         Pulse = pulse,
@@ -644,8 +670,16 @@ namespace ISIDA.Common
         CurrentTriggerStimulusID = GetCurrentTriggerImageID(),
         CurrentGeneticReflexID = GetCurrentGeneticReflexID(),
         CurrentConditionReflexID = GetCurrentConditionedReflexID(),
-        HasCriticalChanges = GetHasCriticalChanges()
+        CurrentAutomatizmID = atmInfo.Id != 0 ? (int?)atmInfo.Id : null,
+        HasCriticalChanges = GetHasCriticalChanges(),
+        OrientationReflexType = orInfo.Type != 0 ? (int?)orInfo.Type : null,
+        OrientationReflexPulse = orInfo.Pulse != 0 ? (int?)orInfo.Pulse : null
       };
+
+      // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
+      if (atmInfo.Pulse == pulse - 1)
+        AppGlobalState.ResetAutomatizmInfo();
+
       return state;
     }
 
@@ -706,7 +740,10 @@ namespace ISIDA.Common
              _lastState.CurrentTriggerStimulusID != current.CurrentTriggerStimulusID ||
              _lastState.CurrentGeneticReflexID != current.CurrentGeneticReflexID ||
              _lastState.CurrentConditionReflexID != current.CurrentConditionReflexID ||
-             _lastState.HasCriticalChanges != current.HasCriticalChanges;
+             _lastState.CurrentAutomatizmID != current.CurrentAutomatizmID ||
+             _lastState.HasCriticalChanges != current.HasCriticalChanges ||
+             _lastState.OrientationReflexType != current.OrientationReflexType ||
+             _lastState.OrientationReflexPulse != current.OrientationReflexPulse;
     }
 
     /// <summary>

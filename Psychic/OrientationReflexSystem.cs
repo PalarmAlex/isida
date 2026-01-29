@@ -21,7 +21,7 @@ namespace ISIDA.Psychic
     private readonly PurposeGeneticImageSystem _purposeGeneticImageSystem;
     private AutomatizmSystem _automatizmSystem;
     private AutomatizmTreeSystem _automatizmTreeSystem;
-    
+
     #region Инициализация
 
     private static OrientationReflexSystem _instance;
@@ -123,15 +123,17 @@ namespace ISIDA.Psychic
     {
       try
       {
-        Automatizm atmz = null;
+        AppGlobalState.UpdateOrientationReflexInfo(1, AppGlobalState.Lifetime);
+        Logger.Info($"Активирован ОР1 на пульсе {AppGlobalState.Lifetime}");
 
+        Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
         if (AppGlobalState.EvolutionStage < 3)
           atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
         return atmz;
       }
-      catch(Exception ex)
+      catch (Exception ex)
       {
         Logger.Error(ex.Message);
         return null;
@@ -145,8 +147,11 @@ namespace ISIDA.Psychic
     {
       try
       {
-        Automatizm atmz = null;
+        AppGlobalState.UpdateOrientationReflexInfo(2, AppGlobalState.Lifetime);
 
+        Logger.Info($"Активирован ОР2 на пульсе {AppGlobalState.Lifetime}");
+
+        Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
         atmz = _purposeGeneticImageSystem.GetBasicAutomatizmByPurpose(automatizmID);
 
