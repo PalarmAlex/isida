@@ -321,11 +321,6 @@ namespace ISIDA.Psychic.Automatism
           return;
 
         automatizm.Count++;
-
-        if (success && automatizm.Usefulness < 10)
-          automatizm.Usefulness++;
-        else if (!success && automatizm.Usefulness > -10)
-          automatizm.Usefulness--;
       }
       catch (Exception ex)
       {

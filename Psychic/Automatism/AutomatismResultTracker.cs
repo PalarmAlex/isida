@@ -431,6 +431,8 @@ namespace ISIDA.Psychic
         };
 
         _lastAutomatizmResults[automatizmId] = trackingResult;
+        AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
+        AppGlobalState.UpdateAutomatizmInfo(automatizmId, GlobalTimer.GlobalPulsCount);
         AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
 
         Logger.Info($"Начато отслеживание автоматизма ID={automatizmId}, ветка={branchId}");
@@ -451,35 +453,23 @@ namespace ISIDA.Psychic
       if (result == null || result.AutomatizmId <= 0)
         return;
 
-      _lock.EnterWriteLock();
       try
       {
         result.EndPulse = GlobalTimer.GlobalPulsCount;
         result.CurrentState = AppGlobalState.CurrentOverallState;
 
-        // Анализ результата на основе изменения состояния
         AnalyzeResult(result);
-
-        // Обновление статистики
         UpdateStatistics(result);
-
-        // Добавление в историю
         AddHistoryRecord(
-            result.AutomatizmId,
-            result.Result,
-            GetResultDescription(result));
-
-        // Обработка неудачных выполнений
-        if (result.Result == ExecutionResult.Error)
-        {
-          HandleFailedExecution(result);
-        }
+          result.AutomatizmId,
+          result.Result,
+          GetResultDescription(result));
 
         Logger.Info($"Завершено отслеживание автоматизма ID={result.AutomatizmId}, результат={result.Result}");
       }
-      finally
+      catch(Exception ex)
       {
-        _lock.ExitWriteLock();
+        Logger.Error(ex.Message);
       }
     }
 
@@ -499,6 +489,7 @@ namespace ISIDA.Psychic
 
           // Обновляем полезность автоматизма на основе оценки оператора
           UpdateAutomatizmUsefulness(automatizmId, assessment);
+          FinishTracking(result);
         }
         else
         {
@@ -515,98 +506,12 @@ namespace ISIDA.Psychic
 
           _lastAutomatizmResults[automatizmId] = newResult;
           UpdateAutomatizmUsefulness(automatizmId, assessment);
+          FinishTracking(newResult);
         }
       }
       finally
       {
         _lock.ExitWriteLock();
-      }
-    }
-    /// <summary>
-    /// Блокировать автоматизм
-    /// </summary>
-    public void BlockAutomatizm(int automatizmId, string reason)
-    {
-      if (automatizmId <= 0 || string.IsNullOrEmpty(reason))
-        return;
-
-      _lock.EnterWriteLock();
-      try
-      {
-        if (!_blockedAutomatizms.ContainsKey(automatizmId))
-        {
-          _blockedAutomatizms[automatizmId] = new BlockedAutomatizmInfo
-          {
-            AutomatizmId = automatizmId,
-            BlockReason = reason,
-            BlockPulse = GlobalTimer.GlobalPulsCount,
-            UnblockPulse = 0,
-            AttemptsAfterBlock = 0
-          };
-
-          Logger.Warning($"Автоматизм ID={automatizmId} заблокирован: {reason}");
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Разблокировать автоматизм
-    /// </summary>
-    public void UnblockAutomatizm(int automatizmId)
-    {
-      if (automatizmId <= 0)
-        return;
-
-      _lock.EnterWriteLock();
-      try
-      {
-        if (_blockedAutomatizms.TryGetValue(automatizmId, out var blockInfo))
-        {
-          blockInfo.UnblockPulse = GlobalTimer.GlobalPulsCount;
-          _blockedAutomatizms.Remove(automatizmId);
-
-          Logger.Info($"Автоматизм ID={automatizmId} разблокирован");
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Проверить, заблокирован ли автоматизм
-    /// </summary>
-    public bool IsAutomatizmBlocked(int automatizmId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return _blockedAutomatizms.ContainsKey(automatizmId);
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Получить информацию о блокировке автоматизма
-    /// </summary>
-    public BlockedAutomatizmInfo GetBlockInfo(int automatizmId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return _blockedAutomatizms.TryGetValue(automatizmId, out var info) ? info : null;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
       }
     }
 
@@ -792,22 +697,6 @@ namespace ISIDA.Psychic
       }
     }
 
-    private void HandleFailedExecution(AutomatizmResult result)
-    {
-      if (!_failedAutomatizms.Contains(result.AutomatizmId))
-      {
-        _failedAutomatizms.Add(result.AutomatizmId);
-
-        // Если автоматизм несколько раз подряд неудачен, блокируем его
-        var recentErrorCount = CountRecentErrors(result.AutomatizmId, 3);
-
-        if (recentErrorCount >= 3)
-        {
-          BlockAutomatizm(result.AutomatizmId, "3 последовательные ошибки выполнения");
-        }
-      }
-    }
-
     /// <summary>
     /// Подсчитывает количество ошибок выполнения для указанного автоматизма за последние N выполнений
     /// </summary>
@@ -862,25 +751,13 @@ namespace ISIDA.Psychic
         var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
         if (automatizm != null)
         {
-          // Оценка оператора: -1 (наказание), 0 (нейтрально), 1 (поощрение)
-          // Обновляем полезность на основе оценки
-          automatizm.Usefulness += assessment * 2; // Усиливаем влияние оценки
-
-          // Ограничиваем диапазон полезности
+          automatizm.Usefulness += assessment;
           automatizm.Usefulness = Math.Max(-10, Math.Min(10, automatizm.Usefulness));
-
-          // Увеличиваем счетчик использования
-          automatizm.Count++;
-
-          string assessmentText = assessment > 0 ? "поощрение" :
-                                 assessment < 0 ? "наказание" : "нейтрально";
-
-          Logger.Info($"Обновлена полезность автоматизма ID={automatizmId}: {automatizm.Usefulness} ({assessmentText})");
         }
       }
       catch (Exception ex)
       {
-        Logger.Error($"Ошибка обновления полезности автоматизма ID={automatizmId}: {ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 

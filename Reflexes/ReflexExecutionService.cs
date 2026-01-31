@@ -1,10 +1,12 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
+using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 
 namespace ISIDA.Reflexes
 {

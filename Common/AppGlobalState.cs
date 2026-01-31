@@ -10,96 +10,63 @@ using System.Collections.Generic;
 /// </summary>
 public static class AppGlobalState
 {
-  private static int _waitingPeriodCountdown = 0;
+  #region Автоматизмы
+
   private static int _currentActiveAutomatizmId = 0;
   private static int _lastAutomatizmPulse = 0;
+  private static int automatizmNodeId = 0;
+  private static int _currentFindAtmzStepCount = 0;
+  private static int _lastRunAutomatizmPulsCount = 0;
+
+  #endregion
+
+  #region Рефлексы
+
   private static int _lastOrientationReflexType = 0;
   private static int _lastOrientationReflexPulse = 0;
+  private static bool _flgConditionReflexes = false;
+  private static List<int> _geneticReflexesActions = new List<int>();
+  private static List<int> _conditionReflexesActions = new List<int>();
+
+  #endregion
+
+  #region Состояние агента
+
+  private static HomeostasisState _currentOverallState = HomeostasisState.Normal;
+  private static int _dominantParam = 0;
+  private static bool _isDead = false;
+  private static bool _isSleeping = false;
+  private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
+  private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
+
+  #endregion
+
+  #region Эволюция и время жизни
+
   private static int _defaultAdaptiveActionIdage = 0;
   private static int _evolutionStage = 0;
   private static int _lifetime = 0;
-  private static int _dominantParam = 0;
-  private static int automatizmNodeId = 0;
-  private static int _curActiveVerbalId = 0;
-  private static int _currentFindAtmzStepCount = 0;
-  private static int _lastRunAutomatizmPulsCount = 0;
-  private static int _waitingPeriodForActionsVal = 0;
-  private static HomeostasisState _currentOverallState = HomeostasisState.Normal;
-  private static bool _isDead = false;
-  private static bool _isSleeping = false;
-  private static bool _flgConditionReflexes = false;
+
+  #endregion
+
+  #region Оценка оператора
+
+  private static int _waitingPeriodCountdown = 0;
   private static bool _waitingForOperatorEvaluation = false;
   private static int _lastEvaluatedAutomatizmId = 0;
   private static int _lastAutomatizmEvaluationTime = 0;
-  private static List<int> _geneticReflexesActions = new List<int>();
-  private static List<int> _conditionReflexesActions = new List<int>();
-  private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
-  private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
+  private static int _waitingPeriodForActionsVal = 0;
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
 
-  /// <summary>
-  /// Оставшееся время ожидания оценки (в пульсах)
-  /// </summary>
-  public static int WaitingPeriodCountdown
-  {
-    get => _waitingPeriodCountdown;
-    private set => _waitingPeriodCountdown = value;
-  }
+  #endregion
 
-  /// <summary>
-  /// Начать период ожидания оценки оператора
-  /// </summary>
-  public static void StartWaitingForOperatorEvaluation(int automatizmId)
-  {
-    WaitingForOperatorEvaluation = true;
-    LastEvaluatedAutomatizmId = automatizmId;
-    LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
-    WaitingPeriodCountdown = WaitingPeriodForActionsVal;
+  #region Вербальные образы
 
-    Logger.Info($"Начат период ожидания оценки оператора для автоматизма ID={automatizmId}, " +
-                $"длительность={WaitingPeriodForActionsVal} пульсов");
-  }
+  private static int _curActiveVerbalId = 0;
 
-  /// <summary>
-  /// Обновить обратный отсчет периода ожидания
-  /// </summary>
-  public static void UpdateWaitingPeriodCountdown()
-  {
-    if (WaitingForOperatorEvaluation && WaitingPeriodCountdown > 0)
-    {
-      WaitingPeriodCountdown--;
+  #endregion
 
-      // Если время вышло, сбрасываем ожидание
-      if (WaitingPeriodCountdown <= 0)
-      {
-        ResetWaitingForOperatorEvaluation();
-        Logger.Info("Период ожидания оценки оператора истек");
-      }
-    }
-  }
-
-  /// <summary>
-  /// Принудительно завершить период ожидания оценки оператора
-  /// </summary>
-  public static void ForceStopWaitingForOperatorEvaluation()
-  {
-    if (WaitingForOperatorEvaluation)
-    {
-      Logger.Info($"Принудительно завершен период ожидания оценки для автоматизма ID={LastEvaluatedAutomatizmId}");
-    }
-    ResetWaitingForOperatorEvaluation();
-  }
-
-  /// <summary>
-  /// Сбросить состояние ожидания оценки оператора
-  /// </summary>
-  public static void ResetWaitingForOperatorEvaluation()
-  {
-    WaitingForOperatorEvaluation = false;
-    LastEvaluatedAutomatizmId = 0;
-    WaitingPeriodCountdown = 0;
-    LastRunAutomatizmPulsCount = 0;
-  }
+  #region Автоматизмы - Свойства и методы
 
   /// <summary>
   /// ID текущего активного автоматизма
@@ -120,15 +87,39 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Последний распознанный узел дерева автоматизмов
+  /// </summary>
+  public static int AutomatizmNodeId
+  {
+    get => automatizmNodeId;
+    set => automatizmNodeId = value;
+  }
+
+  /// <summary>
+  /// Текущий шаг при поиске автоматизма в узлах ветки дерева автоматизмов
+  /// </summary>
+  public static int CurrentFindAtmzStepCount
+  {
+    get => _currentFindAtmzStepCount;
+    set => _currentFindAtmzStepCount = value;
+  }
+
+  /// <summary>
+  /// Пульс, на котором был запущен текущий автоматизм
+  /// </summary>
+  public static int LastRunAutomatizmPulsCount
+  {
+    get => _lastRunAutomatizmPulsCount;
+    set => _lastRunAutomatizmPulsCount = value;
+  }
+
+  /// <summary>
   /// Обновить информацию об активации автоматизма
   /// </summary>
   public static void UpdateAutomatizmInfo(int automatizmId, int pulse)
   {
     CurrentActiveAutomatizmId = automatizmId;
     LastAutomatizmPulse = pulse;
-
-    // Записываем в лог для отладки
-    Logger.Info($"Автоматизм активирован: ID={automatizmId} на пульсе {pulse}");
   }
 
   /// <summary>
@@ -148,6 +139,10 @@ public static class AppGlobalState
     return (CurrentActiveAutomatizmId, LastAutomatizmPulse);
   }
 
+  #endregion
+
+  #region Рефлексы - Свойства и методы
+
   /// <summary>
   /// Тип последнего активированного ориентировочного рефлекса (0 = нет, 1 = ОР1, 2 = ОР2)
   /// </summary>
@@ -164,6 +159,31 @@ public static class AppGlobalState
   {
     get => _lastOrientationReflexPulse;
     internal set => _lastOrientationReflexPulse = value;
+  }
+
+  /// <summary>
+  /// Флаг наличия условных рефлексов
+  /// </summary>
+  public static bool FlgConditionReflexes
+  {
+    get => _flgConditionReflexes;
+    set => _flgConditionReflexes = value;
+  }
+
+  /// <summary>
+  /// Текущие активные безусловные рефлексы
+  /// </summary>
+  public static IReadOnlyList<int> GeneticReflexesActions
+  {
+    get => _geneticReflexesActions;
+  }
+
+  /// <summary>
+  /// Текущие активные условные рефлексы
+  /// </summary>
+  public static IReadOnlyList<int> ConditionedReflexesActions
+  {
+    get => _conditionReflexesActions;
   }
 
   /// <summary>
@@ -196,85 +216,42 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Флаг ожидания оценки от оператора (true - ждем, false - не ждем)
+  /// Обновить текущие активные безусловные рефлексы
   /// </summary>
-  public static bool WaitingForOperatorEvaluation
+  internal static void UpdateGlobalGeneticReflexesActions(List<int> actIdArr)
   {
-    get => _waitingForOperatorEvaluation;
-    set => _waitingForOperatorEvaluation = value;
+    _geneticReflexesActions.Clear();
+
+    if (actIdArr != null)
+    {
+      foreach (var act in actIdArr)
+      {
+        if (act != 0)
+          _geneticReflexesActions.Add(act);
+      }
+    }
   }
 
   /// <summary>
-  /// ID последнего автоматизма, который ожидает оценки оператора
+  /// Обновить текущие активные условные рефлексы
   /// </summary>
-  public static int LastEvaluatedAutomatizmId
+  internal static void UpdateGlobalConditionedReflexesActions(List<int> actIdArr)
   {
-    get => _lastEvaluatedAutomatizmId;
-    set => _lastEvaluatedAutomatizmId = value;
+    _conditionReflexesActions.Clear();
+
+    if (actIdArr != null)
+    {
+      foreach (var acr in actIdArr)
+      {
+        if (acr != 0)
+          _conditionReflexesActions.Add(acr);
+      }
+    }
   }
 
-  /// <summary>
-  /// Состояние агента перед воздействием оператора (для оценки)
-  /// </summary>
-  public static HomeostasisState StateBeforeOperatorImpact
-  {
-    get => _stateBeforeOperatorImpact;
-    set => _stateBeforeOperatorImpact = value;
-  }
+  #endregion
 
-  /// <summary>
-  /// Время (пульс) последней оценки автоматизма оператором
-  /// </summary>
-  public static int LastAutomatizmEvaluationTime
-  {
-    get => _lastAutomatizmEvaluationTime;
-    set => _lastAutomatizmEvaluationTime = value;
-  }
-
-  /// <summary>
-  /// Сохранить состояние перед воздействием оператора для оценки
-  /// </summary>
-  public static void SaveStateForEvaluation(HomeostasisState currentState)
-  {
-    StateBeforeOperatorImpact = currentState;
-    Logger.Info($"Сохранено состояние для оценки: {currentState}");
-  }
-
-  /// <summary>
-  /// Проверить, является ли текущий момент временем оценки предыдущего автоматизма
-  /// </summary>
-  public static bool IsEvaluationTime()
-  {
-    if (!_waitingForOperatorEvaluation ||
-        LastRunAutomatizmPulsCount <= 0 ||
-        WaitingPeriodForActionsVal <= 0)
-      return false;
-
-    int currentPulse = GlobalTimer.GlobalPulsCount;
-    int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
-
-    // Только если мы активно ждем И время в пределах ожидания
-    return timeSinceAutomatizm <= WaitingPeriodForActionsVal &&
-           timeSinceAutomatizm > 0;
-  }
-
-  /// <summary>
-  /// Пульс, на котором был запущен текущий автоматизм
-  /// </summary>
-  public static int LastRunAutomatizmPulsCount
-  {
-    get => _lastRunAutomatizmPulsCount;
-    set => _lastRunAutomatizmPulsCount = value;
-  }
-
-  /// <summary>
-  /// ЭТО НАСТРОЙКА, НЕ СБРАСЫВАТЬ! Период ожидания реакции оператора на действия автоматизма в пульсах
-  /// </summary>
-  public static int WaitingPeriodForActionsVal
-  {
-    get => _waitingPeriodForActionsVal;
-    set => _waitingPeriodForActionsVal = value;
-  }
+  #region Состояние агента - Свойства и методы
 
   /// <summary>
   /// Состояние гомеостаза агента
@@ -305,45 +282,90 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущий шаг при поиске автоматизма в узлах ветки дерева автоматизмов
+  /// ID текущего доминирующего параметра гомеостаза
   /// </summary>
-  public static int CurrentFindAtmzStepCount
+  public static int DominantParam
   {
-    get => _currentFindAtmzStepCount;
-    set => _currentFindAtmzStepCount = value;
+    get => _dominantParam;
+    set => _dominantParam = value;
   }
 
   /// <summary>
-  /// ID текущего активного вербального образа 
+  /// Флаг смерти агента
   /// </summary>
-  public static int CurActiveVerbalId
+  public static bool IsDead
   {
-    get => _curActiveVerbalId;
-    set => _curActiveVerbalId = value;
+    get => _isDead;
+    set => _isDead = value;
   }
 
   /// <summary>
-  /// Флаг наличия условных рефлексов
+  /// Флаг сна агента
   /// </summary>
-  public static bool FlgConditionReflexes
+  public static bool IsSleeping
   {
-    get => _flgConditionReflexes;
-    set => _flgConditionReflexes = value;
+    get => _isSleeping;
+    set => _isSleeping = value;
   }
 
   /// <summary>
-  /// Последний распознанный узел дерева автоматизмов
+  /// Текущие активные стили поведения агента
   /// </summary>
-  public static int AutomatizmNodeId
+  public static IReadOnlyList<GomeostasSystem.BehaviorStyle> ActiveStyles
   {
-    get => automatizmNodeId;
-    set => automatizmNodeId = value;
+    get => _activeStyles.AsReadOnly();
   }
+
+  /// <summary>
+  /// Текущие активные адаптивные действия агента
+  /// </summary>
+  public static IReadOnlyList<AdaptiveActionsSystem.AdaptiveAction> ActiveAdaptiveActions
+  {
+    get => _activeAdaptiveActions.AsReadOnly();
+  }
+
+  /// <summary>
+  /// Внутренний метод для обновления активных стилей
+  /// </summary>
+  internal static void UpdateActiveStyles(IEnumerable<GomeostasSystem.BehaviorStyle> styles)
+  {
+    _activeStyles.Clear();
+
+    if (styles != null)
+    {
+      foreach (var style in styles)
+      {
+        if (style != null)
+          _activeStyles.Add(style);
+      }
+    }
+  }
+
+  /// <summary>
+  /// Внутренний метод для обновления активных адаптивных действий
+  /// </summary>
+  internal static void UpdateActiveAdaptiveActions(IEnumerable<AdaptiveActionsSystem.AdaptiveAction> actions)
+  {
+    _activeAdaptiveActions.Clear();
+
+    if (actions != null)
+    {
+      foreach (var action in actions)
+      {
+        if (action != null)
+          _activeAdaptiveActions.Add(action);
+      }
+    }
+  }
+
+  #endregion
+
+  #region Эволюция и время жизни - Свойства и методы
 
   /// <summary>
   /// Адаптивное действие по умолчанию
   /// </summary>
- public static int DefaultAdaptiveActionId
+  public static int DefaultAdaptiveActionId
   {
     get => _defaultAdaptiveActionIdage;
     set => _defaultAdaptiveActionIdage = value;
@@ -367,130 +389,142 @@ public static class AppGlobalState
     set => _lifetime = value;
   }
 
+  #endregion
+
+  #region Оценка оператора - Свойства и методы
+
   /// <summary>
-  /// Флаг смерти агента
+  /// Оставшееся время ожидания оценки (в пульсах)
   /// </summary>
-  public static bool IsDead
+  public static int WaitingPeriodCountdown
   {
-    get => _isDead;
-    set => _isDead = value;
+    get => _waitingPeriodCountdown;
+    private set => _waitingPeriodCountdown = value;
   }
 
   /// <summary>
-  /// Флаг сна агента
+  /// Флаг ожидания оценки от оператора (true - ждем, false - не ждем)
   /// </summary>
-  public static bool IsSleeping
+  public static bool WaitingForOperatorEvaluation
   {
-    get => _isSleeping;
-    set => _isSleeping = value;
+    get => _waitingForOperatorEvaluation;
+    set => _waitingForOperatorEvaluation = value;
   }
 
   /// <summary>
-  /// ID текущего доминирующего параметра гомеостаза
+  /// Состояние агента перед воздействием оператора (для оценки)
   /// </summary>
-  public static int DominantParam
+  public static HomeostasisState StateBeforeOperatorImpact
   {
-    get => _dominantParam;
-    set => _dominantParam = value;
+    get => _stateBeforeOperatorImpact;
+    set => _stateBeforeOperatorImpact = value;
   }
 
   /// <summary>
-  /// Текущие активные безусловные рефлексы
+  /// Время (пульс) последней оценки автоматизма оператором
   /// </summary>
-  public static IReadOnlyList<int> GeneticReflexesActions
+  public static int LastAutomatizmEvaluationTime
   {
-    get => _geneticReflexesActions;
+    get => _lastAutomatizmEvaluationTime;
+    set => _lastAutomatizmEvaluationTime = value;
   }
 
   /// <summary>
-  /// Обновить текущие активные безусловные рефлексы
+  /// ЭТО НАСТРОЙКА, НЕ СБРАСЫВАТЬ! Период ожидания реакции оператора на действия автоматизма в пульсах
   /// </summary>
-  internal static void UpdateGlobalGeneticReflexesActions(List<int> actIdArr)
+  public static int WaitingPeriodForActionsVal
   {
-    _geneticReflexesActions.Clear();
+    get => _waitingPeriodForActionsVal;
+    set => _waitingPeriodForActionsVal = value;
+  }
 
-    if (actIdArr != null)
+  /// <summary>
+  /// Начать период ожидания оценки оператора
+  /// </summary>
+  public static void StartWaitingForOperatorEvaluation(int automatizmId)
+  {
+    WaitingForOperatorEvaluation = true;
+    LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
+    WaitingPeriodCountdown = WaitingPeriodForActionsVal;
+
+    Logger.Info($"Начат период ожидания оценки оператора для автоматизма ID={automatizmId}, " +
+                $"длительность={WaitingPeriodForActionsVal} пульсов");
+  }
+
+  /// <summary>
+  /// Обновить обратный отсчет периода ожидания
+  /// </summary>
+  public static void UpdateWaitingPeriodCountdown()
+  {
+    if (WaitingForOperatorEvaluation && WaitingPeriodCountdown > 0)
     {
-      foreach (var act in actIdArr)
+      WaitingPeriodCountdown--;
+
+      // Если время вышло, сбрасываем ожидание
+      if (WaitingPeriodCountdown <= 0)
       {
-        if (act != 0)
-          _geneticReflexesActions.Add(act);
+        ResetWaitingForOperatorEvaluation();
+        Logger.Info("Период ожидания оценки оператора истек");
       }
     }
   }
 
   /// <summary>
-  /// Текущие активные условные рефлексы
+  /// Принудительно завершить период ожидания оценки оператора
   /// </summary>
-  public static IReadOnlyList<int> ConditionedReflexesActions
+  public static void ForceStopWaitingForOperatorEvaluation()
   {
-    get => _conditionReflexesActions;
+    ResetWaitingForOperatorEvaluation();
   }
 
   /// <summary>
-  /// Обновить текущие активные условные рефлексы
+  /// Сбросить состояние ожидания оценки оператора
   /// </summary>
-  internal static void UpdateGlobalConditionedReflexesActions(List<int> actIdArr)
+  public static void ResetWaitingForOperatorEvaluation()
   {
-    _conditionReflexesActions.Clear();
-
-    if (actIdArr != null)
-    {
-      foreach (var acr in actIdArr)
-      {
-        if (acr != 0)
-          _conditionReflexesActions.Add(acr);
-      }
-    }
+    WaitingForOperatorEvaluation = false;
+    WaitingPeriodCountdown = 0;
+    LastRunAutomatizmPulsCount = 0;
   }
+
+  ///// <summary>
+  ///// Сохранить состояние перед воздействием оператора для оценки
+  ///// </summary>
+  //public static void SaveStateForEvaluation(HomeostasisState currentState)
+  //{
+  //  StateBeforeOperatorImpact = currentState;
+  //}
 
   /// <summary>
-  /// Текущие активные стили поведения агента
+  /// Проверить, является ли текущий момент временем оценки предыдущего автоматизма
   /// </summary>
-  public static IReadOnlyList<GomeostasSystem.BehaviorStyle> ActiveStyles
+  public static bool IsEvaluationTime()
   {
-    get => _activeStyles.AsReadOnly();
+    if (!_waitingForOperatorEvaluation ||
+        LastRunAutomatizmPulsCount <= 0 ||
+        WaitingPeriodForActionsVal <= 0)
+      return false;
+
+    int currentPulse = GlobalTimer.GlobalPulsCount;
+    int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
+
+    // Только если мы активно ждем И время в пределах ожидания
+    return timeSinceAutomatizm <= WaitingPeriodForActionsVal &&
+           timeSinceAutomatizm > 0;
   }
+
+  #endregion
+
+  #region Вербальные образы - Свойства и методы
 
   /// <summary>
-  /// Внутренний метод для обновления активных стилей
+  /// ID текущего активного вербального образа 
   /// </summary>
-  internal static void UpdateActiveStyles(IEnumerable<GomeostasSystem.BehaviorStyle> styles)
+  public static int CurActiveVerbalId
   {
-    _activeStyles.Clear();
-
-    if (styles != null)
-    {
-      foreach (var style in styles)
-      {
-        if (style != null)
-          _activeStyles.Add(style);
-      }
-    }
+    get => _curActiveVerbalId;
+    set => _curActiveVerbalId = value;
   }
 
-  /// <summary>
-  /// Текущие активные адаптивные действия агента
-  /// </summary>
-  public static IReadOnlyList<AdaptiveActionsSystem.AdaptiveAction> ActiveAdaptiveActions
-  {
-    get => _activeAdaptiveActions.AsReadOnly();
-  }
-
-  /// <summary>
-  /// Внутренний метод для обновления активных адаптивных действий
-  /// </summary>
-  internal static void UpdateActiveAdaptiveActions(IEnumerable<AdaptiveActionsSystem.AdaptiveAction> actions)
-  {
-    _activeAdaptiveActions.Clear();
-
-    if (actions != null)
-    {
-      foreach (var action in actions)
-      {
-        if (action != null)
-          _activeAdaptiveActions.Add(action);
-      }
-    }
-  }
+  #endregion
 }

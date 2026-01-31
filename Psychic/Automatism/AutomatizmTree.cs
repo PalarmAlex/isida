@@ -353,7 +353,7 @@ namespace ISIDA.Psychic.Automatism
         int verbID,
         bool isUnrecognizedPhrase = false)
     {
-      if (_notAllowScanInTreeThisTime || GlobalTimer.GlobalPulsCount < 4)
+      if (_notAllowScanInTreeThisTime || AppGlobalState.EvolutionStage < 2)
         return 0;
 
       _notAllowScanInTreeThisTime = true;

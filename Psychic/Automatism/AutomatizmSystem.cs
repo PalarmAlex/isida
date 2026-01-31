@@ -328,35 +328,6 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Обновляет полезность автоматизма
-    /// </summary>
-    public void UpdateAutomatizmUsefulness(int automatizmId, int usefulness, List<int> gomeoIdSuccesArr = null)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        if (!_automatizmsById.TryGetValue(automatizmId, out var automatizm))
-          return;
-
-        automatizm.Usefulness = usefulness;
-        automatizm.Count++;
-
-        if (gomeoIdSuccesArr != null)
-          automatizm.GomeoIdSuccesArr = gomeoIdSuccesArr.ToList();
-
-        // Обновляем списки успешных/неуспешных
-        if (usefulness > 0)
-          _automatizmSuccessFromId[automatizmId] = automatizm;
-        else if (_automatizmSuccessFromId.ContainsKey(automatizmId))
-          _automatizmSuccessFromId.Remove(automatizmId);
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
     /// Удаляет автоматизм
     /// </summary>
     public void DeleteAutomatizm(int id)
@@ -557,6 +528,21 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterReadLock();
       try
       {
+        return GetAutomatizmFromNodeIdNoLock(nodeId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает автоматизм для узла дерева (лучший подходящий)
+    /// </summary>
+    internal Automatizm GetAutomatizmFromNodeIdNoLock (int nodeId)
+    {
+      try
+      {
         // Сначала проверяем штатный автоматизм
         var belief2 = GetBelief2AutomatizmFromTreeId(nodeId);
         if (belief2 != null && belief2.Usefulness >= 0)
@@ -574,10 +560,12 @@ namespace ISIDA.Psychic.Automatism
             .ThenByDescending(a => a.Count)
             .FirstOrDefault();
       }
-      finally
+      catch(Exception ex)
       {
-        _lock.ExitReadLock();
+        Logger.Error(ex.Message);
+        return null;
       }
+
     }
 
     #endregion

@@ -5,21 +5,9 @@ using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
-using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Threading;
-using System.Xml.Linq;
-using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Common.ResearchLogger;
-using static ISIDA.Psychic.Automatism.AutomatizmSystem;
-using static ISIDA.Psychic.Automatism.AutomatizmTreeSystem;
-using static ISIDA.Psychic.Automatism.InfluenceActionsImagesSystem;
-using static ISIDA.Psychic.AutomatismResultTracker;
-using static ISIDA.Reflexes.ConditionedReflexesSystem;
-using static ISIDA.Reflexes.GeneticReflexesSystem;
-using static ISIDA.Reflexes.PerceptionImagesSystem;
-using static ISIDA.Reflexes.ReflexChainsSystem;
 
 namespace ISIDA.Common
 {
@@ -191,6 +179,11 @@ namespace ISIDA.Common
   public class IsidaContext : IDisposable
   {
     /// <summary>
+    /// Система конвертирования условных рефлексов в автоматизмы
+    /// </summary>
+    public ConditionedReflexToAutomatizmConverter ConditionedReflexToAutomatizm { get; internal set; }
+
+    /// <summary>
     /// Система отслеживания результатов выполнения автоамтизмов
     /// </summary>
     public AutomatismResultTracker AutomatismResult { get; internal set; }
@@ -357,12 +350,13 @@ namespace ISIDA.Common
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
       SafeDispose(PsychicSystem, "PsychicSystem");
+      SafeDispose(ConditionedReflexToAutomatizm, "ConditionedReflexToAutomatizm");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
       SafeDispose(AutomatismResult, "AutomatismResult");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
-      SafeDispose(AutomatizmTree, "PurposeGeneticImageSystem");
+      SafeDispose(PurposeGeneticImageSystem, "PurposeGeneticImageSystem");
       SafeDispose(ActionsImages, "ActionsImages");
       SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(ReflexesActivator, "ReflexesActivator");
@@ -434,16 +428,31 @@ namespace ISIDA.Common
         GeneticReflexes != null &&
         ConditionedReflexes != null &&
         PerceptionImages != null &&
-        AutomatizmTree != null &&
-        AutomatizmSystem != null &&
-        PurposeGeneticImageSystem != null &&
-        ActionsImages != null &&
-        InfluenceActionsImages != null &&
         ReflexesActivator != null &&
         ReflexTree != null &&
         ReflexChains != null &&
         ReflexExecution != null &&
         ConditionedReflexFormation != null &&
+
+        // Системы автоматизмов
+        ActionsImages != null &&
+        InfluenceActionsImages != null &&
+        AutomatizmTree != null &&
+        AutomatizmSystem != null &&
+        AutomatismExecution != null &&
+        AutomatismResult != null &&
+
+        // Системы психики
+        PsychicSystem != null &&
+        EmotionsImageSystem != null &&
+        VerbalBrocaImagesSystem != null &&
+        InformationEnvironmentSystem != null &&
+        PurposeGeneticImageSystem != null &&
+        OrientationReflex != null &&
+
+        // Дополнительные сервисы
+        ConditionedReflexToAutomatizm != null &&
+        EvolutionStageService != null &&
         ResearchLogger != null;
   }
 
@@ -710,8 +719,20 @@ namespace ISIDA.Common
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
-        // Шаг 29: Сервис переключения стадий эволюции
+        // Шаг 29: Сервис конвертирования условных рефлексов в автоматизмы
         initializationStep = 29;
+        ConditionedReflexToAutomatizmConverter.InitializeInstance(
+            context.ConditionedReflexes,
+            context.GeneticReflexes,
+            context.AdaptiveActions,
+            context.EmotionsImageSystem,
+            context.ActionsImages,
+            context.AutomatizmTree,
+            context.AutomatizmSystem);
+        context.ConditionedReflexToAutomatizm = ConditionedReflexToAutomatizmConverter.Instance;
+
+        // Шаг 30: Сервис переключения стадий эволюции
+        initializationStep = 30;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes);
