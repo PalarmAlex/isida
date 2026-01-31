@@ -431,6 +431,7 @@ namespace ISIDA.Psychic
         };
 
         _lastAutomatizmResults[automatizmId] = trackingResult;
+        AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
 
         Logger.Info($"Начато отслеживание автоматизма ID={automatizmId}, ветка={branchId}");
 

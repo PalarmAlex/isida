@@ -661,6 +661,23 @@ namespace ISIDA.Common
     {
       var orInfo = AppGlobalState.GetOrientationReflexInfo();
       var atmInfo = AppGlobalState.GetAutomatizmInfo();
+
+      // Получаем ID рефлексов
+      int? geneticReflexId = GetCurrentGeneticReflexID();
+      int? conditionedReflexId = GetCurrentConditionedReflexID();
+
+      // Приоритет: условный рефлекс имеет приоритет над безусловным
+      // Если есть оба, то выводим только условный
+      int? finalGeneticReflexId = null;
+      int? finalConditionedReflexId = conditionedReflexId;
+
+      if (conditionedReflexId.HasValue && conditionedReflexId.Value > 0)
+        // Есть условный рефлекс - игнорируем безусловный
+        finalGeneticReflexId = null;
+      else if (geneticReflexId.HasValue && geneticReflexId.Value > 0)
+        // Нет условного рефлекса, но есть безусловный
+        finalGeneticReflexId = geneticReflexId;
+
       var state = new SystemState
       {
         Pulse = pulse,
@@ -668,8 +685,8 @@ namespace ISIDA.Common
         CurrentBaseID = GetCurrentBaseState(),
         CurrentBaseStyleID = GetCurrentStyleImageID(),
         CurrentTriggerStimulusID = GetCurrentTriggerImageID(),
-        CurrentGeneticReflexID = GetCurrentGeneticReflexID(),
-        CurrentConditionReflexID = GetCurrentConditionedReflexID(),
+        CurrentGeneticReflexID = finalGeneticReflexId,
+        CurrentConditionReflexID = finalConditionedReflexId,
         CurrentAutomatizmID = atmInfo.Id != 0 ? (int?)atmInfo.Id : null,
         HasCriticalChanges = GetHasCriticalChanges(),
         OrientationReflexType = orInfo.Type != 0 ? (int?)orInfo.Type : null,
@@ -738,12 +755,32 @@ namespace ISIDA.Common
       return _lastState.CurrentBaseID != current.CurrentBaseID ||
              _lastState.CurrentBaseStyleID != current.CurrentBaseStyleID ||
              _lastState.CurrentTriggerStimulusID != current.CurrentTriggerStimulusID ||
-             _lastState.CurrentGeneticReflexID != current.CurrentGeneticReflexID ||
-             _lastState.CurrentConditionReflexID != current.CurrentConditionReflexID ||
+
+             // Используем логику приоритета при сравнении
+             !AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID,
+                             current.CurrentGeneticReflexID, current.CurrentConditionReflexID) ||
+
              _lastState.CurrentAutomatizmID != current.CurrentAutomatizmID ||
              _lastState.HasCriticalChanges != current.HasCriticalChanges ||
              _lastState.OrientationReflexType != current.OrientationReflexType ||
              _lastState.OrientationReflexPulse != current.OrientationReflexPulse;
+    }
+
+    /// <summary>
+    /// Сравнивает рефлексы с учетом приоритета условного рефлекса
+    /// </summary>
+    private bool AreReflexesEqual(int? lastGenetic, int? lastConditioned,
+                                  int? currentGenetic, int? currentConditioned)
+    {
+      // Приоритет: если есть условный рефлекс, игнорируем безусловный
+      var lastEffectiveConditioned = lastConditioned.HasValue && lastConditioned.Value > 0 ? lastConditioned : null;
+      var lastEffectiveGenetic = (lastEffectiveConditioned == null && lastGenetic.HasValue && lastGenetic.Value > 0) ? lastGenetic : null;
+
+      var currentEffectiveConditioned = currentConditioned.HasValue && currentConditioned.Value > 0 ? currentConditioned : null;
+      var currentEffectiveGenetic = (currentEffectiveConditioned == null && currentGenetic.HasValue && currentGenetic.Value > 0) ? currentGenetic : null;
+
+      return lastEffectiveConditioned == currentEffectiveConditioned &&
+             lastEffectiveGenetic == currentEffectiveGenetic;
     }
 
     /// <summary>

@@ -352,8 +352,7 @@ namespace ISIDA.Psychic
           EvaluatePreviousAutomatizm(currentBaseId, actionIdList, phraseIdList);
 
           // После оценки сбрасываем флаг ожидания
-          AppGlobalState.WaitingForOperatorEvaluation = false;
-          AppGlobalState.LastEvaluatedAutomatizmId = 0;
+          AppGlobalState.ResetWaitingForOperatorEvaluation();
         }
         else
         {
@@ -511,7 +510,7 @@ namespace ISIDA.Psychic
         _lastRunAutomatizm = automatizm;
 
         AppGlobalState.UpdateAutomatizmInfo(automatizm.ID, PulseCount);
-        AppGlobalState.LastEvaluatedAutomatizmId = automatizm.ID;
+        AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
         AppGlobalState.SaveStateForEvaluation(AppGlobalState.CurrentOverallState);
 
         // Начать отслеживание результата автоматизма
@@ -603,10 +602,7 @@ namespace ISIDA.Psychic
               AppGlobalState.WaitingPeriodForActionsVal); // время реакции = полное время ожидания
         }
       }
-
-      AppGlobalState.LastRunAutomatizmPulsCount = 0;
-      AppGlobalState.LastEvaluatedAutomatizmId = 0;
-      AppGlobalState.WaitingForOperatorEvaluation = false;
+      AppGlobalState.ResetWaitingForOperatorEvaluation();
       AppGlobalState.ResetAutomatizmInfo();
     }
 

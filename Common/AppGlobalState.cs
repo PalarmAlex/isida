@@ -10,6 +10,7 @@ using System.Collections.Generic;
 /// </summary>
 public static class AppGlobalState
 {
+  private static int _waitingPeriodCountdown = 0;
   private static int _currentActiveAutomatizmId = 0;
   private static int _lastAutomatizmPulse = 0;
   private static int _lastOrientationReflexType = 0;
@@ -35,6 +36,70 @@ public static class AppGlobalState
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
+
+  /// <summary>
+  /// Оставшееся время ожидания оценки (в пульсах)
+  /// </summary>
+  public static int WaitingPeriodCountdown
+  {
+    get => _waitingPeriodCountdown;
+    private set => _waitingPeriodCountdown = value;
+  }
+
+  /// <summary>
+  /// Начать период ожидания оценки оператора
+  /// </summary>
+  public static void StartWaitingForOperatorEvaluation(int automatizmId)
+  {
+    WaitingForOperatorEvaluation = true;
+    LastEvaluatedAutomatizmId = automatizmId;
+    LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
+    WaitingPeriodCountdown = WaitingPeriodForActionsVal;
+
+    Logger.Info($"Начат период ожидания оценки оператора для автоматизма ID={automatizmId}, " +
+                $"длительность={WaitingPeriodForActionsVal} пульсов");
+  }
+
+  /// <summary>
+  /// Обновить обратный отсчет периода ожидания
+  /// </summary>
+  public static void UpdateWaitingPeriodCountdown()
+  {
+    if (WaitingForOperatorEvaluation && WaitingPeriodCountdown > 0)
+    {
+      WaitingPeriodCountdown--;
+
+      // Если время вышло, сбрасываем ожидание
+      if (WaitingPeriodCountdown <= 0)
+      {
+        ResetWaitingForOperatorEvaluation();
+        Logger.Info("Период ожидания оценки оператора истек");
+      }
+    }
+  }
+
+  /// <summary>
+  /// Принудительно завершить период ожидания оценки оператора
+  /// </summary>
+  public static void ForceStopWaitingForOperatorEvaluation()
+  {
+    if (WaitingForOperatorEvaluation)
+    {
+      Logger.Info($"Принудительно завершен период ожидания оценки для автоматизма ID={LastEvaluatedAutomatizmId}");
+    }
+    ResetWaitingForOperatorEvaluation();
+  }
+
+  /// <summary>
+  /// Сбросить состояние ожидания оценки оператора
+  /// </summary>
+  public static void ResetWaitingForOperatorEvaluation()
+  {
+    WaitingForOperatorEvaluation = false;
+    LastEvaluatedAutomatizmId = 0;
+    WaitingPeriodCountdown = 0;
+    LastRunAutomatizmPulsCount = 0;
+  }
 
   /// <summary>
   /// ID текущего активного автоматизма
