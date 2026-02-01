@@ -91,7 +91,7 @@ namespace ISIDA.Psychic
         Automatizm atmtzm = null;
 
         if (automatizmID == 0)
-          atmtzm = OrientationReflex_1(automatizmID, currentEmotionId, actionsImageId);
+          atmtzm = OrientationReflex_1(currentEmotionId, actionsImageId);
         else
         {
           atmtzm = _automatizmSystem.GetAutomatizmById(automatizmID);
@@ -119,7 +119,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 1 уровня: нет автоматизма, нужно быстро создать его по гомеостатическим целям
     /// </summary>
-    internal Automatizm OrientationReflex_1(int automatizmID, int currentEmotionId, int actionsImageId)
+    internal Automatizm OrientationReflex_1(int currentEmotionId, int actionsImageId)
     {
       try
       {

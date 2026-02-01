@@ -454,6 +454,45 @@ namespace ISIDA.Sensors
     #region Работа с фразами
 
     /// <summary>
+    /// Получить первый символ фразы
+    /// </summary>
+    public int GetFirstSymbolFromPhraseId(int phraseId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        if (!PhraseTreeFromID.TryGetValue(phraseId, out var phraseNode))
+          return 0;
+
+        var wordIds = new List<int>();
+        var currentNode = phraseNode;
+
+        while (currentNode != null && currentNode.Id != 0)
+        {
+          wordIds.Add(currentNode.Element);
+          currentNode = currentNode.Parent;
+        }
+        wordIds.Reverse();
+
+        if (wordIds.Count == 0)
+          return 0;
+
+        int firstWordId = wordIds[0];
+        var firstWord = GetWordFromWordIdInternal(firstWordId);
+        if (string.IsNullOrEmpty(firstWord))
+          return 0;
+
+        char firstChar = firstWord[0];
+
+        return GetPrimarySensorId(firstChar);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Проверяет существование фразы в дереве фраз
     /// </summary>
     /// <param name="phraseWords">Список слов фразы</param>

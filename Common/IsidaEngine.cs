@@ -615,7 +615,8 @@ namespace ISIDA.Common
             context.ReflexChains,
             context.ReflexExecution,
             context.AdaptiveActions,
-            context.ConditionedReflexFormation);
+            context.ConditionedReflexFormation,
+            context.PerceptionImages);
         context.ReflexesActivator = ReflexesActivator.Instance;
 
         // Шаг 17: Логирование и глобальный таймер
@@ -728,7 +729,10 @@ namespace ISIDA.Common
             context.EmotionsImageSystem,
             context.ActionsImages,
             context.AutomatizmTree,
-            context.AutomatizmSystem);
+            context.AutomatizmSystem,
+            context.PerceptionImages,
+            context.SensorySystem,
+            context.VerbalBrocaImagesSystem);
         context.ConditionedReflexToAutomatizm = ConditionedReflexToAutomatizmConverter.Instance;
 
         // Шаг 30: Сервис переключения стадий эволюции

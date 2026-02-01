@@ -445,7 +445,7 @@ namespace ISIDA.Psychic
           var line = $"{v.Id}|";
 
           line += $"{v.SimbolID}|";
-          line += AddUtils.IntListToString(v.PhraseIdList);
+          line += AddUtils.IntListToString(v.PhraseIdList) + "|";
           line += $"{v.ToneId}|";
           line += $"{v.MoodId}|";
 

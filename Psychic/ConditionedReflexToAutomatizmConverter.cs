@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using static ISIDA.Psychic.VerbalBrocaImagesSystem;
 
 namespace ISIDA.Psychic
 {
@@ -24,6 +25,9 @@ namespace ISIDA.Psychic
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
     private readonly AutomatizmSystem _automatizmSystem;
+    private readonly PerceptionImagesSystem _perceptionImagesSystem;
+    private readonly SensorySystem _sensorySystem;
+    private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
     private bool _disposed = false;
 
     #region Инициализация
@@ -51,7 +55,10 @@ namespace ISIDA.Psychic
         EmotionsImageSystem emotionsImageSystem,
         ActionsImagesSystem actionsImagesSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
-        AutomatizmSystem automatizmSystem)
+        AutomatizmSystem automatizmSystem,
+        PerceptionImagesSystem perceptionImagesSystem,
+        SensorySystem sensorySystem,
+        VerbalBrocaImagesSystem verbalBrocaImagesSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ConditionedReflexToAutomatizmConverter уже инициализирован.");
@@ -63,7 +70,10 @@ namespace ISIDA.Psychic
           emotionsImageSystem,
           actionsImagesSystem,
           automatizmTreeSystem,
-          automatizmSystem);
+          automatizmSystem,
+          perceptionImagesSystem,
+          sensorySystem,
+          verbalBrocaImagesSystem);
     }
 
     private ConditionedReflexToAutomatizmConverter(
@@ -73,7 +83,10 @@ namespace ISIDA.Psychic
         EmotionsImageSystem emotionsImageSystem,
         ActionsImagesSystem actionsImagesSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
-        AutomatizmSystem automatizmSystem)
+        AutomatizmSystem automatizmSystem,
+        PerceptionImagesSystem perceptionImagesSystem,
+        SensorySystem sensorySystem,
+        VerbalBrocaImagesSystem verbalBrocaImagesSystem)
     {
       _conditionedReflexesSystem = conditionedReflexesSystem ??
           throw new ArgumentNullException(nameof(conditionedReflexesSystem));
@@ -89,6 +102,12 @@ namespace ISIDA.Psychic
           throw new ArgumentNullException(nameof(automatizmTreeSystem));
       _automatizmSystem = automatizmSystem ??
           throw new ArgumentNullException(nameof(automatizmSystem));
+      _perceptionImagesSystem = perceptionImagesSystem ??
+          throw new ArgumentNullException(nameof(perceptionImagesSystem));
+      _sensorySystem = sensorySystem ??
+          throw new ArgumentNullException(nameof(sensorySystem));
+      _verbalBrocaImages = verbalBrocaImagesSystem ??
+          throw new ArgumentNullException(nameof(verbalBrocaImagesSystem));
     }
 
     #endregion
@@ -98,16 +117,17 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Клонирует все условные рефлексы в автоматизмы
     /// </summary>
-    public (int SuccessCount, int TotalCount, List<string> Errors) CloneAllConditionedReflexesToAutomatisms()
+    public (int SuccessCount, int TotalCount, int DuplicateCount, List<string> Errors) CloneAllConditionedReflexesToAutomatisms()
     {
       var errors = new List<string>();
       int successCount = 0;
+      int duplicateCount = 0;
       int totalCount = 0;
 
       try
       {
         if (AppGlobalState.EvolutionStage < 2)
-          return (0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
+          return (0, 0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
 
         _lock.EnterWriteLock();
         try
@@ -116,15 +136,32 @@ namespace ISIDA.Psychic
           totalCount = allConditionedReflexes.Count;
 
           if (totalCount == 0)
-            return (0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
+            return (0, 0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
+
+          var processedImageIds = new HashSet<int>();
+          var createdAutomatizmIds = new List<int>();
 
           foreach (var conditionedReflex in allConditionedReflexes)
           {
             try
             {
+              var (actions, phrases) = GetStimulusDetailsFromConditionedReflex(conditionedReflex);
+              var imageHash = CalculateImageHash(conditionedReflex.Level1, actions, phrases);
+
+              if (processedImageIds.Contains(imageHash))
+              {
+                duplicateCount++;
+                continue;
+              }
+
+              processedImageIds.Add(imageHash);
+
               var result = ConvertConditionedReflexToAutomatizm(conditionedReflex);
               if (result.Success)
+              {
                 successCount++;
+                createdAutomatizmIds.Add(result.AutomatizmId);
+              }
               else
                 errors.Add($"Условный рефлекс ID={conditionedReflex.Id}: {result.Error}");
             }
@@ -134,7 +171,10 @@ namespace ISIDA.Psychic
               Logger.Error(ex.Message);
             }
           }
-          return (successCount, totalCount, errors);
+
+          Logger.Info($"Конвертация завершена: {successCount} создано, {duplicateCount} дубликатов, {errors.Count} ошибок");
+
+          return (successCount, totalCount, duplicateCount, errors);
         }
         finally
         {
@@ -145,7 +185,7 @@ namespace ISIDA.Psychic
       {
         errors.Add($"Общая ошибка: {ex.Message}");
         Logger.Error(ex.Message);
-        return (successCount, totalCount, errors);
+        return (successCount, totalCount, duplicateCount, errors);
       }
     }
 
@@ -161,7 +201,25 @@ namespace ISIDA.Psychic
         if (actionIds == null || !actionIds.Any())
           return (false, 0, $"Нет действий для условного рефлекса ID={conditionedReflex.Id}");
 
-        var treeComponentsResult = ConvertReflexLevelsToTreeComponents(conditionedReflex, actionIds);
+        var (phrases, toneId, moodId) = GetPhrasesFromConditionedReflex(conditionedReflex);
+        int symbolId = 0;
+        int verbId = 0;
+
+        if (phrases?.Any() == true)
+        {
+          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phrases[0]);
+          (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
+        }
+
+        var treeComponentsResult = ConvertReflexLevelsToTreeComponents(
+            conditionedReflex,
+            actionIds,
+            phrases,
+            toneId,
+            moodId,
+            symbolId,
+            verbId);
+
         if (!treeComponentsResult.IsValid)
           return (false, 0, treeComponentsResult.Error);
 
@@ -171,20 +229,16 @@ namespace ISIDA.Psychic
         if (nodeId == 0)
           return (false, 0, $"Не удалось найти или создать узел в дереве автоматизмов");
 
-
         var existingAutomatizm = _automatizmSystem.GetAutomatizmFromNodeIdNoLock(nodeId);
         if (existingAutomatizm != null)
           return (true, existingAutomatizm.ID, "Автоматизм уже существует");
 
-        int actionsImageId = CreateActionsImageForReflex(actionIds);
+        int actionsImageId = CreateActionsImageForReflex(actionIds, phrases, toneId, moodId);
         if (actionsImageId == 0)
           return (false, 0, $"Не удалось создать образ действий");
 
         Automatizm automatizm = null;
-        (_, automatizm) = _automatizmSystem.CreateNewAutomatizm(
-            branchId: nodeId,
-            actionsImageId: actionsImageId,
-            checkUnicum: true);
+        (_, automatizm) = _automatizmSystem.CreateNewAutomatizm(nodeId, actionsImageId, true);
 
         if (automatizm == null)
           return (false, 0, $"Не удалось создать автоматизм");
@@ -225,6 +279,117 @@ namespace ISIDA.Psychic
     #region Вспомогательные методы
 
     /// <summary>
+    /// Вычисляет хэш образа для обнаружения дубликатов
+    /// </summary>
+    private int CalculateImageHash(int baseId, List<int> actions, List<int> phrases)
+    {
+      unchecked
+      {
+        int hash = 17;
+        hash = hash * 31 + baseId.GetHashCode();
+
+        if (actions != null)
+        {
+          foreach (var actionId in actions.OrderBy(x => x))
+            hash = hash * 31 + actionId.GetHashCode();
+        }
+
+        if (phrases != null)
+        {
+          foreach (var phraseId in phrases.OrderBy(x => x))
+            hash = hash * 31 + phraseId.GetHashCode();
+        }
+
+        return hash;
+      }
+    }
+
+    /// <summary>
+    /// Получает детали стимула из условного рефлекса (для отладки)
+    /// </summary>
+    private (List<int> Actions, List<int> Phrases) GetStimulusDetailsFromConditionedReflex(
+        ConditionedReflexesSystem.ConditionedReflex reflex)
+    {
+      var actions = GetActionsFromConditionedReflex(reflex);
+      var (phrases, _, _) = GetPhrasesFromConditionedReflex(reflex);
+      return (actions ?? new List<int>(), phrases);
+    }
+
+    /// <summary>
+    /// Получает фразы из пускового стимула условного рефлекса
+    /// </summary>
+    private (List<int> Phrases, int ToneId, int MoodId) GetPhrasesFromConditionedReflex(
+        ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
+    {
+      try
+      {
+        if (_perceptionImagesSystem == null)
+          return (new List<int>(), 0, 0);
+
+        var perceptionImage = _perceptionImagesSystem.GetAllPerceptionImagesList()
+            .FirstOrDefault(img => img.Id == conditionedReflex.Level3);
+
+        if (perceptionImage == null)
+          return (new List<int>(), 0, 0);
+
+        var phrases = perceptionImage.PhraseIdList ?? new List<int>();
+
+        return (phrases, 0, 0);
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return (new List<int>(), 0, 0);
+      }
+    }
+
+    /// <summary>
+    /// Преобразует уровни рефлекса в компоненты дерева автоматизмов с учетом фраз
+    /// </summary>
+    private (bool IsValid, string Error, TreeComponents Components) ConvertReflexLevelsToTreeComponents(
+        ConditionedReflexesSystem.ConditionedReflex reflex,
+        List<int> actionIds,
+        List<int> phraseIds,
+        int toneId,
+        int moodId,
+        int symbolId,
+        int verbId)
+    {
+      try
+      {
+        var components = new TreeComponents();
+        components.BaseID = reflex.Level1;
+
+        if (reflex.Level2 != null && reflex.Level2.Any())
+        {
+          (int emotionId, var emotionImage) = _emotionsImageSystem.CreateNewEmotionsImage(reflex.Level2, true);
+          components.EmotionID = emotionId;
+        }
+        else
+          components.EmotionID = 0;
+
+        (int activityId, var activityImage) = _actionsImagesSystem.CreateNewActionsImage(
+            kind: 0,
+            actIdList: actionIds,
+            phraseIdList: phraseIds,
+            toneId: toneId,
+            moodId: moodId,
+            checkUnicum: true);
+
+        components.ActivityID = activityId;
+        components.ToneMoodID = PsychicSystem.GetToneMoodID(toneId, moodId);
+        components.SimbolID = symbolId;
+        components.VerbID = verbId;
+
+        return (true, string.Empty, components);
+      }
+      catch (Exception ex)
+      {
+        return (false, $"Ошибка преобразования уровней: {ex.Message}", new TreeComponents());
+      }
+    }
+
+    /// <summary>
     /// Получает действия из условного рефлекса
     /// </summary>
     private List<int> GetActionsFromConditionedReflex(ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
@@ -252,46 +417,6 @@ namespace ISIDA.Psychic
       {
         Logger.Error(ex.Message);
         return new List<int>();
-      }
-    }
-
-    /// <summary>
-    /// Преобразует уровни рефлекса в компоненты дерева автоматизмов
-    /// </summary>
-    private (bool IsValid, string Error, TreeComponents Components) ConvertReflexLevelsToTreeComponents(
-        ConditionedReflexesSystem.ConditionedReflex reflex,
-        List<int> actionIds)
-    {
-      try
-      {
-        var components = new TreeComponents();
-
-        components.BaseID = reflex.Level1;
-
-        if (reflex.Level2 != null && reflex.Level2.Any())
-        {
-          (int emotionId, var emotionImage) = _emotionsImageSystem.CreateNewEmotionsImage(reflex.Level2, true);
-          components.EmotionID = emotionId;
-        }
-
-        (int activityId, var activityImage) = _actionsImagesSystem.CreateNewActionsImage(
-            kind: 0,
-            actIdList: actionIds,
-            phraseIdList: null,
-            toneId: 0,
-            moodId: 0,
-            checkUnicum: true);
-
-        components.ActivityID = activityId;
-        components.ToneMoodID = PsychicSystem.GetToneMoodID(0, 0);
-        components.SimbolID = 0;
-        components.VerbID = 0;
-
-        return (true, string.Empty, components);
-      }
-      catch (Exception ex)
-      {
-        return (false, $"Ошибка преобразования уровней: {ex.Message}", new TreeComponents());
       }
     }
 
@@ -327,17 +452,24 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Создает образ действий для автоматизма
     /// </summary>
-    private int CreateActionsImageForReflex(List<int> actionIds)
+    private int CreateActionsImageForReflex(
+        List<int> actionIds,
+        List<int> phraseIds,
+        int toneId,
+        int moodId)
     {
       try
       {
         var (imageId, _) = _actionsImagesSystem.CreateNewActionsImage(
             kind: 0,
             actIdList: actionIds,
-            phraseIdList: null,
-            toneId: 0,
-            moodId: 0,
+            phraseIdList: phraseIds,
+            toneId: toneId,
+            moodId: moodId,
             checkUnicum: true);
+
+        if (imageId == 0)
+          Logger.Warning($"Не удалось создать образ действий для actions={string.Join(",", actionIds)}, phrases={string.Join(",", phraseIds)}");
 
         return imageId;
       }

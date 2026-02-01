@@ -53,7 +53,6 @@ public static class AppGlobalState
 
   private static int _waitingPeriodCountdown = 0;
   private static bool _waitingForOperatorEvaluation = false;
-  private static int _lastEvaluatedAutomatizmId = 0;
   private static int _lastAutomatizmEvaluationTime = 0;
   private static int _waitingPeriodForActionsVal = 0;
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;

@@ -149,17 +149,11 @@ namespace ISIDA.Psychic
 
         var actionIdList = GetActiveAdaptiveActions();
         ActionsImage actionImage = null;
-        if (actionIdList.Count > 0)
-        {
-          (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
-          purposeGenetic.ActionImage = actionImage;
-        }
-        else
-        {
+        if (actionIdList.Count == 0)
           actionIdList = new List<int> { AppGlobalState.DefaultAdaptiveActionId };
-          (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
-          purposeGenetic.ActionImage = actionImage;
-        }
+
+        (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
+        purposeGenetic.ActionImage = actionImage;
 
         PurposeGeneticObject.Add(purposeGenetic);
         OldPurposeGenetic = CurrentPurposeGenetic;
@@ -183,21 +177,16 @@ namespace ISIDA.Psychic
     /// </summary>
     public List<int> GetActiveAdaptiveActions()
     {
-      if (AppGlobalState.ActiveAdaptiveActions == null || AppGlobalState.ActiveAdaptiveActions.Count == 0)
-      {
-        var conditionActionsIdArr = (List<int>)AppGlobalState.ConditionedReflexesActions;
-        if (conditionActionsIdArr != null && conditionActionsIdArr.Count > 0)
-          return conditionActionsIdArr;
-        else
-        {
-          var geneticActionsIdArr = (List<int>)AppGlobalState.GeneticReflexesActions;
-          if (geneticActionsIdArr != null && geneticActionsIdArr.Count > 0)
-            return geneticActionsIdArr;
-        }
-        return new List<int>();
-      }
+      var conditionActionsIdArr = (List<int>)AppGlobalState.ConditionedReflexesActions;
+      if (conditionActionsIdArr != null && conditionActionsIdArr.Count > 0)
+        return conditionActionsIdArr;
       else
-        return AppGlobalState.ActiveAdaptiveActions.Select(a => a.Id).ToList();
+      {
+        var geneticActionsIdArr = (List<int>)AppGlobalState.GeneticReflexesActions;
+        if (geneticActionsIdArr != null && geneticActionsIdArr.Count > 0)
+          return geneticActionsIdArr;
+      }
+      return new List<int>();
     }
 
     /// <summary>

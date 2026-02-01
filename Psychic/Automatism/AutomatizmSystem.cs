@@ -202,6 +202,16 @@ namespace ISIDA.Psychic.Automatism
         int actionsImageId,
         bool checkUnicum = true)
     {
+      int evolutionStage = AppGlobalState.EvolutionStage;
+      int usefulness = 0;
+
+      if (evolutionStage < 2)
+        throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
+      else if (evolutionStage == 2)
+        usefulness = 5;
+      else if (evolutionStage == 3)
+        usefulness = 3;
+
       if (actionsImageId == 0)
         return (0, null);
 
@@ -217,14 +227,13 @@ namespace ISIDA.Psychic.Automatism
       {
         _lastAutomatizmId++;
         var id = _lastAutomatizmId;
-
         var automatizm = new Automatizm
         {
           ID = id,
           BranchID = branchId,
           ActionsImageID = actionsImageId,
           Energy = 5,
-          Usefulness = 0,
+          Usefulness = usefulness,
           Belief = 0,
           Count = 0
         };
@@ -297,6 +306,9 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     public void SetAutomatizmBelief(Automatizm automatizm, int belief)
     {
+      if (AppGlobalState.EvolutionStage < 2)
+        throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
+
       if (automatizm == null)
         return;
 
@@ -378,7 +390,7 @@ namespace ISIDA.Psychic.Automatism
       try
       {
         if (AppGlobalState.EvolutionStage < 2)
-          throw new InvalidOperationException("Автоматзмы доступны только начиная со стадии 2");
+          throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
 
         var deletedAutomatizmIds = _automatizmsById.Keys.ToList();
 

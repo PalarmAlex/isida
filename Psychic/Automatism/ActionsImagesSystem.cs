@@ -648,10 +648,8 @@ namespace ISIDA.Psychic.Automatism
 
           var line = $"{v.Id}|";
 
-          line += AddUtils.IntListToString(v.ActIdList);
-          line += "|";
-          line += AddUtils.IntListToString(v.PhraseIdList);
-          line += "|";
+          line += AddUtils.IntListToString(v.ActIdList) + "|";
+          line += AddUtils.IntListToString(v.PhraseIdList) + "|";
           line += $"{v.ToneId}|";
           line += $"{v.MoodId}|";
           line += $"{v.Kind}";

@@ -384,7 +384,7 @@ namespace ISIDA.Psychic
 
         if (phraseIdList?.Any() == true)
         {
-          firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(phraseIdList[0]);
+          firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseIdList[0]);
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
           AppGlobalState.CurActiveVerbalId = verbId;
         }

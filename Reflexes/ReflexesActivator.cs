@@ -18,7 +18,19 @@ namespace ISIDA.Reflexes
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
     private ResearchLogger _researchLogger;
-    
+
+    private readonly GomeostasSystem _gomeostas;
+    private readonly GeneticReflexesSystem _geneticReflexes;
+    private readonly ConditionedReflexesSystem _conditionedReflexes;
+    private readonly InfluenceActionSystem _influenceActions;
+    private readonly ReflexTreeSystem _reflexTree;
+    private readonly ReflexExecutionService _reflexExecutionService;
+    private readonly AdaptiveActionsSystem _adaptiveActions;
+    private readonly ReflexChainsSystem _reflexChainsSystem;
+    private readonly ConditionedReflexFormationService _reflexFormationService;
+    private readonly PerceptionImagesSystem _perceptionImageSystem;
+    private PsychicSystem _psychicSystem;
+
     #region Инициализация
 
     private static ReflexesActivator _instance;
@@ -46,24 +58,24 @@ namespace ISIDA.Reflexes
         ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
         AdaptiveActionsSystem adaptiveActions,
-        ConditionedReflexFormationService reflexFormationService)
+        ConditionedReflexFormationService reflexFormationService,
+        PerceptionImagesSystem perceptionImagesSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ReflexesActivator уже инициализирован.");
 
-      _instance = new ReflexesActivator(gomeostas, geneticReflexes, conditionedReflexes, influenceActions, reflexTree, reflexChainsSystem, reflexExecution, adaptiveActions, reflexFormationService);
+      _instance = new ReflexesActivator(
+        gomeostas, 
+        geneticReflexes, 
+        conditionedReflexes, 
+        influenceActions, 
+        reflexTree, 
+        reflexChainsSystem, 
+        reflexExecution, 
+        adaptiveActions, 
+        reflexFormationService,
+        perceptionImagesSystem);
     }
-
-    private readonly GomeostasSystem _gomeostas;
-    private readonly GeneticReflexesSystem _geneticReflexes;
-    private readonly ConditionedReflexesSystem _conditionedReflexes;
-    private readonly InfluenceActionSystem _influenceActions;
-    private readonly ReflexTreeSystem _reflexTree;
-    private readonly ReflexExecutionService _reflexExecutionService;
-    private readonly AdaptiveActionsSystem _adaptiveActions;
-    private readonly ReflexChainsSystem _reflexChainsSystem;
-    private readonly ConditionedReflexFormationService _reflexFormationService;
-    private PsychicSystem _psychicSystem;
 
     private ReflexesActivator(
         GomeostasSystem gomeostas,
@@ -74,7 +86,8 @@ namespace ISIDA.Reflexes
         ReflexChainsSystem reflexChainsSystem,
         ReflexExecutionService reflexExecution,
         AdaptiveActionsSystem adaptiveActions,
-        ConditionedReflexFormationService reflexFormationService)
+        ConditionedReflexFormationService reflexFormationService,
+        PerceptionImagesSystem perceptionImagesSystem)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _geneticReflexes = geneticReflexes ?? throw new ArgumentNullException(nameof(geneticReflexes));
@@ -85,6 +98,7 @@ namespace ISIDA.Reflexes
       _reflexExecutionService = reflexExecution ?? throw new ArgumentNullException(nameof(reflexExecution));
       _adaptiveActions = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));
       _reflexFormationService = reflexFormationService ?? throw new ArgumentNullException(nameof(reflexFormationService));
+      _perceptionImageSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
 
       _reflexActionDuration = _adaptiveActions.ReflexActionDisplayDuration;
 
@@ -382,7 +396,16 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
+        // если нашелся у-рефлекс прерываем все текущие реакции
+        var condFerList = FindConditionedReflexesByPhrase(phraseIdList);
+        if (condFerList.Any())
+        {
+          _adaptiveActions.ClearActiveAction();
+          DeactivateChain(pulseCount);
+        }
+
         CollectReflexesForExecution();
+
         bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
@@ -998,6 +1021,31 @@ namespace ISIDA.Reflexes
         return false;
 
       return true;
+    }
+
+    /// <summary>
+    ///  Найти условный рефлекс по фразе
+    /// </summary>
+    public List<int> FindConditionedReflexesByPhrase(List<int> phraseIdList)
+    {
+      var result = new List<int>();
+      var allReflexes = _conditionedReflexes.GetAllConditionedReflexes();
+      var allImages = _perceptionImageSystem.GetAllPerceptionImagesList();
+
+      foreach (var phraseId in phraseIdList)
+      {
+        var imageIdsWithPhrase = allImages
+            .Where(img => img.PhraseIdList != null && img.PhraseIdList.Contains(phraseId))
+            .Select(img => img.Id)
+            .ToList();
+        foreach (var reflex in allReflexes)
+        {
+          if (imageIdsWithPhrase.Contains(reflex.Level3))
+            result.Add(reflex.Id);
+        }
+      }
+
+      return result;
     }
 
     /// <summary>
