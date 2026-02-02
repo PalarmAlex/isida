@@ -20,6 +20,7 @@ namespace ISIDA.Common
   {
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly ConditionedReflexesSystem _conditionedReflexesSystem;
+    private readonly AutomatizmTreeSystem _automatizmTreeSystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -44,22 +45,26 @@ namespace ISIDA.Common
     /// </summary>
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
-        ConditionedReflexesSystem conditionedReflexesSystem)
+        ConditionedReflexesSystem conditionedReflexesSystem,
+        AutomatizmTreeSystem automatizmTreeSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("EvolutionStageService уже инициализирован.");
 
       _instance = new EvolutionStageService(
         automatizmSystem,
-        conditionedReflexesSystem);
+        conditionedReflexesSystem,
+        automatizmTreeSystem);
     }
 
     private EvolutionStageService(
         AutomatizmSystem automatizmSystem,
-        ConditionedReflexesSystem conditionedReflexesSystem)
+        ConditionedReflexesSystem conditionedReflexesSystem,
+        AutomatizmTreeSystem automatizmTreeSystem)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
+      _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
     }
 
     #endregion
@@ -207,6 +212,7 @@ namespace ISIDA.Common
 
         case 2:
           ClearAllAutomatizm();
+          _automatizmTreeSystem.ClearTree();
           break;
 
         case 3:

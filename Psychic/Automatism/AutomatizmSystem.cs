@@ -115,6 +115,19 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
+    /// <summary>
+    /// Событие удаления автоматизма
+    /// </summary>
+    public event Action<int> AutomatizmDeleted;
+
+    /// <summary>
+    /// Вызывает событие удаления автоматизма
+    /// </summary>
+    private void OnAutomatizmDeleted(int automatizmId)
+    {
+      AutomatizmDeleted?.Invoke(automatizmId);
+    }
+
     #endregion
 
     #region Константы и поля
@@ -208,9 +221,9 @@ namespace ISIDA.Psychic.Automatism
       if (evolutionStage < 2)
         throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
       else if (evolutionStage == 2)
-        usefulness = 5;
-      else if (evolutionStage == 3)
         usefulness = 3;
+      else if (evolutionStage == 3)
+        usefulness = 2;
 
       if (actionsImageId == 0)
         return (0, null);
@@ -374,6 +387,7 @@ namespace ISIDA.Psychic.Automatism
               _automatizmFromPhraseId.Remove(imgId);
           }
         }
+        OnAutomatizmDeleted(id);
       }
       finally
       {
@@ -397,8 +411,12 @@ namespace ISIDA.Psychic.Automatism
         bool removed = true;
         foreach (var atmzId in deletedAutomatizmIds)
         {
+          var automatizm = _automatizmsById[atmzId];
           removed = _automatizmsById.Remove(atmzId);
-          if (!removed)
+
+          if (removed)
+            OnAutomatizmDeleted(atmzId);
+          else
             break;
         }
 
@@ -582,7 +600,93 @@ namespace ISIDA.Psychic.Automatism
 
     #endregion
 
+    #region Работа с цепочками автоматизмов
 
+    private AutomatizmChainsSystem _automatizmChainsSystem;
+
+    /// <summary>
+    /// Инициализация системы цепочек автоматизмов
+    /// </summary>
+    public static void InitializeWithChains(AutomatizmChainsSystem automatizmChainsSystem)
+    {
+      if (_instance == null)
+        throw new InvalidOperationException("AutomatizmSystem должен быть инициализирован перед вызовом InitializeWithChains");
+
+      if (automatizmChainsSystem == null)
+        throw new ArgumentNullException(nameof(automatizmChainsSystem));
+
+      _instance.SetAutomatizmChainsSystem(automatizmChainsSystem);
+    }
+
+    /// <summary>
+    /// Устанавливает систему цепочек автоматизмов после инициализации
+    /// </summary>
+    private void SetAutomatizmChainsSystem(AutomatizmChainsSystem automatizmChainsSystem)
+    {
+      if (_automatizmChainsSystem != null)
+        throw new InvalidOperationException("AutomatizmChainsSystem уже установлена");
+
+      _automatizmChainsSystem = automatizmChainsSystem;
+      _automatizmChainsSystem.AutomatizmChainDeleted += OnAutomatizmChainDeleted;
+    }
+
+    /// <summary>
+    /// Обработчик удаления цепочки автоматизмов
+    /// </summary>
+    private void OnAutomatizmChainDeleted(int chainId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        // Очищаем ссылки на удаленную цепочку во всех автоматизмах
+        foreach (var automatizm in _automatizmsById.Values)
+        {
+          if (automatizm.NextID == chainId)
+          {
+            automatizm.NextID = 0;
+          }
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает автоматизм по ID (включая проверку на существование цепочки)
+    /// </summary>
+    public Automatizm GetAutomatizmByIdWithChain(int id)
+    {
+      var automatizm = GetAutomatizmById(id);
+      if (automatizm != null && automatizm.NextID > 0)
+      {
+        // Проверяем существование цепочки
+        if (_automatizmChainsSystem != null)
+        {
+          var chain = _automatizmChainsSystem.GetChain(automatizm.NextID);
+          if (chain == null)
+          {
+            automatizm.NextID = 0; // Цепочка не существует
+          }
+        }
+      }
+      return automatizm;
+    }
+
+    /// <summary>
+    /// Выполняет следующий шаг в цепочке автоматизмов
+    /// </summary>
+    public (int ExecutedAutomatizmId, bool ChainCompleted) ExecuteNextInChain(int chainId, int previousStepUsefulness)
+    {
+      if (_automatizmChainsSystem == null)
+        return (0, true);
+
+      var result = _automatizmChainsSystem.ExecuteChainStep(chainId, previousStepUsefulness);
+      return (result.ExecutedAutomatizmId, result.ChainCompleted);
+    }
+
+    #endregion
 
     #region Работа с файлами
 
@@ -595,7 +699,7 @@ namespace ISIDA.Psychic.Automatism
         Directory.CreateDirectory(_psychicDataPath);
     }
 
-    private string GetAutomatizmFilePath()
+    internal string GetAutomatizmFilePath()
     {
       return Path.Combine(_psychicDataPath, $"{AutomatizmFileName}.dat");
     }

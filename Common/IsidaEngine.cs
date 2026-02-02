@@ -179,6 +179,11 @@ namespace ISIDA.Common
   public class IsidaContext : IDisposable
   {
     /// <summary>
+    /// Система управления цепочками автоматизмов
+    /// </summary>
+    public AutomatizmChainsSystem AutomatizmChainsSystem  { get; internal set; }
+
+    /// <summary>
     /// Система конвертирования условных рефлексов в автоматизмы
     /// </summary>
     public ConditionedReflexToAutomatizmConverter ConditionedReflexToAutomatizm { get; internal set; }
@@ -354,6 +359,7 @@ namespace ISIDA.Common
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
       SafeDispose(AutomatismResult, "AutomatismResult");
+      SafeDispose(AutomatizmChainsSystem, "AutomatizmChainsSystem");
       SafeDispose(AutomatizmSystem, "AutomatizmSystem");
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(PurposeGeneticImageSystem, "PurposeGeneticImageSystem");
@@ -678,7 +684,6 @@ namespace ISIDA.Common
           context.EmotionsImageSystem,
           context.SensorySystem,
           context.VerbalBrocaImagesSystem,
-          context.Gomeostas,
           context.AutomatismResult);
           context.PsychicSystem = PsychicSystem.Instance;
 
@@ -739,9 +744,15 @@ namespace ISIDA.Common
         initializationStep = 30;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
-            context.ConditionedReflexes);
+            context.ConditionedReflexes,
+            context.AutomatizmTree);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
+
+        // Шаг 31: Система управления цепочками автоматизмов
+        initializationStep = 31;
+        AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
+        context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);
@@ -780,12 +791,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V1.2";
+    public const string ProjectVersion = "V2.1";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2024.01.10";
+    public const string BuildDate = "2026.02.01";
 
     /// <summary>
     /// Краткое описание концепции проекта

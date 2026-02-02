@@ -107,6 +107,20 @@ namespace ISIDA.Common
       public const string AutomatizmFields7 = "# Belief: уверенность: 0=предположение, 1=чужие сведения, 2=проверенное собственное знание";
       public const string AutomatizmFields8 = "# Count: надежность - число использований с подтверждением (бес)полезности";
       public const string AutomatizmFields9 = "# GomeoIdSuccesArr: ID гомео-параметров, которые улучшает это действие (через запятую)";
+
+      // Цепочки автоматизмов
+      public const string AutomatizmChainsFormat = "# Формат файла цепочек автоматизмов";
+      public const string AutomatizmChainsChain = "# CHAIN|ID|Name|Description|TreeNodeId|StartAutomatizmId";
+      public const string AutomatizmChainsLink = "# LINK|LinkID|AutomatizmID|SuccessNext|FailureNext|Description|SuccessThreshold";
+      public const string AutomatizmChainsChainDesc = "# ID: уникальный идентификатор цепочки";
+      public const string AutomatizmChainsNameDesc = "# Name: наименование цепочки";
+      public const string AutomatizmChainsTreeNodeDesc = "# TreeNodeId: ID узла дерева автоматизмов (0 если нет)";
+      public const string AutomatizmChainsStartAutomatizmDesc = "# StartAutomatizmId: ID автоматизма, который запускает цепочку (0 если нет)";
+      public const string AutomatizmChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
+      public const string AutomatizmChainsAutomatizmDesc = "# AutomatizmID: ID автоматизма для выполнения";
+      public const string AutomatizmChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
+      public const string AutomatizmChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
+      public const string AutomatizmChainsThresholdDesc = "# SuccessThreshold: минимальная оценка полезности для успеха (по умолчанию 1)";
     }
 
     private static string _logFilePath;
@@ -1075,11 +1089,105 @@ namespace ISIDA.Common
 
     #endregion
 
-    // Вспомогательный метод для разделения строк
-    private static string[] SplitLines(string content)
+    #region IsValidAutomatizmChainsFile
+
+    /// <summary>
+    /// Проверяет валидность файла цепочек автоматизмов по пути
+    /// </summary>
+    public static bool IsValidAutomatizmChainsFile(string filePath)
     {
-      return content.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidAutomatizmChainsFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
     }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла цепочек автоматизмов
+    /// Разрешает файлы, содержащие только шапку (комментарии #)
+    /// </summary>
+    public static bool IsValidAutomatizmChainsFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      // Проверяем, что файл содержит только комментарии/пустые строки
+      bool hasOnlyComments = lineList.All(line =>
+          string.IsNullOrWhiteSpace(line) ||
+          line.Trim().StartsWith("#", StringComparison.Ordinal));
+
+      if (hasOnlyComments)
+        return true;
+
+      // Проверяем все строки с данными
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+
+        if (parts.Length >= 4 && parts[0] == "CHAIN")
+        {
+          // CHAIN|ID|Name|Description|TreeNodeId|StartAutomatizmId
+          if (!int.TryParse(parts[1], out int chainId) || chainId <= 0)
+            return false;
+
+          if (parts.Length < 2)
+            return false;
+
+          // Опциональные поля
+          if (parts.Length > 4 && !string.IsNullOrWhiteSpace(parts[4]))
+          {
+            if (!int.TryParse(parts[4], out int treeNodeId) || treeNodeId < 0)
+              return false;
+          }
+
+          if (parts.Length > 5 && !string.IsNullOrWhiteSpace(parts[5]))
+          {
+            if (!int.TryParse(parts[5], out int startAutomatizmId) || startAutomatizmId < 0)
+              return false;
+          }
+        }
+        else if (parts.Length >= 5 && parts[0] == "LINK")
+        {
+          // LINK|LinkID|AutomatizmID|SuccessNext|FailureNext|Description|SuccessThreshold
+          if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
+              !int.TryParse(parts[2], out int automatizmId) || automatizmId <= 0 ||
+              !int.TryParse(parts[3], out int successNext) || successNext < 0 ||
+              !int.TryParse(parts[4], out int failureNext) || failureNext < 0)
+            return false;
+
+          // Опциональное поле SuccessThreshold
+          if (parts.Length > 6 && !string.IsNullOrWhiteSpace(parts[6]))
+          {
+            if (!int.TryParse(parts[6], out int threshold) || threshold < 0)
+              return false;
+          }
+        }
+        else
+        {
+          return false; // Неизвестный формат строки
+        }
+      }
+
+      return true; // Все строки прошли проверку
+    }
+
+    #endregion
 
     // ======== БЕЗОПАСНОЕ СОХРАНЕНИЕ С РЕЗЕРВНОЙ КОПИЕЙ ========
 

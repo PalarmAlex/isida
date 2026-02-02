@@ -125,7 +125,7 @@ namespace ISIDA.Psychic
       public int AnswerImageID { get; set; }
 
       /// <summary>
-      /// Это - период ожидания ответа с пульта на действие
+      /// Период ожидания ответа с пульта на действие
       /// </summary>
       public bool IsWaitingPeriod { get; set; }
 

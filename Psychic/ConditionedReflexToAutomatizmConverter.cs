@@ -117,17 +117,18 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Клонирует все условные рефлексы в автоматизмы
     /// </summary>
-    public (int SuccessCount, int TotalCount, int DuplicateCount, List<string> Errors) CloneAllConditionedReflexesToAutomatisms()
+    public (int NewCount, int ExistingCount, int TotalCount, int DuplicateCount, List<string> Errors) CloneAllConditionedReflexesToAutomatisms()
     {
       var errors = new List<string>();
-      int successCount = 0;
+      int newCount = 0;
+      int existingCount = 0;
       int duplicateCount = 0;
       int totalCount = 0;
 
       try
       {
         if (AppGlobalState.EvolutionStage < 2)
-          return (0, 0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
+          return (0, 0, 0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
 
         _lock.EnterWriteLock();
         try
@@ -136,10 +137,9 @@ namespace ISIDA.Psychic
           totalCount = allConditionedReflexes.Count;
 
           if (totalCount == 0)
-            return (0, 0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
+            return (0, 0, 0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
 
           var processedImageIds = new HashSet<int>();
-          var createdAutomatizmIds = new List<int>();
 
           foreach (var conditionedReflex in allConditionedReflexes)
           {
@@ -159,11 +159,20 @@ namespace ISIDA.Psychic
               var result = ConvertConditionedReflexToAutomatizm(conditionedReflex);
               if (result.Success)
               {
-                successCount++;
-                createdAutomatizmIds.Add(result.AutomatizmId);
+                switch (result.Status)
+                {
+                  case ConversionStatus.Created:
+                    newCount++;
+                    break;
+                  case ConversionStatus.AlreadyExists:
+                    existingCount++;
+                    break;
+                }
               }
               else
+              {
                 errors.Add($"Условный рефлекс ID={conditionedReflex.Id}: {result.Error}");
+              }
             }
             catch (Exception ex)
             {
@@ -172,9 +181,9 @@ namespace ISIDA.Psychic
             }
           }
 
-          Logger.Info($"Конвертация завершена: {successCount} создано, {duplicateCount} дубликатов, {errors.Count} ошибок");
+          Logger.Info($"Конвертация завершена: {newCount} новых, {existingCount} существующих, {duplicateCount} дубликатов, {errors.Count} ошибок");
 
-          return (successCount, totalCount, duplicateCount, errors);
+          return (newCount, existingCount, totalCount, duplicateCount, errors);
         }
         finally
         {
@@ -185,21 +194,21 @@ namespace ISIDA.Psychic
       {
         errors.Add($"Общая ошибка: {ex.Message}");
         Logger.Error(ex.Message);
-        return (successCount, totalCount, duplicateCount, errors);
+        return (newCount, existingCount, totalCount, duplicateCount, errors);
       }
     }
 
     /// <summary>
     /// Конвертирует один условный рефлекс в автоматизм
     /// </summary>
-    public (bool Success, int AutomatizmId, string Error) ConvertConditionedReflexToAutomatizm(
+    public (bool Success, int AutomatizmId, ConversionStatus Status, string Error) ConvertConditionedReflexToAutomatizm(
         ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
     {
       try
       {
         var actionIds = GetActionsFromConditionedReflex(conditionedReflex);
         if (actionIds == null || !actionIds.Any())
-          return (false, 0, $"Нет действий для условного рефлекса ID={conditionedReflex.Id}");
+          return (false, 0, ConversionStatus.Failed, $"Нет действий для условного рефлекса ID={conditionedReflex.Id}");
 
         var (phrases, toneId, moodId) = GetPhrasesFromConditionedReflex(conditionedReflex);
         int symbolId = 0;
@@ -221,42 +230,44 @@ namespace ISIDA.Psychic
             verbId);
 
         if (!treeComponentsResult.IsValid)
-          return (false, 0, treeComponentsResult.Error);
+          return (false, 0, ConversionStatus.Failed, treeComponentsResult.Error);
 
         var treeComponents = treeComponentsResult.Components;
 
         int nodeId = FindOrCreateAutomatizmTreeNode(treeComponents);
         if (nodeId == 0)
-          return (false, 0, $"Не удалось найти или создать узел в дереве автоматизмов");
+          return (false, 0, ConversionStatus.Failed, $"Не удалось найти или создать узел в дереве автоматизмов");
 
+        // Проверяем существующий автоматизм
         var existingAutomatizm = _automatizmSystem.GetAutomatizmFromNodeIdNoLock(nodeId);
         if (existingAutomatizm != null)
-          return (true, existingAutomatizm.ID, "Автоматизм уже существует");
+          return (true, existingAutomatizm.ID, ConversionStatus.AlreadyExists, "Автоматизм уже существует");
 
-        int actionsImageId = CreateActionsImageForReflex(actionIds, phrases, toneId, moodId);
+        // для автоматизма по условному рефлексу только действия
+        int actionsImageId = CreateActionsImageForReflex(actionIds, null, 0, 0);
         if (actionsImageId == 0)
-          return (false, 0, $"Не удалось создать образ действий");
+          return (false, 0, ConversionStatus.Failed, $"Не удалось создать образ действий");
 
         Automatizm automatizm = null;
         (_, automatizm) = _automatizmSystem.CreateNewAutomatizm(nodeId, actionsImageId, true);
 
         if (automatizm == null)
-          return (false, 0, $"Не удалось создать автоматизм");
+          return (false, 0, ConversionStatus.Failed, $"Не удалось создать автоматизм");
 
         ConfigureAutomatizmFromReflex(automatizm, conditionedReflex, actionIds);
 
-        return (true, automatizm.ID, "Успешно");
+        return (true, automatizm.ID, ConversionStatus.Created, "Успешно создан");
       }
       catch (Exception ex)
       {
-        return (false, 0, $"Ошибка: {ex.Message}");
+        return (false, 0, ConversionStatus.Failed, $"Ошибка: {ex.Message}");
       }
     }
 
     /// <summary>
     /// Конвертирует конкретный условный рефлекс по ID
     /// </summary>
-    public (bool Success, int AutomatizmId, string Error) ConvertConditionedReflexById(int conditionedReflexId)
+    public (bool Success, int AutomatizmId, ConversionStatus Status, string Error) ConvertConditionedReflexById(int conditionedReflexId)
     {
       try
       {
@@ -264,16 +275,15 @@ namespace ISIDA.Psychic
             .FirstOrDefault(r => r.Id == conditionedReflexId);
 
         if (conditionedReflex == null)
-          return (false, 0, $"Условный рефлекс с ID {conditionedReflexId} не найден");
+          return (false, 0, ConversionStatus.Failed, $"Условный рефлекс с ID {conditionedReflexId} не найден");
 
         return ConvertConditionedReflexToAutomatizm(conditionedReflex);
       }
       catch (Exception ex)
       {
-        return (false, 0, $"Ошибка: {ex.Message}");
+        return (false, 0, ConversionStatus.Failed, $"Ошибка: {ex.Message}");
       }
     }
-
     #endregion
 
     #region Вспомогательные методы
@@ -491,9 +501,9 @@ namespace ISIDA.Psychic
       try
       {
         if(AppGlobalState.EvolutionStage == 2)
-          automatizm.Usefulness = 5;
-        else
           automatizm.Usefulness = 3;
+        else
+          automatizm.Usefulness = 2;
 
         automatizm.Count = 1;
         automatizm.Energy = 5;
@@ -519,7 +529,28 @@ namespace ISIDA.Psychic
 
     #endregion
 
-    #region Вспомогательные классы
+    #region Вспомогательные классы и перечисления
+
+    /// <summary>
+    /// Статус конвертации условного рефлекса в автоматизм
+    /// </summary>
+    public enum ConversionStatus
+    {
+      /// <summary>
+      /// Конвертация не удалась из-за ошибки или некорректных данных
+      /// </summary>
+      Failed = 0,
+
+      /// <summary>
+      /// Новый автоматизм успешно создан
+      /// </summary>
+      Created = 1,
+
+      /// <summary>
+      /// Автоматизм уже существует (дубликат)
+      /// </summary>
+      AlreadyExists = 2
+    }
 
     /// <summary>
     /// Компоненты узла дерева автоматизмов

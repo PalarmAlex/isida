@@ -326,6 +326,48 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
+    /// <summary>
+    /// Полностью очищает дерево автоматизмов, сбрасывая все данные
+    /// </summary>
+    /// <returns>True если очистка выполнена успешно</returns>
+    internal bool ClearTree()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        Tree = new AutomatizmNode { ID = 0 };
+        _nodesById.Clear();
+        _nodesById[0] = Tree;
+
+        _lastAutomatizmNodeId = 0;
+        DetectedActiveLastNodeId = 0;
+        ActiveBranchNodeArr.Clear();
+        CurrentAutomatizmTreeEnd = null;
+        _currentStepCount = 0;
+        _notAllowScanInTreeThisTime = false;
+
+        CreateBasicAutomatizmTree();
+
+        var saveResult = SaveAutomatizmTreeNoLock();
+        if (!saveResult.Success)
+        {
+          Logger.Error($"Не удалось сохранить очищенное дерево: {saveResult.ErrorMessage}");
+          return false;
+        }
+
+        return true;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #endregion
 
     #region Активация дерева

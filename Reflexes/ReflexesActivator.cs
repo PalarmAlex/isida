@@ -398,10 +398,12 @@ namespace ISIDA.Reflexes
 
         // если нашелся у-рефлекс прерываем все текущие реакции
         var condFerList = FindConditionedReflexesByPhrase(phraseIdList);
-        if (condFerList.Any())
+        if ((condFerList.Any() && AppGlobalState.EvolutionStage == 2) || AppGlobalState.EvolutionStage > 2)
         {
-          _adaptiveActions.ClearActiveAction();
           DeactivateChain(pulseCount);
+          _chainCooldownUntilPulse = 0;
+          _adaptiveActions.ClearActiveAction();
+          _adaptiveActions.ClearActivePhrases();
         }
 
         CollectReflexesForExecution();

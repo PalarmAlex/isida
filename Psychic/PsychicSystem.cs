@@ -26,7 +26,6 @@ namespace ISIDA.Psychic
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
     private readonly InfluenceActionsImagesSystem _influenceActionsImagesSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
-    private readonly GomeostasSystem _gomeostas;
     private readonly EmotionsImageSystem _emotionsImageSystem;
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
@@ -60,7 +59,6 @@ namespace ISIDA.Psychic
         EmotionsImageSystem emotionsImageSystem,
         SensorySystem sensorySystem,
         VerbalBrocaImagesSystem verbalBrocaImages,
-        GomeostasSystem gomeostas,
         AutomatismResultTracker automatismResultTracker)
     {
       if (_instance != null)
@@ -74,7 +72,6 @@ namespace ISIDA.Psychic
         emotionsImageSystem,
         sensorySystem,
         verbalBrocaImages,
-        gomeostas,
         automatismResultTracker);
     }
 
@@ -86,7 +83,6 @@ namespace ISIDA.Psychic
       EmotionsImageSystem emotionsImageSystem,
       SensorySystem sensorySystem,
       VerbalBrocaImagesSystem verbalBrocaImages,
-      GomeostasSystem gomeostas,
       AutomatismResultTracker automatismResultTracker)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
@@ -96,7 +92,6 @@ namespace ISIDA.Psychic
       _emotionsImageSystem = emotionsImageSystem ?? throw new ArgumentNullException(nameof(emotionsImageSystem));
       _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
       _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
-      _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _automatismResultTracker = automatismResultTracker ?? throw new ArgumentNullException(nameof(automatismResultTracker));
 
       InitializeBasicAutomatizmTree();
@@ -176,49 +171,9 @@ namespace ISIDA.Psychic
     /// </summary>
     public bool WakeUppingActivation { get; private set; } = true;
 
-    /// <summary>
-    /// Флаг первой активации после пробуждения
-    /// </summary>
-    public bool IsFirstActivation { get; private set; } = true;
-
-    /// <summary>
-    /// Готовность к общению
-    /// 0 - не готов
-    /// 1 - психика активирована без осознания
-    /// 2 - готов к общению
-    /// </summary>
-    public int ReadyStatus { get; private set; } = 0;
-
-    /// <summary>
-    /// Блокировка любых действий
-    /// </summary>
-    public bool NotAllowAnyActions { get; private set; } = false;
-
-    /// <summary>
-    /// Флаг активации изменением условий (не оператором)
-    /// </summary>
-    public bool WasConditionsActivated { get; private set; } = false;
-
-    /// <summary>
-    /// Флаг активации оператором
-    /// </summary>
-    public bool WasOperatorActivated { get; private set; } = false;
-
-    /// <summary>
-    /// Тип активации сенсора
-    /// 1 - изменение условий
-    /// 2 - действие с пульта
-    /// 3 - фраза с пульта
-    /// </summary>
-    public int ActivationTypeSensor { get; private set; } = 0;
-
     // Текущие состояния восприятия для дерева автоматизмов
     private int _currentBaseId = 0;
     private int _currentEmotionId = 0;
-    private int _currentActivityId = 0;
-    private int _currentToneMoodId = 0;
-    private int _currentSimbolId = 0;
-    private int _currentVerbId = 0;
 
     // 
     private bool IsResultAutomatizm = false;
@@ -228,7 +183,6 @@ namespace ISIDA.Psychic
     private int _oldEmotionId = 0;
 
     // Текущий активный автоматизм
-    private int _currentAutomatizmId = 0;
     private int _lastRunAutomatizmPulsCount = 0;
     private int _lastEvaluatedAutomatizmId = 0;
 
@@ -270,18 +224,11 @@ namespace ISIDA.Psychic
         // Обработка тиков при бодрствовании
         if (!IsSleeping)
         {
-          if (IsFirstActivation)
-          {
-            ReadyStatus = 1; // Психика активирована без осознания
-            IsFirstActivation = false;
-          }
-
           // Осознание при включении и бодрствовании
           if (AppGlobalState.EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
           {
             // Начало мышления
             WakeUpping(activetStyleIds);
-            ReadyStatus = 2; // Готов к общению
 
             // Первый запуск дерева автоматизмов
             AutomatizmTreeActivation(1, 0, 0, 0, 0, 0, 0);
@@ -373,7 +320,6 @@ namespace ISIDA.Psychic
           }
         }
 
-        ActivationTypeSensor = activationType;
         int actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
@@ -448,10 +394,6 @@ namespace ISIDA.Psychic
       // Обновить текущие состояния
       _currentBaseId = baseId;
       _currentEmotionId = emotionId;
-      _currentActivityId = activityId;
-      _currentToneMoodId = toneMoodId;
-      _currentSimbolId = simbolId;
-      _currentVerbId = verbId;
 
       // Сброс детектора для действий оператора
       if (activationType > 1)
@@ -519,7 +461,6 @@ namespace ISIDA.Psychic
       _lock.EnterWriteLock();
       try
       {
-        _currentAutomatizmId = automatizm.ID;
         _lastRunAutomatizmPulsCount = PulseCount;
 
         // Начать отслеживание результата автоматизма
@@ -533,14 +474,11 @@ namespace ISIDA.Psychic
         {
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
-          // ВКЛЮЧИТЬ ожидание оценки оператора
+          // Включить ожидание оценки оператора
           AppGlobalState.WaitingForOperatorEvaluation = true;
           AppGlobalState.LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
           if (!IsResultAutomatizm)
-            _lastEvaluatedAutomatizmId = automatizm.ID; // инначе автоматизм сам себя бцдет оценивать
-
-          //if (!IsResultAutomatizm)
-          //  AppGlobalState.LastEvaluatedAutomatizmId = automatizm.ID;
+            _lastEvaluatedAutomatizmId = automatizm.ID; // инначе автоматизм сам себя будет оценивать
         }
         else
         {
@@ -818,66 +756,6 @@ namespace ISIDA.Psychic
     public static bool IsValidMoodId(int moodId)
     {
       return ActionsImagesSystem.IsValidMoodId(moodId);
-    }
-
-    #endregion
-
-    #region Вспомогательные методы
-
-    /// <summary>
-    /// Блокировать любые действия
-    /// </summary>
-    public void SetNotAllowAnyActions(bool notAllow)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        NotAllowAnyActions = notAllow;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Установить флаг активации оператором
-    /// </summary>
-    public void SetWasOperatorActivated(bool activated)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        WasOperatorActivated = activated;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Получить информацию о готовности для пульта
-    /// </summary>
-    public string GetPsychicReady()
-    {
-      return ReadyStatus.ToString();
-    }
-
-    /// <summary>
-    /// Получить расширенную информацию для пульта
-    /// </summary>
-    public string GetExtendInfoForPult()
-    {
-      int detectedNodeId = _automatizmTreeSystem.DetectedActiveLastNodeId;
-      if (detectedNodeId == 0)
-        return "";
-
-      return $"Инфо: BaseID=<b>{_currentBaseId}</b>, " +
-             $"EmotionID=<b>{_currentEmotionId}</b>, " +
-             $"atmzmID=<b>{detectedNodeId}</b>, " +
-             $"стадия=<b>{AppGlobalState.EvolutionStage}</b>, " +
-             $"готовность=<b>{ReadyStatus}</b>";
     }
 
     #endregion
