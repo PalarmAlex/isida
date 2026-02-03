@@ -111,13 +111,13 @@ namespace ISIDA.Common
       // Цепочки автоматизмов
       public const string AutomatizmChainsFormat = "# Формат файла цепочек автоматизмов";
       public const string AutomatizmChainsChain = "# CHAIN|ID|Name|Description|TreeNodeId|StartAutomatizmId";
-      public const string AutomatizmChainsLink = "# LINK|LinkID|AutomatizmID|SuccessNext|FailureNext|Description|SuccessThreshold";
+      public const string AutomatizmChainsLink = "# LINK|LinkID|ActionsImageID|SuccessNext|FailureNext|Description|SuccessThreshold";
       public const string AutomatizmChainsChainDesc = "# ID: уникальный идентификатор цепочки";
       public const string AutomatizmChainsNameDesc = "# Name: наименование цепочки";
       public const string AutomatizmChainsTreeNodeDesc = "# TreeNodeId: ID узла дерева автоматизмов (0 если нет)";
       public const string AutomatizmChainsStartAutomatizmDesc = "# StartAutomatizmId: ID автоматизма, который запускает цепочку (0 если нет)";
       public const string AutomatizmChainsLinkDesc = "# LinkID: уникальный идентификатор звена";
-      public const string AutomatizmChainsAutomatizmDesc = "# AutomatizmID: ID автоматизма для выполнения";
+      public const string AutomatizmChainsAutomatizmDesc = "# ActionsImageID: ID образа действий";
       public const string AutomatizmChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
       public const string AutomatizmChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
       public const string AutomatizmChainsThresholdDesc = "# SuccessThreshold: минимальная оценка полезности для успеха (по умолчанию 1)";
@@ -1164,9 +1164,9 @@ namespace ISIDA.Common
         }
         else if (parts.Length >= 5 && parts[0] == "LINK")
         {
-          // LINK|LinkID|AutomatizmID|SuccessNext|FailureNext|Description|SuccessThreshold
+          // LINK|LinkID|ActionsImageID|SuccessNext|FailureNext|Description|SuccessThreshold
           if (!int.TryParse(parts[1], out int linkId) || linkId <= 0 ||
-              !int.TryParse(parts[2], out int automatizmId) || automatizmId <= 0 ||
+              !int.TryParse(parts[2], out int actionsImageId) || actionsImageId <= 0 || // Изменено: ActionsImageID
               !int.TryParse(parts[3], out int successNext) || successNext < 0 ||
               !int.TryParse(parts[4], out int failureNext) || failureNext < 0)
             return false;

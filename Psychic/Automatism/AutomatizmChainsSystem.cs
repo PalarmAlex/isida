@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Common.FileValidator;
+using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 
 namespace ISIDA.Psychic.Automatism
 {
@@ -76,7 +77,7 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    private void OnAutomatizmDeleted(int automatizmId)
+    private void OnAutomatizmDeleted(int actionsImageId)
     {
       _lock.EnterWriteLock();
       try
@@ -87,18 +88,18 @@ namespace ISIDA.Psychic.Automatism
 
         foreach (var chain in _automatizmChains.Values)
         {
-          var linkWithAutomatizm = chain.Links.FirstOrDefault(l => l.AutomatizmId == automatizmId);
+          var linkWithAutomatizm = chain.Links.FirstOrDefault(l => l.ActionsImageId == actionsImageId);
           if (linkWithAutomatizm != null)
           {
             chainsToUpdate.Add(chain.ID);
-            _automatizmToChain.Remove(automatizmId);
+            _actionsImageToChain.Remove(actionsImageId);
           }
         }
 
         foreach (var chainId in chainsToUpdate)
         {
           var chain = _automatizmChains[chainId];
-          var linksToRemove = chain.Links.Where(l => l.AutomatizmId == automatizmId).ToList();
+          var linksToRemove = chain.Links.Where(l => l.ActionsImageId == actionsImageId).ToList();
 
           foreach (var link in linksToRemove)
           {
@@ -122,7 +123,7 @@ namespace ISIDA.Psychic.Automatism
         if (chainsToUpdate.Any())
         {
           SaveAutomatizmChainsCore();
-          Logger.Info($"Обработано удаление автоматизма {automatizmId} в {chainsToUpdate.Count} цепочках");
+          Logger.Info($"Обработано удаление автоматизма {actionsImageId} в {chainsToUpdate.Count} цепочках");
         }
       }
       finally
@@ -144,8 +145,8 @@ namespace ISIDA.Psychic.Automatism
       /// <summary>ID цепочки, к которой принадлежит звено</summary>
       public int ChainID { get; set; }
 
-      /// <summary>ID автоматизма для выполнения</summary>
-      public int AutomatizmId { get; set; }
+      /// <summary>ID образа действий для выполнения</summary>
+      public int ActionsImageId { get; set; }
 
       /// <summary>ID следующего звена при успешном выполнении</summary>
       public int SuccessNextLink { get; set; }
@@ -197,9 +198,9 @@ namespace ISIDA.Psychic.Automatism
     private readonly Dictionary<int, int> _activeChains = new Dictionary<int, int>();
 
     /// <summary>
-    /// Карта привязки автоматизмов к цепочкам (AutomatizmId -> ChainId)
+    /// Карта привязки образов действий к цепочкам (ActionsImageId -> ChainId)
     /// </summary>
-    private readonly Dictionary<int, int> _automatizmToChain = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _actionsImageToChain = new Dictionary<int, int>();
 
     private string GetAutomatizmChainsFilePath()
     {
@@ -260,13 +261,9 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    /// <summary>Добавляет новую цепочку автоматизмов</summary>
-    /// <param name="name">Наименование цепочки</param>
-    /// <param name="description">Описание цепочки</param>
-    /// <param name="links">Звенья цепочки</param>
-    /// <param name="treeNodeId">ID узла дерева автоматизмов (опционально)</param>
-    /// <param name="startAutomatizmId">ID автоматизма, который запускает цепочку (опционально)</param>
-    /// <returns>ID созданной цепочки и предупреждения</returns>
+    /// <summary>
+    /// Добавляет новую цепочку автоматизмов (обновленная версия)
+    /// </summary>
     public (int ChainId, string[] Warnings) AddAutomatizmChain(
         string name, string description, List<ChainLink> links,
         int treeNodeId = 0, int startAutomatizmId = 0)
@@ -279,21 +276,24 @@ namespace ISIDA.Psychic.Automatism
       if (links == null || !links.Any())
         throw new ArgumentException("Цепочка должна содержать хотя бы одно звено", nameof(links));
 
-      var allAutomatizms = _automatizmSystem.GetAllAutomatizms();
+      // Проверяем существование образов действий вместо автоматизмов
       foreach (var link in links)
       {
-        if (!allAutomatizms.Any(a => a.ID == link.AutomatizmId))
-          warnings.Add($"Автоматизм с ID {link.AutomatizmId} не существует");
+        if (!DoesActionsImageExist(link.ActionsImageId))
+          warnings.Add($"Образ действий с ID {link.ActionsImageId} не существует");
 
-        // Проверяем, не используется ли уже автоматизм в другой цепочке
-        if (_automatizmToChain.ContainsKey(link.AutomatizmId))
+        // Если указан treeNodeId, проверяем существует ли автоматизм с этим образом действий
+        if (treeNodeId > 0)
         {
-          warnings.Add($"Автоматизм {link.AutomatizmId} уже используется в цепочке {_automatizmToChain[link.AutomatizmId]}");
+          var automatizm = GetAutomatizmByActionsImageAndNode(link.ActionsImageId, treeNodeId);
+          if (automatizm == null)
+            warnings.Add($"Для узла дерева {treeNodeId} нет автоматизма с образом действий {link.ActionsImageId}");
         }
 
-        int duplicateCount = links.Count(l => l.AutomatizmId == link.AutomatizmId);
+        // Проверяем дублирование образов действий в цепочке
+        int duplicateCount = links.Count(l => l.ActionsImageId == link.ActionsImageId);
         if (duplicateCount > 1)
-          warnings.Add($"Автоматизм {link.AutomatizmId} повторяется {duplicateCount} раз в цепочке");
+          warnings.Add($"Образ действий {link.ActionsImageId} повторяется {duplicateCount} раз в цепочке");
       }
 
       _lock.EnterWriteLock();
@@ -313,10 +313,10 @@ namespace ISIDA.Psychic.Automatism
 
         _automatizmChains.Add(newId, chain);
 
-        // Обновляем карту привязок
+        // Обновляем карту привязок (ActionsImageId -> ChainId)
         foreach (var link in links)
         {
-          _automatizmToChain[link.AutomatizmId] = newId;
+          _actionsImageToChain[link.ActionsImageId] = newId;
         }
 
         return (newId, warnings.ToArray());
@@ -346,7 +346,7 @@ namespace ISIDA.Psychic.Automatism
         // Убираем из карты привязок
         foreach (var link in chain.Links)
         {
-          _automatizmToChain.Remove(link.AutomatizmId);
+          _actionsImageToChain.Remove(link.ActionsImageId);
         }
 
         bool removed = _automatizmChains.Remove(chainId);
@@ -371,16 +371,16 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    /// <summary>Проверяет, используется ли автоматизм в цепочках</summary>
-    /// <param name="automatizmId">ID автоматизма</param>
+    /// <summary>Проверяет, используется ли образ действий в цепочках</summary>
+    /// <param name="actionsImageId">ID образа действий</param>
     /// <returns>True если автоматизм используется в цепочках</returns>
-    public bool IsAutomatizmUsedInChains(int automatizmId)
+    public bool IsAutomatizmUsedInChains(int actionsImageId)
     {
       _lock.EnterReadLock();
       try
       {
         return _automatizmChains.Values
-            .Any(chain => chain.Links.Any(link => link.AutomatizmId == automatizmId));
+            .Any(chain => chain.Links.Any(link => link.ActionsImageId == actionsImageId));
       }
       finally
       {
@@ -410,14 +410,14 @@ namespace ISIDA.Psychic.Automatism
 
     /// <summary>Добавляет звено к существующей цепочке</summary>
     /// <param name="chainId">ID цепочки</param>
-    /// <param name="automatizmId">ID автоматизма</param>
+    /// <param name="actionsImageId">ID образа действий</param>
     /// <param name="successNextLink">ID следующего звена при успехе</param>
     /// <param name="failureNextLink">ID следующего звена при неудаче</param>
     /// <param name="description">Описание звена</param>
     /// <param name="successThreshold">Минимальная оценка полезности для успеха (по умолчанию > 0)</param>
     /// <returns>ID созданного звена и предупреждения</returns>
     public (int LinkId, string[] Warnings) AddChainLink(
-        int chainId, int automatizmId, int successNextLink,
+        int chainId, int actionsImageId, int successNextLink,
         int failureNextLink, string description, int successThreshold = 1)
     {
       var warnings = new List<string>();
@@ -428,23 +428,21 @@ namespace ISIDA.Psychic.Automatism
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
-        var allAutomatizms = _automatizmSystem.GetAllAutomatizms();
-        if (!allAutomatizms.Any(a => a.ID == automatizmId))
-          warnings.Add($"Автоматизм с ID {automatizmId} не существует");
+        if (!DoesActionsImageExist(actionsImageId))
+          warnings.Add($"Образ действий с ID {actionsImageId} не существует");
 
-        // Проверяем, не используется ли уже автоматизм в другой цепочке
-        if (_automatizmToChain.ContainsKey(automatizmId) && _automatizmToChain[automatizmId] != chainId)
+        // Если у цепочки есть привязка к узлу дерева, проверяем существование автоматизма
+        if (chain.TreeNodeId > 0)
         {
-          warnings.Add($"Автоматизм {automatizmId} уже используется в цепочке {_automatizmToChain[automatizmId]}");
+          var automatizm = GetAutomatizmByActionsImageAndNode(actionsImageId, chain.TreeNodeId);
+          if (automatizm == null)
+            warnings.Add($"Для узла дерева {chain.TreeNodeId} нет автоматизма с образом действий {actionsImageId}");
         }
 
-        if (successNextLink != 0)
+        // Проверяем, не используется ли уже образ действий в другой цепочке
+        if (_actionsImageToChain.ContainsKey(actionsImageId) && _actionsImageToChain[actionsImageId] != chainId)
         {
-          var existingLink = chain.Links.FirstOrDefault(l => l.ID == successNextLink);
-          if (existingLink == null)
-            warnings.Add($"Следующее звено при успехе (ID:{successNextLink}) не найдено в цепочке");
-          else if (successNextLink <= chain.Links.Max(l => l.ID))
-            warnings.Add($"Ссылка на предыдущее звено (ID:{successNextLink}) запрещена");
+          warnings.Add($"Образ действий {actionsImageId} уже используется в цепочке {_actionsImageToChain[actionsImageId]}");
         }
 
         if (failureNextLink != 0)
@@ -465,7 +463,7 @@ namespace ISIDA.Psychic.Automatism
         {
           ID = newLinkId,
           ChainID = chainId,
-          AutomatizmId = automatizmId,
+          ActionsImageId = actionsImageId,
           SuccessNextLink = successNextLink,
           FailureNextLink = failureNextLink,
           Description = description ?? $"Звено {newLinkId}",
@@ -473,7 +471,7 @@ namespace ISIDA.Psychic.Automatism
         };
 
         chain.Links.Add(link);
-        _automatizmToChain[automatizmId] = chainId;
+        _actionsImageToChain[actionsImageId] = chainId;
 
         return (newLinkId, warnings.ToArray());
       }
@@ -487,7 +485,7 @@ namespace ISIDA.Psychic.Automatism
     /// Обновляет существующее звено цепочки
     /// </summary>
     public (bool Success, string[] Warnings) UpdateChainLink(
-        int chainId, int linkId, int automatizmId, int successNextLink,
+        int chainId, int linkId, int actionsImageId, int successNextLink,
         int failureNextLink, string description, int successThreshold = 1)
     {
       var warnings = new List<string>();
@@ -503,20 +501,20 @@ namespace ISIDA.Psychic.Automatism
           throw new KeyNotFoundException($"Звено с ID {linkId} не найдено в цепочке {chainId}");
 
         var allAutomatizms = _automatizmSystem.GetAllAutomatizms();
-        if (!allAutomatizms.Any(a => a.ID == automatizmId))
-          warnings.Add($"Автоматизм с ID {automatizmId} не существует");
+        if (!allAutomatizms.Any(a => a.ID == actionsImageId))
+          warnings.Add($"Автоматизм с ID {actionsImageId} не существует");
 
         // Если меняем автоматизм, обновляем карту привязок
-        if (link.AutomatizmId != automatizmId)
+        if (link.ActionsImageId != actionsImageId)
         {
           // Убираем старую привязку
-          _automatizmToChain.Remove(link.AutomatizmId);
+          _actionsImageToChain.Remove(link.ActionsImageId);
 
           // Проверяем, не используется ли новый автоматизм в другой цепочке
-          if (_automatizmToChain.ContainsKey(automatizmId) && _automatizmToChain[automatizmId] != chainId)
-            warnings.Add($"Автоматизм {automatizmId} уже используется в цепочке {_automatizmToChain[automatizmId]}");
+          if (_actionsImageToChain.ContainsKey(actionsImageId) && _actionsImageToChain[actionsImageId] != chainId)
+            warnings.Add($"Автоматизм {actionsImageId} уже используется в цепочке {_actionsImageToChain[actionsImageId]}");
           else
-            _automatizmToChain[automatizmId] = chainId;
+            _actionsImageToChain[actionsImageId] = chainId;
         }
 
         if (successNextLink != 0 && successNextLink != linkId)
@@ -540,7 +538,7 @@ namespace ISIDA.Psychic.Automatism
         if (successThreshold < 0)
           warnings.Add($"Порог успеха не может быть отрицательным: {successThreshold}");
 
-        link.AutomatizmId = automatizmId;
+        link.ActionsImageId = actionsImageId;
         link.SuccessNextLink = successNextLink;
         link.FailureNextLink = failureNextLink;
         link.Description = description ?? link.Description;
@@ -601,7 +599,7 @@ namespace ISIDA.Psychic.Automatism
         }
 
         // Убираем из карты привязок
-        _automatizmToChain.Remove(linkToRemove.AutomatizmId);
+        _actionsImageToChain.Remove(linkToRemove.ActionsImageId);
 
         bool removed = chain.Links.Remove(linkToRemove);
         if (removed)
@@ -640,8 +638,8 @@ namespace ISIDA.Psychic.Automatism
         var allAutomatizms = _automatizmSystem.GetAllAutomatizms();
         foreach (var link in chain.Links)
         {
-          if (!allAutomatizms.Any(a => a.ID == link.AutomatizmId))
-            issues.Add($"Автоматизм {link.AutomatizmId} в звене {link.ID} не существует");
+          if (!allAutomatizms.Any(a => a.ID == link.ActionsImageId))
+            issues.Add($"Образ действий {link.ActionsImageId} в звене {link.ID} не существует");
 
           if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
             issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink}");
@@ -675,6 +673,29 @@ namespace ISIDA.Psychic.Automatism
       {
         _lock.ExitReadLock();
       }
+    }
+
+    /// <summary>
+    /// Проверяет, существует ли образ действий
+    /// </summary>
+    private bool DoesActionsImageExist(int actionsImageId)
+    {
+      if (!ActionsImagesSystem.IsInitialized)
+        return false;
+
+      return ActionsImagesSystem.Instance.GetActionsImage(actionsImageId) != null;
+    }
+
+    /// <summary>
+    /// Получает автоматизм по ID образа действий для указанного узла дерева
+    /// </summary>
+    private Automatizm GetAutomatizmByActionsImageAndNode(int actionsImageId, int treeNodeId)
+    {
+      if (!ActionsImagesSystem.IsInitialized || _automatizmSystem == null)
+        return null;
+
+      var automatizms = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(treeNodeId);
+      return automatizms.FirstOrDefault(a => a.ActionsImageID == actionsImageId);
     }
 
     #endregion
@@ -728,7 +749,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="chainId">ID цепочки</param>
     /// <param name="previousStepUsefulness">Оценка полезности предыдущего шага</param>
     /// <returns>Результат выполнения шага (ID выполненного автоматизма, ID следующего звена, завершена ли цепочка)</returns>
-    public (int ExecutedAutomatizmId, int NextLinkId, bool ChainCompleted) ExecuteChainStep(int chainId, int previousStepUsefulness)
+    public (int ExecutedActionsImageId, int NextLinkId, bool ChainCompleted) ExecuteChainStep(int chainId, int previousStepUsefulness)
     {
       _lock.EnterWriteLock();
       try
@@ -759,8 +780,8 @@ namespace ISIDA.Psychic.Automatism
         {
           // Цепочка завершена
           _activeChains.Remove(chainId);
-          Logger.Info($"Цепочка автоматизмов {chainId} завершена. Выполнен автоматизм: {currentLink.AutomatizmId}");
-          return (currentLink.AutomatizmId, 0, true);
+          Logger.Info($"Цепочка автоматизмов {chainId} завершена. Выполнен образ действий: {currentLink.ActionsImageId}");
+          return (currentLink.ActionsImageId, 0, true);
         }
 
         // Проверяем существование следующего звена
@@ -769,14 +790,14 @@ namespace ISIDA.Psychic.Automatism
         {
           _activeChains.Remove(chainId);
           Logger.Warning($"Следующее звено {nextLinkId} не найдено в цепочке {chainId}");
-          return (currentLink.AutomatizmId, 0, true);
+          return (currentLink.ActionsImageId, 0, true);
         }
 
         // Переходим к следующему звену
         _activeChains[chainId] = nextLinkId;
 
         Logger.Info($"Цепочка {chainId}: переход от звена {currentLinkId} к {nextLinkId} (успех: {isSuccess})");
-        return (currentLink.AutomatizmId, nextLinkId, false);
+        return (currentLink.ActionsImageId, nextLinkId, false);
       }
       finally
       {
@@ -840,16 +861,16 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Получает цепочку по ID автоматизма
+    /// Получает цепочку по ID образа действий
     /// </summary>
-    /// <param name="automatizmId">ID автоматизма</param>
+    /// <param name="actionsImageId">ID автоматизма</param>
     /// <returns>ID цепочки или 0</returns>
-    public int GetChainByAutomatizm(int automatizmId)
+    public int GetChainByActionsImage(int actionsImageId)
     {
       _lock.EnterReadLock();
       try
       {
-        return _automatizmToChain.TryGetValue(automatizmId, out int chainId) ? chainId : 0;
+        return _actionsImageToChain.TryGetValue(actionsImageId, out int chainId) ? chainId : 0;
       }
       finally
       {
@@ -916,7 +937,7 @@ namespace ISIDA.Psychic.Automatism
           _automatizmChains.Clear();
           _lastChainId = 0;
           _lastLinkId = 0;
-          _automatizmToChain.Clear();
+          _actionsImageToChain.Clear();
 
           AutomatizmChain currentChain = null;
 
@@ -952,7 +973,7 @@ namespace ISIDA.Psychic.Automatism
             if (parts.Length >= 5 && parts[0] == "LINK" && currentChain != null)
             {
               if (int.TryParse(parts[1], out int linkId) &&
-                  int.TryParse(parts[2], out int automatizmId) &&
+                  int.TryParse(parts[2], out int actionsImageId) &&
                   int.TryParse(parts[3], out int successNext) &&
                   int.TryParse(parts[4], out int failureNext))
               {
@@ -963,7 +984,7 @@ namespace ISIDA.Psychic.Automatism
                 {
                   ID = linkId,
                   ChainID = currentChain.ID,
-                  AutomatizmId = automatizmId,
+                  ActionsImageId = actionsImageId,
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
                   Description = description,
@@ -971,7 +992,7 @@ namespace ISIDA.Psychic.Automatism
                 };
 
                 currentChain.Links.Add(link);
-                _automatizmToChain[automatizmId] = currentChain.ID;
+                _actionsImageToChain[actionsImageId] = currentChain.ID;
 
                 if (linkId > _lastLinkId)
                   _lastLinkId = linkId;
@@ -1059,7 +1080,7 @@ namespace ISIDA.Psychic.Automatism
 
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
-            lines.Add($"LINK|{link.ID}|{link.AutomatizmId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description ?? ""}|{link.SuccessThreshold}");
+            lines.Add($"LINK|{link.ID}|{link.ActionsImageId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description ?? ""}|{link.SuccessThreshold}");
           }
           lines.Add("");
         }

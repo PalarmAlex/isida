@@ -677,13 +677,14 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Выполняет следующий шаг в цепочке автоматизмов
     /// </summary>
-    public (int ExecutedAutomatizmId, bool ChainCompleted) ExecuteNextInChain(int chainId, int previousStepUsefulness)
+    public (int ExecutedActionsImageId, bool ChainCompleted) ExecuteNextInChain(
+        int chainId, int previousStepUsefulness)
     {
       if (_automatizmChainsSystem == null)
         return (0, true);
 
       var result = _automatizmChainsSystem.ExecuteChainStep(chainId, previousStepUsefulness);
-      return (result.ExecutedAutomatizmId, result.ChainCompleted);
+      return (result.ExecutedActionsImageId, result.ChainCompleted);
     }
 
     #endregion
