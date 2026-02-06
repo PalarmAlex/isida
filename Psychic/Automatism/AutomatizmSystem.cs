@@ -861,6 +861,9 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     private (bool Success, string ErrorMessage) SaveAutomatizmNoLock()
     {
+      if (AppGlobalState.EvolutionStage < 2)
+        throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
       try
       {
         var lines = new List<string>
@@ -918,7 +921,8 @@ namespace ISIDA.Psychic.Automatism
       if (_disposed) return;
       try
       {
-        SaveAutomatizm();
+        if (AppGlobalState.EvolutionStage >= 2)
+          SaveAutomatizm();
       }
       catch (Exception ex)
       {

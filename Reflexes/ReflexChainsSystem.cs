@@ -740,7 +740,8 @@ namespace ISIDA.Reflexes
 
       try
       {
-        SaveReflexChains();
+        if (AppGlobalState.EvolutionStage == 0)
+          SaveReflexChains();
       }
       catch (Exception ex)
       {

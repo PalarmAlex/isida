@@ -110,7 +110,7 @@
     <Compile Include="Psychic\Automatism\AutomatizmSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmTree.cs" />
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
-    <Compile Include="Psychic\ConditionedReflexToAutomatizmConverter.cs" />
+    <Compile Include="Psychic\Automatism\ConditionedReflexToAutomatizmConverter.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />

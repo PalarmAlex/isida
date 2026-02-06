@@ -270,6 +270,9 @@ namespace ISIDA.Psychic.Automatism
     {
       var warnings = new List<string>();
 
+      if (AppGlobalState.EvolutionStage < 2)
+        throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
       if (string.IsNullOrWhiteSpace(name))
         throw new ArgumentException("Наименование цепочки не может быть пустым", nameof(name));
 
@@ -335,6 +338,9 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        if (AppGlobalState.EvolutionStage < 2)
+          throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
@@ -425,6 +431,9 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        if (AppGlobalState.EvolutionStage < 2)
+          throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
@@ -493,6 +502,9 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        if (AppGlobalState.EvolutionStage < 2)
+          throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
@@ -564,6 +576,9 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        if (AppGlobalState.EvolutionStage < 2)
+          throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
           throw new KeyNotFoundException($"Цепочка с ID {chainId} не найдена");
 
@@ -1055,6 +1070,9 @@ namespace ISIDA.Psychic.Automatism
 
     private (bool Success, string ErrorMessage) SaveAutomatizmChainsCore()
     {
+      if (AppGlobalState.EvolutionStage < 2)
+        throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+
       var lines = new List<string>
     {
         FileHeaders.AutomatizmChainsFormat,
@@ -1113,7 +1131,8 @@ namespace ISIDA.Psychic.Automatism
         if (_automatizmSystem != null)
           _automatizmSystem.AutomatizmDeleted -= OnAutomatizmDeleted;
 
-        SaveAutomatizmChains();
+        if(AppGlobalState.EvolutionStage >= 2)
+          SaveAutomatizmChains();
       }
       catch (Exception ex)
       {

@@ -737,7 +737,8 @@ namespace ISIDA.Common
             context.AutomatizmSystem,
             context.PerceptionImages,
             context.SensorySystem,
-            context.VerbalBrocaImagesSystem);
+            context.VerbalBrocaImagesSystem,
+            context.ReflexChains);
         context.ConditionedReflexToAutomatizm = ConditionedReflexToAutomatizmConverter.Instance;
 
         // Шаг 30: Сервис переключения стадий эволюции

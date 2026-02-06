@@ -1392,7 +1392,8 @@ namespace ISIDA.Reflexes
           _conditionedReflexesSystem.MultipleConditionedReflexesDeleted -= OnMultipleConditionedReflexesDeleted;
         }
 
-        SaveReflexesAttributes();
+        if (AppGlobalState.EvolutionStage == 0)
+          SaveReflexesAttributes();
       }
       catch (Exception ex)
       {

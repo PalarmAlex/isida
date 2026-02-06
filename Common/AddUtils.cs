@@ -83,5 +83,14 @@ namespace ISIDA.Common
 
       return list1.OrderBy(x => x).SequenceEqual(list2.OrderBy(x => x));
     }
+
+    /// <summary>
+    /// Сравнение float с погрешностью epsilon (по умолчанию 1E-04).
+    /// <para>Возвращает True, если a ≤ b с учетом погрешности</para>
+    /// </summary>
+    public static bool FloatLessOrEqual(float a, float b, float tolerance = 0.0001f)
+    {
+      return a < b || Math.Abs(a - b) <= tolerance;
+    }
   }
 }

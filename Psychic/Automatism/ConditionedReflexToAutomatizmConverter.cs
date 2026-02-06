@@ -7,6 +7,7 @@ using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime;
 using System.Threading;
 using static ISIDA.Psychic.VerbalBrocaImagesSystem;
 
@@ -28,6 +29,7 @@ namespace ISIDA.Psychic
     private readonly PerceptionImagesSystem _perceptionImagesSystem;
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
+    private readonly ReflexChainsSystem _reflexChainsSystem;
     private bool _disposed = false;
 
     #region Инициализация
@@ -58,7 +60,8 @@ namespace ISIDA.Psychic
         AutomatizmSystem automatizmSystem,
         PerceptionImagesSystem perceptionImagesSystem,
         SensorySystem sensorySystem,
-        VerbalBrocaImagesSystem verbalBrocaImagesSystem)
+        VerbalBrocaImagesSystem verbalBrocaImagesSystem,
+        ReflexChainsSystem reflexChainsSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("ConditionedReflexToAutomatizmConverter уже инициализирован.");
@@ -73,7 +76,8 @@ namespace ISIDA.Psychic
           automatizmSystem,
           perceptionImagesSystem,
           sensorySystem,
-          verbalBrocaImagesSystem);
+          verbalBrocaImagesSystem,
+          reflexChainsSystem);
     }
 
     private ConditionedReflexToAutomatizmConverter(
@@ -86,7 +90,8 @@ namespace ISIDA.Psychic
         AutomatizmSystem automatizmSystem,
         PerceptionImagesSystem perceptionImagesSystem,
         SensorySystem sensorySystem,
-        VerbalBrocaImagesSystem verbalBrocaImagesSystem)
+        VerbalBrocaImagesSystem verbalBrocaImagesSystem,
+        ReflexChainsSystem reflexChainsSystem)
     {
       _conditionedReflexesSystem = conditionedReflexesSystem ??
           throw new ArgumentNullException(nameof(conditionedReflexesSystem));
@@ -108,6 +113,8 @@ namespace ISIDA.Psychic
           throw new ArgumentNullException(nameof(sensorySystem));
       _verbalBrocaImages = verbalBrocaImagesSystem ??
           throw new ArgumentNullException(nameof(verbalBrocaImagesSystem));
+      _reflexChainsSystem = reflexChainsSystem ??
+          throw new ArgumentNullException(nameof(reflexChainsSystem));
     }
 
     #endregion
@@ -115,20 +122,22 @@ namespace ISIDA.Psychic
     #region Основные методы конвертации
 
     /// <summary>
-    /// Клонирует все условные рефлексы в автоматизмы
+    /// Клонирует все условные рефлексы в автоматизмы (с поддержкой цепочек)
     /// </summary>
-    public (int NewCount, int ExistingCount, int TotalCount, int DuplicateCount, List<string> Errors) CloneAllConditionedReflexesToAutomatisms()
+    public (int NewCount, int ExistingCount, int TotalCount, int DuplicateCount, int ChainsCreated, List<string> Errors)
+        CloneAllConditionedReflexesToAutomatisms()
     {
       var errors = new List<string>();
       int newCount = 0;
       int existingCount = 0;
       int duplicateCount = 0;
+      int chainsCreated = 0;
       int totalCount = 0;
 
       try
       {
         if (AppGlobalState.EvolutionStage < 2)
-          return (0, 0, 0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
+          return (0, 0, 0, 0, 0, new List<string> { $"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов" });
 
         _lock.EnterWriteLock();
         try
@@ -137,14 +146,18 @@ namespace ISIDA.Psychic
           totalCount = allConditionedReflexes.Count;
 
           if (totalCount == 0)
-            return (0, 0, 0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
+            return (0, 0, 0, 0, 0, new List<string> { "Нет условных рефлексов для клонирования" });
 
           var processedImageIds = new HashSet<int>();
+          float actReflexTreshold = _conditionedReflexesSystem.Settings.ActivationThreshold;
 
           foreach (var conditionedReflex in allConditionedReflexes)
           {
             try
             {
+              if (AddUtils.FloatLessOrEqual(conditionedReflex.AssociationStrength, actReflexTreshold))
+                continue; // пропускаем рефлекс с крепостью <= пороговой
+
               var (actions, phrases) = GetStimulusDetailsFromConditionedReflex(conditionedReflex);
               var imageHash = CalculateImageHash(conditionedReflex.Level1, actions, phrases);
 
@@ -163,6 +176,11 @@ namespace ISIDA.Psychic
                 {
                   case ConversionStatus.Created:
                     newCount++;
+
+                    // Проверяем, была ли создана цепочка
+                    if (result.Error?.Contains("с цепочкой") == true)
+                      chainsCreated++;
+
                     break;
                   case ConversionStatus.AlreadyExists:
                     existingCount++;
@@ -181,9 +199,10 @@ namespace ISIDA.Psychic
             }
           }
 
-          Logger.Info($"Конвертация завершена: {newCount} новых, {existingCount} существующих, {duplicateCount} дубликатов, {errors.Count} ошибок");
+          Logger.Info($"Конвертация завершена: {newCount} новых, {existingCount} существующих, " +
+                     $"{duplicateCount} дубликатов, {chainsCreated} цепочек создано, {errors.Count} ошибок");
 
-          return (newCount, existingCount, totalCount, duplicateCount, errors);
+          return (newCount, existingCount, totalCount, duplicateCount, chainsCreated, errors);
         }
         finally
         {
@@ -194,18 +213,19 @@ namespace ISIDA.Psychic
       {
         errors.Add($"Общая ошибка: {ex.Message}");
         Logger.Error(ex.Message);
-        return (newCount, existingCount, totalCount, duplicateCount, errors);
+        return (newCount, existingCount, totalCount, duplicateCount, chainsCreated, errors);
       }
     }
 
     /// <summary>
-    /// Конвертирует один условный рефлекс в автоматизм
+    /// Конвертирует один условный рефлекс в автоматизм (с поддержкой цепочек)
     /// </summary>
     public (bool Success, int AutomatizmId, ConversionStatus Status, string Error) ConvertConditionedReflexToAutomatizm(
         ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
     {
       try
       {
+        // Получаем действия из исходного безусловного рефлекса
         var actionIds = GetActionsFromConditionedReflex(conditionedReflex);
         if (actionIds == null || !actionIds.Any())
           return (false, 0, ConversionStatus.Failed, $"Нет действий для условного рефлекса ID={conditionedReflex.Id}");
@@ -243,20 +263,78 @@ namespace ISIDA.Psychic
         if (existingAutomatizm != null)
           return (true, existingAutomatizm.ID, ConversionStatus.AlreadyExists, "Автоматизм уже существует");
 
-        // для автоматизма по условному рефлексу только действия
-        int actionsImageId = CreateActionsImageForReflex(actionIds, null, 0, 0);
+        // Проверяем наличие цепочки в исходном безусловном рефлексе
+        var geneticReflex = _geneticReflexesSystem.GetGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+        int automatizmChainId = 0;
+        ReflexChainInfo reflexChainInfo = null; // Объявляем переменную здесь
+
+        if (geneticReflex?.ReflexChainID > 0)
+        {
+          // Получаем информацию о цепочке рефлексов
+          reflexChainInfo = GetChainInfoFromGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+          if (reflexChainInfo != null)
+          {
+            // Создаем цепочку автоматизмов на основе цепочки рефлексов
+            var chainResult = CreateAutomatizmChainFromReflexChain(reflexChainInfo, nodeId);
+            if (chainResult.Success)
+            {
+              automatizmChainId = chainResult.ChainId;
+              Logger.Info($"Создана цепочка автоматизмов {automatizmChainId} для условного рефлекса {conditionedReflex.Id}");
+            }
+            else
+            {
+              Logger.Warning($"Не удалось создать цепочку автоматизмов: {chainResult.Error}");
+            }
+          }
+        }
+
+        // Создаем образ действий для автоматизма
+        // Если есть цепочка, используем действие из первого звена цепочки
+        int actionsImageId = 0;
+        if (automatizmChainId > 0 && reflexChainInfo?.Links?.FirstOrDefault() != null)
+        {
+          // Используем действие из первого звена цепочки
+          var firstLinkActionId = reflexChainInfo.Links.First().ActionId;
+          (actionsImageId, _) = _actionsImagesSystem.CreateNewActionsImage(
+              kind: 0,
+              actIdList: new List<int> { firstLinkActionId },
+              phraseIdList: null,
+              toneId: 0,
+              moodId: 0,
+              checkUnicum: true);
+        }
+        else
+        {
+          // Используем первое действие из списка действий рефлекса
+          (actionsImageId, _) = _actionsImagesSystem.CreateNewActionsImage(
+              kind: 0,
+              actIdList: new List<int> { actionIds.First() },
+              phraseIdList: phrases,
+              toneId: toneId,
+              moodId: moodId,
+              checkUnicum: true);
+        }
+
         if (actionsImageId == 0)
           return (false, 0, ConversionStatus.Failed, $"Не удалось создать образ действий");
 
-        Automatizm automatizm = null;
-        (_, automatizm) = _automatizmSystem.CreateNewAutomatizm(nodeId, actionsImageId, true);
-
+        // Создаем автоматизм
+        var (automatizmId, automatizm) = _automatizmSystem.CreateNewAutomatizm(nodeId, actionsImageId, true);
         if (automatizm == null)
           return (false, 0, ConversionStatus.Failed, $"Не удалось создать автоматизм");
 
+        // Настраиваем автоматизм
         ConfigureAutomatizmFromReflex(automatizm, conditionedReflex, actionIds);
 
-        return (true, automatizm.ID, ConversionStatus.Created, "Успешно создан");
+        // Если создана цепочка, связываем ее с автоматизмом
+        if (automatizmChainId > 0)
+        {
+          automatizm.NextID = automatizmChainId;
+          Logger.Info($"Автоматизм {automatizmId} связан с цепочкой {automatizmChainId}");
+        }
+
+        return (true, automatizmId, ConversionStatus.Created,
+                automatizmChainId > 0 ? "Автоматизм с цепочкой успешно создан" : "Автоматизм успешно создан");
       }
       catch (Exception ex)
       {
@@ -284,6 +362,7 @@ namespace ISIDA.Psychic
         return (false, 0, ConversionStatus.Failed, $"Ошибка: {ex.Message}");
       }
     }
+    
     #endregion
 
     #region Вспомогательные методы
@@ -460,37 +539,6 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Создает образ действий для автоматизма
-    /// </summary>
-    private int CreateActionsImageForReflex(
-        List<int> actionIds,
-        List<int> phraseIds,
-        int toneId,
-        int moodId)
-    {
-      try
-      {
-        var (imageId, _) = _actionsImagesSystem.CreateNewActionsImage(
-            kind: 0,
-            actIdList: actionIds,
-            phraseIdList: phraseIds,
-            toneId: toneId,
-            moodId: moodId,
-            checkUnicum: true);
-
-        if (imageId == 0)
-          Logger.Warning($"Не удалось создать образ действий для actions={string.Join(",", actionIds)}, phrases={string.Join(",", phraseIds)}");
-
-        return imageId;
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
-        return 0;
-      }
-    }
-
-    /// <summary>
     /// Настраивает автоматизм на основе рефлекса
     /// </summary>
     private void ConfigureAutomatizmFromReflex(
@@ -563,6 +611,224 @@ namespace ISIDA.Psychic
       public int ToneMoodID { get; set; }
       public int SimbolID { get; set; }
       public int VerbID { get; set; }
+    }
+
+    #endregion
+
+    #region Вспомогательные классы и методы для цепочек
+
+    /// <summary>
+    /// Информация о цепочке рефлексов
+    /// </summary>
+    private class ReflexChainInfo
+    {
+      public int ChainId { get; set; }
+      public List<ReflexChainsSystem.ChainLink> Links { get; set; } = new List<ReflexChainsSystem.ChainLink>();
+      public int StartLinkId { get; set; }
+    }
+
+    /// <summary>
+    /// Получает информацию о цепочке из безусловного рефлекса
+    /// </summary>
+    private ReflexChainInfo GetChainInfoFromGeneticReflex(int geneticReflexId)
+    {
+      try
+      {
+        var geneticReflex = _geneticReflexesSystem.GetGeneticReflex(geneticReflexId);
+        if (geneticReflex == null || geneticReflex.ReflexChainID == 0)
+          return null;
+
+        var chainId = geneticReflex.ReflexChainID;
+        var chain = _reflexChainsSystem?.GetChain(chainId);
+        if (chain == null)
+          return null;
+
+        return new ReflexChainInfo
+        {
+          ChainId = chainId,
+          Links = chain.Links?.ToList() ?? new List<ReflexChainsSystem.ChainLink>(),
+          StartLinkId = chain.Links?.FirstOrDefault()?.ID ?? 0
+        };
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return null;
+      }
+    }
+
+    /// <summary>
+    /// Создает цепочку автоматизмов на основе цепочки рефлексов
+    /// </summary>
+    private (bool Success, int ChainId, string Error) CreateAutomatizmChainFromReflexChain(
+        ReflexChainInfo reflexChainInfo,
+        int treeNodeId)
+    {
+      try
+      {
+        if (reflexChainInfo == null || !reflexChainInfo.Links.Any())
+          return (false, 0, "Информация о цепочке рефлексов отсутствует или пуста");
+
+        if (!AutomatizmChainsSystem.IsInitialized)
+          return (false, 0, "Система цепочек автоматизмов не инициализирована");
+
+        var automatizmChainsSystem = AutomatizmChainsSystem.Instance;
+
+        // Получаем максимальные ID для новой цепочки
+        int nextLinkId = 1;
+        var existingChains = automatizmChainsSystem.GetAllAutomatizmChains();
+        if (existingChains.Any())
+        {
+          // Находим максимальный ID звена среди всех цепочек
+          foreach (var chain in existingChains.Values)
+          {
+            if (chain.Links != null && chain.Links.Any())
+            {
+              var maxInChain = chain.Links.Max(l => l.ID);
+              if (maxInChain >= nextLinkId)
+                nextLinkId = maxInChain + 1;
+            }
+          }
+        }
+
+        // Создаем словарь для сопоставления ID звеньев рефлексов и ID звеньев автоматизмов
+        var linkIdMap = new Dictionary<int, int>();
+        var automatizmLinks = new List<AutomatizmChainsSystem.ChainLink>();
+
+        // Сначала создаем все звенья (без ссылок)
+        foreach (var reflexLink in reflexChainInfo.Links.OrderBy(l => l.ID))
+        {
+          // Создаем образ действий для звена
+          var actionId = reflexLink.ActionId;
+          var (actionsImageId, _) = _actionsImagesSystem.CreateNewActionsImage(
+              kind: 0,
+              actIdList: new List<int> { actionId },
+              phraseIdList: null,
+              toneId: 0,
+              moodId: 0,
+              checkUnicum: true);
+
+          if (actionsImageId == 0)
+            return (false, 0, $"Не удалось создать образ действий для действия {actionId}");
+
+          // Создаем звено с уникальным ID
+          var automatizmLink = new AutomatizmChainsSystem.ChainLink
+          {
+            ID = nextLinkId++,
+            ActionsImageId = actionsImageId,
+            SuccessNextLink = 0, // Пока временно 0
+            FailureNextLink = 0, // Пока временно 0
+            Description = $"Звено из рефлекса {reflexLink.ID}",
+            SuccessThreshold = 1
+          };
+
+          automatizmLinks.Add(automatizmLink);
+          linkIdMap[reflexLink.ID] = automatizmLink.ID;
+        }
+
+        // Теперь устанавливаем правильные ссылки между звеньями
+        for (int i = 0; i < reflexChainInfo.Links.Count; i++)
+        {
+          var reflexLink = reflexChainInfo.Links[i];
+          var automatizmLink = automatizmLinks[i];
+
+          // Находим ID следующего звена для успеха
+          if (reflexLink.SuccessNextLink > 0 && linkIdMap.ContainsKey(reflexLink.SuccessNextLink))
+            automatizmLink.SuccessNextLink = linkIdMap[reflexLink.SuccessNextLink];
+
+          // Находим ID следующего звена для неудачи
+          if (reflexLink.FailureNextLink > 0 && linkIdMap.ContainsKey(reflexLink.FailureNextLink))
+            automatizmLink.FailureNextLink = linkIdMap[reflexLink.FailureNextLink];
+        }
+
+        // Создаем цепочку
+        var chainName = $"Цепочка из рефлекса {reflexChainInfo.ChainId}";
+        var chainDescription = $"Автоматизированная цепочка на основе цепочки рефлексов {reflexChainInfo.ChainId}";
+
+        var (chainId, warnings) = automatizmChainsSystem.AddAutomatizmChain(
+            chainName,
+            chainDescription,
+            automatizmLinks,
+            treeNodeId);
+
+        if (chainId == 0)
+          return (false, 0, "Не удалось создать цепочку автоматизмов");
+
+        // Сохраняем изменения
+        var saveResult = automatizmChainsSystem.SaveAutomatizmChains();
+        if (!saveResult.Success)
+          return (false, 0, $"Ошибка сохранения цепочки: {saveResult.ErrorMessage}");
+
+        Logger.Info($"Создана цепочка автоматизмов ID={chainId} с {automatizmLinks.Count} звеньями");
+        return (true, chainId, "Цепочка автоматизмов успешно создана");
+      }
+      catch (Exception ex)
+      {
+        return (false, 0, $"Ошибка создания цепочки автоматизмов: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Конвертирует цепочку рефлексов в цепочку автоматизмов для конкретного условного рефлекса
+    /// </summary>
+    public (bool Success, int ChainId, string Error) ConvertReflexChainToAutomatizmChain(
+        int conditionedReflexId)
+    {
+      try
+      {
+        var conditionedReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == conditionedReflexId);
+
+        if (conditionedReflex == null)
+          return (false, 0, $"Условный рефлекс с ID {conditionedReflexId} не найден");
+
+        var geneticReflex = _geneticReflexesSystem.GetGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+        if (geneticReflex?.ReflexChainID == 0)
+          return (false, 0, $"Исходный безусловный рефлекс не имеет цепочки");
+
+        var reflexChainInfo = GetChainInfoFromGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+        if (reflexChainInfo == null)
+          return (false, 0, $"Не удалось получить информацию о цепочке рефлексов");
+
+        // Создаем дерево автоматизмов для этого условного рефлекса
+        var actionIds = GetActionsFromConditionedReflex(conditionedReflex);
+        var (phrases, toneId, moodId) = GetPhrasesFromConditionedReflex(conditionedReflex);
+
+        int symbolId = 0;
+        int verbId = 0;
+        if (phrases?.Any() == true)
+        {
+          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phrases[0]);
+          (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
+        }
+
+        var treeComponentsResult = ConvertReflexLevelsToTreeComponents(
+            conditionedReflex,
+            actionIds,
+            phrases,
+            toneId,
+            moodId,
+            symbolId,
+            verbId);
+
+        if (!treeComponentsResult.IsValid)
+          return (false, 0, treeComponentsResult.Error);
+
+        var treeComponents = treeComponentsResult.Components;
+        int nodeId = FindOrCreateAutomatizmTreeNode(treeComponents);
+
+        if (nodeId == 0)
+          return (false, 0, "Не удалось создать узел дерева автоматизмов");
+
+        // Создаем цепочку автоматизмов
+        var chainResult = CreateAutomatizmChainFromReflexChain(reflexChainInfo, nodeId);
+
+        return chainResult;
+      }
+      catch (Exception ex)
+      {
+        return (false, 0, $"Ошибка: {ex.Message}");
+      }
     }
 
     #endregion
