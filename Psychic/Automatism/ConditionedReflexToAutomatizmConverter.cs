@@ -625,6 +625,7 @@ namespace ISIDA.Psychic
       public int ChainId { get; set; }
       public List<ReflexChainsSystem.ChainLink> Links { get; set; } = new List<ReflexChainsSystem.ChainLink>();
       public int StartLinkId { get; set; }
+      public string Description { get; set; }
     }
 
     /// <summary>
@@ -647,7 +648,8 @@ namespace ISIDA.Psychic
         {
           ChainId = chainId,
           Links = chain.Links?.ToList() ?? new List<ReflexChainsSystem.ChainLink>(),
-          StartLinkId = chain.Links?.FirstOrDefault()?.ID ?? 0
+          StartLinkId = chain.Links?.FirstOrDefault()?.ID ?? 0,
+          Description = chain.Description ?? ""
         };
       }
       catch (Exception ex)
@@ -674,23 +676,6 @@ namespace ISIDA.Psychic
 
         var automatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
-        // Получаем максимальные ID для новой цепочки
-        int nextLinkId = 1;
-        var existingChains = automatizmChainsSystem.GetAllAutomatizmChains();
-        if (existingChains.Any())
-        {
-          // Находим максимальный ID звена среди всех цепочек
-          foreach (var chain in existingChains.Values)
-          {
-            if (chain.Links != null && chain.Links.Any())
-            {
-              var maxInChain = chain.Links.Max(l => l.ID);
-              if (maxInChain >= nextLinkId)
-                nextLinkId = maxInChain + 1;
-            }
-          }
-        }
-
         // Создаем словарь для сопоставления ID звеньев рефлексов и ID звеньев автоматизмов
         var linkIdMap = new Dictionary<int, int>();
         var automatizmLinks = new List<AutomatizmChainsSystem.ChainLink>();
@@ -714,11 +699,11 @@ namespace ISIDA.Psychic
           // Создаем звено с уникальным ID
           var automatizmLink = new AutomatizmChainsSystem.ChainLink
           {
-            ID = nextLinkId++,
+            ID = reflexLink.ID,
             ActionsImageId = actionsImageId,
             SuccessNextLink = 0, // Пока временно 0
             FailureNextLink = 0, // Пока временно 0
-            Description = $"Звено из рефлекса {reflexLink.ID}",
+            Description = reflexLink.Description,
             SuccessThreshold = 1
           };
 
@@ -743,7 +728,7 @@ namespace ISIDA.Psychic
 
         // Создаем цепочку
         var chainName = $"Цепочка из рефлекса {reflexChainInfo.ChainId}";
-        var chainDescription = $"Автоматизированная цепочка на основе цепочки рефлексов {reflexChainInfo.ChainId}";
+        var chainDescription = reflexChainInfo.Description;
 
         var (chainId, warnings) = automatizmChainsSystem.AddAutomatizmChain(
             chainName,

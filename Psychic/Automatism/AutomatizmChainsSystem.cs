@@ -116,14 +116,14 @@ namespace ISIDA.Psychic.Automatism
 
             chain.Links.Remove(link);
             if (!chain.Links.Any())
-              RemoveAutomatizmChain(chainId);
+              RemoveAutomatizmChainNoBlock(chainId);
           }
         }
 
         if (chainsToUpdate.Any())
         {
           SaveAutomatizmChainsCore();
-          Logger.Info($"Обработано удаление автоматизма {actionsImageId} в {chainsToUpdate.Count} цепочках");
+          Logger.Info($"Обработано удаление образа действий {actionsImageId} в {chainsToUpdate.Count} цепочках");
         }
       }
       finally
@@ -338,6 +338,18 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        return RemoveAutomatizmChainNoBlock(chainId);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    internal bool RemoveAutomatizmChainNoBlock(int chainId)
+    {
+      try
+      {
         if (AppGlobalState.EvolutionStage < 2)
           throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
 
@@ -346,10 +358,8 @@ namespace ISIDA.Psychic.Automatism
 
         var linkIds = chain.Links.Select(l => l.ID).ToList();
 
-        // Убираем из активных цепочек
         _activeChains.Remove(chainId);
 
-        // Убираем из карты привязок
         foreach (var link in chain.Links)
         {
           _actionsImageToChain.Remove(link.ActionsImageId);
@@ -370,10 +380,6 @@ namespace ISIDA.Psychic.Automatism
       {
         Logger.Error(ex.Message);
         return false;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
       }
     }
 
