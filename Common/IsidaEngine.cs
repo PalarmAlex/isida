@@ -711,12 +711,18 @@ namespace ISIDA.Common
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
 
-        // Шаг 28: Сервис выполнения автоматизмов
+        // Шаг 28: Система управления цепочками автоматизмов
         initializationStep = 28;
+        AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
+        context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
+
+        // Шаг 29: Сервис выполнения автоматизмов
+        initializationStep = 29;
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
-            context.OrientationReflex);
+            context.OrientationReflex,
+            context.AutomatizmChainsSystem);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
         context.PsychicSystem.SetOrientationReflexSystem(context.OrientationReflex);
         context.PsychicSystem.SetAutomatismExecutionService(context.AutomatismExecution);
@@ -725,8 +731,8 @@ namespace ISIDA.Common
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
-        // Шаг 29: Сервис конвертирования условных рефлексов в автоматизмы
-        initializationStep = 29;
+        // Шаг 30: Сервис конвертирования условных рефлексов в автоматизмы
+        initializationStep = 30;
         ConditionedReflexToAutomatizmConverter.InitializeInstance(
             context.ConditionedReflexes,
             context.GeneticReflexes,
@@ -738,22 +744,19 @@ namespace ISIDA.Common
             context.PerceptionImages,
             context.SensorySystem,
             context.VerbalBrocaImagesSystem,
-            context.ReflexChains);
+            context.ReflexChains,
+            context.InfluenceActionsImages,
+            context.AutomatizmChainsSystem);
         context.ConditionedReflexToAutomatizm = ConditionedReflexToAutomatizmConverter.Instance;
 
-        // Шаг 30: Сервис переключения стадий эволюции
-        initializationStep = 30;
+        // Шаг 31: Сервис переключения стадий эволюции
+        initializationStep = 31;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes,
             context.AutomatizmTree);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
-
-        // Шаг 31: Система управления цепочками автоматизмов
-        initializationStep = 31;
-        AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
-        context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);

@@ -5,6 +5,8 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Xml.Linq;
+using static ISIDA.Reflexes.ReflexChainsSystem;
 
 namespace ISIDA.Reflexes
 {
@@ -289,11 +291,6 @@ namespace ISIDA.Reflexes
     private int _detectedLevel = 0;
 
     /// <summary>
-    /// Текущий последний распознанный узел дерева - результат распознавания
-    /// </summary>
-    public int DetectedLastNodeID => _detectedLastNodeID;
-
-    /// <summary>
     /// Уровень, на котором был найден узел (0 - только базовое состояние, 1 - состояние + стиль, 2 - состояние + стиль + триггер)
     /// </summary>
     public int DetectedLevel => _detectedLevel;
@@ -341,6 +338,8 @@ namespace ISIDA.Reflexes
 
       parent?.Children.Add(node);
       WriteReflexTreeFromID(id, node);
+
+      AppGlobalState.DetectedReflexNodeId = id;
 
       return (id, node);
     }
@@ -408,6 +407,8 @@ namespace ISIDA.Reflexes
 
       if (_detectedLastNodeID == 0)
         _detectedLevel = -1;
+
+      AppGlobalState.DetectedReflexNodeId = _detectedLastNodeID;
     }
 
     private void GetReflexTreeNode(int level, int[] conditions, ReflexNode node)
@@ -518,13 +519,15 @@ namespace ISIDA.Reflexes
             existingNode.ReflexChainID = reflexChainID;
 
           SaveReflexTreeInternal();
+          AppGlobalState.DetectedReflexNodeId = existingId;
+
           return existingId;
         }
 
         // Если узел не найден - создаем новую ветку
         // Активируем дерево для поиска подходящего места
         ConditionsDetection(conditionArr);
-        int detectedNodeId = DetectedLastNodeID;
+        int detectedNodeId = AppGlobalState.DetectedReflexNodeId;
 
         if (detectedNodeId > 0)
         {
@@ -548,6 +551,8 @@ namespace ISIDA.Reflexes
             if (newNode != null)
             {
               SaveReflexTreeInternal();
+              AppGlobalState.DetectedReflexNodeId = lastNodeId;
+
               return lastNodeId;
             }
           }
@@ -561,6 +566,8 @@ namespace ISIDA.Reflexes
         if (newNodeFromRoot != null)
         {
           SaveReflexTreeInternal();
+          AppGlobalState.DetectedReflexNodeId = newNodeIdFromRoot;
+
           return newNodeIdFromRoot;
         }
 

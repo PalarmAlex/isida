@@ -62,7 +62,7 @@ namespace ISIDA.Gomeostas
         // Инициализация детектора новизны
         _previousOverallState = HomeostasisOverallState.Normal;
         _previousActiveStyleIds = new List<int>();
-        _isNewConditions = false;
+        AppGlobalState.IsNewConditions = false;
 
         EnsureDataDirectory();
         LoadAgentData();
@@ -1302,16 +1302,6 @@ namespace ISIDA.Gomeostas
     // детектор новизны гомео-состояния
     private HomeostasisOverallState _previousOverallState;
     private List<int> _previousActiveStyleIds = new List<int>();
-    private bool _isNewConditions = false;
-
-    /// <summary>
-    /// Флаг новых гомео-условий: изменилось интегральное состояние или активные стили
-    /// </summary>
-    internal bool IsNewConditions
-    {
-      get => _isNewConditions;
-      set => _isNewConditions = value;
-    }
 
     /// <summary>
     /// Обновляет детектор новизны на основе изменений гомео-состояния
@@ -1336,7 +1326,7 @@ namespace ISIDA.Gomeostas
             param.LastStateChangePulse.HasValue)
         {
           int pulsesSinceChange = GlobalTimer.GlobalPulsCount - param.LastStateChangePulse.Value;
-          if (pulsesSinceChange >= _dynamicTime && !_calculator.IsChainActive)
+          if (pulsesSinceChange >= _dynamicTime && !AppGlobalState.IsReflexChainActive && !AppGlobalState.IsAutomatizmChainActive)
           {
             holdingEnded = true;
             break;
@@ -1344,7 +1334,7 @@ namespace ISIDA.Gomeostas
         }
       }
 
-      IsNewConditions = overallStateChanged || activeStylesChanged || holdingEnded;
+      AppGlobalState.IsNewConditions = overallStateChanged || activeStylesChanged || holdingEnded;
 
       _previousOverallState = currentOverallState;
       _previousActiveStyleIds = currentActiveStyleIds;

@@ -1,11 +1,13 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Gomeostas;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
 using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
+using static ISIDA.Psychic.Automatism.AutomatizmChainsSystem;
 
 namespace ISIDA.Psychic.Automatism
 {
@@ -56,12 +58,14 @@ namespace ISIDA.Psychic.Automatism
     public static void InitializeWithDependencies(
         AutomatizmSystem automatizmSystem,
         PsychicSystem psychicSystem,
-        OrientationReflexSystem orientationReflexSystem)
+        OrientationReflexSystem orientationReflexSystem,
+        AutomatizmChainsSystem automatizmChainsSystem)
     {
       if (_instance == null)
         throw new InvalidOperationException("AutomatismExecutionService должен быть сначала инициализирован через InitializeInstance()");
 
       _instance.SetDependencies(automatizmSystem, psychicSystem, orientationReflexSystem);
+      _instance.SetAutomatizmChainsSystem(automatizmChainsSystem);
     }
 
     private AutomatismExecutionService(
@@ -73,7 +77,8 @@ namespace ISIDA.Psychic.Automatism
       _actionsImagesSystem = actionsImagesSystem ??
           throw new ArgumentNullException(nameof(actionsImagesSystem));
 
-      // Системы психики будут установлены позже через InitializeWithDependencies
+      _reflexActionDuration = _adaptiveActionsSystem.ReflexActionDisplayDuration;
+
       _automatizmSystem = null;
       _psychicSystem = null;
       _orientationReflexSystem = null;
@@ -103,14 +108,63 @@ namespace ISIDA.Psychic.Automatism
         _psychicSystem != null &&
         _orientationReflexSystem != null;
 
+    /// <summary>
+    /// Проверяет, доступны ли цепочки автоматизмов
+    /// </summary>
+    public bool AreChainsAvailable =>
+        AppGlobalState.EvolutionStage >= 2 && _automatizmChainsSystem != null;
+
+    /// <summary>
+    /// Устанавливает систему цепочек автоматизмов
+    /// </summary>
+    public void SetAutomatizmChainsSystem(AutomatizmChainsSystem automatizmChainsSystem)
+    {
+      _automatizmChainsSystem = automatizmChainsSystem ??
+          throw new ArgumentNullException(nameof(automatizmChainsSystem));
+    }
+
     #endregion
+
+    /// <summary>
+    /// Обрабатывает пульс для активных цепочек автоматизмов
+    /// </summary>
+    public void ProcessAutomatizmChainsPulse(int pulseCount)
+    {
+      if (_pendingChainActivation != null &&
+          pulseCount >= _pendingChainActivation.StartPulse + _reflexActionDuration)
+      {
+        StartAutomatizmChain(_pendingChainActivation.ChainId, pulseCount);
+        _pendingChainActivation = null;
+      }
+
+      if (!AreChainsAvailable || !_activeAutomatizmChains.Any())
+        return;
+
+      if (AppGlobalState.IsNewConditions ||
+          (_pulseChainCompleted != 0 && pulseCount > _pulseChainCompleted + _reflexActionDuration))
+      {
+        StopAllAutomatizmChains(pulseCount);
+        return;
+      }
+
+      var activeChainIds = _activeAutomatizmChains.Keys.ToList();
+
+      foreach (var chainId in activeChainIds)
+      {
+        if (!_activeAutomatizmChains[chainId].IsWaitingForResult &&
+            pulseCount >= _activeAutomatizmChains[chainId].LastStepPulse + _reflexActionDuration)
+        {
+          ExecuteNextChainStep(chainId, pulseCount);
+        }
+      }
+    }
 
     #region Выполнение автоматизмов
 
     /// <summary>
     /// Выполняет автоматизм по его ID
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteAutomatizm(int automatizmId)
+    private (bool Success, string ErrorMessage) ExecuteAutomatizm(int automatizmId)
     {
       try
       {
@@ -138,63 +192,38 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Выполняет автоматизм по ID узла дерева
+    /// Метод выполнения автоматизма с поддержкой цепочек
     /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteAutomatizmByNodeId(int nodeId)
-    {
-      try
-      {
-        if (!AreDependenciesSet)
-          return (false, "Зависимости AutomatismExecutionService не установлены. Вызовите InitializeWithDependencies()");
-
-        var automatizm = _psychicSystem.GetAutomatizmFromNode(nodeId);
-
-        if (automatizm == null)
-          return (false, $"Автоматизм для узла {nodeId} не найден");
-
-        return ExecuteAutomatizm(automatizm.ID);
-      }
-      catch (Exception ex)
-      {
-        return (false, $"Ошибка выполнения автоматизма по узлу {nodeId}: {ex.Message}");
-      }
-    }
-
-    /// <summary>
-    /// Выполняет автоматизм из дерева с учетом ориентировочного рефлекса
-    /// </summary>
-    public (bool Success, string ErrorMessage) ExecuteAutomatizmWithOrientation(
+    public (bool Success, string ErrorMessage, bool ChainActivated) ExecuteAutomatizmWithChains(
         int automatizmId,
-        int currentEmotionId,
-        int actionsImageId)
+        int pulseCount)
     {
-      try
+      StopAllAutomatizmChains(pulseCount);
+      _pendingChainActivation = null;
+
+      var result = ExecuteAutomatizm(automatizmId);
+
+      if (!result.Success)
+        return (false, result.ErrorMessage, false);
+
+      var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
+      if (automatizm == null || automatizm.NextID <= 0)
+        return (true, result.ErrorMessage, false);
+
+      // Проверяем существование цепочки
+      var chain = _automatizmChainsSystem.GetChain(automatizm.NextID);
+      if (chain == null || chain.StartAutomatizmId != automatizmId)
+        return (true, result.ErrorMessage, false);
+
+      // Подготавливаем данные для запуска цепочки, но не запускаем сразу
+      _pendingChainActivation = new PendingChainActivation
       {
-        if (!AreDependenciesSet)
-          return (false, "Зависимости AutomatismExecutionService не установлены. Вызовите InitializeWithDependencies()");
+        ChainId = automatizm.NextID,
+        StartPulse = pulseCount,
+        StartAutomatizmId = automatizmId
+      };
 
-        // Проверяем наличие ориентировочного рефлекса
-        if (_orientationReflexSystem != null)
-        {
-          var orientedAutomatizm = _orientationReflexSystem.OrientationReflex(
-              automatizmId,
-              currentEmotionId,
-              actionsImageId);
-
-          if (orientedAutomatizm != null && orientedAutomatizm.ID != automatizmId)
-          {
-            // Ориентировочный рефлекс предложил другой автоматизм
-            Logger.Info($"Ориентировочный рефлекс заменил автоматизм {automatizmId} на {orientedAutomatizm.ID}");
-            automatizmId = orientedAutomatizm.ID;
-          }
-        }
-
-        return ExecuteAutomatizm(automatizmId);
-      }
-      catch (Exception ex)
-      {
-        return (false, $"Ошибка выполнения автоматизма с ориентировочным рефлексом {automatizmId}: {ex.Message}");
-      }
+      return (true, result.ErrorMessage, true);
     }
 
     /// <summary>
@@ -252,6 +281,283 @@ namespace ISIDA.Psychic.Automatism
       return (successfulActions.Any(), message);
     }
 
+    /// <summary>
+    /// Обновляет статистику выполнения автоматизма
+    /// </summary>
+    private void UpdateAutomatizmStatistics(int automatizmId, bool success)
+    {
+      try
+      {
+        var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
+        if (automatizm == null)
+          return;
+
+        automatizm.Count++;
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning(ex.Message);
+      }
+    }
+
+    #endregion
+
+    #region Поля и класссы для управления цепочками автоматизмов
+
+    private AutomatizmChainsSystem _automatizmChainsSystem;
+    private readonly Dictionary<int, ActiveAutomatizmChain> _activeAutomatizmChains = new Dictionary<int, ActiveAutomatizmChain>();
+    private PendingChainActivation _pendingChainActivation = null;
+    private int _pulseChainCompleted = 0;
+    private int _reflexActionDuration = 0;
+
+    /// <summary>
+    /// Активная цепочка автоматизмов
+    /// </summary>
+    private class ActiveAutomatizmChain
+    {
+      public int ChainId { get; set; }
+      public int CurrentLinkId { get; set; }
+      public int StartPulse { get; set; }
+      public int LastStepPulse { get; set; }
+      public List<int> CompletedActions { get; set; } = new List<int>();
+      public bool IsWaitingForResult { get; set; }
+      public int LastStepUsefulness { get; set; }
+    }
+
+    private class PendingChainActivation
+    {
+      public int ChainId { get; set; }
+      public int StartPulse { get; set; }
+      public int StartAutomatizmId { get; set; }
+    }
+
+    #endregion
+
+    #region Методы активации цепочек автоматизмов
+
+    /// <summary>
+    /// Проверяет и активирует цепочку автоматизмов для указанного автоматизма
+    /// </summary>
+    public (bool Activated, int ChainId) TryActivateChainForAutomatizm(int automatizmId, int pulseCount)
+    {
+      if (!AreChainsAvailable || !AreDependenciesSet)
+        return (false, 0);
+
+      var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
+      if (automatizm == null || automatizm.NextID <= 0)
+        return (false, 0);
+
+      // Проверяем существование цепочки
+      var chain = _automatizmChainsSystem.GetChain(automatizm.NextID);
+      if (chain == null)
+        return (false, 0);
+
+      // Проверяем, не активна ли уже эта цепочка
+      if (_activeAutomatizmChains.ContainsKey(automatizm.NextID))
+        return (false, automatizm.NextID);
+
+      // Проверяем, что цепочка связана с этим автоматизмом
+      if (chain.StartAutomatizmId != automatizmId)
+          return (false, 0);
+
+      return StartAutomatizmChain(automatizm.NextID, pulseCount);
+    }
+
+    /// <summary>
+    /// Запускает цепочку автоматизмов
+    /// </summary>
+    private (bool Activated, int ChainId) StartAutomatizmChain(int chainId, int pulseCount)
+    {
+      if (!_automatizmChainsSystem.StartChain(chainId))
+        return (false, 0);
+
+      var activeChain = new ActiveAutomatizmChain
+      {
+        ChainId = chainId,
+        StartPulse = pulseCount,
+        LastStepPulse = pulseCount,
+        CurrentLinkId = _automatizmChainsSystem.GetCurrentChainLink(chainId)
+      };
+
+      _activeAutomatizmChains[chainId] = activeChain;
+      AppGlobalState.IsAutomatizmChainActive = true;
+      Logger.Info($"Pulse: {pulseCount}. Запущена цепочка автоматизмов {chainId}");
+
+      // Сразу выполняем первый шаг
+      ExecuteNextChainStep(chainId, pulseCount);
+
+      return (true, chainId);
+    }
+
+    /// <summary>
+    /// Выполняет следующий шаг в активной цепочке
+    /// </summary>
+    private (bool Success, bool ChainCompleted) ExecuteNextChainStep(int chainId, int pulseCount)
+    {
+      if (!_activeAutomatizmChains.TryGetValue(chainId, out var activeChain))
+        return (false, true);
+
+      // Получаем текущее звено
+      var chain = _automatizmChainsSystem.GetChain(chainId);
+      var currentLink = chain?.Links.FirstOrDefault(l => l.ID == activeChain.CurrentLinkId);
+
+      if (currentLink == null)
+      {
+        StopAutomatizmChain(chainId, pulseCount);
+        return (false, true);
+      }
+
+      // Получаем образ действий по ID из звена цепочки
+      var actionsImage = _actionsImagesSystem.GetActionsImage(currentLink.ActionsImageId);
+      if (actionsImage == null || actionsImage.ActIdList == null || !actionsImage.ActIdList.Any())
+      {
+        Logger.Warning($"Образ действий {currentLink.ActionsImageId} не найден или не содержит действий");
+        activeChain.LastStepUsefulness = -1;
+        activeChain.IsWaitingForResult = false;
+
+        // Переходим к следующему звену при неудаче
+        return ProcessChainTransition(chainId, pulseCount, false);
+      }
+
+      // Выполняем действия из образа действий
+      var result = ExecuteAdaptiveActions(
+          actionsImage.ActIdList,
+          ActionActivationSource.Automatizm,
+          0);
+
+      if (!result.Success)
+      {
+        Logger.Warning($"Ошибка выполнения действий из образа {currentLink.ActionsImageId} в цепочке {chainId}: {result.ErrorMessage}");
+        activeChain.LastStepUsefulness = -1;
+        activeChain.IsWaitingForResult = false;
+
+        // Переходим к следующему звену при неудаче
+        return ProcessChainTransition(chainId, pulseCount, false);
+      }
+
+      // Ждем оценки полезности
+      activeChain.IsWaitingForResult = true;
+      activeChain.LastStepPulse = pulseCount;
+
+      return (true, false);
+    }
+
+    /// <summary>
+    /// Обрабатывает переход к следующему звену в цепочке
+    /// </summary>
+    private (bool Success, bool ChainCompleted) ProcessChainTransition(int chainId, int pulseCount, bool useResult = true)
+    {
+      if (!_activeAutomatizmChains.TryGetValue(chainId, out var activeChain))
+        return (false, true);
+
+      // Если useResult = false (например, при ошибке выполнения), используем -1 как результат
+      int resultUsefulness = useResult ? activeChain.LastStepUsefulness : -1;
+
+      var result = _automatizmChainsSystem.ExecuteChainStep(
+          chainId,
+          resultUsefulness);
+
+      if (result.ChainCompleted)
+      {
+        StopAutomatizmChain(chainId, pulseCount);
+        return (true, true);
+      }
+
+      // Переходим к следующему звену
+      activeChain.CurrentLinkId = result.NextLinkId;
+      activeChain.IsWaitingForResult = false;
+      activeChain.LastStepPulse = pulseCount;
+
+      // Выполняем следующий шаг
+      return ExecuteNextChainStep(chainId, pulseCount);
+    }
+
+    /// <summary>
+    /// Устанавливает результат выполнения шага цепочки
+    /// </summary>
+    public bool SetChainStepResult(int chainId, int usefulness)
+    {
+      if (!_activeAutomatizmChains.TryGetValue(chainId, out var activeChain))
+        return false;
+
+      if (!activeChain.IsWaitingForResult)
+        return false;
+
+      activeChain.LastStepUsefulness = usefulness;
+      activeChain.IsWaitingForResult = false;
+
+      // Добавляем выполненное действие в список
+      var chain = _automatizmChainsSystem.GetChain(chainId);
+      var currentLink = chain?.Links.FirstOrDefault(l => l.ID == activeChain.CurrentLinkId);
+      if (currentLink != null)
+        activeChain.CompletedActions.Add(currentLink.ActionsImageId);
+
+      Logger.Info($"Результат шага цепочки автоматизмов {chainId}: полезность={usefulness}");
+      return true;
+    }
+
+    /// <summary>
+    /// Останавливает выполнение цепочки
+    /// </summary>
+    private void StopAutomatizmChain(int chainId, int pulseCount)
+    {
+      if (_activeAutomatizmChains.Remove(chainId))
+      {
+        _automatizmChainsSystem.StopChain(chainId);
+        _pulseChainCompleted = pulseCount;
+      }
+    }
+
+    private void StopAllAutomatizmChains(int pulseCount)
+    {
+      foreach (var chainId in _activeAutomatizmChains.Keys.ToList())
+      {
+        StopAutomatizmChain(chainId, pulseCount);
+      }
+      _pulseChainCompleted = 0;
+      AppGlobalState.IsAutomatizmChainActive = false;
+      Logger.Info($"Pulse: {pulseCount}. Цепочка автоматизмов остановлена");
+
+    }
+
+    /// <summary>
+    /// Проверяет наличие активной цепочки
+    /// </summary>
+    public bool IsAutomatizmChainActive(int chainId = 0)
+    {
+      if (chainId > 0)
+        return _activeAutomatizmChains.ContainsKey(chainId);
+
+      return _activeAutomatizmChains.Any();
+    }
+
+    /// <summary>
+    /// Получает ID активной цепочки
+    /// </summary>
+    public int GetActiveAutomatizmChainId()
+    {
+      return _activeAutomatizmChains.Keys.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Получает текущее звено активной цепочки
+    /// </summary>
+    public int GetCurrentAutomatizmChainLink(int chainId)
+    {
+      return _activeAutomatizmChains.TryGetValue(chainId, out var chain)
+          ? chain.CurrentLinkId
+          : 0;
+    }
+
+    /// <summary>
+    /// Проверяет, ожидает ли цепочка результат выполнения
+    /// </summary>
+    public bool IsChainWaitingForResult(int chainId)
+    {
+      return _activeAutomatizmChains.TryGetValue(chainId, out var chain)
+          && chain.IsWaitingForResult;
+    }
+
     #endregion
 
     #region Получение информации об автоматизмах
@@ -273,58 +579,6 @@ namespace ISIDA.Psychic.Automatism
       catch
       {
         return new List<int>();
-      }
-    }
-
-    ///// <summary>
-    ///// Получает ID действия из автоматизма
-    ///// </summary>
-    //public int GetActionIdFromAutomatizm(int automatizmId)
-    //{
-    //  var actions = GetActionsForAutomatizm(automatizmId);
-    //  return actions.FirstOrDefault();
-    //}
-
-    ///// <summary>
-    ///// Получает автоматизм по ID действия
-    ///// </summary>
-    //public Automatizm GetAutomatizmForAction(int actionId)
-    //{
-    //  try
-    //  {
-    //    if (!AreDependenciesSet)
-    //      return null;
-
-    //    // Ищем автоматизмы, связанные с данным действием
-    //    // TODO: Реализовать поиск автоматизма по действию
-    //    return null;
-    //  }
-    //  catch
-    //  {
-    //    return null;
-    //  }
-    //}
-
-    #endregion
-
-    #region Обновление статистики
-
-    /// <summary>
-    /// Обновляет статистику выполнения автоматизма
-    /// </summary>
-    private void UpdateAutomatizmStatistics(int automatizmId, bool success)
-    {
-      try
-      {
-        var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
-        if (automatizm == null)
-          return;
-
-        automatizm.Count++;
-      }
-      catch (Exception ex)
-      {
-        Logger.Warning(ex.Message);
       }
     }
 

@@ -1,8 +1,6 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
-using ISIDA.Reflexes;
-using System;
 using System.Collections.Generic;
 
 /// <summary>
@@ -14,17 +12,20 @@ public static class AppGlobalState
 
   private static int _currentActiveAutomatizmId = 0;
   private static int _lastAutomatizmPulse = 0;
-  private static int automatizmNodeId = 0;
+  private static int _automatizmNodeId = 0;
   private static int _currentFindAtmzStepCount = 0;
   private static int _lastRunAutomatizmPulsCount = 0;
+  private static bool _isAutomatizmChainActive = false;
 
   #endregion
 
   #region Рефлексы
 
+  private static int _detectedReflexNodeId = 0;
   private static int _lastOrientationReflexType = 0;
   private static int _lastOrientationReflexPulse = 0;
   private static bool _flgConditionReflexes = false;
+  private static bool _isReflexChainActive = false;
   private static List<int> _geneticReflexesActions = new List<int>();
   private static List<int> _conditionReflexesActions = new List<int>();
 
@@ -36,6 +37,7 @@ public static class AppGlobalState
   private static int _dominantParam = 0;
   private static bool _isDead = false;
   private static bool _isSleeping = false;
+  private static bool _isNewConditions = false;
   private static List<GomeostasSystem.BehaviorStyle> _activeStyles = new List<GomeostasSystem.BehaviorStyle>();
   private static List<AdaptiveActionsSystem.AdaptiveAction> _activeAdaptiveActions = new List<AdaptiveActionsSystem.AdaptiveAction>();
 
@@ -68,6 +70,15 @@ public static class AppGlobalState
   #region Автоматизмы - Свойства и методы
 
   /// <summary>
+  /// Флаг активности цепочки автоматизмов
+  /// </summary>
+  public static bool IsAutomatizmChainActive
+  {
+    get => _isAutomatizmChainActive;
+    set => _isAutomatizmChainActive = value;
+  }
+
+  /// <summary>
   /// ID текущего активного автоматизма
   /// </summary>
   public static int CurrentActiveAutomatizmId
@@ -90,8 +101,8 @@ public static class AppGlobalState
   /// </summary>
   public static int AutomatizmNodeId
   {
-    get => automatizmNodeId;
-    set => automatizmNodeId = value;
+    get => _automatizmNodeId;
+    set => _automatizmNodeId = value;
   }
 
   /// <summary>
@@ -141,6 +152,24 @@ public static class AppGlobalState
   #endregion
 
   #region Рефлексы - Свойства и методы
+
+  /// <summary>
+  /// Флаг активности цепочки рефлексов
+  /// </summary>
+  public static bool IsReflexChainActive
+  {
+    get => _isReflexChainActive;
+    set => _isReflexChainActive = value;
+  }
+
+  /// <summary>
+  /// Последний распознанный узел дерева рефлексов
+  /// </summary>
+  public static int DetectedReflexNodeId
+  {
+    get => _detectedReflexNodeId;
+    set => _detectedReflexNodeId = value;
+  }
 
   /// <summary>
   /// Тип последнего активированного ориентировочного рефлекса (0 = нет, 1 = ОР1, 2 = ОР2)
@@ -251,6 +280,15 @@ public static class AppGlobalState
   #endregion
 
   #region Состояние агента - Свойства и методы
+
+  /// <summary>
+  /// Флаг изменения контекста условий
+  /// </summary>
+  public static bool IsNewConditions
+  {
+    get => _isNewConditions;
+    set => _isNewConditions = value;
+  }
 
   /// <summary>
   /// Состояние гомеостаза агента

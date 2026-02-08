@@ -15,21 +15,6 @@ namespace ISIDA.Gomeostas
   /// </summary>
   public sealed class HomeostasisCalculator : IDisposable
   {
-    private bool _isChainActive = false;
-
-    /// <summary>
-    /// Флаг активности цепочки рефлексов
-    /// </summary>
-    public bool IsChainActive => _isChainActive;
-
-    /// <summary>
-    /// Флаг активности цепочки рефлексов
-    /// </summary>
-    public void SetChainActive(bool isActive)
-    {
-      _isChainActive = isActive;
-    }
-
     /// <summary>
     /// Определение критичности изменений
     /// </summary>
@@ -289,7 +274,7 @@ namespace ISIDA.Gomeostas
           absDelta < difSensorPar)
       {
         int pulsesSinceChange = GlobalTimer.GlobalPulsCount - param.LastStateChangePulse.Value;
-        bool keepHolding = (pulsesSinceChange < dynamicTime) || _isChainActive;
+        bool keepHolding = (pulsesSinceChange < dynamicTime) || AppGlobalState.IsReflexChainActive || AppGlobalState.IsAutomatizmChainActive;
 
         if (keepHolding)
         {
@@ -448,7 +433,7 @@ namespace ISIDA.Gomeostas
         if (lastWellStatePulse.HasValue)
         {
           int pulsesSinceWell = GlobalTimer.GlobalPulsCount - lastWellStatePulse.Value;
-          if (pulsesSinceWell >= dynamicTime && !_isChainActive)
+          if (pulsesSinceWell >= dynamicTime && !AppGlobalState.IsReflexChainActive && !AppGlobalState.IsAutomatizmChainActive)
           {
             overallState = HomeostasisOverallState.Normal;
             lastWellStatePulse = null;

@@ -754,8 +754,6 @@ namespace ISIDA.Psychic.Automatism
 
           _activeChains[chainId] = startLinkId;
         }
-
-        Logger.Info($"Запущена цепочка автоматизмов {chainId}, текущее звено: {_activeChains[chainId]}");
         return true;
       }
       finally
@@ -832,18 +830,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="chainId">ID цепочки</param>
     public void StopChain(int chainId)
     {
-      _lock.EnterWriteLock();
-      try
-      {
-        if (_activeChains.Remove(chainId))
-        {
-          Logger.Info($"Выполнение цепочки автоматизмов {chainId} остановлено");
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
+      _activeChains.Remove(chainId);
     }
 
     /// <summary>

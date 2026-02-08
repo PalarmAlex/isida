@@ -687,6 +687,44 @@ namespace ISIDA.Psychic.Automatism
       return (result.ExecutedActionsImageId, result.ChainCompleted);
     }
 
+    /// <summary>
+    /// Получает информацию о цепочке, связанной с автоматизмом
+    /// </summary>
+    public (bool HasChain, int ChainId) GetAutomatizmChainInfo(int automatizmId)
+    {
+      var automatizm = GetAutomatizmById(automatizmId);
+      if (automatizm == null || automatizm.NextID <= 0)
+        return (false, 0);
+
+      return (true, automatizm.NextID);
+    }
+
+    /// <summary>
+    /// Привязывает цепочку к автоматизму
+    /// </summary>
+    public bool AttachChainToAutomatizm(int automatizmId, int chainId)
+    {
+      var automatizm = GetAutomatizmById(automatizmId);
+      if (automatizm == null)
+        return false;
+
+      automatizm.NextID = chainId;
+      return true;
+    }
+
+    /// <summary>
+    /// Отвязывает цепочку от автоматизма
+    /// </summary>
+    public bool DetachChainFromAutomatizm(int automatizmId)
+    {
+      var automatizm = GetAutomatizmById(automatizmId);
+      if (automatizm == null)
+        return false;
+
+      automatizm.NextID = 0;
+      return true;
+    }
+
     #endregion
 
     #region Работа с файлами

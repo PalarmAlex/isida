@@ -256,6 +256,8 @@ namespace ISIDA.Psychic
             _lastEvaluatedAutomatizmId = 0;
             IsResultAutomatizm = false;
           }
+
+          _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
         }
         else
           ProcessSleep();
@@ -469,7 +471,8 @@ namespace ISIDA.Psychic
             automatizm.BranchID,
             automatizm.ActionsImageID);
 
-        var result = _automatismExecutionService.ExecuteAutomatizm(automatizm.ID);
+        var result = _automatismExecutionService.ExecuteAutomatizmWithChains(automatizm.ID, PulseCount);
+
         if (result.Success)
         {
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");

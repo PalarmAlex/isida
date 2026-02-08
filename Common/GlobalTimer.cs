@@ -557,7 +557,7 @@ namespace ISIDA.Common
       {
         try
         {
-          _gomeostas.IsNewConditions = false;
+          AppGlobalState.IsNewConditions = false;
           _reflexesActivator.ResetStates(GlobalPulsCount);
         }
         catch (Exception finalEx)

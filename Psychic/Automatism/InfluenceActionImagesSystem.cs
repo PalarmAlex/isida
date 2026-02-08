@@ -162,7 +162,7 @@ namespace ISIDA.Psychic.Automatism
         bool checkUnicum)
     {
       // Не создавать образ с пустым действием
-      if (actIdList == null)
+      if (actIdList == null || actIdList.Count == 0)
         return (0, null);
 
       _lock.EnterUpgradeableReadLock();
