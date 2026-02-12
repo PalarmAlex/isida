@@ -187,7 +187,7 @@ namespace ISIDA.Reflexes
     private int _chainBaseID = 0;                       // Базовое состояние при активации цепочки                       
     private int _chainStyleID = 0;                      // Стиль поведения при активации цепочки
 
-    private bool _isChainActive => _activeChainId > 0 
+    private bool _isChainActive => AppGlobalState.IsReflexChainActive
       || AppGlobalState.IsAutomatizmChainActive;        // Флаг наличия активной цепочки рефлексов или автоматизмов
     private int _activeChainId = 0;                     // ID текущей активной цепочки рефлексов
 
@@ -510,7 +510,7 @@ namespace ISIDA.Reflexes
                 _lastReflexActivationPulse = pulseCount;
 
                 activatedGeneticReflexesFromConditioned.Add(conditionedReflex.SourceGeneticReflexId);
-                Logger.Info($"Pulse: {pulseCount}, Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+                Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
               }
             }
           }
@@ -617,7 +617,7 @@ namespace ISIDA.Reflexes
       {
         if (!CanActivateChain(pulseCount))
         {
-          Logger.Info($"Pulse: {pulseCount}, Активация цепочки рефлексов заблокирована (задержка или уже активна)");
+          Logger.Info($"Активация цепочки рефлексов заблокирована (задержка или уже активна)");
           return;
         }
 
@@ -645,11 +645,11 @@ namespace ISIDA.Reflexes
         if (reflexExecuted && _reflexTree.ActivateChain(chainId, firstChainLink.ID, GlobalTimer.GlobalPulsCount))
         {
           _activeChainId = chainId;
-          Logger.Info($"Pulse: {pulseCount}, Цепочка рефлексов {chainId} активирована после рефлекса, " +
+          Logger.Info($"Цепочка рефлексов {chainId} активирована после рефлекса, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
         }
         else
-          Logger.Warning($"Pulse: {pulseCount}, Не удалось активировать цепочку рефлексов {chainId}");
+          Logger.Warning($"Не удалось активировать цепочку рефлексов {chainId}");
       }
       catch (Exception ex)
       {
@@ -715,9 +715,9 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Флаг активности цепочки
+    /// Флаг активности цепочки рефлекса или автоматизма
     /// </summary>
-    public bool IsChainActive => _activeChainId > 0;
+    public bool IsChainActive => _isChainActive;
 
     /// <summary>
     /// Проверка возможности активации цепочки в текущем пульсе
@@ -1114,7 +1114,7 @@ namespace ISIDA.Reflexes
 
       if (!CanContinueChain())
       {
-        Logger.Info($"Pulse: {pulseCount}, Цепочка рефлексов {_activeChainId} прервана - изменились условия");
+        Logger.Info($"Цепочка рефлексов {_activeChainId} прервана - изменились условия");
         DeactivateChain(pulseCount);
         return;
       }
@@ -1137,7 +1137,7 @@ namespace ISIDA.Reflexes
 
       if (!result.Success)
       {
-        Logger.Warning($"Pulse: {pulseCount}, Ошибка выполнения шага цепочки {_activeChainId}");
+        Logger.Warning($"Ошибка выполнения шага цепочки {_activeChainId}");
         DeactivateChain(pulseCount);
         return;
       }
@@ -1155,14 +1155,14 @@ namespace ISIDA.Reflexes
         {
           _completedReflexesInChain.Add(result.ExecutedActionId);
           ResetStepResult();
-          Logger.Info($"Pulse: {pulseCount}, Выполнено действие {result.ExecutedActionId} из цепочки рефлексов {_activeChainId}");
+          Logger.Info($"Выполнено действие {result.ExecutedActionId} из цепочки рефлексов {_activeChainId}");
           pulseChainCompleted = pulseCount;
         }
       }
 
       if (result.ChainCompleted)
       {
-        Logger.Info($"Pulse: {pulseCount}, Цепочка рефлексов {_activeChainId} успешно завершена. " +
+        Logger.Info($"Цепочка рефлексов {_activeChainId} успешно завершена. " +
                $"Выполнено действий в цепочке: {_completedReflexesInChain.Count}");
         // цепочка сбросится в ProcessReflexPulse() - нужно дать время завершить действие
         //DeactivateChain(pulseCount);
@@ -1250,7 +1250,7 @@ namespace ISIDA.Reflexes
       if (_activeChainId > 0)
       {
         _reflexTree.DeactivateChain(_activeChainId);
-        Logger.Info($"Pulse: {pulseCount}, Цепочка рефлексов {_activeChainId} деактивирована");
+        Logger.Info($"Цепочка рефлексов {_activeChainId} деактивирована");
         _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
         pulseChainCompleted = 0;
       }

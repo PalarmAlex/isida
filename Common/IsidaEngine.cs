@@ -721,7 +721,6 @@ namespace ISIDA.Common
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
-            context.OrientationReflex,
             context.AutomatizmChainsSystem);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
         context.PsychicSystem.SetOrientationReflexSystem(context.OrientationReflex);

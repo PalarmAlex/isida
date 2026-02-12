@@ -628,8 +628,8 @@ namespace ISIDA.Actions
             int activeActionModifiedVigor = GetModifiedVigor(activeAction.Id);
             int activeActionPower = activeActionModifiedVigor;
 
-            // Если текущее действие сильнее - удаляем антагониста
-            if (currentActionPower > activeActionPower)
+            // Если текущее действие сильнее - удаляем антагониста. = чтобы не было взаимной блокировки
+            if (currentActionPower >= activeActionPower)
             {
               _activeActions.Remove(activeAction);
               _activeActionPhrases.Remove(activeAction.Id);

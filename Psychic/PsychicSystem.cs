@@ -171,23 +171,12 @@ namespace ISIDA.Psychic
     /// </summary>
     public bool WakeUppingActivation { get; private set; } = true;
 
-    // Текущие состояния восприятия для дерева автоматизмов
-    private int _currentBaseId = 0;
-    private int _currentEmotionId = 0;
+    // Текущие и предыдущие автоматизмы
+    private int _currentAutomatizmId = 0;
+    private int _previousAutomatizmId = 0;
 
-    // 
-    private bool IsResultAutomatizm = false;
-    
-    // Предыдущие состояния (для сравнения)
-    private int _oldBaseId = 0;
-    private int _oldEmotionId = 0;
-
-    // Текущий активный автоматизм
-    private int _lastRunAutomatizmPulsCount = 0;
-    private int _lastEvaluatedAutomatizmId = 0;
-
-    // Детектор отсутствия автоматизма
-    private int _noAutomatizmAfterStimul = 0;
+    // оператор отреагировал
+    private bool _isAnswer = false;
 
     #endregion
 
@@ -235,28 +224,23 @@ namespace ISIDA.Psychic
             WakeUppingActivation = false;
           }
 
-          // Детектор отсутствия автоматизма на стимул
-          if (_noAutomatizmAfterStimul > 2 && (_noAutomatizmAfterStimul < PulseCount - 2) && PulseCount > 5)
-            _noAutomatizmAfterStimul = 2; // Сигнал детектора отсутствия автоматизма
-
-          // Проверка истечения времени ожидания оценки
-          if (AppGlobalState.WaitingForOperatorEvaluation &&
-              (AppGlobalState.LastRunAutomatizmPulsCount + AppGlobalState.WaitingPeriodForActionsVal) < GlobalTimer.GlobalPulsCount)
+          if (AppGlobalState.WaitingForOperatorEvaluation)
           {
-            // Сброс глобальных переменных по истечении времени ожидания
-            ResetAutomatizmWaitingState();
+            // Время ожидания оценки автоматизма истекло
+            if (!AppGlobalState.IsEvaluationTime())
+            {
+              ResetAutomatizmWaitingState();
+              Logger.Info($"Время ожидания оценки истекло для автоматизма ID={_currentAutomatizmId}");
+            }
+            else
+            {
+              if (_previousAutomatizmId > 0 && _isAnswer)
+              {
+                EvaluatePreviousAutomatizm(_previousAutomatizmId);
+                _isAnswer = false;
+              }
+            }
           }
-
-          // запуск оценки автоматизма через 1 пульс после стимула от оператора
-          if (IsResultAutomatizm && PulseCount + 1 >= _lastRunAutomatizmPulsCount)
-          {
-            EvaluatePreviousAutomatizm();
-            AppGlobalState.ResetWaitingForOperatorEvaluation();
-            _lastRunAutomatizmPulsCount = 0;
-            _lastEvaluatedAutomatizmId = 0;
-            IsResultAutomatizm = false;
-          }
-
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
         }
         else
@@ -299,28 +283,8 @@ namespace ISIDA.Psychic
 
       try
       {
-        // Сначала проверить, не является ли этот стимул ОЦЕНКОЙ предыдущего автоматизма
-        // Только если: 1) ждем оценки, 2) это стимул оператора (не изменение условий), 3) в пределах времени ожидания
-        if (AppGlobalState.WaitingForOperatorEvaluation &&
-            activationType >= 2 && // 2-действие, 3-фраза (оператор)
-            AppGlobalState.IsEvaluationTime() &&
-            _lastEvaluatedAutomatizmId > 0)
-        {
-          // Это ОЦЕНКА оператором предыдущего автоматизма
-          // ТОЛЬКО на основе конкретного стимула оператора, а не просто изменения состояния!
-          // Оценка запускается в методе ProcessPsychicPulse через 1 пульс после стимула оператора
-          IsResultAutomatizm = true;
-        }
-        else
-        {
-          // Это НЕ оценка, а новый стимул для запуска автоматизма
-          // Выключаем ожидание оценки предыдущего автоматизма (если было)
-          if (AppGlobalState.WaitingForOperatorEvaluation)
-          {
-            Logger.Warning($"Новый стимул оператора прервал ожидание оценки для автоматизма ID={_lastEvaluatedAutomatizmId}");
-            ResetAutomatizmWaitingState();
-          }
-        }
+        if (AppGlobalState.WaitingForOperatorEvaluation &&  activationType >= 2 && AppGlobalState.IsEvaluationTime())
+          _isAnswer = true;
 
         int actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
@@ -389,18 +353,6 @@ namespace ISIDA.Psychic
       if (IsSleeping)
         return 0;
 
-      // Сохранить предыдущие состояния
-      _oldBaseId = _currentBaseId;
-      _oldEmotionId = _currentEmotionId;
-
-      // Обновить текущие состояния
-      _currentBaseId = baseId;
-      _currentEmotionId = emotionId;
-
-      // Сброс детектора для действий оператора
-      if (activationType > 1)
-        _noAutomatizmAfterStimul = PulseCount;
-
       // Активация дерева
       int detectedNodeId = _automatizmTreeSystem.AutomatizmTreeActivation(
           baseId,
@@ -463,7 +415,8 @@ namespace ISIDA.Psychic
       _lock.EnterWriteLock();
       try
       {
-        _lastRunAutomatizmPulsCount = PulseCount;
+        if (_currentAutomatizmId > 0)
+          _previousAutomatizmId = _currentAutomatizmId;
 
         // Начать отслеживание результата автоматизма
         var trackingResult = _automatismResultTracker.StartTracking(
@@ -479,9 +432,8 @@ namespace ISIDA.Psychic
 
           // Включить ожидание оценки оператора
           AppGlobalState.WaitingForOperatorEvaluation = true;
-          AppGlobalState.LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
-          if (!IsResultAutomatizm)
-            _lastEvaluatedAutomatizmId = automatizm.ID; // инначе автоматизм сам себя будет оценивать
+          AppGlobalState.LastRunAutomatizmPulsCount = PulseCount;
+          _currentAutomatizmId = automatizm.ID;
         }
         else
         {
@@ -492,7 +444,9 @@ namespace ISIDA.Psychic
 
           Logger.Warning($"Ошибка выполнения автоматизма {automatizm.ID}: {result.ErrorMessage}");
           AppGlobalState.LastRunAutomatizmPulsCount = 0;
+          AppGlobalState.WaitingForOperatorEvaluation = false;
           AppGlobalState.ResetAutomatizmInfo();
+          _currentAutomatizmId = 0;
           return false;
         }
 
@@ -508,10 +462,6 @@ namespace ISIDA.Psychic
           int phraseImageId = automatizm.BranchID - 2000000;
           Logger.Info($"Произнесение фразы из образа: {phraseImageId}");
         }
-
-        // Сброс детектора отсутствия автоматизма
-        if (_noAutomatizmAfterStimul > 0)
-          _noAutomatizmAfterStimul = 0;
 
         return true;
       }
@@ -532,58 +482,44 @@ namespace ISIDA.Psychic
     /// </summary>
     private void ResetAutomatizmWaitingState()
     {
-      // Если время ожидания истекло, сбрасываем все
-      if (AppGlobalState.WaitingForOperatorEvaluation)
-      {
-        Logger.Info($"Время ожидания оценки истекло для автоматизма ID={_lastEvaluatedAutomatizmId}");
-
-        // Если оператор не оценил, считаем нейтральной оценкой
-        if (_lastEvaluatedAutomatizmId > 0)
-        {
-          _automatismResultTracker.MarkOperatorRecognition(
-              _lastEvaluatedAutomatizmId,
-              false, // не распознано оператором
-              0,     // нейтральная оценка
-              AppGlobalState.WaitingPeriodForActionsVal); // время реакции = полное время ожидания
-        }
-      }
       AppGlobalState.ResetWaitingForOperatorEvaluation();
       AppGlobalState.ResetAutomatizmInfo();
-      IsResultAutomatizm = false;
-      _lastEvaluatedAutomatizmId = 0;
+      AppGlobalState.WaitingForOperatorEvaluation = false;
+      _currentAutomatizmId = 0;
     }
 
     /// <summary>
     /// Оценить предыдущий автоматизм на основе СТИМУЛА оператора
     /// </summary>
-    private void EvaluatePreviousAutomatizm()
+    private void EvaluatePreviousAutomatizm(int automatizmIdToEvaluate)
     {
-      int automatizmId = _lastEvaluatedAutomatizmId;
-      if (automatizmId <= 0)
+      if (automatizmIdToEvaluate <= 0)
         return;
 
-      // Получаем состояние до автоматизма (сохраненное при запуске)
+      // Получаем состояние до автоматизма
       var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
 
       // Текущее состояние после стимула оператора
       var stateAfter = AppGlobalState.CurrentOverallState;
 
-      // Вычисляем оценку: улучшение = +1, ухудшение = -1, без изменений = 0
+      // Вычисляем оценку
       int assessment = 0;
       if (stateAfter > stateBefore)
-        assessment = 1; // Улучшение (поощрение)
+        assessment = 1; // Улучшение
       else if (stateAfter < stateBefore)
-        assessment = -1; // Ухудшение (наказание)
+        assessment = -1; // Ухудшение
 
       // Время реакции оператора
-      int responseTime = GlobalTimer.GlobalPulsCount - AppGlobalState.LastRunAutomatizmPulsCount;
+      int responseTime = PulseCount - AppGlobalState.LastRunAutomatizmPulsCount;
 
-      // Отметить распознавание оператором в трекере
+      // Отметить распознавание оператором
       _automatismResultTracker.MarkOperatorRecognition(
-          automatizmId,
+          automatizmIdToEvaluate,
           true, // распознано оператором
-          assessment, // оценка
-          responseTime); // время реакции
+          assessment,
+          responseTime);
+
+      Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
     }
 
     /// <summary>

@@ -687,7 +687,7 @@ namespace ISIDA.Psychic
             SuccessNextLink = 0, // Пока временно 0
             FailureNextLink = 0, // Пока временно 0
             Description = reflexLink.Description,
-            SuccessThreshold = 1
+            ChainUsefulness = 1
           };
 
           automatizmLinks.Add(automatizmLink);

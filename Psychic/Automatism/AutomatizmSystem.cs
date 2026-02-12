@@ -675,19 +675,6 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Выполняет следующий шаг в цепочке автоматизмов
-    /// </summary>
-    public (int ExecutedActionsImageId, bool ChainCompleted) ExecuteNextInChain(
-        int chainId, int previousStepUsefulness)
-    {
-      if (_automatizmChainsSystem == null)
-        return (0, true);
-
-      var result = _automatizmChainsSystem.ExecuteChainStep(chainId, previousStepUsefulness);
-      return (result.ExecutedActionsImageId, result.ChainCompleted);
-    }
-
-    /// <summary>
     /// Получает информацию о цепочке, связанной с автоматизмом
     /// </summary>
     public (bool HasChain, int ChainId) GetAutomatizmChainInfo(int automatizmId)

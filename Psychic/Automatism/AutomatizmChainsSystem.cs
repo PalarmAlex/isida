@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using static ISIDA.Common.FileValidator;
 using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 
@@ -157,8 +158,8 @@ namespace ISIDA.Psychic.Automatism
       /// <summary>Описание звена (для отладки)</summary>
       public string Description { get; set; }
 
-      /// <summary>Минимальная оценка полезности для перехода по успеху (по умолчанию > 0)</summary>
-      public int SuccessThreshold { get; set; } = 1;
+      /// <summary>Оценка полезности звена цепочки. [-10...+10]</summary>
+      public int ChainUsefulness { get; set; } = 0;
     }
 
     /// <summary>Цепочка автоматизмов</summary>
@@ -358,7 +359,7 @@ namespace ISIDA.Psychic.Automatism
 
         var linkIds = chain.Links.Select(l => l.ID).ToList();
 
-        _activeChains.Remove(chainId);
+        StopChain(chainId);
 
         foreach (var link in chain.Links)
         {
@@ -426,11 +427,11 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="successNextLink">ID следующего звена при успехе</param>
     /// <param name="failureNextLink">ID следующего звена при неудаче</param>
     /// <param name="description">Описание звена</param>
-    /// <param name="successThreshold">Минимальная оценка полезности для успеха (по умолчанию > 0)</param>
+    /// <param name="ChainUsefulness">Оценка полезности звена цепочки</param>
     /// <returns>ID созданного звена и предупреждения</returns>
     public (int LinkId, string[] Warnings) AddChainLink(
         int chainId, int actionsImageId, int successNextLink,
-        int failureNextLink, string description, int successThreshold = 1)
+        int failureNextLink, string description, int ChainUsefulness = 0)
     {
       var warnings = new List<string>();
 
@@ -469,9 +470,6 @@ namespace ISIDA.Psychic.Automatism
             warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена");
         }
 
-        if (successThreshold < 0)
-          warnings.Add($"Порог успеха не может быть отрицательным: {successThreshold}");
-
         int newLinkId = ++_lastLinkId;
 
         var link = new ChainLink
@@ -482,7 +480,7 @@ namespace ISIDA.Psychic.Automatism
           SuccessNextLink = successNextLink,
           FailureNextLink = failureNextLink,
           Description = description ?? $"Звено {newLinkId}",
-          SuccessThreshold = successThreshold
+          ChainUsefulness = ChainUsefulness
         };
 
         chain.Links.Add(link);
@@ -501,7 +499,7 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     public (bool Success, string[] Warnings) UpdateChainLink(
         int chainId, int linkId, int actionsImageId, int successNextLink,
-        int failureNextLink, string description, int successThreshold = 1)
+        int failureNextLink, string description, int ChainUsefulness = 0)
     {
       var warnings = new List<string>();
 
@@ -553,14 +551,11 @@ namespace ISIDA.Psychic.Automatism
             warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена");
         }
 
-        if (successThreshold < 0)
-          warnings.Add($"Порог успеха не может быть отрицательным: {successThreshold}");
-
         link.ActionsImageId = actionsImageId;
         link.SuccessNextLink = successNextLink;
         link.FailureNextLink = failureNextLink;
         link.Description = description ?? link.Description;
-        link.SuccessThreshold = successThreshold;
+        link.ChainUsefulness = ChainUsefulness;
 
         SaveAutomatizmChainsCore();
         return (true, warnings.ToArray());
@@ -675,9 +670,6 @@ namespace ISIDA.Psychic.Automatism
           if (link.FailureNextLink != 0 && link.FailureNextLink != link.ID &&
               !chain.Links.Any(l => l.ID == link.FailureNextLink))
             issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
-
-          if (link.SuccessThreshold < 0)
-            issues.Add($"Звено {link.ID}: порог успеха не может быть отрицательным: {link.SuccessThreshold}");
         }
 
         var terminalLinks = chain.Links.Where(l =>
@@ -763,12 +755,10 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Выполняет следующий шаг в активной цепочке
+    /// Получаем данные для следующего шага в активной цепочке
     /// </summary>
-    /// <param name="chainId">ID цепочки</param>
-    /// <param name="previousStepUsefulness">Оценка полезности предыдущего шага</param>
-    /// <returns>Результат выполнения шага (ID выполненного автоматизма, ID следующего звена, завершена ли цепочка)</returns>
-    public (int ExecutedActionsImageId, int NextLinkId, bool ChainCompleted) ExecuteChainStep(int chainId, int previousStepUsefulness)
+    internal (int ExecutedActionsImageId, int NextLinkId, bool ChainCompleted)
+        GetNextChainStepData(int chainId, int usefulness)
     {
       _lock.EnterWriteLock();
       try
@@ -778,45 +768,68 @@ namespace ISIDA.Psychic.Automatism
 
         if (!_automatizmChains.TryGetValue(chainId, out var chain))
         {
-          _activeChains.Remove(chainId);
+          StopChain(chainId);
           return (0, 0, true);
         }
 
         var currentLink = chain.Links.FirstOrDefault(l => l.ID == currentLinkId);
         if (currentLink == null)
         {
-          _activeChains.Remove(chainId);
+          StopChain(chainId);
           return (0, 0, true);
         }
 
-        // Определяем, успешен ли был предыдущий шаг
-        bool isSuccess = previousStepUsefulness > currentLink.SuccessThreshold;
+        int nextLinkId = 0;
 
-        // Получаем следующее звено
-        int nextLinkId = isSuccess ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+        if (usefulness >= 0)
+          nextLinkId = currentLink.SuccessNextLink;
+        else
+          nextLinkId = currentLink.FailureNextLink;
 
         if (nextLinkId == 0)
         {
-          // Цепочка завершена
-          _activeChains.Remove(chainId);
-          Logger.Info($"Цепочка автоматизмов {chainId} завершена. Выполнен образ действий: {currentLink.ActionsImageId}");
+          Logger.Info($"Цепочка {chainId}: следующее звено не указано, завершение");
+          StopChain(chainId);
           return (currentLink.ActionsImageId, 0, true);
         }
 
-        // Проверяем существование следующего звена
         var nextLink = chain.Links.FirstOrDefault(l => l.ID == nextLinkId);
         if (nextLink == null)
         {
-          _activeChains.Remove(chainId);
           Logger.Warning($"Следующее звено {nextLinkId} не найдено в цепочке {chainId}");
+          StopChain(chainId);
           return (currentLink.ActionsImageId, 0, true);
         }
 
-        // Переходим к следующему звену
         _activeChains[chainId] = nextLinkId;
 
-        Logger.Info($"Цепочка {chainId}: переход от звена {currentLinkId} к {nextLinkId} (успех: {isSuccess})");
+        Logger.Info($"Цепочка {chainId}: переход от звена {currentLinkId} к {nextLinkId}");
         return (currentLink.ActionsImageId, nextLinkId, false);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Обновляет полезность звена цепочки
+    /// </summary>
+    public bool UpdateLinkUsefulness(int chainId, int linkId, int usefulness)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_automatizmChains.TryGetValue(chainId, out var chain))
+          return false;
+
+        var link = chain.Links.FirstOrDefault(l => l.ID == linkId);
+        if (link == null)
+          return false;
+
+        link.ChainUsefulness += usefulness;
+
+        return true;
       }
       finally
       {
@@ -986,7 +999,7 @@ namespace ISIDA.Psychic.Automatism
                   int.TryParse(parts[4], out int failureNext))
               {
                 string description = parts.Length > 5 ? parts[5] : "";
-                int threshold = parts.Length > 6 && int.TryParse(parts[6], out int thr) ? thr : 1;
+                int useFulnes = parts.Length > 6 && int.TryParse(parts[6], out int thr) ? thr : 0;
 
                 var link = new ChainLink
                 {
@@ -996,7 +1009,7 @@ namespace ISIDA.Psychic.Automatism
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
                   Description = description,
-                  SuccessThreshold = threshold
+                  ChainUsefulness = useFulnes
                 };
 
                 currentChain.Links.Add(link);
@@ -1091,7 +1104,7 @@ namespace ISIDA.Psychic.Automatism
 
           foreach (var link in chain.Links.OrderBy(l => l.ID))
           {
-            lines.Add($"LINK|{link.ID}|{link.ActionsImageId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description ?? ""}|{link.SuccessThreshold}");
+            lines.Add($"LINK|{link.ID}|{link.ActionsImageId}|{link.SuccessNextLink}|{link.FailureNextLink}|{link.Description ?? ""}|{link.ChainUsefulness}");
           }
           lines.Add("");
         }

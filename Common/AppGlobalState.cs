@@ -545,7 +545,7 @@ public static class AppGlobalState
     int currentPulse = GlobalTimer.GlobalPulsCount;
     int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
 
-    // Только если мы активно ждем И время в пределах ожидания
+    // Только если мы активно ждем и время в пределах ожидания
     return timeSinceAutomatizm <= WaitingPeriodForActionsVal &&
            timeSinceAutomatizm > 0;
   }
