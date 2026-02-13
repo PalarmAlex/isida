@@ -213,6 +213,11 @@ namespace ISIDA.Reflexes
           warnings.Add($"Действие {link.ActionId} повторяется {duplicateCount} раз в цепочке");
       }
 
+      // ИСПРАВЛЕНИЕ: Проверяем наличие конечных звеньев
+      var terminalLinks = links.Where(l => l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
+      if (terminalLinks.Count == 0)
+        warnings.Add("Цепочка не содержит конечных звеньев (возможен бесконечный цикл)");
+
       _lock.EnterWriteLock();
       try
       {
@@ -227,6 +232,16 @@ namespace ISIDA.Reflexes
         };
 
         _reflexChains.Add(newId, chain);
+        
+        // ИСПРАВЛЕНИЕ: Полная валидация новой цепочки
+        SaveReflexChainsCore();
+        var (isValid, validationIssues) = ValidateChain(newId);
+        if (!isValid)
+        {
+          warnings.AddRange(validationIssues);
+          Logger.Warning($"Цепочка {newId} создана с проблемами валидации: {string.Join("; ", validationIssues)}");
+        }
+        
         return (newId, warnings.ToArray());
       }
       finally
@@ -528,8 +543,11 @@ namespace ISIDA.Reflexes
 
         if (terminalLinks.Count == 0)
         {
-          issues.Add("Цепочка не содержит конечных звеньев (бесконечный цикл)");
+          issues.Add("Цепочка не содержит конечных звеньев (обнаружена циклическая зависимость)");
         }
+
+        // ИСПРАВЛЕНИЕ: Проверка на циклические ссылки в цепочке
+        DetectCycles(chain, issues);
 
         return (!issues.Any(), issues.ToArray());
       }
@@ -537,6 +555,63 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitReadLock();
       }
+    }
+
+    /// <summary>
+    /// Обнаруживает циклические зависимости в цепочке
+    /// </summary>
+    private void DetectCycles(ReflexChain chain, List<string> issues)
+    {
+      // DFS поиск циклов
+      var visited = new HashSet<int>();
+      var recursionStack = new HashSet<int>();
+
+      foreach (var link in chain.Links)
+      {
+        if (!visited.Contains(link.ID))
+        {
+          if (DFSDetectCycle(chain, link.ID, visited, recursionStack, issues))
+          {
+            break; // Достаточно найтиодному циклу
+          }
+        }
+      }
+    }
+
+    /// <summary>
+    /// DFS поиск цикла в цепочке
+    /// </summary>
+    private bool DFSDetectCycle(ReflexChain chain, int linkId, HashSet<int> visited, 
+                                HashSet<int> recursionStack, List<string> issues)
+    {
+      visited.Add(linkId);
+      recursionStack.Add(linkId);
+
+      var link = chain.Links.FirstOrDefault(l => l.ID == linkId);
+      if (link == null)
+        return false;
+
+      // Проверяем оба перехода
+      int[] nextLinks = { link.SuccessNextLink, link.FailureNextLink };
+      foreach (int nextId in nextLinks)
+      {
+        if (nextId == 0) continue; // 0 означает конец цепочки
+
+        if (recursionStack.Contains(nextId))
+        {
+          issues.Add($"Обнаружен цикл: звено {linkId} -> {nextId} (и версь назад)");
+          return true;
+        }
+
+        if (!visited.Contains(nextId))
+        {
+          if (DFSDetectCycle(chain, nextId, visited, recursionStack, issues))
+            return true;
+        }
+      }
+
+      recursionStack.Remove(linkId);
+      return false;
     }
 
     #endregion

@@ -82,11 +82,10 @@ namespace ISIDA.Gomeostas
         if (!File.Exists(path))
           return combinations;
 
-        var lines = File.ReadAllLines(path);
-
         _lock.EnterReadLock();
         try
         {
+          var lines = File.ReadAllLines(path);
           var allStyles = GetAllBehaviorStyles();
 
           foreach (var line in lines)
@@ -138,6 +137,7 @@ namespace ISIDA.Gomeostas
     /// <returns>Результат операции сохранения</returns>
     public (bool Success, string ErrorMessage) SaveStyleCombinations(List<List<GomeostasSystem.BehaviorStyle>> combinations)
     {
+      _lock.EnterWriteLock();
       try
       {
         var path = GetStyleCombinationsFilePath();
@@ -181,12 +181,18 @@ namespace ISIDA.Gomeostas
         }
         catch (Exception ex)
         {
+          Logger.Error($"SaveStyleCombinations ошибка: {ex.Message}");
           return (false, ex.Message);
         }
       }
       catch (Exception ex)
       {
+        Logger.Error($"SaveStyleCombinations критическая ошибка: {ex.Message}");
         return (false, ex.Message);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
     #region Вспомогательные методы

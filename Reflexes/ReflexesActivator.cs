@@ -399,10 +399,11 @@ namespace ISIDA.Reflexes
 
         // если нашелся у-рефлекс прерываем все текущие реакции
         var condFerList = FindConditionedReflexesByPhrase(phraseIdList);
-        if ((condFerList.Any() && AppGlobalState.EvolutionStage == 2) || AppGlobalState.EvolutionStage > 2)
+        bool shouldInterruptChain = (condFerList.Any() && AppGlobalState.EvolutionStage == 2) || AppGlobalState.EvolutionStage > 2;
+        
+        if (shouldInterruptChain)
         {
           DeactivateChain(pulseCount);
-          _chainCooldownUntilPulse = 0;
           _adaptiveActions.ClearActiveAction();
           _adaptiveActions.ClearActivePhrases();
         }
@@ -415,10 +416,13 @@ namespace ISIDA.Reflexes
           return;
         }
 
-        _chainCooldownUntilPulse = 0;
-        _adaptiveActions.ClearActiveAction();
-        _adaptiveActions.ClearActivePhrases();
-        DeactivateChain(pulseCount);
+        // Второе прерывание цепочки при выполнении действий с фразой
+        if (shouldInterruptChain)
+        {
+          _adaptiveActions.ClearActiveAction();
+          _adaptiveActions.ClearActivePhrases();
+        }
+        
         ExecuteReflexes(pulseCount);
 
         if (_activeCurTriggerStimulusID != 0)
@@ -593,18 +597,18 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        return _reflexTree.GetAllNodes();
+        var allNodes = _reflexTree.GetAllNodes();
+        if (allNodes != null && allNodes.Count > 0)
+          return allNodes;
+        
+        // Fallback: система не предоставила список, возврат пустого списка
+        Logger.Warning("ReflexTree.GetAllNodes() вернул null или пустой список. Цепочки не будут активированы.");
+        return new List<ReflexTreeSystem.ReflexNode>();
       }
-      catch
+      catch (Exception ex)
       {
-        var nodes = new List<ReflexTreeSystem.ReflexNode>();
-        for (int i = 1; i <= 1000; i++)
-        {
-          var node = _reflexTree.FindNodeByID(i);
-          if (node != null)
-            nodes.Add(node);
-        }
-        return nodes;
+        Logger.Error($"Ошибка получения всех узлов дерева рефлексов: {ex.Message}");
+        return new List<ReflexTreeSystem.ReflexNode>();
       }
     }
 
@@ -790,9 +794,16 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
+        // ИСПРАВЛЕНИЕ: Прямая установка результата без рекурсии
         if (_activeReflexChain != null && _activeReflexChain.IsWaitingForResult)
         {
-          SetChainStepResult(_activeReflexChain.ChainId, success);
+          // Установка оценки в активную цепочку
+          if (_activeReflexChain.LastEvaluation != success)
+          {
+            Logger.Info($"Оценка звена {_activeReflexChain.CurrentLinkId} цепочки {_activeReflexChain.ChainId} изменена: " +
+                       $"{_activeReflexChain.LastEvaluation?.ToString() ?? "null"} -> {success}");
+          }
+          _activeReflexChain.LastEvaluation = success;
         }
         else
         {
@@ -1238,6 +1249,8 @@ namespace ISIDA.Reflexes
       {
         StopCurrentReflexChain(pulseCount);
         Logger.Info($"Цепочка рефлексов завершена из-за смены условий");
+        // ИСПРАВЛЕНИЕ: сбрасываем флаг активации чтобы новые цепочки могли быть активированы
+        _chainAlreadyActivatedInThisContext = false;
         return;
       }
 

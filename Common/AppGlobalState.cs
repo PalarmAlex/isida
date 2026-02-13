@@ -2,12 +2,16 @@
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System.Collections.Generic;
+using System.Threading;
 
 /// <summary>
-/// Глобальные переменные
+/// Глобальные переменные с thread-safe доступом через ReaderWriterLockSlim
 /// </summary>
 public static class AppGlobalState
 {
+  // Глобальная блокировка для синхронизации доступа ко всем свойствам
+  private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+
   #region Автоматизмы
 
   private static int _currentActiveAutomatizmId = 0;
@@ -28,6 +32,7 @@ public static class AppGlobalState
   private static bool _isReflexChainActive = false;
   private static List<int> _geneticReflexesActions = new List<int>();
   private static List<int> _conditionReflexesActions = new List<int>();
+  private static int _lastDetectedReflexNodeId = 0; // Для валидации изменений
 
   #endregion
 
@@ -70,57 +75,117 @@ public static class AppGlobalState
   #region Автоматизмы - Свойства и методы
 
   /// <summary>
-  /// Флаг активности цепочки автоматизмов
+  /// Флаг активности цепочки автоматизмов (thread-safe)
   /// </summary>
   public static bool IsAutomatizmChainActive
   {
-    get => _isAutomatizmChainActive;
-    set => _isAutomatizmChainActive = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _isAutomatizmChainActive; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _isAutomatizmChainActive = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// ID текущего активного автоматизма
+  /// ID текущего активного автоматизма (thread-safe)
   /// </summary>
   public static int CurrentActiveAutomatizmId
   {
-    get => _currentActiveAutomatizmId;
-    set => _currentActiveAutomatizmId = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _currentActiveAutomatizmId; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _currentActiveAutomatizmId = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// Пульс, на котором был активирован последний автоматизм
+  /// Пульс, на котором был активирован последний автоматизм (thread-safe)
   /// </summary>
   public static int LastAutomatizmPulse
   {
-    get => _lastAutomatizmPulse;
-    set => _lastAutomatizmPulse = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _lastAutomatizmPulse; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _lastAutomatizmPulse = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// Последний распознанный узел дерева автоматизмов
+  /// Последний распознанный узел дерева автоматизмов (thread-safe)
   /// </summary>
   public static int AutomatizmNodeId
   {
-    get => _automatizmNodeId;
-    set => _automatizmNodeId = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _automatizmNodeId; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _automatizmNodeId = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// Текущий шаг при поиске автоматизма в узлах ветки дерева автоматизмов
+  /// Текущий шаг при поиске автоматизма в узлах ветки дерева автоматизмов (thread-safe)
   /// </summary>
   public static int CurrentFindAtmzStepCount
   {
-    get => _currentFindAtmzStepCount;
-    set => _currentFindAtmzStepCount = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _currentFindAtmzStepCount; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _currentFindAtmzStepCount = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// Пульс, на котором был запущен текущий автоматизм
+  /// Пульс, на котором был запущен текущий автоматизм (thread-safe)
   /// </summary>
   public static int LastRunAutomatizmPulsCount
   {
-    get => _lastRunAutomatizmPulsCount;
-    set => _lastRunAutomatizmPulsCount = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _lastRunAutomatizmPulsCount; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _lastRunAutomatizmPulsCount = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
@@ -154,21 +219,45 @@ public static class AppGlobalState
   #region Рефлексы - Свойства и методы
 
   /// <summary>
-  /// Флаг активности цепочки рефлексов
+  /// Флаг активности цепочки рефлексов (thread-safe)
   /// </summary>
   public static bool IsReflexChainActive
   {
-    get => _isReflexChainActive;
-    set => _isReflexChainActive = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _isReflexChainActive; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _isReflexChainActive = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>
-  /// Последний распознанный узел дерева рефлексов
+  /// Последний распознанный узел дерева рефлексов (thread-safe)
   /// </summary>
   public static int DetectedReflexNodeId
   {
-    get => _detectedReflexNodeId;
-    set => _detectedReflexNodeId = value;
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _detectedReflexNodeId; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _lastDetectedReflexNodeId = _detectedReflexNodeId;
+        _detectedReflexNodeId = value;
+      }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   /// <summary>

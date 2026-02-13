@@ -521,7 +521,7 @@ namespace ISIDA.Gomeostas
       errorMessage = string.Empty;
       var conflicts = new List<string>();
 
-      //_lock.EnterReadLock();
+      _lock.EnterReadLock();
       try
       {
         var allStyles = GetAllBehaviorStyles();
@@ -554,7 +554,7 @@ namespace ISIDA.Gomeostas
       }
       finally
       {
-        //_lock.ExitReadLock();
+        _lock.ExitReadLock();
       }
     }
 
