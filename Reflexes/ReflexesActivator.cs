@@ -637,19 +637,24 @@ namespace ISIDA.Reflexes
         _chainStyleID = _activeCurBaseStyleID;
         _chainAlreadyActivatedInThisContext = true;
 
-        // Рефлекс уже выполнен в ExecuteReflexes()
-        bool reflexExecuted = true;
-
         AppGlobalState.IsReflexChainActive = true;
 
-        if (reflexExecuted && _reflexTree.ActivateChain(chainId, firstChainLink.ID, GlobalTimer.GlobalPulsCount))
+        // Создаем новую активную цепочку
+        _activeReflexChain = new ActiveReflexChain
         {
-          _activeChainId = chainId;
-          Logger.Info($"Цепочка рефлексов {chainId} активирована после рефлекса, " +
-                 $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
-        }
-        else
-          Logger.Warning($"Не удалось активировать цепочку рефлексов {chainId}");
+          ChainId = chainId,
+          StartPulse = pulseCount,
+          LastStepPulse = pulseCount,
+          LastEvaluation = null,
+          CurrentLinkId = firstChainLink.ID
+        };
+
+        _activeChainId = chainId;
+        Logger.Info($"Цепочка рефлексов {chainId} активирована после рефлекса, " +
+               $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
+
+        // Сразу выполняем первое звено
+        ExecuteChainLink(pulseCount);
       }
       catch (Exception ex)
       {
@@ -785,7 +790,15 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
-        _lastStepSuccessResult = success;
+        if (_activeReflexChain != null && _activeReflexChain.IsWaitingForResult)
+        {
+          SetChainStepResult(_activeReflexChain.ChainId, success);
+        }
+        else
+        {
+          // Для обратной совместимости - сохраняем в старую переменную
+          _lastStepSuccessResult = success;
+        }
       }
       finally
       {
@@ -801,6 +814,8 @@ namespace ISIDA.Reflexes
       _lock.EnterReadLock();
       try
       {
+        if (_activeReflexChain != null && _activeReflexChain.LastEvaluation.HasValue)
+          return _activeReflexChain.LastEvaluation.Value;
         return _lastStepSuccessResult;
       }
       finally
@@ -817,9 +832,7 @@ namespace ISIDA.Reflexes
       _lock.EnterReadLock();
       try
       {
-        return _isChainActive &&
-               _reflexTree.GetActiveChains().ContainsKey(_activeChainId) &&
-               (GlobalTimer.GlobalPulsCount >= _reflexTree.GetCurrentChainPulse(_activeChainId) + _reflexActionDuration);
+        return _activeReflexChain != null && _activeReflexChain.IsWaitingForResult;
       }
       finally
       {
@@ -1100,109 +1113,95 @@ namespace ISIDA.Reflexes
 
     #endregion
 
+    #region Классы для управления цепочками рефлексов
+
+    /// <summary>
+    /// Активная цепочка рефлексов
+    /// </summary>
+    private class ActiveReflexChain
+    {
+      public int ChainId { get; set; }
+      public int CurrentLinkId { get; set; }
+      public int StartPulse { get; set; }
+      public int LastStepPulse { get; set; }
+      public List<int> CompletedActions { get; set; } = new List<int>();
+      public bool IsWaitingForResult { get; set; }
+      public bool OperatorEvaluated => LastEvaluation.HasValue;
+      public bool? LastEvaluation { get; set; }
+    }
+
+    #endregion
+
     #region Активация и выполнение цепочек рефлексов
 
+    // Единая активная цепочка
+    private ActiveReflexChain _activeReflexChain = null;
     // Пульс завершения последней цепочки (для контроля задержки)
     private int pulseChainCompleted = 0;
 
     /// <summary>
-    /// Выполнение шага активной цепочки
+    /// Выполняет звено цепочки рефлексов
     /// </summary>
-    private void ExecuteChainStep(int pulseCount)
+    private void ExecuteChainLink(int pulseCount)
     {
-      if (!_isChainActive) return;
+      if (_activeReflexChain == null)
+        return;
 
-      if (!CanContinueChain())
+      // Получаем текущее звено
+      var chain = _reflexChainsSystem.GetChain(_activeReflexChain.ChainId);
+      var currentLink = chain?.Links.FirstOrDefault(l => l.ID == _activeReflexChain.CurrentLinkId);
+
+      if (currentLink == null)
       {
-        Logger.Info($"Цепочка рефлексов {_activeChainId} прервана - изменились условия");
-        DeactivateChain(pulseCount);
+        StopCurrentReflexChain(pulseCount);
         return;
       }
 
-      var activeChain = _reflexTree.GetActiveChains();
-      if (!activeChain.TryGetValue(_activeChainId, out var chain))
+      // Выполняем действие звена
+      var node = _reflexTree.FindNodeByID(AppGlobalState.DetectedReflexNodeId);
+      bool isFromConditionedReflex = node?.ConditionedReflex > 0;
+
+      var actionResult = _reflexExecutionService.ExecuteChainAction(
+          currentLink.ActionId,
+          isFromConditionedReflex);
+
+      if (!actionResult.Success)
       {
-        DeactivateChain(pulseCount);
+        Logger.Warning($"Ошибка выполнения действия {currentLink.ActionId} из звена {currentLink.ID} цепочки {_activeReflexChain.ChainId}");
+        StopCurrentReflexChain(pulseCount);
         return;
       }
 
-      int timeSinceChainActivation = pulseCount - chain.StartPulse;
+      // Устанавливаем состояние ожидания оценки
+      _activeReflexChain.IsWaitingForResult = true;
+      _activeReflexChain.LastStepPulse = pulseCount;
+      _activeReflexChain.LastEvaluation = null;  // Сбрасываем оценку для нового звена
 
-      if (timeSinceChainActivation < _reflexActionDuration)
-        return;
-
-      bool previousStepSuccess = GetStepResultFromConsole();
-
-      var result = _reflexTree.ExecuteChainStep(_activeChainId, pulseCount, previousStepSuccess);
-
-      if (!result.Success)
-      {
-        Logger.Warning($"Ошибка выполнения шага цепочки {_activeChainId}");
-        DeactivateChain(pulseCount);
-        return;
-      }
-
-      if (result.ExecutedActionId > 0)
-      {
-        var node = _reflexTree.FindNodeByID(AppGlobalState.DetectedReflexNodeId);
-        bool isFromConditionedReflex = node?.ConditionedReflex > 0;
-
-        var actionResult = _reflexExecutionService.ExecuteChainAction(
-            result.ExecutedActionId,
-            isFromConditionedReflex);
-
-        if (actionResult.Success)
-        {
-          _completedReflexesInChain.Add(result.ExecutedActionId);
-          ResetStepResult();
-          Logger.Info($"Выполнено действие {result.ExecutedActionId} из цепочки рефлексов {_activeChainId}");
-          pulseChainCompleted = pulseCount;
-        }
-      }
-
-      if (result.ChainCompleted)
-      {
-        Logger.Info($"Цепочка рефлексов {_activeChainId} успешно завершена. " +
-               $"Выполнено действий в цепочке: {_completedReflexesInChain.Count}");
-        // цепочка сбросится в ProcessReflexPulse() - нужно дать время завершить действие
-        //DeactivateChain(pulseCount);
-      }
+      Logger.Info($"Выполнено действие {currentLink.ActionId} из звена {_activeReflexChain.CurrentLinkId} цепочки {_activeReflexChain.ChainId}, " +
+                  $"ожидание оценки в течение {_reflexActionDuration} пульсов");
     }
 
     /// <summary>
-    /// Получает результат выполнения действия с пульта
+    /// Устанавливает результат выполнения шага цепочки
     /// </summary>
-    private bool GetStepResultFromConsole()
+    public bool SetChainStepResult(int chainId, bool success)
     {
-      _lock.EnterReadLock();
-      try
-      {
-        // В реальной реализации здесь будет опрос интерфейса пользователя
-        // Пока используем значение из публичного свойства
-        return _lastStepSuccessResult;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
+      // Проверяем, что это текущая активная цепочка
+      if (_activeReflexChain == null || _activeReflexChain.ChainId != chainId)
+        return false;
 
-    /// <summary>
-    /// Сбрасывает результат выполнения шага для следующего действия
-    /// </summary>
-    private void ResetStepResult()
-    {
-      _lock.EnterWriteLock();
-      try
+      if (!_activeReflexChain.IsWaitingForResult)
+        return false;
+
+      // Логируем только изменение оценки
+      if (_activeReflexChain.LastEvaluation != success)
       {
-        // Сбрасываем на значение по умолчанию (true)
-        // Пользователь должен установить новое значение через интерфейс
-        _lastStepSuccessResult = true;
+        Logger.Info($"Оценка звена {_activeReflexChain.CurrentLinkId} цепочки {chainId} изменена: " +
+                   $"{_activeReflexChain.LastEvaluation?.ToString() ?? "null"} -> {success}");
       }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
+
+      _activeReflexChain.LastEvaluation = success;
+      return true;
     }
 
     /// <summary>
@@ -1210,6 +1209,9 @@ namespace ISIDA.Reflexes
     /// </summary>
     private bool CanContinueChain()
     {
+      if (_activeReflexChain == null)
+        return false;
+
       if (_chainBaseID != _activeCurBaseID || _chainStyleID != _activeCurBaseStyleID)
         return false;
 
@@ -1219,26 +1221,88 @@ namespace ISIDA.Reflexes
       if (_gomeostas.HasCriticalChanges)
         return false;
 
-      return _reflexTree.IsChainActive(_activeChainId);
+      return true;
     }
 
     /// <summary>
-    /// Проверяет и выполняет активную цепочку в текущем пульсе
+    /// Проверка и выполнение активной цепочки в текущем пульсе
     /// </summary>
     private void ProcessActiveChain(int pulseCount)
     {
-      if (!_isChainActive) return;
+      // Проверяем отложенную активацию цепочки
+      if (_activeReflexChain == null)
+        return;
 
-      var activeChain = _reflexTree.GetActiveChains();
-      if (activeChain.TryGetValue(_activeChainId, out var chain))
+      // Проверка на смену условий
+      if (AppGlobalState.IsNewConditions || !CanContinueChain())
       {
-        int requiredTime = _reflexActionDuration;
+        StopCurrentReflexChain(pulseCount);
+        Logger.Info($"Цепочка рефлексов завершена из-за смены условий");
+        return;
+      }
 
-        if (pulseCount >= (chain.CurrentPulse + requiredTime))
+      var chain = _activeReflexChain;
+
+      // Если цепочка ожидает результат, проверяем, не пора ли выбрать следующее звено
+      if (chain.IsWaitingForResult)
+      {
+        // Проверяем, истекло ли время ожидания оценки
+        if (pulseCount >= chain.LastStepPulse + _reflexActionDuration)
         {
-          _adaptiveActions.CleanupExpiredReflexActions();
-          ExecuteChainStep(pulseCount);
+          bool finalEvaluation;
+
+          // Оценка приходит на каждом пульсе, поэтому используем последнюю
+          // Если почему-то оценка не пришла (что не должно быть), используем true по умолчанию
+          if (chain.LastEvaluation.HasValue)
+          {
+            finalEvaluation = chain.LastEvaluation.Value;
+            Logger.Info($"Время ожидания оценки истекло, используется последняя оценка: {finalEvaluation}");
+          }
+          else
+          {
+            finalEvaluation = true;
+            Logger.Info($"Время ожидания оценки истекло, оценка не получена, используется успех=true по умолчанию");
+          }
+
+          // Выполняем шаг цепочки с полученной оценкой
+          var reflexChain = _reflexChainsSystem.GetChain(chain.ChainId);
+          var currentLink = reflexChain?.Links.FirstOrDefault(l => l.ID == chain.CurrentLinkId);
+
+          if (currentLink == null)
+          {
+            StopCurrentReflexChain(pulseCount);
+            return;
+          }
+
+          // Определяем следующее звено на основе оценки
+          int nextLinkId = finalEvaluation ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+
+          if (nextLinkId == 0)
+          {
+            // Цепочка завершена
+            StopCurrentReflexChain(pulseCount);
+            Logger.Info($"Цепочка рефлексов {chain.ChainId} успешно завершена. " +
+                       $"Выполнено действий в цепочке: {chain.CompletedActions.Count}");
+          }
+          else
+          {
+            // Переходим к следующему звену
+            chain.CurrentLinkId = nextLinkId;
+            chain.LastStepPulse = pulseCount;
+            chain.IsWaitingForResult = false;
+
+            // Сбрасываем оценку для нового звена
+            chain.LastEvaluation = null;
+
+            // Выполняем следующее звено
+            ExecuteChainLink(pulseCount);
+          }
         }
+      }
+      // Если не ожидает результат, запускаем следующее звено
+      else if (pulseCount >= chain.LastStepPulse + _reflexActionDuration)
+      {
+        ExecuteChainLink(pulseCount);
       }
     }
 
@@ -1247,12 +1311,19 @@ namespace ISIDA.Reflexes
     /// </summary>
     private void DeactivateChain(int pulseCount)
     {
-      if (_activeChainId > 0)
+      StopCurrentReflexChain(pulseCount);
+    }
+
+    /// <summary>
+    /// Останавливает активную цепочку рефлексов
+    /// </summary>
+    private void StopCurrentReflexChain(int pulseCount)
+    {
+      if (_activeReflexChain != null)
       {
-        _reflexTree.DeactivateChain(_activeChainId);
-        Logger.Info($"Цепочка рефлексов {_activeChainId} деактивирована");
-        _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
-        pulseChainCompleted = 0;
+        _reflexTree.DeactivateChain(_activeReflexChain.ChainId);
+        Logger.Info($"Цепочка рефлексов {_activeReflexChain.ChainId} остановлена");
+        _activeReflexChain = null;
       }
 
       _activeChainId = 0;
@@ -1261,6 +1332,8 @@ namespace ISIDA.Reflexes
       _chainAlreadyActivatedInThisContext = false;
       AppGlobalState.IsReflexChainActive = false;
       _completedReflexesInChain.Clear();
+      _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
+      pulseChainCompleted = 0;
     }
 
     #endregion
