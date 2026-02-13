@@ -379,5 +379,19 @@ namespace ISIDA.Common
     }
 
     #endregion
+
+    #region Цепочки автоматизмов и рефлексов
+
+    /// <summary>
+    /// Валидация и ограничение значения полезности звена цепочки
+    /// </summary>
+    /// <param name="value">Значение для валидации (int)</param>
+    /// <returns>Ограниченное значение в диапазоне [-10:10]</returns>
+    public static int ClampChainLinkUsefulness(int value)
+    {
+      return Math.Max(-10, Math.Min(10, value));
+    }
+
+    #endregion
   }
 }

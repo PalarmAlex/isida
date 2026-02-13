@@ -480,7 +480,7 @@ namespace ISIDA.Psychic.Automatism
           SuccessNextLink = successNextLink,
           FailureNextLink = failureNextLink,
           Description = description ?? $"Звено {newLinkId}",
-          ChainUsefulness = ChainUsefulness
+          ChainUsefulness = SettingsValidator.ClampChainLinkUsefulness(ChainUsefulness)
         };
 
         chain.Links.Add(link);
@@ -555,7 +555,7 @@ namespace ISIDA.Psychic.Automatism
         link.SuccessNextLink = successNextLink;
         link.FailureNextLink = failureNextLink;
         link.Description = description ?? link.Description;
-        link.ChainUsefulness = ChainUsefulness;
+        link.ChainUsefulness = SettingsValidator.ClampChainLinkUsefulness(ChainUsefulness);
 
         SaveAutomatizmChainsCore();
         return (true, warnings.ToArray());
@@ -828,6 +828,8 @@ namespace ISIDA.Psychic.Automatism
           return false;
 
         link.ChainUsefulness += usefulness;
+        // Ограничиваем значение в диапазоне [-10:10]
+        link.ChainUsefulness = SettingsValidator.ClampChainLinkUsefulness(link.ChainUsefulness);
 
         return true;
       }
@@ -1009,7 +1011,7 @@ namespace ISIDA.Psychic.Automatism
                   SuccessNextLink = successNext,
                   FailureNextLink = failureNext,
                   Description = description,
-                  ChainUsefulness = useFulnes
+                  ChainUsefulness = SettingsValidator.ClampChainLinkUsefulness(useFulnes)
                 };
 
                 currentChain.Links.Add(link);
