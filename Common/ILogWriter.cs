@@ -12,7 +12,8 @@ namespace ISIDA.Common
     /// </summary>
     void WriteLog(string className, string method, int? pulse, int? baseId,
                  int? baseStyleId, int? triggerStimulusId, int? orientationReflexType,
-                 int? geneticReflexId, int? conditionedReflexId, int? automatizmId = null);
+                 int? geneticReflexId, int? conditionedReflexId, int? automatizmId = null,
+                 string reflexChainInfo = null, string automatizmChainInfo = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

@@ -2,6 +2,7 @@
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
@@ -19,6 +20,7 @@ namespace ISIDA.Psychic.Automatism
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private AutomatizmSystem _automatizmSystem;
     private PsychicSystem _psychicSystem;
+    private ResearchLogger _researchLogger;
     private bool _disposed = false;
 
     #region Инициализация
@@ -55,13 +57,15 @@ namespace ISIDA.Psychic.Automatism
     public static void InitializeWithDependencies(
         AutomatizmSystem automatizmSystem,
         PsychicSystem psychicSystem,
-        AutomatizmChainsSystem automatizmChainsSystem)
+        AutomatizmChainsSystem automatizmChainsSystem,
+        ResearchLogger researchLogger = null)
     {
       if (_instance == null)
         throw new InvalidOperationException("AutomatismExecutionService должен быть сначала инициализирован через InitializeInstance()");
 
       _instance.SetDependencies(automatizmSystem, psychicSystem);
       _instance.SetAutomatizmChainsSystem(automatizmChainsSystem);
+      _instance.SetResearchLogger(researchLogger);
     }
 
     private AutomatismExecutionService(
@@ -114,6 +118,14 @@ namespace ISIDA.Psychic.Automatism
           throw new ArgumentNullException(nameof(automatizmChainsSystem));
     }
 
+    /// <summary>
+    /// Устанавливает логгер для записи цепочек
+    /// </summary>
+    public void SetResearchLogger(ResearchLogger researchLogger)
+    {
+      _researchLogger = researchLogger;
+    }
+
     #endregion
 
     /// <summary>
@@ -121,6 +133,8 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     public void ProcessAutomatizmChainsPulse(int pulseCount)
     {
+      Debug.WriteLine($"[AUTOMATIZM CHAIN] ProcessAutomatizmChainsPulse START: pulse={pulseCount}, hasActiveChain={_activeChain != null}");
+
       // Проверяем отложенную активацию цепочки
       if (_pendingChainActivation != null &&
           pulseCount >= _pendingChainActivation.StartPulse + _reflexActionDuration)
@@ -174,6 +188,7 @@ namespace ISIDA.Psychic.Automatism
           if (nextStep.ChainCompleted)
           {
             // Цепочка завершена
+            Debug.WriteLine($"[AUTOMATIZM CHAIN] Chain completed: chainId={chain.ChainId}, pulse={pulseCount}");
             StopCurrentAutomatizmChain(pulseCount);
           }
           else
@@ -187,6 +202,7 @@ namespace ISIDA.Psychic.Automatism
             chain.LastEvaluation = null;
 
             // Выполняем следующее звено
+            Debug.WriteLine($"[AUTOMATIZM CHAIN] ExecuteChainLink called from ProcessAutomatizmChainsPulse (waiting): pulse={pulseCount}");
             ExecuteChainLink(pulseCount);
           }
         }
@@ -194,6 +210,7 @@ namespace ISIDA.Psychic.Automatism
       // Если не ожидает результат, запускаем следующее звено
       else if (pulseCount >= chain.LastStepPulse + _reflexActionDuration)
       {
+        Debug.WriteLine($"[AUTOMATIZM CHAIN] ExecuteChainLink called from ProcessAutomatizmChainsPulse (not waiting): pulse={pulseCount}");
         ExecuteChainLink(pulseCount);
       }
     }
@@ -426,7 +443,11 @@ namespace ISIDA.Psychic.Automatism
       AppGlobalState.IsAutomatizmChainActive = true;
       Logger.Info($"Запущена цепочка автоматизмов {chainId}");
 
-      // Сразу выполняем первый шаг
+      // Регистрируем цепочку для логирования
+      Debug.WriteLine($"[AUTOMATIZM CHAIN] RegisterActiveChain: chainId={chainId}, pulse={pulseCount}");
+      _researchLogger?.RegisterActiveChain(chainId, $"AutomatizmChain_{chainId}", "Automatizm");
+
+      // Сразу выполняем первый шаг (логирование произойдет там)
       ExecuteChainLink(pulseCount);
 
       return (true, chainId);
@@ -472,6 +493,11 @@ namespace ISIDA.Psychic.Automatism
         return;
       }
 
+      // Логируем выполнение звена цепочки (используем первое действие из образа)
+      int firstActionId = actionsImage.ActIdList.First();
+      Debug.WriteLine($"[AUTOMATIZM CHAIN] LogChainLinkExecution: chainId={_activeChain.ChainId}, linkId={_activeChain.CurrentLinkId}, actionId={firstActionId}, pulse={pulseCount}");
+      _researchLogger?.LogChainLinkExecution(_activeChain.ChainId, _activeChain.CurrentLinkId, firstActionId, pulseCount);
+
       // Устанавливаем состояние ожидания оценки
       _activeChain.IsWaitingForResult = true;
       _activeChain.LastStepPulse = pulseCount;
@@ -479,6 +505,7 @@ namespace ISIDA.Psychic.Automatism
       Logger.Info($"Выполнено звено {_activeChain.CurrentLinkId} цепочки {_activeChain.ChainId}, " +
                   $"ожидание оценки в течение {_reflexActionDuration} пульсов");
     }
+    
 
     /// <summary>
     /// Устанавливает результат выполнения шага цепочки
@@ -512,6 +539,14 @@ namespace ISIDA.Psychic.Automatism
         return;
 
       int chainId = _activeChain.ChainId;
+      int completedLinksCount = _activeChain.CompletedActions.Count;
+      bool? finalEvaluation = _activeChain.LastEvaluation.HasValue ? (bool?)(_activeChain.LastEvaluation.Value == 1) : null;
+      
+      Debug.WriteLine($"[AUTOMATIZM CHAIN] StopCurrentAutomatizmChain: chainId={chainId}, pulse={pulseCount}");
+      
+      // Логируем завершение цепочки ПЕРЕД её очисткой
+      _researchLogger?.LogChainCompletion(chainId, pulseCount, completedLinksCount, finalEvaluation);
+      
       _activeChain = null;
 
       _automatizmChainsSystem.StopChain(chainId);

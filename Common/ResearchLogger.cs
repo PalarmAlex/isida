@@ -9,6 +9,7 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
 using static ISIDA.Actions.AdaptiveActionsSystem;
@@ -95,6 +96,13 @@ namespace ISIDA.Common
     private Dictionary<string, object> _currentPulseLogEntry = null;
     private int _bufferedPulse = -1;
 
+    // Логирование цепочек
+    private readonly Dictionary<int, ActiveChainSession> _activeChains = new Dictionary<int, ActiveChainSession>();
+    private readonly HashSet<string> _chainsLoggedInCycle = new HashSet<string>();
+
+    private readonly Dictionary<int, (string ReflexChain, string AutomatizmChain)> _chainInfoByPulse
+    = new Dictionary<int, (string, string)>();
+
     #endregion
 
     #region Внутренние классы
@@ -115,6 +123,9 @@ namespace ISIDA.Common
       public int? HasCriticalChanges { get; set; }
       public int? OrientationReflexType { get; set; }
       public int? OrientationReflexPulse { get; set; }
+      // Поля для логирования цепочек
+      public string LastReflexChainInfo { get; set; }  // "ChainId:ActionId"
+      public string LastAutomatizmChainInfo { get; set; }  // "ChainId:ActionId"
     }
 
     /// <summary>
@@ -218,6 +229,128 @@ namespace ISIDA.Common
       /// Детали активации
       /// </summary>
       public string ActivationDetails { get; set; }
+    }
+
+    /// <summary>
+    /// Событие выполнения цепочки рефлексов или автоматизмов
+    /// </summary>
+    private class ChainExecutionEvent
+    {
+      /// <summary>
+      /// Номер пульса начала события
+      /// </summary>
+      public int Pulse { get; set; }
+
+      /// <summary>
+      /// Время события
+      /// </summary>
+      public DateTime Time { get; set; }
+
+      /// <summary>
+      /// Тип цепочки: "Reflex" или "Automatizm"
+      /// </summary>
+      public string ChainType { get; set; }
+
+      /// <summary>
+      /// ID цепочки
+      /// </summary>
+      public int ChainId { get; set; }
+
+      /// <summary>
+      /// Имя цепочки
+      /// </summary>
+      public string ChainName { get; set; }
+
+      /// <summary>
+      /// Тип события: "ChainStart", "LinkExecute", "Evaluation", "BranchDecision", "ChainComplete"
+      /// </summary>
+      public string EventType { get; set; }
+
+      /// <summary>
+      /// ID звена цепочки (для событий выполнения звена)
+      /// </summary>
+      public int? LinkId { get; set; }
+
+      /// <summary>
+      /// ID действия (для событий выполнения звена)
+      /// </summary>
+      public int? ActionId { get; set; }
+
+      /// <summary>
+      /// Результат выполнения действия (успех/неудача)
+      /// </summary>
+      public bool? ActionSuccess { get; set; }
+
+      /// <summary>
+      /// Оценка оператора (true=успех, false=неудача, null=ожидание)
+      /// </summary>
+      public bool? OperatorEvaluation { get; set; }
+
+      /// <summary>
+      /// ID следующего звена после ветвления
+      /// </summary>
+      public int? NextLinkId { get; set; }
+
+      /// <summary>
+      /// Тип выбранной ветви: "Success" или "Failure"
+      /// </summary>
+      public string BranchType { get; set; }
+
+      /// <summary>
+      /// Основная причина/описание события
+      /// </summary>
+      public string Details { get; set; }
+    }
+
+    /// <summary>
+    /// Состояние выполняемой цепочки для отслеживания в сессии
+    /// </summary>
+    private class ActiveChainSession
+    {
+      /// <summary>
+      /// ID цепочки
+      /// </summary>
+      public int ChainId { get; set; }
+
+      /// <summary>
+      /// Имя цепочки
+      /// </summary>
+      public string ChainName { get; set; }
+
+      /// <summary>
+      /// Тип цепочки
+      /// </summary>
+      public string ChainType { get; set; }
+
+      /// <summary>
+      /// Пульс начала цепочки
+      /// </summary>
+      public int StartPulse { get; set; }
+
+      /// <summary>
+      /// Время начала
+      /// </summary>
+      public DateTime StartTime { get; set; }
+
+      /// <summary>
+      /// Последний выполненный ID звена
+      /// </summary>
+      public int LastLinkId { get; set; }
+
+      /// <summary>
+      /// Последняя оценка оператора
+      /// </summary>
+      public bool? LastEvaluation { get; set; }
+
+      /// <summary>
+      /// Список выполненных звеньев в порядке выполнения
+      /// </summary>
+      public List<int> ExecutedLinks { get; set; } = new List<int>();
+
+      /// <summary>
+      /// История оценок оператора на каждом звене
+      /// </summary>
+      public Dictionary<int, bool?> EvaluationHistory { get; set; } = new Dictionary<int, bool?>();
     }
 
     /// <summary>
@@ -408,6 +541,10 @@ namespace ISIDA.Common
         _parametersHeadersWritten = false;
         _stylesHeadersWritten = false;
 
+        // Очищаем активные цепочки и логированные в цикле
+        _activeChains.Clear();
+        _chainsLoggedInCycle.Clear();
+
         // Сбрасываем состояние
         _lastState = new SystemState { Pulse = 0 };
         _lastParametersState = new ParametersState { Pulse = 0 };
@@ -443,18 +580,53 @@ namespace ISIDA.Common
           var currentState = CollectSystemState(currentPulse);
           var currentParametersState = CollectParametersState(currentPulse);
 
-          if (IsDuplicateState(currentState))
+          bool hasChainInfoForPulse = _chainInfoByPulse.ContainsKey(currentPulse);
+          bool hasStateChanges = IsDuplicateState(currentState);
+
+          if (hasChainInfoForPulse)
+          {
+            var chainInfo = _chainInfoByPulse[currentPulse];
+            Debug.WriteLine($"[RESEARCH LOGGER] LogSystemState: pulse={currentPulse}, hasChainInfo={hasChainInfoForPulse}, reflex={chainInfo.ReflexChain}, automatizm={chainInfo.AutomatizmChain}");
+          }
+
+          if (hasStateChanges || hasChainInfoForPulse)
           {
             int correctPulse = currentState.Pulse;
             if (_lastState.CurrentBaseID == -1 || _lastState.CurrentBaseID == 2)
               correctPulse++;
 
             var logEntry = CreateLogEntry(currentState, correctPulse);
-            if (_bufferedPulse != correctPulse && _currentPulseLogEntry != null)
-              WriteBufferedLogEntry();
 
-            _currentPulseLogEntry = logEntry;
-            _bufferedPulse = correctPulse;
+            // ИСПРАВЛЕНИЕ: Если есть информация о цепочке для текущего пульса,
+            // принудительно записываем буфер и создаем новую запись
+            if (hasChainInfoForPulse)
+            {
+              // Записываем предыдущий буфер, если есть
+              if (_currentPulseLogEntry != null)
+                WriteBufferedLogEntry();
+
+              // Создаем новую запись для текущего пульса
+              _currentPulseLogEntry = logEntry;
+              _bufferedPulse = correctPulse;
+
+              // НЕМЕДЛЕННО записываем в память
+              WriteBufferedLogEntry();
+              _currentPulseLogEntry = null;
+              _bufferedPulse = -1;
+            }
+            else if (_bufferedPulse != correctPulse)
+            {
+              if (_currentPulseLogEntry != null)
+                WriteBufferedLogEntry();
+
+              _currentPulseLogEntry = logEntry;
+              _bufferedPulse = correctPulse;
+            }
+            else
+            {
+              _currentPulseLogEntry = logEntry;
+            }
+
             _lastState = currentState;
 
             if (currentState.OrientationReflexType.HasValue && currentState.OrientationReflexType.Value > 0)
@@ -486,6 +658,16 @@ namespace ISIDA.Common
                       state.OrientationReflexType.Value == 2 ? "ОР2" : "";
       }
 
+      // Получаем информацию о цепочках для этого пульса
+      string reflexChainInfo = string.Empty;
+      string automatizmChainInfo = string.Empty;
+
+      if (_chainInfoByPulse.TryGetValue(correctPulse, out var chainInfo))
+      {
+        reflexChainInfo = chainInfo.ReflexChain;
+        automatizmChainInfo = chainInfo.AutomatizmChain;
+      }
+
       return new Dictionary<string, object>
       {
         ["Время"] = state.Time.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -498,7 +680,9 @@ namespace ISIDA.Common
         ["ОР"] = orTypeString,
         ["Б/у рефлекс"] = state.CurrentGeneticReflexID?.ToString() ?? "",
         ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? "",
-        ["Автоматизм"] = state.CurrentAutomatizmID?.ToString() ?? ""
+        ["Автоматизм"] = state.CurrentAutomatizmID?.ToString() ?? "",
+        ["Цепочка РФ"] = reflexChainInfo,
+        ["Цепочка АВ"] = automatizmChainInfo
       };
     }
 
@@ -515,7 +699,6 @@ namespace ISIDA.Common
 
       try
       {
-        // Записываем в JSONL
         if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
         {
           var jsonLine = JsonConvert.SerializeObject(_currentPulseLogEntry, new JsonSerializerSettings
@@ -526,14 +709,23 @@ namespace ISIDA.Common
           _jsonlWriter.WriteLine(jsonLine);
         }
 
-        // Записываем в CSV
         if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
         {
           WriteCsvLine(_currentPulseLogEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
         }
 
-        // Для UI - сразу записываем
-        WriteToMemoryLog(_currentPulseLogEntry);
+        string reflexChainInfo = string.Empty;
+        string automatizmChainInfo = string.Empty;
+
+        if (_chainInfoByPulse.TryGetValue(_bufferedPulse, out var chainInfo))
+        {
+          reflexChainInfo = chainInfo.ReflexChain;
+          automatizmChainInfo = chainInfo.AutomatizmChain;
+
+          Debug.WriteLine($"[RESEARCH LOGGER] Writing to memory: pulse={_bufferedPulse}, reflex={reflexChainInfo}, automatizm={automatizmChainInfo}");
+        }
+
+        WriteToMemoryLog(_currentPulseLogEntry, _bufferedPulse, reflexChainInfo, automatizmChainInfo);
       }
       catch (Exception ex)
       {
@@ -544,7 +736,8 @@ namespace ISIDA.Common
     /// <summary>
     /// Записывает в память (UI)
     /// </summary>
-    private void WriteToMemoryLog(Dictionary<string, object> logEntry)
+    private void WriteToMemoryLog(Dictionary<string, object> logEntry, int currentPulse,
+                                  string reflexChainInfo = "", string automatizmChainInfo = "")
     {
       if (_memoryLogWriter == null || _disposed) return;
 
@@ -574,7 +767,9 @@ namespace ISIDA.Common
           logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString()) ?
               int.Parse(logEntry["Усл. рефлекс"].ToString()) : (int?)null,
           logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString()) ?
-              int.Parse(logEntry["Автоматизм"].ToString()) : (int?)null
+              int.Parse(logEntry["Автоматизм"].ToString()) : (int?)null,
+          reflexChainInfo,
+          automatizmChainInfo
       );
     }
 
@@ -590,6 +785,7 @@ namespace ISIDA.Common
         WriteBufferedLogEntry();
         _currentPulseLogEntry = null;
         _bufferedPulse = -1;
+        _chainInfoByPulse.Clear();
       }
     }
 
@@ -1185,6 +1381,260 @@ namespace ISIDA.Common
       return value;
     }
 
+    #endregion
+
+    #region Логирование цепочек
+
+    private void SetChainInfoForCurrentPulse(int pulse, string chainType, string chainInfo)
+    {
+      if (!_chainInfoByPulse.ContainsKey(pulse))
+        _chainInfoByPulse[pulse] = (string.Empty, string.Empty);
+
+      var current = _chainInfoByPulse[pulse];
+      if (chainType == "Reflex")
+        _chainInfoByPulse[pulse] = (chainInfo, current.AutomatizmChain);
+      else if (chainType == "Automatizm")
+        _chainInfoByPulse[pulse] = (current.ReflexChain, chainInfo);
+
+      Debug.WriteLine($"[RESEARCH LOGGER] SetChainInfoForCurrentPulse: pulse={pulse}, type={chainType}, info={chainInfo}");
+    }
+
+    /// <summary>
+    /// Регистрирует цепочку в активных цепочках БЕЗ логирования события
+    /// Нужна для инициализации цепочки, чтобы последующие вызовы LogChainLinkExecution работали
+    /// </summary>
+    public void RegisterActiveChain(int chainId, string chainName, string chainType)
+    {
+      if (!_enabled || _disposed) return;
+
+      lock (_lock)
+      {
+        try
+        {
+          // Просто регистрируем цепочку в словаре, но не логируем событие
+          var session = new ActiveChainSession
+          {
+            ChainId = chainId,
+            ChainName = chainName,
+            ChainType = chainType,
+            StartPulse = GlobalTimer.GlobalPulsCount,
+            StartTime = DateTime.Now,
+            LastLinkId = 0
+          };
+          _activeChains[chainId] = session;
+          Logger.Info($"Цепочка {chainType} {chainId} зарегистрирована для логирования");
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Error registering active chain: {ex.Message}");
+        }
+      }
+    }
+
+    /// <summary>
+    /// Логирует начало выполнения цепочки (рефлекса или автоматизма)
+    /// </summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="chainName">Имя цепочки</param>
+    /// <param name="chainType">Тип: "Reflex" или "Automatizm"</param>
+    /// <param name="startPulse">Номер пульса начала</param>
+    public void LogChainStart(int chainId, string chainName, string chainType, int startPulse)
+    {
+      if (!_enabled || _disposed) return;
+
+      lock (_lock)
+      {
+        try
+        {
+          // Создаём новую сессию активной цепочки
+          var session = new ActiveChainSession
+          {
+            ChainId = chainId,
+            ChainName = chainName,
+            ChainType = chainType,
+            StartPulse = startPulse,
+            StartTime = DateTime.Now,
+            LastLinkId = 0
+          };
+          _activeChains[chainId] = session;
+
+          // Логируем начало цепочки в основные логи (просто информационное сообщение)
+          Logger.Info($"[CHAIN_START|{chainType}|{chainId}] Цепочка {chainName} ({chainType}) активирована");
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Error logging chain start: {ex.Message}");
+        }
+      }
+    }
+
+    /// <summary>
+    /// Логирует выполнение звена цепочки - пишет ПРЯМО в основной AgentLogs файл
+    /// </summary>
+    public void LogChainLinkExecution(int chainId, int linkId, int actionId, int pulse)
+    {
+      if (!_enabled || _disposed) return;
+
+      Debug.WriteLine($"[RESEARCH LOGGER] LogChainLinkExecution START: chainId={chainId}, linkId={linkId}, actionId={actionId}, pulse={pulse}");
+
+      lock (_lock)
+      {
+        try
+        {
+          if (_activeChains.TryGetValue(chainId, out var session))
+          {
+            session.LastLinkId = linkId;
+            if (!session.ExecutedLinks.Contains(linkId))
+              session.ExecutedLinks.Add(linkId);
+
+            string chainInfo = $"{chainId}:{actionId}";
+
+            // Пишем прямо в основные AgentLogs файлы
+            var logEntry = new Dictionary<string, object>
+            {
+              ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+              ["Объект"] = "ChainExecution",
+              ["Метод"] = "LogChainLinkExecution",
+              ["Пульс"] = pulse.ToString(),
+              ["Состояние"] = "",
+              ["Стили"] = "",
+              ["Триггер"] = "",
+              ["ОР"] = "",
+              ["Б/у рефлекс"] = session.ChainType == "Reflex" ? chainId.ToString() : "",
+              ["Усл. рефлекс"] = "",
+              ["Автоматизм"] = session.ChainType == "Automatizm" ? chainId.ToString() : "",
+              ["Цепочка РФ"] = session.ChainType == "Reflex" ? chainInfo : "",
+              ["Цепочка АВ"] = session.ChainType == "Automatizm" ? chainInfo : ""
+            };
+
+            // Записываем в JSONL
+            if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
+            {
+              var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
+              {
+                Formatting = Formatting.None,
+                NullValueHandling = NullValueHandling.Ignore
+              });
+              _jsonlWriter.WriteLine(jsonLine);
+            }
+
+            // Записываем в CSV
+            if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
+            {
+              WriteCsvLine(logEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
+            }
+
+            SetChainInfoForCurrentPulse(pulse, session.ChainType, chainInfo);
+          }
+        }
+        catch (Exception ex)
+        {
+          Logger.Error(ex.Message);
+        }
+      }
+    }
+
+    /// <summary>
+    /// Логирует оценку оператора для звена цепочки
+    /// </summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="linkId">ID звена</param>
+    /// <param name="evaluation">Оценка (true=успех, false=неудача, null=ожидание)</param>
+    /// <param name="pulse">Номер пульса оценки</param>
+    public void LogChainEvaluation(int chainId, int linkId, bool? evaluation, int pulse)
+    {
+      if (!_enabled || _disposed) return;
+
+      lock (_lock)
+      {
+        try
+        {
+          if (_activeChains.TryGetValue(chainId, out var session))
+          {
+            session.LastEvaluation = evaluation;
+            session.EvaluationHistory[linkId] = evaluation;
+
+            var evalStr = evaluation == null ? "ожидание" : (evaluation.Value ? "успех" : "неудача");
+            // Логируем в основные логи с маркером [CHAIN_EVAL|...]
+            Logger.Info($"[CHAIN_EVAL|{session.ChainType}|{chainId}|{linkId}|{evalStr}] Оценка звена {linkId} цепочки {session.ChainName}: {evalStr}");
+          }
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Error logging chain evaluation: {ex.Message}");
+        }
+      }
+    }
+
+    /// <summary>
+    /// Логирует решение о ветвлении цепочки на основе оценки
+    /// </summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="currentLinkId">ID текущего звена</param>
+    /// <param name="evaluation">Значение оценки, определившее ветвление</param>
+    /// <param name="nextLinkId">ID следующего звена</param>
+    /// <param name="branchType">Тип ветви: "Success" (true) или "Failure" (false)</param>
+    /// <param name="pulse">Номер пульса решения</param>
+    public void LogChainBranchDecision(int chainId, int currentLinkId, bool? evaluation, 
+                                       int nextLinkId, string branchType, int pulse)
+    {
+      if (!_enabled || _disposed) return;
+
+      lock (_lock)
+      {
+        try
+        {
+          if (_activeChains.TryGetValue(chainId, out var session))
+          {
+            var evalStr = evaluation == null ? "null" : evaluation.Value.ToString();
+            // Логируем в основные логи с маркером [CHAIN_BRANCH|...]
+            Logger.Info($"[CHAIN_BRANCH|{session.ChainType}|{chainId}|{currentLinkId}|{nextLinkId}|{branchType}] Ветвление: от звена {currentLinkId} к {nextLinkId} ({branchType})");
+          }
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Error logging branch decision: {ex.Message}");
+        }
+      }
+    }
+
+    /// <summary>
+    /// Логирует завершение цепочки
+    /// </summary>
+    /// <param name="chainId">ID цепочки</param>
+    /// <param name="pulse">Номер пульса завершения</param>
+    /// <param name="totalLinksExecuted">Количество выполненных звеньев</param>
+    /// <param name="finalEvaluation">Финальная оценка цепочки</param>
+    public void LogChainCompletion(int chainId, int pulse, int totalLinksExecuted, bool? finalEvaluation = null)
+    {
+      if (!_enabled || _disposed) return;
+
+      lock (_lock)
+      {
+        try
+        {
+          if (_activeChains.TryGetValue(chainId, out var session))
+          {
+            var evalStr = finalEvaluation == null ? "нет" : (finalEvaluation.Value ? "успех" : "неудача");
+            Logger.Info($"[CHAIN_COMPLETE|{session.ChainType}|{chainId}] Цепочка {session.ChainName} завершена: звеньев={totalLinksExecuted}, итог={evalStr}");
+
+            // ИСПРАВЛЕНИЕ: Принудительно записываем буфер при завершении цепочки
+            if (_bufferedPulse == pulse)
+            {
+              WriteBufferedLogEntry();
+              _currentPulseLogEntry = null;
+              _bufferedPulse = -1;
+            }
+
+            _activeChains.Remove(chainId);
+          }
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Error logging chain completion: {ex.Message}");
+        }
+      }
+    }
     #endregion
 
     #region IDisposable

@@ -727,6 +727,7 @@ namespace ISIDA.Common
         context.PsychicSystem.SetAutomatismExecutionService(context.AutomatismExecution);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
+        context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
