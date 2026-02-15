@@ -19,6 +19,7 @@ public static class AppGlobalState
   private static int _automatizmNodeId = 0;
   private static int _currentFindAtmzStepCount = 0;
   private static int _lastRunAutomatizmPulsCount = 0;
+  private static int _lastTriggerStimulusID = 0;
   private static bool _isAutomatizmChainActive = false;
 
   #endregion
@@ -74,6 +75,25 @@ public static class AppGlobalState
   #endregion
 
   #region Автоматизмы - Свойства и методы
+
+  /// <summary>
+  /// ID триггера с пульта
+  /// </summary>
+  public static int LastTriggerStimulusID
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _lastTriggerStimulusID; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _lastTriggerStimulusID = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
+  }
 
   /// <summary>
   /// Флаг активности цепочки автоматизмов (thread-safe)

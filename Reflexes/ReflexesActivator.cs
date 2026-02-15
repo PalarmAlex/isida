@@ -427,12 +427,12 @@ namespace ISIDA.Reflexes
           return;
         }
 
-        // Второе прерывание цепочки при выполнении действий с фразой
-        if (shouldInterruptChain)
-        {
-          _adaptiveActions.ClearActiveAction();
-          _adaptiveActions.ClearActivePhrases();
-        }
+        //// Второе прерывание цепочки при выполнении действий с фразой
+        //if (shouldInterruptChain)
+        //{
+        //  _adaptiveActions.ClearActiveAction();
+        //  _adaptiveActions.ClearActivePhrases();
+        //}
         
         ExecuteReflexes(pulseCount);
 

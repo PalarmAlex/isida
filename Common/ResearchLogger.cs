@@ -586,7 +586,6 @@ namespace ISIDA.Common
           if (hasChainInfoForPulse)
           {
             var chainInfo = _chainInfoByPulse[currentPulse];
-            Debug.WriteLine($"[RESEARCH LOGGER] LogSystemState: pulse={currentPulse}, hasChainInfo={hasChainInfoForPulse}, reflex={chainInfo.ReflexChain}, automatizm={chainInfo.AutomatizmChain}");
           }
 
           if (hasStateChanges || hasChainInfoForPulse)
@@ -667,6 +666,8 @@ namespace ISIDA.Common
         reflexChainInfo = chainInfo.ReflexChain;
         automatizmChainInfo = chainInfo.AutomatizmChain;
       }
+      if (state.CurrentAutomatizmID.HasValue)
+        AppGlobalState.LastTriggerStimulusID = 0;
 
       return new Dictionary<string, object>
       {
@@ -721,8 +722,6 @@ namespace ISIDA.Common
         {
           reflexChainInfo = chainInfo.ReflexChain;
           automatizmChainInfo = chainInfo.AutomatizmChain;
-
-          Debug.WriteLine($"[RESEARCH LOGGER] Writing to memory: pulse={_bufferedPulse}, reflex={reflexChainInfo}, automatizm={automatizmChainInfo}");
         }
 
         WriteToMemoryLog(_currentPulseLogEntry, _bufferedPulse, reflexChainInfo, automatizmChainInfo);
@@ -1070,7 +1069,13 @@ namespace ISIDA.Common
     {
       try
       {
-        return _reflexesActivator.ActiveGlobalCurTriggerStimulusID;
+        // Сначала пробуем получить из рефлексов
+        var reflexTrigger = _reflexesActivator.ActiveGlobalCurTriggerStimulusID;
+        if (reflexTrigger != 0)
+          return reflexTrigger;
+
+        // Если нет, берем из глобального состояния (для автоматизмов)
+        return AppGlobalState.LastTriggerStimulusID != 0 ? AppGlobalState.LastTriggerStimulusID : (int?)null;
       }
       catch (Exception ex)
       {
@@ -1332,14 +1337,6 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Преобразует 0 в null для всех полей кроме BaseID
-    /// </summary>
-    private int? NullIfZero(int? value)
-    {
-      return value == 0 ? null : value;
-    }
-
-    /// <summary>
     /// Запись строки в CSV
     /// </summary>
     private void WriteCsvLine(Dictionary<string, object> logEntry, StreamWriter writer,
@@ -1395,8 +1392,6 @@ namespace ISIDA.Common
         _chainInfoByPulse[pulse] = (chainInfo, current.AutomatizmChain);
       else if (chainType == "Automatizm")
         _chainInfoByPulse[pulse] = (current.ReflexChain, chainInfo);
-
-      Debug.WriteLine($"[RESEARCH LOGGER] SetChainInfoForCurrentPulse: pulse={pulse}, type={chainType}, info={chainInfo}");
     }
 
     /// <summary>
@@ -1474,8 +1469,6 @@ namespace ISIDA.Common
     public void LogChainLinkExecution(int chainId, int linkId, int actionId, int pulse)
     {
       if (!_enabled || _disposed) return;
-
-      Debug.WriteLine($"[RESEARCH LOGGER] LogChainLinkExecution START: chainId={chainId}, linkId={linkId}, actionId={actionId}, pulse={pulse}");
 
       lock (_lock)
       {

@@ -723,8 +723,11 @@ namespace ISIDA.Common
             context.PsychicSystem,
             context.AutomatizmChainsSystem);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
-        context.PsychicSystem.SetOrientationReflexSystem(context.OrientationReflex);
-        context.PsychicSystem.SetAutomatismExecutionService(context.AutomatismExecution);
+
+        context.PsychicSystem.SetPsychicSystemDop(
+          context.AutomatismExecution, 
+          context.OrientationReflex,
+          context.PerceptionImages);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
@@ -748,6 +751,9 @@ namespace ISIDA.Common
             context.InfluenceActionsImages,
             context.AutomatizmChainsSystem);
         context.ConditionedReflexToAutomatizm = ConditionedReflexToAutomatizmConverter.Instance;
+        context.PurposeGeneticImageSystem.SetDopPurposeGeneticImageSystem(
+          context.ConditionedReflexToAutomatizm,
+          context.AutomatizmChainsSystem);
 
         // Шаг 31: Сервис переключения стадий эволюции
         initializationStep = 31;

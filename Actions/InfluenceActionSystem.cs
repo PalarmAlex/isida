@@ -418,6 +418,7 @@ namespace ISIDA.Actions
         ActiveCurTriggerStimulusID = CreatePerceptionImage(actionIdList, phraseIdList ?? new List<int>());
         // для стимула б/у рефлексов фразу игнорируем
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(actionIdList, new List<int>());
+        AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
         if (phraseIdList?.Any() == true)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId);

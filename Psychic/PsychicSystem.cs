@@ -29,9 +29,10 @@ namespace ISIDA.Psychic
     private readonly EmotionsImageSystem _emotionsImageSystem;
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
+    private readonly AutomatismResultTracker _automatismResultTracker;
     private OrientationReflexSystem _orientationReflexSystem;
     private AutomatismExecutionService _automatismExecutionService;
-    private readonly AutomatismResultTracker _automatismResultTracker;
+    private PerceptionImagesSystem _perceptionImagesSystem;
 
     #region Инициализация
 
@@ -100,29 +101,14 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Установка сервиса выполнения автоматизмов
     /// </summary>
-    public void SetAutomatismExecutionService(AutomatismExecutionService executionService)
+    public void SetPsychicSystemDop(
+      AutomatismExecutionService executionService,
+      OrientationReflexSystem orientationReflexSystem,
+      PerceptionImagesSystem perceptionImagesSystem)
     {
-      if (executionService == null)
-        throw new ArgumentNullException(nameof(executionService));
-
-      if (!executionService.AreDependenciesSet)
-        throw new InvalidOperationException("Зависимости AutomatismExecutionService не установлены");
-
-      _automatismExecutionService = executionService;
-    }
-
-    /// <summary>
-    /// Установка системы ориентировочного рефлекса
-    /// </summary>
-    public void SetOrientationReflexSystem(OrientationReflexSystem orientationReflexSystem)
-    {
-      if (orientationReflexSystem == null)
-        throw new ArgumentNullException(nameof(orientationReflexSystem));
-
-      if (!orientationReflexSystem.AreDependenciesSet)
-        throw new InvalidOperationException("Зависимости OrientationReflexSystem не установлены. Вызовите SetDependencies().");
-
-      _orientationReflexSystem = orientationReflexSystem;
+      _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
+      _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
+      _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
     }
 
     /// <summary>
@@ -299,6 +285,8 @@ namespace ISIDA.Psychic
           firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseIdList[0]);
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
           AppGlobalState.CurActiveVerbalId = verbId;
+          var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdList);
+          AppGlobalState.LastTriggerStimulusID = perceptionImageId;
         }
         else
           AppGlobalState.CurActiveVerbalId = 0;

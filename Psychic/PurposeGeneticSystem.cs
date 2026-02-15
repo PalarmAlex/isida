@@ -3,6 +3,7 @@ using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
+using System.IO.Pipes;
 using System.Linq;
 using System.Threading;
 using static ISIDA.Actions.AdaptiveActionsSystem;
@@ -19,6 +20,8 @@ namespace ISIDA.Psychic
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
+    private ConditionedReflexToAutomatizmConverter _conditionedReflexToAutomatizm;
+    private AutomatizmChainsSystem _automatizmChainsSystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -78,6 +81,18 @@ namespace ISIDA.Psychic
         throw;
       }
     }
+
+    /// <summary>
+    /// Вторичная инициализация
+    /// </summary>
+    public void SetDopPurposeGeneticImageSystem(
+      ConditionedReflexToAutomatizmConverter conditionedReflexToAutomatizm,
+      AutomatizmChainsSystem automatizmChainsSystem)
+    {
+      _conditionedReflexToAutomatizm = conditionedReflexToAutomatizm ?? throw new ArgumentNullException(nameof(conditionedReflexToAutomatizm));
+      _automatizmChainsSystem = automatizmChainsSystem ?? throw new ArgumentNullException(nameof(automatizmChainsSystem));
+    }
+
 
     #endregion
 
@@ -310,10 +325,9 @@ namespace ISIDA.Psychic
 
         // На стадии 2 при действиях от безусловного рефлекса клонируем цепочку, если есть
         int automatizmChainId = 0;
-        if (AppGlobalState.EvolutionStage == 2 && AppGlobalState.CurrentGeneticReflexID > 0 &&
-            ConditionedReflexToAutomatizmConverter.IsInitialized)
+        if (AppGlobalState.EvolutionStage == 2 && AppGlobalState.CurrentGeneticReflexID > 0)
         {
-          var chainResult = ConditionedReflexToAutomatizmConverter.Instance.CreateAutomatizmChainFromGeneticReflex(
+          var chainResult = _conditionedReflexToAutomatizm.CreateAutomatizmChainFromGeneticReflex(
               AppGlobalState.CurrentGeneticReflexID, branchID);
           if (chainResult.Success && chainResult.ChainId > 0)
             automatizmChainId = chainResult.ChainId;
@@ -324,10 +338,10 @@ namespace ISIDA.Psychic
         Automatizm atmz = null;
         (_, atmz) = _automatizmSystem.CreateNewAutomatizm(branchID, actionImageId);
 
-        if (atmz != null && automatizmChainId > 0 && AutomatizmChainsSystem.IsInitialized)
+        if (atmz != null && automatizmChainId > 0)
         {
           atmz.NextID = automatizmChainId;
-          var chain = AutomatizmChainsSystem.Instance.GetChain(automatizmChainId);
+          var chain = _automatizmChainsSystem.GetChain(automatizmChainId);
           if (chain != null)
             chain.StartAutomatizmId = atmz.ID;
         }
