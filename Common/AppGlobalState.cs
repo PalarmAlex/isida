@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System.Collections.Generic;
@@ -33,6 +33,7 @@ public static class AppGlobalState
   private static List<int> _geneticReflexesActions = new List<int>();
   private static List<int> _conditionReflexesActions = new List<int>();
   private static int _lastDetectedReflexNodeId = 0; // Для валидации изменений
+  private static int _currentGeneticReflexID = 0; // ID безусловного рефлекса, чьи действия в GeneticReflexesActions
 
   #endregion
 
@@ -333,19 +334,43 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Обновить текущие активные безусловные рефлексы
+  /// ID безусловного рефлекса, чьи действия сейчас в GeneticReflexesActions (для клонирования цепочек на стадии 2).
   /// </summary>
-  internal static void UpdateGlobalGeneticReflexesActions(List<int> actIdArr)
+  public static int CurrentGeneticReflexID
   {
-    _geneticReflexesActions.Clear();
-
-    if (actIdArr != null)
+    get
     {
-      foreach (var act in actIdArr)
+      _lock.EnterReadLock();
+      try { return _currentGeneticReflexID; }
+      finally { _lock.ExitReadLock(); }
+    }
+  }
+
+  /// <summary>
+  /// Обновить текущие активные безусловные рефлексы и ID рефлекса-источника
+  /// </summary>
+  /// <param name="actIdArr">Список ID действий</param>
+  /// <param name="geneticReflexId">ID безусловного рефлекса (0 если не один рефлекс или нет)</param>
+  internal static void UpdateGlobalGeneticReflexesActions(List<int> actIdArr, int geneticReflexId = 0)
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      _currentGeneticReflexID = geneticReflexId;
+      _geneticReflexesActions.Clear();
+
+      if (actIdArr != null)
       {
-        if (act != 0)
-          _geneticReflexesActions.Add(act);
+        foreach (var act in actIdArr)
+        {
+          if (act != 0)
+            _geneticReflexesActions.Add(act);
+        }
       }
+    }
+    finally
+    {
+      _lock.ExitWriteLock();
     }
   }
 

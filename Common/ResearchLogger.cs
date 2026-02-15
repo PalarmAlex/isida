@@ -597,7 +597,7 @@ namespace ISIDA.Common
 
             var logEntry = CreateLogEntry(currentState, correctPulse);
 
-            // ИСПРАВЛЕНИЕ: Если есть информация о цепочке для текущего пульса,
+            // Если есть информация о цепочке для текущего пульса,
             // принудительно записываем буфер и создаем новую запись
             if (hasChainInfoForPulse)
             {
@@ -994,7 +994,7 @@ namespace ISIDA.Common
 
         if (currentParam.ParameterState != lastParam.ParameterState &&
           currentParam.ActivationZone != lastParam.ActivationZone)
-         
+
           return false;
       }
       return true;
@@ -1575,7 +1575,7 @@ namespace ISIDA.Common
     /// <param name="nextLinkId">ID следующего звена</param>
     /// <param name="branchType">Тип ветви: "Success" (true) или "Failure" (false)</param>
     /// <param name="pulse">Номер пульса решения</param>
-    public void LogChainBranchDecision(int chainId, int currentLinkId, bool? evaluation, 
+    public void LogChainBranchDecision(int chainId, int currentLinkId, bool? evaluation,
                                        int nextLinkId, string branchType, int pulse)
     {
       if (!_enabled || _disposed) return;
@@ -1618,7 +1618,7 @@ namespace ISIDA.Common
             var evalStr = finalEvaluation == null ? "нет" : (finalEvaluation.Value ? "успех" : "неудача");
             Logger.Info($"[CHAIN_COMPLETE|{session.ChainType}|{chainId}] Цепочка {session.ChainName} завершена: звеньев={totalLinksExecuted}, итог={evalStr}");
 
-            // ИСПРАВЛЕНИЕ: Принудительно записываем буфер при завершении цепочки
+            // Принудительно записываем буфер при завершении цепочки
             if (_bufferedPulse == pulse)
             {
               WriteBufferedLogEntry();

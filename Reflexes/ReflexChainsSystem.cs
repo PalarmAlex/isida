@@ -213,7 +213,7 @@ namespace ISIDA.Reflexes
           warnings.Add($"Действие {link.ActionId} повторяется {duplicateCount} раз в цепочке");
       }
 
-      // ИСПРАВЛЕНИЕ: Проверяем наличие конечных звеньев
+      // Проверяем наличие конечных звеньев
       var terminalLinks = links.Where(l => l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
       if (terminalLinks.Count == 0)
         warnings.Add("Цепочка не содержит конечных звеньев (возможен бесконечный цикл)");
@@ -233,7 +233,7 @@ namespace ISIDA.Reflexes
 
         _reflexChains.Add(newId, chain);
         
-        // ИСПРАВЛЕНИЕ: Полная валидация новой цепочки
+        // Полная валидация новой цепочки
         SaveReflexChainsCore();
         var (isValid, validationIssues) = ValidateChain(newId);
         if (!isValid)
@@ -546,7 +546,7 @@ namespace ISIDA.Reflexes
           issues.Add("Цепочка не содержит конечных звеньев (обнаружена циклическая зависимость)");
         }
 
-        // ИСПРАВЛЕНИЕ: Проверка на циклические ссылки в цепочке
+        // Проверка на циклические ссылки в цепочке
         DetectCycles(chain, issues);
 
         return (!issues.Any(), issues.ToArray());

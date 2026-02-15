@@ -94,14 +94,11 @@ namespace ISIDA.Reflexes
       public int GeneticReflexId { get; set; }
     }
 
-    // ИСПРАВЛЕНИЕ: Расширенная история стимулов (вместо одного последнего)
-    // Ограничиваем размер для оптимизации памяти
-    private const int MaxStimulusHistorySize = 100;
-    private readonly List<StimulusRecord> _stimulusHistory = new List<StimulusRecord>();
-    
-    // Кэширование последних стимулов для быстрого доступа в проверке корреляций
-    private StimulusRecord _lastUnconditionedStimulus;
-    private StimulusRecord _lastConditionedStimulus;
+    // Последний безусловный стимул
+    private StimulusRecord _lastUnconditionedStimulus = null;
+
+    // Последний условный стимул
+    private StimulusRecord _lastConditionedStimulus = null;
 
     /// <summary>
     /// Добавление стимула в историю
@@ -125,15 +122,10 @@ namespace ISIDA.Reflexes
           GeneticReflexId = geneticReflexId
         };
 
-        _stimulusHistory.Add(record);
-
-        // Ограничиваем размер истории для экономии памяти
-        if (_stimulusHistory.Count > MaxStimulusHistorySize)
-        {
-          // Удаляем самые старые записи (оставляем последние)
-          int toRemove = _stimulusHistory.Count - MaxStimulusHistorySize;
-          _stimulusHistory.RemoveRange(0, toRemove);
-        }
+        if (geneticReflexId > 0)
+          _lastUnconditionedStimulus = record;
+        else
+          _lastConditionedStimulus = record;
       }
       finally
       {
@@ -151,50 +143,19 @@ namespace ISIDA.Reflexes
       {
         var recentStimuli = new List<StimulusRecord>();
 
-        // Получаем стимулы в пределах временного окна
-        foreach (var stimulus in _stimulusHistory)
-        {
-          if ((currentPulse - stimulus.Pulse) <= timeWindowPulses)
-            recentStimuli.Add(stimulus);
-        }
+        // Проверяем последний условный стимул
+        if (_lastConditionedStimulus != null && (currentPulse - _lastConditionedStimulus.Pulse) <= timeWindowPulses)
+          recentStimuli.Add(_lastConditionedStimulus);
+
+        // Проверяем последний безусловный стимул
+        if (_lastUnconditionedStimulus != null && (currentPulse - _lastUnconditionedStimulus.Pulse) <= timeWindowPulses)
+          recentStimuli.Add(_lastUnconditionedStimulus);
 
         return recentStimuli.OrderBy(r => r.Pulse).ToList();
       }
       finally
       {
         _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Записывает последний безусловный стимул (из genetic reflex)
-    /// </summary>
-    public void RecordLastUnconditionedStimulus(StimulusRecord stimulus)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        _lastUnconditionedStimulus = stimulus;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Записывает последний условный стимул (от сенсоров/восприятия)
-    /// </summary>
-    public void RecordLastConditionedStimulus(StimulusRecord stimulus)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        _lastConditionedStimulus = stimulus;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
       }
     }
 
@@ -314,14 +275,13 @@ namespace ISIDA.Reflexes
     #region Управление жизненным циклом рефлексов
 
     /// <summary>
-    /// Сбрасывает историю стимулов и последние кэшированные значения
+    /// Сбрасывает историю стимулов
     /// </summary>
     public void ResetHistory()
     {
       _lock.EnterWriteLock();
       try
       {
-        _stimulusHistory.Clear();
         _lastUnconditionedStimulus = null;
         _lastConditionedStimulus = null;
       }

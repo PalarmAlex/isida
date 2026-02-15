@@ -327,7 +327,7 @@ namespace ISIDA.Common
     {
       if (_disposed) return;
 
-      Logger.Info("[IsidaContext] Начинается безопасное освобождение ресурсов...");
+      Logger.Info("Начинается безопасное освобождение ресурсов...");
 
       try
       {

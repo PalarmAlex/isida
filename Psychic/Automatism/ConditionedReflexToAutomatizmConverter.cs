@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
@@ -795,6 +795,27 @@ namespace ISIDA.Psychic
       catch (Exception ex)
       {
         return (false, 0, $"Ошибка: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Создаёт цепочку автоматизмов из безусловного рефлекса (для ситуативного клонирования на стадии 2).
+    /// </summary>
+    /// <param name="geneticReflexId">ID безусловного рефлекса</param>
+    /// <param name="treeNodeId">ID узла дерева автоматизмов</param>
+    /// <returns>Success, ChainId, Error</returns>
+    public (bool Success, int ChainId, string Error) CreateAutomatizmChainFromGeneticReflex(int geneticReflexId, int treeNodeId)
+    {
+      try
+      {
+        var reflexChainInfo = GetChainInfoFromGeneticReflex(geneticReflexId);
+        if (reflexChainInfo == null)
+          return (false, 0, "У безусловного рефлекса нет цепочки или рефлекс не найден");
+        return CreateAutomatizmChainFromReflexChain(reflexChainInfo, treeNodeId);
+      }
+      catch (Exception ex)
+      {
+        return (false, 0, ex.Message);
       }
     }
 

@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
@@ -308,10 +308,29 @@ namespace ISIDA.Psychic
         int toneId = purposeGenetic.ActionImage.ToneId;
         int moodId = purposeGenetic.ActionImage.MoodId;
 
+        // На стадии 2 при действиях от безусловного рефлекса клонируем цепочку, если есть
+        int automatizmChainId = 0;
+        if (AppGlobalState.EvolutionStage == 2 && AppGlobalState.CurrentGeneticReflexID > 0 &&
+            ConditionedReflexToAutomatizmConverter.IsInitialized)
+        {
+          var chainResult = ConditionedReflexToAutomatizmConverter.Instance.CreateAutomatizmChainFromGeneticReflex(
+              AppGlobalState.CurrentGeneticReflexID, branchID);
+          if (chainResult.Success && chainResult.ChainId > 0)
+            automatizmChainId = chainResult.ChainId;
+        }
+
         int actionImageId = 0;
         (actionImageId, _) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, aArr, sArr, toneId, moodId, true);
         Automatizm atmz = null;
         (_, atmz) = _automatizmSystem.CreateNewAutomatizm(branchID, actionImageId);
+
+        if (atmz != null && automatizmChainId > 0 && AutomatizmChainsSystem.IsInitialized)
+        {
+          atmz.NextID = automatizmChainId;
+          var chain = AutomatizmChainsSystem.Instance.GetChain(automatizmChainId);
+          if (chain != null)
+            chain.StartAutomatizmId = atmz.ID;
+        }
 
         return atmz;
       }
