@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
@@ -225,11 +225,31 @@ namespace ISIDA.Psychic.Automatism
         if (automatizm.Usefulness < 0)
           return (false, $"Автоматизм {automatizmId} имеет отрицательную полезность и не может быть выполнен");
 
-        var actionIds = GetActionsForAutomatizm(automatizm);
-        if (actionIds == null || !actionIds.Any())
-          return (false, $"Автоматизм {automatizmId} не содержит связанных действий");
+        var actionsImage = _actionsImagesSystem.GetActionsImage(automatizm.ActionsImageID);
+        if (actionsImage == null)
+          return (false, $"Не найден образ действий ID={automatizm.ActionsImageID} для автоматизма {automatizmId}");
 
-        return ExecuteAdaptiveActions(actionIds, ActionActivationSource.Automatizm, automatizmId);
+        int phraseId = actionsImage.PhraseIdList?.FirstOrDefault() ?? 0;
+        var actionIds = actionsImage.ActIdList?.ToList() ?? new List<int>();
+
+        bool isVerbalResponse = phraseId > 0;
+        if (!actionIds.Any())
+        {
+          if (!isVerbalResponse)
+            return (false, $"Автоматизм {automatizmId} не содержит связанных действий");
+
+          if (_adaptiveActionsSystem.DefaultAdaptiveActionId <= 0)
+            return (false, "Невозможно выполнить вербальный автоматизм: не задано действие по умолчанию");
+
+          // Фраза без моторного действия выполняется через действие по умолчанию.
+          actionIds.Add(_adaptiveActionsSystem.DefaultAdaptiveActionId);
+        }
+
+        var activationSource = isVerbalResponse
+          ? ActionActivationSource.AutomatizmVerbalResponse
+          : ActionActivationSource.Automatizm;
+
+        return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId);
       }
       catch (Exception ex)
       {
@@ -278,7 +298,8 @@ namespace ISIDA.Psychic.Automatism
     public (bool Success, string ErrorMessage) ExecuteAdaptiveActions(
         List<int> actionIds,
         ActionActivationSource activationSource,
-        int automatizmId = 0)
+        int automatizmId = 0,
+        int phraseId = 0)
     {
       if (actionIds == null || !actionIds.Any())
         return (false, "Нет действий для выполнения");
@@ -302,7 +323,7 @@ namespace ISIDA.Psychic.Automatism
             action.ActivationPulse = GlobalTimer.GlobalPulsCount;
           }
 
-          bool applied = _adaptiveActionsSystem.ApplyAction(actionId);
+          bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId);
           if (applied)
           {
             successfulActions.Add(actionId);

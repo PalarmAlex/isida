@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
 using System;
@@ -226,7 +226,12 @@ namespace ISIDA.Actions
       /// <summary>
       /// Действие от автоматизма
       /// </summary>
-      Automatizm = 3
+      Automatizm = 3,
+
+      /// <summary>
+      /// Вербальный ответ, выполненный автоматизмом
+      /// </summary>
+      AutomatizmVerbalResponse = 4
     }
 
     private readonly Dictionary<int, AdaptiveAction> _actions = new Dictionary<int, AdaptiveAction>();

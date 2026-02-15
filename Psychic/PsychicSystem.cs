@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
@@ -33,6 +33,7 @@ namespace ISIDA.Psychic
     private OrientationReflexSystem _orientationReflexSystem;
     private AutomatismExecutionService _automatismExecutionService;
     private PerceptionImagesSystem _perceptionImagesSystem;
+    private readonly MirrorAutomatizmService _mirrorAutomatizmService;
 
     #region Инициализация
 
@@ -94,6 +95,7 @@ namespace ISIDA.Psychic
       _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
       _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
       _automatismResultTracker = automatismResultTracker ?? throw new ArgumentNullException(nameof(automatismResultTracker));
+      _mirrorAutomatizmService = new MirrorAutomatizmService(_automatizmSystem);
 
       InitializeBasicAutomatizmTree();
     }
@@ -176,6 +178,7 @@ namespace ISIDA.Psychic
       int pulseCount,
       int sleepingType)
     {
+      int mirrorAutomatizmToExecute = 0;
       _lock.EnterWriteLock();
       try
       {
@@ -220,9 +223,10 @@ namespace ISIDA.Psychic
             }
             else
             {
-              if (_previousAutomatizmId > 0 && _isAnswer)
+              int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
+              if (automatizmToEvaluate > 0 && _isAnswer)
               {
-                EvaluatePreviousAutomatizm(_previousAutomatizmId);
+                mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(automatizmToEvaluate);
                 _isAnswer = false;
               }
             }
@@ -235,6 +239,13 @@ namespace ISIDA.Psychic
       finally
       {
         _lock.ExitWriteLock();
+      }
+
+      if (mirrorAutomatizmToExecute > 0)
+      {
+        var mirrorAutomatizm = _automatizmSystem.GetAutomatizmById(mirrorAutomatizmToExecute);
+        if (mirrorAutomatizm != null)
+          ExecuteAutomatizm(mirrorAutomatizm);
       }
     }
 
@@ -303,8 +314,31 @@ namespace ISIDA.Psychic
 
         if (automatizmNodeId > 0)
         {
+          bool hasVerbalPart = phraseIdList?.Any() == true;
+          if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
+            _mirrorAutomatizmService.RegisterOperatorResponseActionsImage(actionsImageId);
+
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
+
+          if (foundAutomatizm == null &&
+              AppGlobalState.EvolutionStage == 3 &&
+              !AppGlobalState.WaitingForOperatorEvaluation &&
+              activationType >= 2)
+          {
+            int parrotAutomatizmId = _mirrorAutomatizmService.TryCreateInitialParrotAutomatizm(
+              automatizmNodeId,
+              actionsImageId,
+              hasVerbalPart);
+
+            if (parrotAutomatizmId > 0)
+            {
+              var parrotAutomatizm = _automatizmSystem.GetAutomatizmById(parrotAutomatizmId);
+              if (parrotAutomatizm != null)
+                return ExecuteAutomatizm(parrotAutomatizm);
+            }
+          }
+
           atmz = _orientationReflexSystem.OrientationReflex(
             foundAutomatizm?.ID ?? 0, 
             currentEmotionId,
@@ -474,15 +508,16 @@ namespace ISIDA.Psychic
       AppGlobalState.ResetAutomatizmInfo();
       AppGlobalState.WaitingForOperatorEvaluation = false;
       _currentAutomatizmId = 0;
+      _mirrorAutomatizmService.ResetDialogMirror();
     }
 
     /// <summary>
     /// Оценить предыдущий автоматизм на основе СТИМУЛА оператора
     /// </summary>
-    private void EvaluatePreviousAutomatizm(int automatizmIdToEvaluate)
+    private int EvaluatePreviousAutomatizm(int automatizmIdToEvaluate)
     {
       if (automatizmIdToEvaluate <= 0)
-        return;
+        return 0;
 
       // Получаем состояние до автоматизма
       var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
@@ -507,7 +542,12 @@ namespace ISIDA.Psychic
           assessment,
           responseTime);
 
+      int mirrorAutomatizmId = 0;
+      if (AppGlobalState.EvolutionStage == 3)
+        mirrorAutomatizmId = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+
       Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
+      return mirrorAutomatizmId;
     }
 
     /// <summary>
@@ -702,7 +742,8 @@ namespace ISIDA.Psychic
           return 0;
         }
 
-        if (actionIdList == null || !actionIdList.Any())
+        if ((actionIdList == null || !actionIdList.Any()) &&
+            (phraseIdList == null || !phraseIdList.Any()))
           return 0;
 
         if (!ActionsImagesSystem.IsValidToneId(toneId))
@@ -721,7 +762,7 @@ namespace ISIDA.Psychic
         // Kind = 0 (объективное действие) - реальное воздействие с пульта
         var (imageId, actionsImage) = _actionsImagesSystem.CreateNewActionsImage(
             kind: 0, // объективное действие
-            actIdList: actionIdList,
+            actIdList: actionIdList?.ToList() ?? new List<int>(),
             phraseIdList: phraseIdList,
             toneId: toneId,
             moodId: moodId,
@@ -798,6 +839,7 @@ namespace ISIDA.Psychic
 
       try
       {
+        _mirrorAutomatizmService?.Dispose();
         _lock?.Dispose();
       }
       finally
