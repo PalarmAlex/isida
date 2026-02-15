@@ -493,7 +493,6 @@ namespace ISIDA.Psychic.Automatism
       Logger.Info($"Выполнено звено {_activeChain.CurrentLinkId} цепочки {_activeChain.ChainId}, " +
                   $"ожидание оценки в течение {_reflexActionDuration} пульсов");
     }
-    
 
     /// <summary>
     /// Устанавливает результат выполнения шага цепочки
@@ -534,7 +533,6 @@ namespace ISIDA.Psychic.Automatism
       _researchLogger?.LogChainCompletion(chainId, pulseCount, completedLinksCount, finalEvaluation);
       
       _activeChain = null;
-
       _automatizmChainsSystem.StopChain(chainId);
       AppGlobalState.IsAutomatizmChainActive = false;
 

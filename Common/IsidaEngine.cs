@@ -806,7 +806,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.02.01";
+    public const string BuildDate = "2026.02.15";
 
     /// <summary>
     /// Краткое описание концепции проекта

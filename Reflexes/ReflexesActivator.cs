@@ -340,7 +340,7 @@ namespace ISIDA.Reflexes
 
         _chainCooldownUntilPulse = 0;
         _adaptiveActions.ClearActiveAction();
-        DeactivateChain(pulseCount);
+        StopAllReflexChains(pulseCount);
 
         if (!fullMatchFound && AppGlobalState.DetectedReflexNodeId > 0)
         {
@@ -353,6 +353,7 @@ namespace ISIDA.Reflexes
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
+          StopAllReflexChains(pulseCount);
           return;
         }
 
@@ -414,7 +415,7 @@ namespace ISIDA.Reflexes
         
         if (shouldInterruptChain)
         {
-          DeactivateChain(pulseCount);
+          StopAllReflexChains(pulseCount);
           _adaptiveActions.ClearActiveAction();
           _adaptiveActions.ClearActivePhrases();
         }
@@ -424,15 +425,9 @@ namespace ISIDA.Reflexes
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
+          StopAllReflexChains(pulseCount);
           return;
         }
-
-        //// Второе прерывание цепочки при выполнении действий с фразой
-        //if (shouldInterruptChain)
-        //{
-        //  _adaptiveActions.ClearActiveAction();
-        //  _adaptiveActions.ClearActivePhrases();
-        //}
         
         ExecuteReflexes(pulseCount);
 
@@ -1463,6 +1458,29 @@ namespace ISIDA.Reflexes
       _chainCooldownUntilPulse = GlobalTimer.GlobalPulsCount;
       pulseChainCompleted = 0;
       // НЕ сбрасываем здесь флаги отложенной цепочки!
+    }
+
+    /// <summary>
+    /// Полная остановка всех цепочек рефлексов (активных и отложенных)
+    /// </summary>
+    public void StopAllReflexChains(int pulseCount)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        // Останавливаем активную цепочку
+        DeactivateChain(pulseCount);
+
+        // Очищаем отложенную активацию
+        _pendingChainId = 0;
+        _pendingChainActivationPulse = 0;
+        _pendingChainBaseID = 0;
+        _pendingChainStyleID = 0;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     /// <summary>

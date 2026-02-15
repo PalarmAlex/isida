@@ -583,11 +583,7 @@ namespace ISIDA.Common
           bool hasChainInfoForPulse = _chainInfoByPulse.ContainsKey(currentPulse);
           bool hasStateChanges = IsDuplicateState(currentState);
 
-          if (hasChainInfoForPulse)
-          {
-            var chainInfo = _chainInfoByPulse[currentPulse];
-          }
-
+          // ИСПРАВЛЕНИЕ: Всегда записываем, если есть изменения ИЛИ информация о цепочке
           if (hasStateChanges || hasChainInfoForPulse)
           {
             int correctPulse = currentState.Pulse;
@@ -596,35 +592,18 @@ namespace ISIDA.Common
 
             var logEntry = CreateLogEntry(currentState, correctPulse);
 
-            // Если есть информация о цепочке для текущего пульса,
-            // принудительно записываем буфер и создаем новую запись
-            if (hasChainInfoForPulse)
-            {
-              // Записываем предыдущий буфер, если есть
-              if (_currentPulseLogEntry != null)
-                WriteBufferedLogEntry();
+            // Получаем информацию о цепочках для этого пульса
+            string reflexChainInfo = string.Empty;
+            string automatizmChainInfo = string.Empty;
 
-              // Создаем новую запись для текущего пульса
-              _currentPulseLogEntry = logEntry;
-              _bufferedPulse = correctPulse;
-
-              // НЕМЕДЛЕННО записываем в память
-              WriteBufferedLogEntry();
-              _currentPulseLogEntry = null;
-              _bufferedPulse = -1;
-            }
-            else if (_bufferedPulse != correctPulse)
+            if (_chainInfoByPulse.TryGetValue(correctPulse, out var chainInfo))
             {
-              if (_currentPulseLogEntry != null)
-                WriteBufferedLogEntry();
+              reflexChainInfo = chainInfo.ReflexChain;
+              automatizmChainInfo = chainInfo.AutomatizmChain;
+            }
 
-              _currentPulseLogEntry = logEntry;
-              _bufferedPulse = correctPulse;
-            }
-            else
-            {
-              _currentPulseLogEntry = logEntry;
-            }
+            // ИСПРАВЛЕНИЕ: Записываем сразу, без буферизации
+            WriteLogEntryImmediately(logEntry, correctPulse, reflexChainInfo, automatizmChainInfo);
 
             _lastState = currentState;
 
@@ -642,6 +621,43 @@ namespace ISIDA.Common
         {
           Logger.Error(ex.Message);
         }
+      }
+    }
+
+    /// <summary>
+    /// Немедленная запись лога без буферизации
+    /// </summary>
+    private void WriteLogEntryImmediately(Dictionary<string, object> logEntry, int pulse,
+                                          string reflexChainInfo, string automatizmChainInfo)
+    {
+      try
+      {
+        // Обновляем время на момент записи
+        logEntry["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+        // Запись в JSONL
+        if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
+        {
+          var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
+          {
+            Formatting = Formatting.None,
+            NullValueHandling = NullValueHandling.Ignore
+          });
+          _jsonlWriter.WriteLine(jsonLine);
+        }
+
+        // Запись в CSV
+        if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
+        {
+          WriteCsvLine(logEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
+        }
+
+        // Запись в память (UI)
+        WriteToMemoryLog(logEntry, pulse, reflexChainInfo, automatizmChainInfo);
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"Error writing log entry immediately: {ex.Message}");
       }
     }
 
@@ -671,7 +687,7 @@ namespace ISIDA.Common
 
       return new Dictionary<string, object>
       {
-        ["Время"] = state.Time.ToString("yyyy-MM-dd HH:mm:ss"),
+        ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
         ["Объект"] = "ResearchLogger",
         ["Метод"] = "LogSystemState",
         ["Пульс"] = correctPulse.ToString(),
@@ -1482,10 +1498,10 @@ namespace ISIDA.Common
 
             string chainInfo = $"{chainId}:{actionId}";
 
-            // Пишем прямо в основные AgentLogs файлы
+            // ИСПРАВЛЕНИЕ: Используем текущее время
             var logEntry = new Dictionary<string, object>
             {
-              ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+              ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),  // Уже правильно
               ["Объект"] = "ChainExecution",
               ["Метод"] = "LogChainLinkExecution",
               ["Пульс"] = pulse.ToString(),
@@ -1500,7 +1516,7 @@ namespace ISIDA.Common
               ["Цепочка АВ"] = session.ChainType == "Automatizm" ? chainInfo : ""
             };
 
-            // Записываем в JSONL
+            // Записываем сразу
             if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
             {
               var jsonLine = JsonConvert.SerializeObject(logEntry, new JsonSerializerSettings
@@ -1511,7 +1527,6 @@ namespace ISIDA.Common
               _jsonlWriter.WriteLine(jsonLine);
             }
 
-            // Записываем в CSV
             if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
             {
               WriteCsvLine(logEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
