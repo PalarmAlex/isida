@@ -58,6 +58,12 @@ public static class AppGlobalState
 
   #endregion
 
+  #region Пульт — режим наблюдения
+
+  private static bool _observationMode = false;
+
+  #endregion
+
   #region Оценка оператора
 
   private static int _waitingPeriodCountdown = 0;
@@ -558,6 +564,29 @@ public static class AppGlobalState
   {
     get => _lifetime;
     set => _lifetime = value;
+  }
+
+  #endregion
+
+  #region Пульт — режим наблюдения (свойства)
+
+  /// <summary>
+  /// Режим наблюдения: при true воздействия с пульта не меняют параметры гомеостаза агента.
+  /// </summary>
+  public static bool ObservationMode
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _observationMode; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _observationMode = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
   }
 
   #endregion

@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Automatism;
@@ -279,6 +279,11 @@ namespace ISIDA.Common
     public PsychicSystem PsychicSystem { get; internal set; }
 
     /// <summary>
+    /// Сервис зеркалирования автоматизмов (стадия 3).
+    /// </summary>
+    public MirrorAutomatizmService MirrorAutomatizmService { get; internal set; }
+
+    /// <summary>
     /// Система управления эмоциями
     /// </summary>
     public EmotionsImageSystem EmotionsImageSystem { get; internal set; }
@@ -355,6 +360,9 @@ namespace ISIDA.Common
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
       SafeDispose(PsychicSystem, "PsychicSystem");
+      // Дублируем явную очистку сервиса зеркалирования как отдельной точки доступа контекста.
+      // Безопасно: внутри сервиса есть защита от повторного Dispose.
+      SafeDispose(MirrorAutomatizmService, "MirrorAutomatizmService");
       SafeDispose(ConditionedReflexToAutomatizm, "ConditionedReflexToAutomatizm");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
@@ -450,6 +458,7 @@ namespace ISIDA.Common
 
         // Системы психики
         PsychicSystem != null &&
+        MirrorAutomatizmService != null &&
         EmotionsImageSystem != null &&
         VerbalBrocaImagesSystem != null &&
         InformationEnvironmentSystem != null &&
@@ -686,6 +695,7 @@ namespace ISIDA.Common
           context.VerbalBrocaImagesSystem,
           context.AutomatismResult);
           context.PsychicSystem = PsychicSystem.Instance;
+          context.MirrorAutomatizmService = context.PsychicSystem.MirrorAutomatizmService;
 
         // Шаг 25: Система управления гомеостатическими целями
         initializationStep = 25;
@@ -801,12 +811,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V2.1";
+    public const string ProjectVersion = "V2.2";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.02.15";
+    public const string BuildDate = "2026.02.16";
 
     /// <summary>
     /// Краткое описание концепции проекта

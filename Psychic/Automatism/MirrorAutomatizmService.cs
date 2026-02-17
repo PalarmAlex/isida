@@ -6,7 +6,8 @@ namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Сервис отзеркаливания автоматизмов для 3-й стадии.
-  /// Создает автоматизмы вида: триггер первого вербального стимула -> ответ оператора.
+  /// Создает автоматизмы вида: триггер стимула с пульта -> ответ оператора.
+  /// В обычном режиме учитываются только вербальные стимулы; в режиме наблюдения — вербальные, невербальные (флажки воздействий) и смешанные.
   /// </summary>
   public sealed class MirrorAutomatizmService : IDisposable
   {
@@ -17,6 +18,9 @@ namespace ISIDA.Psychic.Automatism
     private bool _dialogMirrorActive;
     private int _dialogTriggerNodeId;
     private int _pendingResponseActionsImageId;
+    private int _pendingResponseNodeId;
+    private bool _pendingResponseHasVerbalPart;
+    private bool _pendingResponseHasNonVerbalPart;
 
     /// <summary>
     /// Создает сервис отзеркаливания автоматизмов.
@@ -28,11 +32,17 @@ namespace ISIDA.Psychic.Automatism
 
     /// <summary>
     /// Создать и вернуть первый (попугайский) автоматизм для запуска цикла зеркалирования.
+    /// В режиме наблюдения учитываются и невербальные стимулы (флажки воздействий).
     /// </summary>
+    /// <param name="detectedNodeId">ID узла дерева автоматизмов, распознанного по стимулу.</param>
+    /// <param name="actionsImageId">ID образа действий (стимул оператора).</param>
+    /// <param name="hasVerbalPart">Есть ли в стимуле вербальная часть (фраза).</param>
+    /// <param name="hasNonVerbalPart">Есть ли в стимуле невербальная часть (действия с пульта).</param>
     public int TryCreateInitialParrotAutomatizm(
       int detectedNodeId,
       int actionsImageId,
-      bool hasVerbalPart)
+      bool hasVerbalPart,
+      bool hasNonVerbalPart = false)
     {
       if (AppGlobalState.EvolutionStage != 3)
       {
@@ -40,7 +50,8 @@ namespace ISIDA.Psychic.Automatism
         return 0;
       }
 
-      if (detectedNodeId <= 0 || actionsImageId <= 0 || !hasVerbalPart)
+      bool canMirror = hasVerbalPart || (AppGlobalState.ObservationMode && hasNonVerbalPart);
+      if (detectedNodeId <= 0 || actionsImageId <= 0 || !canMirror)
         return 0;
 
       _lock.EnterWriteLock();
@@ -57,6 +68,7 @@ namespace ISIDA.Psychic.Automatism
         // Первый шаг цикла не должен доминировать при выборе "лучшего" автоматизма.
         created.Usefulness = 0;
         created.Count = 0;
+        _automatizmSystem.SetAutomatizmBelief(created, 2);
 
         Logger.Info($"MirrorAutomatizm: стартовый автоматизм ID={id}, TriggerNode={detectedNodeId}, ActionsImage={actionsImageId}");
         return id;
@@ -70,9 +82,17 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Сохранить образ ответа оператора в период ожидания оценки.
     /// </summary>
-    public void RegisterOperatorResponseActionsImage(int actionsImageId)
+    /// <param name="actionsImageId">ID образа действий (ответ оператора).</param>
+    /// <param name="detectedNodeId">ID узла дерева автоматизмов, распознанного по ответу.</param>
+    /// <param name="hasVerbalPart">Есть ли в ответе вербальная часть (фраза).</param>
+    /// <param name="hasNonVerbalPart">Есть ли в ответе невербальная часть (действия с пульта).</param>
+    public void RegisterOperatorResponse(
+      int actionsImageId,
+      int detectedNodeId,
+      bool hasVerbalPart,
+      bool hasNonVerbalPart = false)
     {
-      if (actionsImageId <= 0 || AppGlobalState.EvolutionStage != 3)
+      if (actionsImageId <= 0 || detectedNodeId <= 0 || AppGlobalState.EvolutionStage != 3)
         return;
 
       _lock.EnterWriteLock();
@@ -82,6 +102,9 @@ namespace ISIDA.Psychic.Automatism
           return;
 
         _pendingResponseActionsImageId = actionsImageId;
+        _pendingResponseNodeId = detectedNodeId;
+        _pendingResponseHasVerbalPart = hasVerbalPart;
+        _pendingResponseHasNonVerbalPart = hasNonVerbalPart;
       }
       finally
       {
@@ -103,21 +126,43 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
-        if (!_dialogMirrorActive || _dialogTriggerNodeId <= 0 || _pendingResponseActionsImageId <= 0)
+        if (!_dialogMirrorActive || _dialogTriggerNodeId <= 0 || _pendingResponseActionsImageId <= 0 || _pendingResponseNodeId <= 0)
           return 0;
 
-        var (id, created) = _automatizmSystem.CreateNewAutomatizm(_dialogTriggerNodeId, _pendingResponseActionsImageId, true);
-        _pendingResponseActionsImageId = 0;
-        if (created == null)
+        // 1) Учительский автоматизм: предыдущий триггер -> ответ оператора.
+        var (_, teacherAutomatizm) = _automatizmSystem.CreateNewAutomatizm(_dialogTriggerNodeId, _pendingResponseActionsImageId, true);
+        if (teacherAutomatizm == null)
+        {
+          ClearPendingOperatorResponse();
           return 0;
+        }
 
-        // Второй шаг цикла является авторитетной демонстрацией правильного ответа оператора.
-        if (created.Usefulness < 1)
-          created.Usefulness = 1;
-        created.Count = Math.Max(created.Count, 1);
+        if (teacherAutomatizm.Usefulness < 1)
+          teacherAutomatizm.Usefulness = 1;
+        teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 1);
+        _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
-        Logger.Info($"MirrorAutomatizm: зеркальный автоматизм ID={id}, TriggerNode={_dialogTriggerNodeId}, ActionsImage={created.ActionsImageID}");
-        return id;
+        // 2) Прямой автоматизм для нового шага: новый триггер -> его же ответ.
+        // Создается как "провокатор" следующей пары. В режиме наблюдения продолжаем цикл и для невербальных ответов.
+        bool continueCycle = _pendingResponseHasVerbalPart ||
+            (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
+        if (continueCycle)
+        {
+          var (_, nextParrotAutomatizm) = _automatizmSystem.CreateNewAutomatizm(_pendingResponseNodeId, _pendingResponseActionsImageId, true);
+          if (nextParrotAutomatizm != null)
+          {
+            nextParrotAutomatizm.Usefulness = 0;
+            nextParrotAutomatizm.Count = 0;
+            _automatizmSystem.SetAutomatizmBelief(nextParrotAutomatizm, 2);
+          }
+        }
+
+        // Переносим триггер диалога на последний стимул оператора.
+        _dialogTriggerNodeId = _pendingResponseNodeId;
+        ClearPendingOperatorResponse();
+
+        Logger.Info($"MirrorAutomatizm: учительский автоматизм ID={teacherAutomatizm.ID}, TriggerNode={teacherAutomatizm.BranchID}, ActionsImage={teacherAutomatizm.ActionsImageID}");
+        return teacherAutomatizm.ID;
       }
       finally
       {
@@ -135,7 +180,7 @@ namespace ISIDA.Psychic.Automatism
       {
         _dialogMirrorActive = false;
         _dialogTriggerNodeId = 0;
-        _pendingResponseActionsImageId = 0;
+        ClearPendingOperatorResponse();
       }
       finally
       {
@@ -153,6 +198,14 @@ namespace ISIDA.Psychic.Automatism
 
       _lock.Dispose();
       _disposed = true;
+    }
+
+    private void ClearPendingOperatorResponse()
+    {
+      _pendingResponseActionsImageId = 0;
+      _pendingResponseNodeId = 0;
+      _pendingResponseHasVerbalPart = false;
+      _pendingResponseHasNonVerbalPart = false;
     }
   }
 }

@@ -135,6 +135,11 @@ namespace ISIDA.Psychic
     #region Состояния и свойства
 
     /// <summary>
+    /// Сервис зеркалирования автоматизмов (доступен для внешних потребителей через контекст).
+    /// </summary>
+    public MirrorAutomatizmService MirrorAutomatizmService => _mirrorAutomatizmService;
+
+    /// <summary>
     /// Текущий пульс психики
     /// </summary>
     public int PulseCount { get; private set; } = 0;
@@ -315,8 +320,9 @@ namespace ISIDA.Psychic
         if (automatizmNodeId > 0)
         {
           bool hasVerbalPart = phraseIdList?.Any() == true;
+          bool hasNonVerbalPart = actionIdList?.Any() == true;
           if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
-            _mirrorAutomatizmService.RegisterOperatorResponseActionsImage(actionsImageId);
+            _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
@@ -329,7 +335,8 @@ namespace ISIDA.Psychic
             int parrotAutomatizmId = _mirrorAutomatizmService.TryCreateInitialParrotAutomatizm(
               automatizmNodeId,
               actionsImageId,
-              hasVerbalPart);
+              hasVerbalPart,
+              hasNonVerbalPart);
 
             if (parrotAutomatizmId > 0)
             {

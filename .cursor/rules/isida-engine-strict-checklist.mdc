@@ -1,0 +1,23 @@
+---
+description: Strict checklist for any IsidaEngine.cs changes
+globs: "Common/IsidaEngine.cs"
+alwaysApply: false
+---
+
+# IsidaEngine Strict Checklist
+
+Use this checklist for every edit in `Common/IsidaEngine.cs`.
+
+- Add every new system/service to `IsidaContext` as an explicit property.
+- Initialize systems only in dependency-safe order (no usage before init).
+- If dependencies are cyclic, introduce explicit secondary initialization methods.
+- After initializing a new system, wire it into all required dependent systems immediately.
+- Register cleanup in `IsidaContext.Dispose()` using `SafeDispose(...)` in dependency-safe order.
+- Avoid hidden ownership: if service is exposed in context, ensure disposal is safe for double-dispose.
+- Keep `IsFullyInitialized` in sync with newly added required systems.
+- Keep initialization step numbers and step comments consistent and strictly ordered.
+- Do not silently swallow critical init failures; preserve `IsidaInitializationException` chain with correct step.
+- When adding runtime config usage, validate config first and apply it right after target system init.
+- Never access uninitialized singletons through `*.Instance` in later steps by assumption; use context references.
+- Preserve backward compatibility of `Create()` / `CreateWithDefaults()` behavior.
+- After any change, run `dotnet build isida.csproj` and fix introduced warnings/errors.

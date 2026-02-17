@@ -1,4 +1,4 @@
-﻿using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -453,19 +453,22 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Внутренний метод применения одиночного воздействия (без блокировки)
+    /// Внутренний метод применения одиночного воздействия (без блокировки).
+    /// В режиме наблюдения (AppGlobalState.ObservationMode) эффект на гомеостаз не применяется.
     /// </summary>
     private (bool Success, string ErrorMessage) ApplySingleInfluenceActionInternal(GomeostasisInfluenceAction action)
     {
       try
-      {        
+      {
         if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
           return (false, "Агент неактивен или мертв - воздействие невозможно");
+
+        if (AppGlobalState.ObservationMode)
+          return (true, string.Empty);
 
         var parameters = _gomeostas.GetAllParameters();
         bool isCriticalImpact = _gomeostas.Calculator.IsExternalImpactCritical(
             action.Influences, parameters);
-
 
         foreach (var influence in action.Influences)
         {
@@ -482,7 +485,7 @@ namespace ISIDA.Actions
           param.Value = newValue;
         }
         _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
-       
+
         return (true, string.Empty);
       }
       catch (Exception ex)
