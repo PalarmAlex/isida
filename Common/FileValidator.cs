@@ -131,7 +131,6 @@ namespace ISIDA.Common
       public const string EpisodicTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect";
       public const string EpisodicTreeFields1 = "# NodePID: ID узла дерева проблем";
       public const string EpisodicTreeFields2 = "# TriggerId: ID образа стимула, ActionId: ID образа ответа";
-
       public const string EpisodicHistoryFormat = "# Формат записи: ID,LifeTime|ID,LifeTime|...";
     }
 

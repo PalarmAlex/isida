@@ -44,7 +44,7 @@ namespace ISIDA.Psychic.Memory.Episodic
   }
 
   /// <summary>
-  /// Узел дерева эпизодической памяти (по аналогии с BOT EpisodicTreeNode)
+  /// Узел дерева эпизодической памяти
   /// </summary>
   public class EpisodicMemoryNode
   {

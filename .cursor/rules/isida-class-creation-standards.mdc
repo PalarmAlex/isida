@@ -11,10 +11,16 @@ Apply these rules for every new class in `isida`.
 - Every new class must implement `IDisposable` and include `public void Dispose()` with safe one-time cleanup (`_disposed` guard).
 - If the class owns persisted data files, call the class save method from `Dispose()` by default (respect stage/validation constraints).
 - Register every new class/service in `Common/IsidaEngine.cs` in correct places: `IsidaContext` property, initialization step order, and disposal chain.
-- Add XML comments for all public fields, properties, methods, constructors, and class declarations.
+- **XML-документация обязательна**: для каждого публичного типа, члена, метода, свойства и конструктора — добавить `<summary>`, для методов — `<param>` и `<returns>`; иначе CS1591. Примеры:
+  - `/// <summary>Описание</summary>` — свойство, поле
+  - `/// <param name="x">Описание</param>` `/// <returns>Описание</returns>` — метод
 - Organize class code into meaningful `#region` blocks (initialization, state, core logic, file I/O, dispose, etc.).
 - In `IsidaEngine` initialization, never use dependencies that are not initialized yet. If cyclic dependencies exist, use explicit secondary initialization methods.
 - Prefer constructor/initializer-injected references over direct `*.Instance` access inside class logic.
 - Keep thread-safety explicit for mutable shared state (`ReaderWriterLockSlim` or equivalent where needed).
 - New logic must not break existing behavior: keep backward-compatible defaults and avoid changing unrelated execution paths.
 - After edits: build `isida.csproj`, fix any introduced warnings/errors, and ensure disposal/init order is still valid.
+
+## Перед завершением
+
+- [ ] Все публичные члены имеют XML-комментарии (иначе CS1591)

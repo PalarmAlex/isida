@@ -8,7 +8,7 @@ using System.Threading;
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Система дерева проблем — аналог BOT understanding_problem_tree
+  /// Система дерева проблем
   /// </summary>
   /// <remarks>
   /// Активируется при активации дерева автоматизмов. DetectedActiveLastProblemNodeId
@@ -86,8 +86,14 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>
     /// Обновить активную ветку по ID узла дерева автоматизмов (упрощённый режим)
     /// </summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public void UpdateActiveBranchFromAutomatizmTree(int automatizmTreeNodeId)
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для дерева проблем");
+        return;
+      }
       _lock.EnterWriteLock();
       try
       {
@@ -145,8 +151,14 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>Получить узел дерева по ID</summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public ProblemTreeNode GetNodeById(int id)
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для дерева проблем");
+        return null;
+      }
       _lock.EnterReadLock();
       try
       {
@@ -222,9 +234,28 @@ namespace ISIDA.Psychic.Understanding
 
     /// <summary>Сохранить дерево проблем на диск</summary>
     /// <returns>Успех и сообщение об ошибке при неудаче</returns>
+    /// <remarks>Доступно с 4 стадии развития (на стадиях &lt; 4 возвращает true)</remarks>
     public (bool Success, string ErrorMessage) SaveProblemTree()
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для дерева проблем");
+        return (true, null);
+      }
       _lock.EnterReadLock();
+      try
+      {
+        return SaveProblemTreeCore();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>Сохранение без блокировки (вызывать только при удержании lock)</summary>
+    private (bool Success, string ErrorMessage) SaveProblemTreeCore()
+    {
       try
       {
         var path = Path.Combine(_psychicDataPath, $"{ProblemTreeFileName}.dat");
@@ -250,10 +281,6 @@ namespace ISIDA.Psychic.Understanding
       {
         return (false, ex.Message);
       }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
     }
 
     private void CollectLines(ProblemTreeNode n, List<string> lines)
@@ -274,7 +301,7 @@ namespace ISIDA.Psychic.Understanding
       _lock.EnterWriteLock();
       try
       {
-        var (ok, err) = SaveProblemTree();
+        var (ok, err) = SaveProblemTreeCore();
         if (!ok && !string.IsNullOrEmpty(err))
           Logger.Warning($"Ошибка сохранения дерева проблем: {err}");
         _disposed = true;

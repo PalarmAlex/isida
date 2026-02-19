@@ -27,6 +27,11 @@ namespace ISIDA.Psychic.Memory.Episodic
     public void FixDirectRule(int triggerId, int actionId, int usefulnessDelta, int stimulsEffect)
     {
       if (!EpisodicMemorySystem.IsInitialized) return;
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return;
+      }
       if (actionId <= 0) return;
       if (triggerId <= 0) return; // нет стимула — не записывать (кроме провокации, TODO)
 
@@ -41,14 +46,25 @@ namespace ISIDA.Psychic.Memory.Episodic
     public void FixTeacherRule(int triggerId, int actionId, int stimulsEffect)
     {
       if (!EpisodicMemorySystem.IsInitialized) return;
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return;
+      }
       if (actionId <= 0 || triggerId <= 0) return;
 
       _episodicMemory.SaveNewEpisode(triggerId, actionId, TeacherRuleEffect, stimulsEffect, useOldCondition: true);
     }
 
     /// <summary>Вставить пустой кадр — конец темы</summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public void SetInterruption()
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return;
+      }
       _episodicMemory?.SetInterruption();
     }
   }

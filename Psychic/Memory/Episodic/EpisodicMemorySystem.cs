@@ -11,7 +11,7 @@ using System.Threading;
 namespace ISIDA.Psychic.Memory.Episodic
 {
   /// <summary>
-  /// Система моторной эпизодической памяти (по аналогии с BOT)
+  /// Система моторной эпизодической памяти
   /// </summary>
   public sealed class EpisodicMemorySystem : IDisposable
   {
@@ -130,9 +130,15 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     /// <summary>Получить текущие условия (базовое состояние, эмоция, узел проблем)</summary>
     /// <param name="useOldCondition">Использовать предыдущее состояние (для учительских правил)</param>
-    /// <returns>Кортеж (BaseId, EmotionId, NodePid)</returns>
+    /// <returns>Кортеж (BaseId, EmotionId, NodePid). При стадии &lt; 4 возвращает (0, 0, 0)</returns>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public (int BaseId, int EmotionId, int NodePid) GetCurrentConditions(bool useOldCondition = false)
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return (0, 0, 0);
+      }
       return (GetBaseId(), GetEmotionId(), GetNodePid(useOldCondition));
     }
 
@@ -141,8 +147,14 @@ namespace ISIDA.Psychic.Memory.Episodic
     #region Сохранение эпизода
 
     /// <summary>Записать новый эпизод</summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public int SaveNewEpisode(int triggerId, int actionId, int effect, int stimulsEffect, bool useOldCondition = false)
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return -1;
+      }
       _lock.EnterWriteLock();
       try
       {
@@ -188,8 +200,14 @@ namespace ISIDA.Psychic.Memory.Episodic
     }
 
     /// <summary>Вставить пустой кадр — конец темы</summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public void SetInterruption()
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return;
+      }
       History.SetInterruption(AppGlobalState.Lifetime);
     }
 
@@ -198,8 +216,14 @@ namespace ISIDA.Psychic.Memory.Episodic
     #region Load / Save / Clear
 
     /// <summary>Очистить эпизодическую память (для пульта)</summary>
+    /// <remarks>Доступно с 4 стадии развития</remarks>
     public void ClearEpisodicMemory()
     {
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
+        return;
+      }
       Clear();
     }
 

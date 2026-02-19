@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Узел дерева проблем (по аналогии с BOT understanding_problem_tree)
+  /// Узел дерева проблем
   /// </summary>
   /// <remarks>
   /// Имеет 4 уровня: AutTreeID, SituationTreeID, ThemeID, PurposeID.

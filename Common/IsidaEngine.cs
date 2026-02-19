@@ -687,6 +687,7 @@ namespace ISIDA.Common
         initializationStep = 19;
         Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.ProblemTree = Psychic.Understanding.ProblemTreeSystem.Instance;
+        context.AutomatizmTree.SetProblemTree(context.ProblemTree);
 
         // Шаг 20: Система автоматизмов
         initializationStep = 20;

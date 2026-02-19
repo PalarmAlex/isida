@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
@@ -78,53 +78,31 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    private void OnAutomatizmDeleted(int actionsImageId)
+    /// <summary>
+    /// Обработчик удаления автоматизма. Событие передаёт ID автоматизма (не ActionsImageId).
+    /// Удаляются целые цепочки, у которых StartAutomatizmId совпадает с удалённым автоматизмом.
+    /// </summary>
+    private void OnAutomatizmDeleted(int automatizmId)
     {
       _lock.EnterWriteLock();
       try
       {
         if (_automatizmChains == null) return;
 
-        var chainsToUpdate = new List<int>();
+        var chainsToRemove = _automatizmChains.Values
+            .Where(c => c.StartAutomatizmId == automatizmId)
+            .Select(c => c.ID)
+            .ToList();
 
-        foreach (var chain in _automatizmChains.Values)
+        foreach (var chainId in chainsToRemove)
         {
-          var linkWithAutomatizm = chain.Links.FirstOrDefault(l => l.ActionsImageId == actionsImageId);
-          if (linkWithAutomatizm != null)
-          {
-            chainsToUpdate.Add(chain.ID);
-            _actionsImageToChain.Remove(actionsImageId);
-          }
+          RemoveAutomatizmChainNoBlock(chainId);
         }
 
-        foreach (var chainId in chainsToUpdate)
-        {
-          var chain = _automatizmChains[chainId];
-          var linksToRemove = chain.Links.Where(l => l.ActionsImageId == actionsImageId).ToList();
-
-          foreach (var link in linksToRemove)
-          {
-            var referencingLinks = chain.Links.Where(l =>
-                l.SuccessNextLink == link.ID || l.FailureNextLink == link.ID).ToList();
-
-            foreach (var refLink in referencingLinks)
-            {
-              if (refLink.SuccessNextLink == link.ID)
-                refLink.SuccessNextLink = 0;
-              if (refLink.FailureNextLink == link.ID)
-                refLink.FailureNextLink = 0;
-            }
-
-            chain.Links.Remove(link);
-            if (!chain.Links.Any())
-              RemoveAutomatizmChainNoBlock(chainId);
-          }
-        }
-
-        if (chainsToUpdate.Any())
+        if (chainsToRemove.Any())
         {
           SaveAutomatizmChainsCore();
-          Logger.Info($"Обработано удаление образа действий {actionsImageId} в {chainsToUpdate.Count} цепочках");
+          Logger.Info($"Удалены цепочки автоматизмов {string.Join(", ", chainsToRemove)} при удалении автоматизма {automatizmId}");
         }
       }
       finally
