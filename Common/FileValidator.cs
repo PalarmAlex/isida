@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -121,6 +121,18 @@ namespace ISIDA.Common
       public const string AutomatizmChainsSuccessDesc = "# SuccessNext: ID следующего звена при успехе";
       public const string AutomatizmChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
       public const string AutomatizmChainsThresholdDesc = "# ChainUsefulness: оценка полезности звена цепочки";
+
+      // Дерево проблем
+      public const string ProblemTreeFormat = "# Формат записи: ID|ParentID|AutTreeID|SituationTreeID|ThemeID|PurposeID";
+      public const string ProblemTreeFields1 = "# ID: уникальный идентификатор узла дерева проблем";
+      public const string ProblemTreeFields2 = "# AutTreeID: ID узла дерева автоматизмов";
+
+      // Эпизодическая память
+      public const string EpisodicTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect";
+      public const string EpisodicTreeFields1 = "# NodePID: ID узла дерева проблем";
+      public const string EpisodicTreeFields2 = "# TriggerId: ID образа стимула, ActionId: ID образа ответа";
+
+      public const string EpisodicHistoryFormat = "# Формат записи: ID,LifeTime|ID,LifeTime|...";
     }
 
     private static string _logFilePath;
@@ -1184,6 +1196,123 @@ namespace ISIDA.Common
       }
 
       return true; // Все строки прошли проверку
+    }
+
+    #endregion
+
+    #region IsValidProblemTreeFile
+
+    /// <summary>Проверяет валидность файла дерева проблем по пути</summary>
+    public static bool IsValidProblemTreeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidProblemTreeFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла дерева проблем</summary>
+    public static bool IsValidProblemTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 5) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidEpisodicTreeFile
+
+    /// <summary>Проверяет валидность файла дерева эпизодической памяти</summary>
+    public static bool IsValidEpisodicTreeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidEpisodicTreeFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла дерева эпизодической памяти</summary>
+    public static bool IsValidEpisodicTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var main = t.Split('#');
+        var p = main[0].Split('|');
+        if (p.Length < 7) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidEpisodicHistoryFile
+
+    /// <summary>Проверяет валидность файла истории эпизодической памяти</summary>
+    public static bool IsValidEpisodicHistoryFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath))
+        return true; // пустой путь — допустимо для новой системы
+      if (!File.Exists(filePath))
+        return true; // файла нет — создастся при сохранении
+      try
+      {
+        return IsValidEpisodicHistoryContent(File.ReadAllText(filePath));
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого истории (ID,LifeTime|...)</summary>
+    public static bool IsValidEpisodicHistoryContent(string content)
+    {
+      if (string.IsNullOrWhiteSpace(content)) return true;
+      var parts = content.Split('|');
+      foreach (var part in parts)
+      {
+        var s = part?.Trim();
+        if (string.IsNullOrWhiteSpace(s)) continue;
+        var p = s.Split(',');
+        if (p.Length < 2) return false;
+        if (!int.TryParse(p[0], out _)) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+      }
+      return true;
     }
 
     #endregion

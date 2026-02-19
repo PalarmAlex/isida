@@ -80,6 +80,30 @@ public static class AppGlobalState
 
   #endregion
 
+  #region Эпизодическая память
+
+  /// <summary>Образ стимула (действий оператора) перед ответом Beast</summary>
+  private static int _curStimulusImageId = 0;
+
+  /// <summary>Значимость стимула для записи правил</summary>
+  private static int _prevStimulsEffect = 0;
+
+  /// <summary>Образ стимула (действий оператора) перед ответом Beast</summary>
+  public static int CurStimulusImageId
+  {
+    get { _lock.EnterReadLock(); try { return _curStimulusImageId; } finally { _lock.ExitReadLock(); } }
+    set { _lock.EnterWriteLock(); try { _curStimulusImageId = value; } finally { _lock.ExitWriteLock(); } }
+  }
+
+  /// <summary>Значимость стимула для записи правил</summary>
+  public static int PrevStimulsEffect
+  {
+    get { _lock.EnterReadLock(); try { return _prevStimulsEffect; } finally { _lock.ExitReadLock(); } }
+    set { _lock.EnterWriteLock(); try { _prevStimulsEffect = value; } finally { _lock.ExitWriteLock(); } }
+  }
+
+  #endregion
+
   #region Автоматизмы - Свойства и методы
 
   /// <summary>

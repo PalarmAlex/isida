@@ -112,6 +112,15 @@
     <Compile Include="Psychic\Automatism\MirrorAutomatizmService.cs" />
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
     <Compile Include="Psychic\Automatism\ConditionedReflexToAutomatizmConverter.cs" />
+    <Compile Include="Psychic\Understanding\ProblemTreeNode.cs" />
+    <Compile Include="Psychic\Understanding\ProblemTreeSystem.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryNode.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryTree.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryHistory.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryStorage.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemorySystem.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRulesService.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRules.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />

@@ -314,6 +314,21 @@ namespace ISIDA.Common
     public OrientationReflexSystem OrientationReflex { get; internal set; }
 
     /// <summary>
+    /// Дерево проблем (для эпизодической памяти)
+    /// </summary>
+    public Psychic.Understanding.ProblemTreeSystem ProblemTree { get; internal set; }
+
+    /// <summary>
+    /// Моторная эпизодическая память
+    /// </summary>
+    public Psychic.Memory.Episodic.EpisodicMemorySystem EpisodicMemory { get; internal set; }
+
+    /// <summary>
+    /// Сервис записи правил в эпизодическую память
+    /// </summary>
+    public Psychic.Memory.Episodic.EpisodicMemoryRulesService EpisodicMemoryRulesService { get; internal set; }
+
+    /// <summary>
     /// Сервис управления переключением между стадиями эволюции
     /// </summary>
     public EvolutionStageService EvolutionStageService { get; internal set; }
@@ -359,6 +374,8 @@ namespace ISIDA.Common
       //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
+      SafeDispose(EpisodicMemory, "EpisodicMemory");
+      SafeDispose(ProblemTree, "ProblemTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
       // Дублируем явную очистку сервиса зеркалирования как отдельной точки доступа контекста.
       // Безопасно: внутри сервиса есть защита от повторного Dispose.
@@ -457,6 +474,9 @@ namespace ISIDA.Common
         AutomatismResult != null &&
 
         // Системы психики
+        ProblemTree != null &&
+        EpisodicMemory != null &&
+        EpisodicMemoryRulesService != null &&
         PsychicSystem != null &&
         MirrorAutomatizmService != null &&
         EmotionsImageSystem != null &&
@@ -663,6 +683,11 @@ namespace ISIDA.Common
         if (context.AutomatizmTree.Tree.Children.Count == 0)
           context.AutomatizmTree.CreateBasicAutomatizmTree();
 
+        // Шаг 19.5: Дерево проблем (для эпизодической памяти)
+        initializationStep = 19;
+        Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        context.ProblemTree = Psychic.Understanding.ProblemTreeSystem.Instance;
+
         // Шаг 20: Система автоматизмов
         initializationStep = 20;
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
@@ -682,6 +707,19 @@ namespace ISIDA.Common
         initializationStep = 23;
         AutomatismResultTracker.InitializeInstance(context.AutomatizmSystem);
         context.AutomatismResult = AutomatismResultTracker.Instance;
+
+        // Шаг 23.5: Моторная эпизодическая память
+        initializationStep = 23;
+        Psychic.Memory.Episodic.EpisodicMemorySystem.InitializeInstance(
+          config.PsychicDataFolder,
+          context.AutomatizmTree,
+          context.ProblemTree,
+          context.InformationEnvironmentSystem,
+          context.Gomeostas,
+          context.ActionsImages);
+        context.EpisodicMemory = Psychic.Memory.Episodic.EpisodicMemorySystem.Instance;
+        context.EpisodicMemoryRulesService = new Psychic.Memory.Episodic.EpisodicMemoryRulesService(context.EpisodicMemory);
+        context.AutomatismResult.SetEpisodicMemoryRulesService(context.EpisodicMemoryRulesService);
 
         // Шаг 24: Система психики
         initializationStep = 24;
@@ -811,12 +849,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V2.2";
+    public const string ProjectVersion = "V2.3";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.02.16";
+    public const string BuildDate = "2026.02.17";
 
     /// <summary>
     /// Краткое описание концепции проекта

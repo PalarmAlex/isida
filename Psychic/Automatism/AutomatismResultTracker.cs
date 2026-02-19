@@ -1,6 +1,7 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Memory.Episodic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -33,6 +34,15 @@ namespace ISIDA.Psychic
     public static bool IsInitialized => _instance != null;
 
     private readonly AutomatizmSystem _automatizmSystem;
+    private EpisodicMemoryRulesService _episodicRulesService;
+
+    /// <summary>
+    /// Установить сервис записи правил эпизодической памяти (вызывается из IsidaEngine)
+    /// </summary>
+    public void SetEpisodicMemoryRulesService(EpisodicMemoryRulesService service)
+    {
+      _episodicRulesService = service;
+    }
 
     /// <summary>
     /// Инициализирует глобальный экземпляр системы отслеживания результатов
@@ -459,6 +469,16 @@ namespace ISIDA.Psychic
         result.CurrentState = AppGlobalState.CurrentOverallState;
 
         AnalyzeResult(result);
+
+        // Запись в эпизодическую память
+        if (_episodicRulesService != null && result.ActionsImageId > 0)
+        {
+          int triggerId = AppGlobalState.CurStimulusImageId;
+          int effect = result.UsefulnessDelta;
+          int stimulsEffect = AppGlobalState.PrevStimulsEffect;
+          _episodicRulesService.FixDirectRule(triggerId, result.ActionsImageId, effect, stimulsEffect);
+        }
+
         UpdateStatistics(result);
         AddHistoryRecord(
           result.AutomatizmId,

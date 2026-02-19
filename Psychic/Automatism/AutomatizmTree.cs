@@ -1,4 +1,5 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
+using ISIDA.Psychic.Understanding;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -434,6 +435,9 @@ namespace ISIDA.Psychic.Automatism
           DetectedActiveLastNodeId = FormingBranch(0, _currentStepCount, condArr);
           CurrentAutomatizmTreeEnd = condArr;
         }
+
+        if (ProblemTreeSystem.IsInitialized)
+          ProblemTreeSystem.Instance.UpdateActiveBranchFromAutomatizmTree(DetectedActiveLastNodeId);
 
         return DetectedActiveLastNodeId;
       }
