@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
@@ -2117,6 +2117,23 @@ namespace ISIDA.Gomeostas
 
       if (dominantParam != null)
         dominantParam.IsDominant = true;
+    }
+
+    /// <summary>
+    /// Сбрасывает все индикаторы, зависящие от пульсации (активные стили, доминирующий параметр, состояния параметров).
+    /// Вызывается при остановке пульсации.
+    /// </summary>
+    public void ClearPulseRuntimeIndicators()
+    {
+      Array.Clear(ActiveStyles, 0, ActiveStyles.Length);
+      AppGlobalState.UpdateActiveStyles(Enumerable.Empty<BehaviorStyle>());
+
+      foreach (var param in _agentState.Parameters)
+      {
+        param.IsDominant = false;
+        param.CurrentState = ParameterState.Normal;
+        param.LastState = ParameterState.Normal;
+      }
     }
 
     /// <summary>

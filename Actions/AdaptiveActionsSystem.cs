@@ -587,6 +587,15 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
+    /// Полная очистка всех активных действий и фраз. Вызывается при остановке пульсации.
+    /// </summary>
+    public void ClearAllActiveState()
+    {
+      ClearActiveAction();
+      ClearActivePhrases();
+    }
+
+    /// <summary>
     /// Очищает рефлекторные действия, которые отображались дольше заданного времени
     /// </summary>
     internal void CleanupExpiredReflexActions()

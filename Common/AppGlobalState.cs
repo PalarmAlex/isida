@@ -702,6 +702,17 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Очищает индикаторы цепочек и автоматизмов при остановке пульсации.
+  /// (Стили и параметры сбрасываются в GomeostasSystem.ClearPulseRuntimeIndicators.)
+  /// </summary>
+  public static void ClearPulseIndicators()
+  {
+    IsAutomatizmChainActive = false;
+    IsReflexChainActive = false;
+    ResetAutomatizmInfo();
+  }
+
+  /// <summary>
   /// Сбросить состояние ожидания оценки оператора
   /// </summary>
   public static void ResetWaitingForOperatorEvaluation()

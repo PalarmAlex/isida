@@ -120,8 +120,9 @@ namespace ISIDA.Psychic
     {
       try
       {
-        // Создать первые три ветки базовых состояний, если их нет9
-        _automatizmTreeSystem.CreateBasicAutomatizmTree();
+        // Создать первые три ветки базовых состояний, если их нет
+        if (_automatizmTreeSystem.Tree.Children.Count == 0)
+          _automatizmTreeSystem.CreateBasicAutomatizmTree();
       }
       catch (Exception ex)
       {

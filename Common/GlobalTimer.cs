@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -189,6 +189,7 @@ namespace ISIDA.Common
 
       if (wasRunning)
       {
+        OnPulsationStopped();
         // Уведомляем UI
         PulsationStateChanged?.Invoke();
         // Останавливаем таймеры (не уведомляем UI повторно)
@@ -364,6 +365,7 @@ namespace ISIDA.Common
 
       if (shouldStop)
       {
+        OnPulsationStopped();
         // Вызываем событие смерти агента
         OnPulseError?.Invoke("Агент умер");
 
@@ -392,6 +394,7 @@ namespace ISIDA.Common
 
       if (shouldStop)
       {
+        OnPulsationStopped();
         // Вызываем событие ошибки
         OnPulseError?.Invoke(errorMessage);
 
@@ -399,6 +402,24 @@ namespace ISIDA.Common
         StopTimers();
 
         Logger.Info("Остановка завершена");
+      }
+    }
+
+    /// <summary>
+    /// Выполняется при остановке пульсации: сброс периода ожидания, активных действий, стилей, цепочек, параметров.
+    /// </summary>
+    private static void OnPulsationStopped()
+    {
+      try
+      {
+        AppGlobalState.ForceStopWaitingForOperatorEvaluation();
+        _actionsSystem?.ClearAllActiveState();
+        AppGlobalState.ClearPulseIndicators();
+        _gomeostas?.ClearPulseRuntimeIndicators();
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"Ошибка при сбросе состояния при остановке пульсации: {ex.Message}");
       }
     }
 
