@@ -454,6 +454,43 @@ namespace ISIDA.Sensors
     #region Работа с фразами
 
     /// <summary>
+    /// Находит ID фразы по точной последовательности ID слов
+    /// </summary>
+    /// <param name="wordIds">Список ID слов, составляющих фразу</param>
+    /// <returns>ID фразы или 0 если не найдена</returns>
+    private int FindExactPhraseId(List<int> wordIds)
+    {
+      if (wordIds == null || wordIds.Count == 0) return 0;
+
+      _lock.EnterReadLock();
+      try
+      {
+        // Начинаем с корневого узла (ID = 0)
+        if (!PhraseTreeFromID.TryGetValue(0, out var currentNode))
+          return 0;
+
+        // Идем по пути из слов
+        foreach (var wordId in wordIds)
+        {
+          var childNode = currentNode.Children
+              .FirstOrDefault(c => c.Element.Equals(wordId));
+
+          if (childNode == null)
+            return 0;
+
+          currentNode = childNode;
+        }
+
+        // Возвращаем ID последнего узла в пути (даже если у него есть дети)
+        return currentNode.Id;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Получить первый символ фразы
     /// </summary>
     public int GetFirstSymbolFromPhraseId(int phraseId)
@@ -583,7 +620,12 @@ namespace ISIDA.Sensors
       _lock.EnterReadLock();
       try
       {
-        // Ищем фразу в дереве
+        // СПОСОБ 1: Ищем точное совпадение по пути
+        var exactId = FindExactPhraseId(wordIds);
+        if (exactId != 0)
+          return exactId;
+
+        // СПОСОБ 2: Ищем среди конечных узлов (старая логика)
         return PhraseTree.FindBranchInternal(wordIds);
       }
       finally
@@ -612,8 +654,8 @@ namespace ISIDA.Sensors
         var existingId = PhraseTree.FindBranchInternal(wordIds);
         if (existingId != 0) return existingId;
 
-        // Фильтр мусора
-        if (IsGarbagePhrase(wordIds)) return null;
+        //// Фильтр мусора
+        //if (IsGarbagePhrase(wordIds)) return null;
 
         // Авторитарный режим - сразу в дерево
         if (_authoritativeMode)
@@ -641,18 +683,18 @@ namespace ISIDA.Sensors
       }
     }
 
-    private bool IsGarbagePhrase(List<int> wordIds)
-    {
-      //// 1. Фразы из 1 слова (кроме исключений типа "Стоп!")
-      //if (wordIds.Count == 1 && GetFirstSymbolFromWordId(wordIds[0]) != 60 /* ! */)
-      //  return true;
+    //private bool IsGarbagePhrase(List<int> wordIds)
+    //{
+    //  //// 1. Фразы из 1 слова (кроме исключений типа "Стоп!")
+    //  //if (wordIds.Count == 1 && GetFirstSymbolFromWordId(wordIds[0]) != 60 /* ! */)
+    //  //  return true;
 
-      // 2. Повторяющиеся слова ("да да да")
-      if (wordIds.Distinct().Count() < wordIds.Count)
-        return true;
+    //  // 2. Повторяющиеся слова ("да да да")
+    //  if (wordIds.Distinct().Count() < wordIds.Count)
+    //    return true;
 
-      return false;
-    }
+    //  return false;
+    //}
 
     /// <summary>
     /// Получает фразу по ее ID из дерева фраз
@@ -677,6 +719,9 @@ namespace ISIDA.Sensors
     /// </summary>
     internal string GetPhraseFromPhraseIdInternal(int phraseId)
     {
+      if (phraseId == 178)
+        phraseId = 178;
+
       // Находим конечный узел фразы
       if (!PhraseTreeFromID.TryGetValue(phraseId, out var phraseNode))
         return string.Empty;
@@ -699,41 +744,41 @@ namespace ISIDA.Sensors
       return string.Join(" ", words);
     }
 
-    /// <summary>
-    /// Получает все фразы из дерева фраз
-    /// </summary>
-    internal Dictionary<int, string> GetAllPhrasesInternal()
-    {
-      var phrases = new Dictionary<int, string>();
-      foreach (var node in PhraseTreeFromID.Values)
-      {
-        // Конечный узел - это узел без детей И с ненулевым ID
-        if (node.Children.Count == 0 && node.Id != 0)
-        {
-          var phrase = GetPhraseFromPhraseIdInternal(node.Id);
-          if (!string.IsNullOrEmpty(phrase))
-            phrases.Add(node.Id, phrase);
-        }
-      }
-      return phrases;
-    }
+    ///// <summary>
+    ///// Получает все фразы из дерева фраз
+    ///// </summary>
+    ////internal Dictionary<int, string> GetAllPhrasesInternal()
+    ////{
+    ////  var phrases = new Dictionary<int, string>();
+    ////  foreach (var node in PhraseTreeFromID.Values)
+    ////  {
+    ////    // Конечный узел - это узел без детей И с ненулевым ID
+    ////    if (node.Children.Count == 0 && node.Id != 0)
+    ////    {
+    ////      var phrase = GetPhraseFromPhraseIdInternal(node.Id);
+    ////      if (!string.IsNullOrEmpty(phrase))
+    ////        phrases.Add(node.Id, phrase);
+    ////    }
+    ////  }
+    ////  return phrases;
+    ////}
 
-    /// <summary>
-    /// Получает все фразы из дерева фраз
-    /// </summary>
-    /// <returns>Словарь, где ключ - ID фразы, значение - сама фраза</returns>
-    public Dictionary<int, string> GetAllPhrases()
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        return GetAllPhrasesInternal();
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
+    ///// <summary>
+    ///// Получает все фразы из дерева фраз
+    ///// </summary>
+    ///// <returns>Словарь, где ключ - ID фразы, значение - сама фраза</returns>
+    ////public Dictionary<int, string> GetAllPhrases()
+    ////{
+    ////  _lock.EnterReadLock();
+    ////  try
+    ////  {
+    ////    return GetAllPhrasesInternal();
+    ////  }
+    ////  finally
+    ////  {
+    ////    _lock.ExitReadLock();
+    ////  }
+    ////}
 
     #endregion
 
@@ -828,59 +873,36 @@ namespace ISIDA.Sensors
         // Нормализуем входной текст
         var inputTextNormalized = text.Trim().ToLower();
 
-        //Logger.Info($"=== Распознавание текста: '{text}' ===");
-
         // обрабатываем текст (добавляем слова и фразы в дерево/песочницу)
         ProcessText(text, maxPhraseLength);
 
-        // получаем все фразы из дерева после обработки
-        var allPhrases = GetAllPhrasesInternal();
+        // Получаем ID слов для входного текста
+        var words = Regex.Matches(text, @"(\S+)")
+                       .Cast<Match>()
+                       .Select(m => m.Value)
+                       .ToList();
 
-        //Logger.Info($"Доступные фразы в дереве: {string.Join("; ", allPhrases.Values)}");
-
-        // Ищем точное совпадение
-        foreach (var phrase in allPhrases)
+        var wordIds = new List<int>();
+        foreach (var word in words)
         {
-          var phraseNormalized = phrase.Value.ToLower();
+          var wordId = WordTree.FindBranchInternal(word);
+          if (wordId != 0)
+            wordIds.Add(wordId);
+        }
 
-          if (phraseNormalized == inputTextNormalized)
+        // Ищем точное совпадение по пути (включая не-листовые узлы)
+        if (wordIds.Count > 0)
+        {
+          var exactPhraseId = FindExactPhraseId(wordIds);
+          if (exactPhraseId != 0)
           {
-            //Logger.Info($"✓ Найдено точное совпадение: '{phrase.Value}' -> ID {phrase.Key}");
-            recognizedPhraseIds.Add(phrase.Key);
+            var phrase = GetPhraseFromPhraseIdInternal(exactPhraseId);
+            recognizedPhraseIds.Add(exactPhraseId);
             return recognizedPhraseIds;
           }
         }
 
-        //Logger.Info($"✗ Точное совпадение не найдено");
-
-        // Если точного совпадения нет, ищем наиболее длинную подходящую фразу
-        var candidatePhrases = new List<(int id, string phrase, int length)>();
-
-        foreach (var phrase in allPhrases)
-        {
-          var phraseNormalized = phrase.Value.ToLower();
-
-          // Проверяем, содержится ли фраза в тексте как подстрока
-          if (inputTextNormalized.Contains(phraseNormalized))
-          {
-            candidatePhrases.Add((phrase.Key, phrase.Value, phrase.Value.Length));
-            //Logger.Info($"~ Найдено частичное совпадение: '{phrase.Value}' в '{text}'");
-          }
-        }
-
-        // Выбираем самую длинную подходящую фразу
-        if (candidatePhrases.Any())
-        {
-          var bestMatch = candidatePhrases.OrderByDescending(x => x.length).First();
-          //Logger.Info($"★ Выбрана фраза: '{bestMatch.phrase}' (ID: {bestMatch.id}, длина: {bestMatch.length})");
-          recognizedPhraseIds.Add(bestMatch.id);
-        }
-        else
-        {
-          //Logger.Warning($"✗ Не найдено подходящих фраз для текста: '{text}'");
-        }
-
-        //Logger.Info($"=== Завершено распознавание ===");
+        // Если точного совпадения нет, возвращаем пустой список
         return recognizedPhraseIds;
       }
       catch (Exception ex)
