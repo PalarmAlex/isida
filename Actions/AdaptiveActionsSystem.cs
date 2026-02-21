@@ -148,6 +148,13 @@ namespace ISIDA.Actions
       /// </remarks>
       public List<int> TargetGomeoParamIdArr { get; set; }
 
+    /// <summary>
+    /// ID связанного действия с пульта (InfluenceAction) для отзеркаливания. 0 = нет связи.
+    /// В UI отображается как пустое поле.
+    /// При создании зеркального автоматизма по стимулу с пульта ищется AdaptiveAction с этим полем.
+    /// </summary>
+    public int InfluenceActionId { get; set; }
+
       private int _vigor = 5;
 
       /// <summary>
@@ -353,6 +360,61 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
+    /// Возвращает AdaptiveAction с указанным InfluenceActionId (связь для отзеркаливания).
+    /// </summary>
+    /// <param name="influenceActionId">ID действия с пульта (InfluenceAction)</param>
+    /// <returns>AdaptiveAction или null если нет связи</returns>
+    public AdaptiveAction GetAdaptiveActionByInfluenceActionId(int influenceActionId)
+    {
+      if (influenceActionId <= 0) return null;
+      _lock.EnterReadLock();
+      try
+      {
+        return _actions.Values.FirstOrDefault(a => a.InfluenceActionId == influenceActionId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Проверяет, используется ли ID действия с пульта в каком-либо AdaptiveAction для отзеркаливания.
+    /// </summary>
+    public bool IsInfluenceActionIdUsedForMirroring(int influenceActionId)
+    {
+      if (influenceActionId <= 0) return false;
+      _lock.EnterReadLock();
+      try
+      {
+        return _actions.Values.Any(a => a.InfluenceActionId == influenceActionId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Преобразует список ID действий с пульта (InfluenceAction) в ID адаптивных действий (AdaptiveAction)
+    /// по полю InfluenceActionId. Если для InfluenceAction нет связи — ID пропускается.
+    /// </summary>
+    public List<int> ConvertInfluenceActionIdsToAdaptiveActionIds(List<int> influenceActionIds)
+    {
+      if (influenceActionIds == null || !influenceActionIds.Any())
+        return new List<int>();
+
+      var result = new List<int>();
+      foreach (int infId in influenceActionIds)
+      {
+        var adaptive = GetAdaptiveActionByInfluenceActionId(infId);
+        if (adaptive != null)
+          result.Add(adaptive.Id);
+      }
+      return result;
+    }
+
+    /// <summary>
     /// Получает активные действия по источнику активации
     /// </summary>
     public ReadOnlyCollection<AdaptiveAction> GetActiveActionsBySource(ActionActivationSource source)
@@ -396,6 +458,7 @@ namespace ISIDA.Actions
     /// <param name="targetGomeoParamIdArr">Список ID параметров гомеостаза, которые потенциально может улучшить действие</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <param name="Vigor">Интенсивность действия [1...10], по умолчанию = 5</param>
+    /// <param name="influenceActionId">ID связанного действия с пульта (InfluenceAction) для отзеркаливания. 0 = нет связи.</param>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях в влияниях или затратах (вне диапазона -10..+10)</exception>
     public (int ActionId, string[] Warnings) AddAction(
@@ -404,7 +467,8 @@ namespace ISIDA.Actions
         List<int> antagonistActions = null,
         List<int> targetGomeoParamIdArr = null,
         bool strictValidation = false,
-        int Vigor = 5)
+        int Vigor = 5,
+        int influenceActionId = 0)
     {
       if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
@@ -421,6 +485,7 @@ namespace ISIDA.Actions
         AntagonistActions = antagonistActions ?? new List<int>(),
         TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>(),
         Vigor = Vigor,
+        InfluenceActionId = influenceActionId,
         ActionsSystem = this
       };
 
@@ -449,7 +514,8 @@ namespace ISIDA.Actions
           Description = description,
           Vigor = Vigor,
           AntagonistActions = antagonistActions ?? new List<int>(),
-          TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>()
+          TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>(),
+          InfluenceActionId = influenceActionId
         };
 
         _actions.Add(newId, action);
@@ -897,6 +963,12 @@ namespace ISIDA.Actions
             else
               action.TargetGomeoParamIdArr = new List<int>();
 
+            if (parts.Length >= 7 && !string.IsNullOrWhiteSpace(parts[6]))
+            {
+              if (int.TryParse(parts[6].Trim(), out int influenceActionId) && influenceActionId >= 0)
+                action.InfluenceActionId = influenceActionId;
+            }
+
             _actions[action.Id] = action;
             if (action.Id > _lastActionId)
               _lastActionId = action.Id;
@@ -909,7 +981,8 @@ namespace ISIDA.Actions
             {
                 FileHeaders.ActionsFormat,
                 FileHeaders.ActionsAntagonists,
-                FileHeaders.TargetParameters
+                FileHeaders.TargetParameters,
+                FileHeaders.ActionsInfluenceActionId
             };
           File.WriteAllLines(path, lines);
 
@@ -959,7 +1032,8 @@ namespace ISIDA.Actions
         {
           FileHeaders.ActionsFormat,
           FileHeaders.ActionsAntagonists,
-          FileHeaders.TargetParameters
+          FileHeaders.TargetParameters,
+          FileHeaders.ActionsInfluenceActionId
         };
 
         foreach (var action in _actions.Values.OrderBy(a => a.Id))
@@ -971,7 +1045,7 @@ namespace ISIDA.Actions
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
             $"{action.Vigor}|" +
             $"{string.Join(",", action.AntagonistActions)}|" +
-            $"{targetParams}");
+            $"{targetParams}|{action.InfluenceActionId}");
         }
 
         var minLinesCount = 4;

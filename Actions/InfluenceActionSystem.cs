@@ -309,6 +309,13 @@ namespace ISIDA.Actions
           throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется в образах восприятия и не может быть удалено");
         }
 
+        if (AdaptiveActionsSystem.IsInitialized &&
+            AdaptiveActionsSystem.Instance.IsInfluenceActionIdUsedForMirroring(actionId))
+        {
+          var actionName = _influenceActions[actionId].Name;
+          throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется для отзеркаливания в действиях агента и не может быть удалено");
+        }
+
         bool removed = _influenceActions.Remove(actionId);
 
         _influenceActiveActions.RemoveAll(a => a.Id == actionId);

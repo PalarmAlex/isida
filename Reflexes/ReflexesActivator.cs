@@ -1,4 +1,4 @@
-using ISIDA.Psychic;
+﻿using ISIDA.Psychic;
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;

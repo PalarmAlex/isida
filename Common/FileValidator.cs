@@ -45,9 +45,10 @@ namespace ISIDA.Common
       public const string InfluenceAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Адаптивные действия
-      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры";
+      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
       public const string TargetParameters = "# Target параметры: id1,id2,id3";
+      public const string ActionsInfluenceActionId = "# InfluenceActionId: 0=нет связи, иначе ID действия с пульта для отзеркаливания";
 
       // Стили поведения
       public const string StylesFormat = "# Формат: ID|Имя|Описание|Антагонисты";
@@ -383,6 +384,12 @@ namespace ISIDA.Common
         if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]))
         {
           if (!int.TryParse(parts[3], out int vigor) || vigor < 1 || vigor > 10)
+            return false;
+        }
+
+        if (parts.Length >= 7 && !string.IsNullOrWhiteSpace(parts[6]))
+        {
+          if (!int.TryParse(parts[6], out int influenceActionId) || influenceActionId < 0)
             return false;
         }
 
