@@ -744,42 +744,6 @@ namespace ISIDA.Sensors
       return string.Join(" ", words);
     }
 
-    ///// <summary>
-    ///// Получает все фразы из дерева фраз
-    ///// </summary>
-    ////internal Dictionary<int, string> GetAllPhrasesInternal()
-    ////{
-    ////  var phrases = new Dictionary<int, string>();
-    ////  foreach (var node in PhraseTreeFromID.Values)
-    ////  {
-    ////    // Конечный узел - это узел без детей И с ненулевым ID
-    ////    if (node.Children.Count == 0 && node.Id != 0)
-    ////    {
-    ////      var phrase = GetPhraseFromPhraseIdInternal(node.Id);
-    ////      if (!string.IsNullOrEmpty(phrase))
-    ////        phrases.Add(node.Id, phrase);
-    ////    }
-    ////  }
-    ////  return phrases;
-    ////}
-
-    ///// <summary>
-    ///// Получает все фразы из дерева фраз
-    ///// </summary>
-    ///// <returns>Словарь, где ключ - ID фразы, значение - сама фраза</returns>
-    ////public Dictionary<int, string> GetAllPhrases()
-    ////{
-    ////  _lock.EnterReadLock();
-    ////  try
-    ////  {
-    ////    return GetAllPhrasesInternal();
-    ////  }
-    ////  finally
-    ////  {
-    ////    _lock.ExitReadLock();
-    ////  }
-    ////}
-
     #endregion
 
     #region Обработка текста

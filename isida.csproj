@@ -107,6 +107,7 @@
     <Compile Include="Psychic\Automatism\AutomatismExecutionService.cs" />
     <Compile Include="Psychic\Automatism\AutomatismResultTracker.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmChainsSystem.cs" />
+    <Compile Include="Psychic\Automatism\AutomatizmFileLoader.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatizmTree.cs" />
     <Compile Include="Psychic\Automatism\MirrorAutomatizmService.cs" />

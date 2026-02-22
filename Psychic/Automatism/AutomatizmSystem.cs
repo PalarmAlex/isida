@@ -396,7 +396,7 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Удалить все автоматизмы
+    /// Удалить все автоматизмы и полностью очистить дерево автоматизмов
     /// </summary>
     public bool DeleteAllAutomatizm()
     {
@@ -427,13 +427,23 @@ namespace ISIDA.Psychic.Automatism
           _automatizmBelief2FromTreeNodeId.Clear();
           _automatizmFromActionId.Clear();
           _automatizmFromPhraseId.Clear();
+
+          if (AutomatizmTreeSystem.IsInitialized)
+          {
+            Logger.Info("Выполняется полная очистка дерева автоматизмов");
+            bool treeCleared = AutomatizmTreeSystem.Instance.ClearTree();
+            if (treeCleared)
+              Logger.Info("Дерево автоматизмов успешно очищено");
+            else
+              Logger.Error("Не удалось полностью очистить дерево автоматизмов");
+          }
         }
 
         return removed;
       }
       catch (Exception ex)
       {
-        Logger.Error(ex.Message);
+        Logger.Error($"Ошибка при очистке автоматизмов: {ex.Message}");
         return false;
       }
       finally
