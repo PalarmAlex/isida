@@ -1,4 +1,4 @@
-﻿using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
@@ -94,6 +94,24 @@ namespace ISIDA.Psychic
     private readonly Dictionary<int, EmotionsImage> _emotionsImages = new Dictionary<int, EmotionsImage>();
     private int _lastEmotionsImageId = 0;
 
+    /// <summary>
+    /// Быстрый поиск по ключу списка стилей для проверки уникальности (O(1)).
+    /// </summary>
+    private readonly Dictionary<string, int> _unicumEmotionsImageKeyToId = new Dictionary<string, int>();
+
+    /// <summary>
+    /// Не логировать «Найден существующий образ» (для массовой загрузки).
+    /// </summary>
+    private bool _suppressFoundExistingLog = false;
+
+    /// <summary>
+    /// Отключить логирование при нахождении существующего образа (для массовой загрузки из файла).
+    /// </summary>
+    public void SetSuppressFoundExistingLog(bool suppress)
+    {
+      _suppressFoundExistingLog = suppress;
+    }
+
     #endregion
 
     #region Управление образами действий
@@ -172,7 +190,8 @@ namespace ISIDA.Psychic
           var existing = CheckUnicumEmotionsImageNoLock(baseStylesList);
           if (existing.Image != null)
           {
-            Logger.Info($"Найден существующий образ ID={existing.Id}");
+            if (!_suppressFoundExistingLog)
+              Logger.Info($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -239,17 +258,30 @@ namespace ISIDA.Psychic
       };
 
       _emotionsImages[newId] = image;
+      _unicumEmotionsImageKeyToId[EmotionsImageUnicumKey(baseStylesList)] = newId;
       if (checkUnicum)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
+    private static string EmotionsImageUnicumKey(List<int> baseStylesList)
+    {
+      if (baseStylesList == null || baseStylesList.Count == 0)
+        return "";
+      return string.Join(",", baseStylesList.OrderBy(x => x));
+    }
+
     /// <summary>
-    /// Проверить уникальность образа действий (без блокировки - для внутреннего использования)
+    /// Проверить уникальность образа действий (O(1) по индексу, иначе перебор).
     /// </summary>
     private (int Id, EmotionsImage Image) CheckUnicumEmotionsImageNoLock(List<int> baseStylesList)
     {
+      string key = EmotionsImageUnicumKey(baseStylesList);
+      if (_unicumEmotionsImageKeyToId.TryGetValue(key, out int existingId) &&
+          _emotionsImages.TryGetValue(existingId, out var existingImg))
+        return (existingId, existingImg);
+
       foreach (var kvp in _emotionsImages)
       {
         var v = kvp.Value;
@@ -259,6 +291,7 @@ namespace ISIDA.Psychic
         if (!AddUtils.AreListsEqual(baseStylesList, v.BaseStylesList))
           continue;
 
+        _unicumEmotionsImageKeyToId[key] = kvp.Key;
         return (kvp.Key, v);
       }
 
@@ -274,6 +307,7 @@ namespace ISIDA.Psychic
       try
       {
         _emotionsImages.Clear();
+        _unicumEmotionsImageKeyToId.Clear();
         _lastEmotionsImageId = 0;
       }
       finally
@@ -321,6 +355,7 @@ namespace ISIDA.Psychic
 
           File.WriteAllLines(filePath, lines);
           _emotionsImages.Clear();
+          _unicumEmotionsImageKeyToId.Clear();
           _lastEmotionsImageId = 0;
           return;
         }
@@ -337,6 +372,7 @@ namespace ISIDA.Psychic
         try
         {
           _emotionsImages.Clear();
+          _unicumEmotionsImageKeyToId.Clear();
           _lastEmotionsImageId = 0;
 
           foreach (var line in File.ReadLines(filePath))

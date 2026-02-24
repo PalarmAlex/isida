@@ -258,8 +258,8 @@ namespace ISIDA.Psychic.Understanding
     {
       try
       {
-        var path = Path.Combine(_psychicDataPath, $"{ProblemTreeFileName}.dat");
         EnsureDataDirectory();
+        var path = Path.Combine(_psychicDataPath, $"{ProblemTreeFileName}.dat");
         var lines = new List<string>
         {
           FileValidator.FileHeaders.ProblemTreeFormat,
@@ -269,13 +269,14 @@ namespace ISIDA.Psychic.Understanding
         foreach (var node in Tree.Children)
           CollectLines(node, lines);
 
-        if (!FileValidator.IsValidProblemTreeFile(lines))
-        {
-          return (false, "Валидация файла дерева проблем не пройдена");
-        }
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            content => FileValidator.IsValidProblemTreeFile(string.Join(Environment.NewLine, content)),
+            minLinesCount: 3,
+            fileDescription: "дерева проблем");
 
-        File.WriteAllLines(path, lines);
-        return (true, null);
+        return (result.Success, result.ErrorMessage);
       }
       catch (Exception ex)
       {
@@ -303,7 +304,8 @@ namespace ISIDA.Psychic.Understanding
       {
         var (ok, err) = SaveProblemTreeCore();
         if (!ok && !string.IsNullOrEmpty(err))
-          Logger.Warning($"Ошибка сохранения дерева проблем: {err}");
+          Logger.Error(err);
+
         _disposed = true;
       }
       finally

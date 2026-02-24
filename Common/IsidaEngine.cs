@@ -175,6 +175,10 @@ namespace ISIDA.Common
         throw new ArgumentException("ReflexesFolder не указан");
       if (string.IsNullOrEmpty(PsychicDataFolder))
         throw new ArgumentException("PsychicDataFolder не указан");
+      if (string.IsNullOrEmpty(LogsFolder))
+        throw new ArgumentException("LogsFolder не указан");
+      if (string.IsNullOrEmpty(BootDataFolder))
+        throw new ArgumentException("BootDataFolder не указан");
     }
   }
 
@@ -187,6 +191,11 @@ namespace ISIDA.Common
   /// </remarks>
   public class IsidaContext : IDisposable
   {
+    /// <summary>
+    /// Класс для загрузки автоматизмов из файла
+    /// </summary>
+    public AutomatizmFileLoader AutomatizmFileLoader { get; internal set; }
+
     /// <summary>
     /// Система управления цепочками автоматизмов
     /// </summary>
@@ -383,6 +392,7 @@ namespace ISIDA.Common
       //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
+      SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");
       SafeDispose(EpisodicMemory, "EpisodicMemory");
       SafeDispose(ProblemTree, "ProblemTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
@@ -479,6 +489,7 @@ namespace ISIDA.Common
         AutomatizmSystem != null &&
         AutomatismExecution != null &&
         AutomatismResult != null &&
+        AutomatizmFileLoader != null &&
 
         // Системы психики
         ProblemTree != null &&
@@ -752,28 +763,33 @@ namespace ISIDA.Common
           context.AdaptiveActions);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
-        // Шаг 28: Сервис выполнения автоматизмов
+        // Шаг 28: Класс для загрузки автоматизмов из файла
         initializationStep = 28;
+        AutomatizmFileLoader.InitializeInstance(config.BootDataFolder);
+        context.AutomatizmFileLoader = AutomatizmFileLoader.Instance;
+
+        // Шаг 29: Сервис выполнения автоматизмов
+        initializationStep = 29;
         AutomatismExecutionService.InitializeInstance(
             context.AdaptiveActions,
             context.ActionsImages);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
 
-        // Шаг 29: Система ориентировочного рефлекса
-        initializationStep = 29;
+        // Шаг 30: Система ориентировочного рефлекса
+        initializationStep = 30;
         OrientationReflexSystem.InitializeInstance(
             context.InformationEnvironmentSystem,
             context.PurposeGeneticImageSystem);
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
 
-        // Шаг 30: Система управления цепочками автоматизмов
-        initializationStep = 30;
+        // Шаг 31: Система управления цепочками автоматизмов
+        initializationStep = 31;
         AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
         context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
-        // Шаг 31: Сервис выполнения автоматизмов
-        initializationStep = 31;
+        // Шаг 32: Сервис выполнения автоматизмов
+        initializationStep = 32;
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
@@ -790,8 +806,8 @@ namespace ISIDA.Common
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
-        // Шаг 32: Сервис конвертирования условных рефлексов в автоматизмы
-        initializationStep = 32;
+        // Шаг 33: Сервис конвертирования условных рефлексов в автоматизмы
+        initializationStep = 33;
         ConditionedReflexToAutomatizmConverter.InitializeInstance(
             context.ConditionedReflexes,
             context.GeneticReflexes,
@@ -811,8 +827,8 @@ namespace ISIDA.Common
           context.ConditionedReflexToAutomatizm,
           context.AutomatizmChainsSystem);
 
-        // Шаг 33: Сервис переключения стадий эволюции
-        initializationStep = 33;
+        // Шаг 34: Сервис переключения стадий эволюции
+        initializationStep = 34;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes,
@@ -857,7 +873,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V2.3";
+    public const string ProjectVersion = "V2.4";
 
     /// <summary>
     /// Дата сборки

@@ -343,7 +343,10 @@ namespace ISIDA.Psychic
             {
               var parrotAutomatizm = _automatizmSystem.GetAutomatizmById(parrotAutomatizmId);
               if (parrotAutomatizm != null)
+              {
+                AppGlobalState.CurStimulusImageId = actionsImageId;
                 return ExecuteAutomatizm(parrotAutomatizm);
+              }
             }
           }
 
@@ -354,7 +357,10 @@ namespace ISIDA.Psychic
         }
 
         if (atmz != null)
+        {
+          AppGlobalState.CurStimulusImageId = actionsImageId;
           return ExecuteAutomatizm(atmz); // блокируем рефлексы при удачном запуске автоматизма
+        }
       }
       catch (Exception ex)
       {

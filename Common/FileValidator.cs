@@ -129,9 +129,17 @@ namespace ISIDA.Common
       public const string ProblemTreeFields2 = "# AutTreeID: ID узла дерева автоматизмов";
 
       // Эпизодическая память
-      public const string EpisodicTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect";
-      public const string EpisodicTreeFields1 = "# NodePID: ID узла дерева проблем";
-      public const string EpisodicTreeFields2 = "# TriggerId: ID образа стимула, ActionId: ID образа ответа";
+      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect";
+      public const string EpisodicTreeId = "# ID: уникальный идентификатор узла";
+      public const string EpisodicTreeParentId = "# ParentID: ID родительского узла (0 для корня)";
+      public const string EpisodicTreeBaseId = "# BaseID: Базовое состояние. -1: Плохо 0: Норма 1: Хорошо";
+      public const string EpisodicTreeEmotionId = "# EmotionID: Образ эмоции";
+      public const string EpisodicTreeNodePid = "# NodePID: ID узла дерева проблем";
+      public const string EpisodicTreeTriggerId = "# TriggerId: ID образа стимула";
+      public const string EpisodicTreeActionId = "# ActionId: ID образа ответа";
+      public const string EpisodicTreeEffect = "# Effect: изменение полезности (-10..+10, 100 — учительское)";
+      public const string EpisodicTreeCount = "# Count: число подтверждений применения";
+      public const string EpisodicTreeStimulsEffect = "# StimulsEffect: значимость стимула";
       public const string EpisodicHistoryFormat = "# Формат записи: ID,LifeTime|ID,LifeTime|...";
     }
 
@@ -1314,9 +1322,9 @@ namespace ISIDA.Common
         var s = part?.Trim();
         if (string.IsNullOrWhiteSpace(s)) continue;
         var p = s.Split(',');
-        if (p.Length < 2) return false;
-        if (!int.TryParse(p[0], out _)) return false;
-        if (!int.TryParse(p[1], out _)) return false;
+        if (p.Length < 2) continue; // пропускаем части без формата id,time (напр. "..." в шапке)
+        if (!int.TryParse(p[0], out _)) continue; // шапка или нечисловое — пропустить
+        if (!int.TryParse(p[1], out _)) return false; // число,xxx но xxx не число — ошибка
       }
       return true;
     }

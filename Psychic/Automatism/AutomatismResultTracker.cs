@@ -142,9 +142,14 @@ namespace ISIDA.Psychic
       public int BranchId { get; set; }
 
       /// <summary>
-      /// ID образа действий
+      /// ID образа действий (ответ Beast)
       /// </summary>
       public int ActionsImageId { get; set; }
+
+      /// <summary>
+      /// ID образа стимула оператора (перед ответом Beast)
+      /// </summary>
+      public int StimulusImageId { get; set; }
 
       /// <summary>
       /// Предыдущее глобальное состояние агента
@@ -435,6 +440,7 @@ namespace ISIDA.Psychic
           StartPulse = GlobalTimer.GlobalPulsCount,
           BranchId = branchId,
           ActionsImageId = actionsImageId,
+          StimulusImageId = AppGlobalState.CurStimulusImageId,
           PreviousState = AppGlobalState.CurrentOverallState,
           CurrentState = AppGlobalState.CurrentOverallState,
           Result = ExecutionResult.Success // по умолчанию
@@ -473,7 +479,7 @@ namespace ISIDA.Psychic
         // Запись в эпизодическую память
         if (_episodicRulesService != null && result.ActionsImageId > 0)
         {
-          int triggerId = AppGlobalState.CurStimulusImageId;
+          int triggerId = result.StimulusImageId;
           int effect = result.UsefulnessDelta;
           int stimulsEffect = AppGlobalState.PrevStimulsEffect;
           _episodicRulesService.FixDirectRule(triggerId, result.ActionsImageId, effect, stimulsEffect);

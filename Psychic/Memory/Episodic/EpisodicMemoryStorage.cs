@@ -54,7 +54,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       foreach (var line in File.ReadLines(filePath))
       {
         lineNum++;
-        if (lineNum <= 4) continue;
+        if (lineNum <= 11) continue;
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
 
@@ -114,18 +114,23 @@ namespace ISIDA.Psychic.Memory.Episodic
 
       try
       {
-        var content = File.ReadAllText(filePath);
+        var lines = File.ReadAllLines(filePath);
         var entries = new List<EpisodicHistoryEntry>();
-        var parts = content.Split('|');
-        foreach (var part in parts)
+        foreach (var line in lines)
         {
-          var s = part?.Trim();
-          if (string.IsNullOrWhiteSpace(s)) continue;
-          var p = s.Split(',');
-          if (p.Length < 2) continue;
-          if (!int.TryParse(p[0], out int nodeId)) continue;
-          if (!int.TryParse(p[1], out int lifeTime)) continue;
-          entries.Add(new EpisodicHistoryEntry { NodeId = nodeId, LifeTime = lifeTime });
+          var t = line?.Trim();
+          if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+          var parts = t.Split('|');
+          foreach (var part in parts)
+          {
+            var s = part?.Trim();
+            if (string.IsNullOrWhiteSpace(s)) continue;
+            var p = s.Split(',');
+            if (p.Length < 2) continue;
+            if (!int.TryParse(p[0], out int nodeId)) continue;
+            if (!int.TryParse(p[1], out int lifeTime)) continue;
+            entries.Add(new EpisodicHistoryEntry { NodeId = nodeId, LifeTime = lifeTime });
+          }
         }
         history.LoadFromEntries(entries);
       }
@@ -145,17 +150,28 @@ namespace ISIDA.Psychic.Memory.Episodic
         var lines = new List<string>
         {
           FileValidator.FileHeaders.EpisodicTreeFormat,
-          FileValidator.FileHeaders.EpisodicTreeFields1,
-          FileValidator.FileHeaders.EpisodicTreeFields2
+          FileValidator.FileHeaders.EpisodicTreeId,
+          FileValidator.FileHeaders.EpisodicTreeParentId,
+          FileValidator.FileHeaders.EpisodicTreeBaseId,
+          FileValidator.FileHeaders.EpisodicTreeEmotionId,
+          FileValidator.FileHeaders.EpisodicTreeNodePid,
+          FileValidator.FileHeaders.EpisodicTreeTriggerId,
+          FileValidator.FileHeaders.EpisodicTreeActionId,
+          FileValidator.FileHeaders.EpisodicTreeEffect,
+          FileValidator.FileHeaders.EpisodicTreeCount,
+          FileValidator.FileHeaders.EpisodicTreeStimulsEffect
         };
         CollectTreeLines(root, lines);
 
         var path = GetTreeFilePath(basePath);
-        if (!FileValidator.IsValidEpisodicTreeFile(lines))
-          return (false, "Валидация не пройдена");
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            FileValidator.IsValidEpisodicTreeFile,
+            minLinesCount: 11,
+            fileDescription: "дерева эпизодической памяти");
 
-        File.WriteAllLines(path, lines);
-        return (true, null);
+        return (result.Success, result.ErrorMessage);
       }
       catch (Exception ex)
       {
@@ -181,15 +197,30 @@ namespace ISIDA.Psychic.Memory.Episodic
       try
       {
         EnsureDirectory(basePath);
+        var path = GetHistoryFilePath(basePath);
+        var lines = new List<string>
+        {
+          FileValidator.FileHeaders.EpisodicHistoryFormat
+        };
+
         var sb = new System.Text.StringBuilder();
         foreach (var e in history.Entries)
         {
           if (sb.Length > 0) sb.Append('|');
           sb.Append(e.NodeId).Append(',').Append(e.LifeTime);
         }
-        var path = GetHistoryFilePath(basePath);
-        File.WriteAllText(path, sb.ToString());
-        return (true, null);
+
+        if (sb.Length > 0)
+          lines.Add(sb.ToString());
+
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            FileValidator.IsValidEpisodicHistoryFile,
+            minLinesCount: 1,
+            fileDescription: "истории эпизодической памяти");
+
+        return (result.Success, result.ErrorMessage);
       }
       catch (Exception ex)
       {

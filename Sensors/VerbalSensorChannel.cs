@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
 using System.Collections.Generic;
@@ -454,10 +454,36 @@ namespace ISIDA.Sensors
     #region Работа с фразами
 
     /// <summary>
-    /// Находит ID фразы по точной последовательности ID слов
+    /// Находит ID фразы по точной последовательности ID слов.
+    /// Вызывающий код должен удерживать read lock при вызове (используется из FindPhraseId).
     /// </summary>
-    /// <param name="wordIds">Список ID слов, составляющих фразу</param>
-    /// <returns>ID фразы или 0 если не найдена</returns>
+    private int FindExactPhraseIdInternal(List<int> wordIds)
+    {
+      if (wordIds == null || wordIds.Count == 0) return 0;
+
+      // Начинаем с корневого узла (ID = 0)
+      if (!PhraseTreeFromID.TryGetValue(0, out var currentNode))
+        return 0;
+
+      // Идем по пути из слов
+      foreach (var wordId in wordIds)
+      {
+        var childNode = currentNode.Children
+            .FirstOrDefault(c => c.Element.Equals(wordId));
+
+        if (childNode == null)
+          return 0;
+
+        currentNode = childNode;
+      }
+
+      // Возвращаем ID последнего узла в пути (даже если у него есть дети)
+      return currentNode.Id;
+    }
+
+    /// <summary>
+    /// Находит ID фразы по точной последовательности ID слов (с захватом блокировки).
+    /// </summary>
     private int FindExactPhraseId(List<int> wordIds)
     {
       if (wordIds == null || wordIds.Count == 0) return 0;
@@ -465,24 +491,7 @@ namespace ISIDA.Sensors
       _lock.EnterReadLock();
       try
       {
-        // Начинаем с корневого узла (ID = 0)
-        if (!PhraseTreeFromID.TryGetValue(0, out var currentNode))
-          return 0;
-
-        // Идем по пути из слов
-        foreach (var wordId in wordIds)
-        {
-          var childNode = currentNode.Children
-              .FirstOrDefault(c => c.Element.Equals(wordId));
-
-          if (childNode == null)
-            return 0;
-
-          currentNode = childNode;
-        }
-
-        // Возвращаем ID последнего узла в пути (даже если у него есть дети)
-        return currentNode.Id;
+        return FindExactPhraseIdInternal(wordIds);
       }
       finally
       {
@@ -620,8 +629,8 @@ namespace ISIDA.Sensors
       _lock.EnterReadLock();
       try
       {
-        // СПОСОБ 1: Ищем точное совпадение по пути
-        var exactId = FindExactPhraseId(wordIds);
+        // СПОСОБ 1: Ищем точное совпадение по пути (Internal — уже удерживаем read lock)
+        var exactId = FindExactPhraseIdInternal(wordIds);
         if (exactId != 0)
           return exactId;
 

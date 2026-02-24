@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -171,6 +171,20 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     private bool _noWarningCreateShow = false;
 
+    /// <summary>
+    /// Быстрый поиск по (BranchID, ActionsImageID) для проверки уникальности (O(1) вместо перебора).
+    /// </summary>
+    private readonly Dictionary<(int BranchId, int ActionsImageId), int> _unicumBranchActionsToId = new Dictionary<(int, int), int>();
+
+    /// <summary>
+    /// Отключить логирование создания автоматизмов (для массовой загрузки из файла).
+    /// Восстановить предыдущее значение по завершении загрузки.
+    /// </summary>
+    public void SetSuppressCreateLogging(bool suppress)
+    {
+      _noWarningCreateShow = suppress;
+    }
+
     #endregion
 
     #region Управление автоматизмами
@@ -252,6 +266,7 @@ namespace ISIDA.Psychic.Automatism
         };
 
         _automatizmsById[id] = automatizm;
+        _unicumBranchActionsToId[(branchId, actionsImageId)] = id;
 
         // Добавляем в соответствующие коллекции
         if (branchId > 1000000 && branchId < 2000000)
@@ -292,17 +307,31 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Проверяет уникальность автоматизма по сочетанию BranchID и ActionsImageID
+    /// Проверяет уникальность автоматизма по сочетанию BranchID и ActionsImageID (O(1) по индексу).
     /// </summary>
     private (int Id, Automatizm Automatizm) CheckUnicumMotorsAutomatizm(int branchId, int actionsImageId)
     {
-      _lock.EnterReadLock();
+      var key = (branchId, actionsImageId);
+      _lock.EnterUpgradeableReadLock();
       try
       {
+        if (_unicumBranchActionsToId.TryGetValue(key, out int existingId) &&
+            _automatizmsById.TryGetValue(existingId, out var existing))
+          return (existingId, existing);
+
         foreach (var kvp in _automatizmsById)
         {
           if (kvp.Value.BranchID == branchId && kvp.Value.ActionsImageID == actionsImageId)
           {
+            _lock.EnterWriteLock();
+            try
+            {
+              _unicumBranchActionsToId[key] = kvp.Key;
+            }
+            finally
+            {
+              _lock.ExitWriteLock();
+            }
             return (kvp.Key, kvp.Value);
           }
         }
@@ -310,7 +339,7 @@ namespace ISIDA.Psychic.Automatism
       }
       finally
       {
-        _lock.ExitReadLock();
+        _lock.ExitUpgradeableReadLock();
       }
     }
 
@@ -869,6 +898,7 @@ namespace ISIDA.Psychic.Automatism
     {
       _automatizmsById.Clear();
       _lastAutomatizmId = 0;
+      _unicumBranchActionsToId.Clear();
       _automatizmBelief2FromTreeNodeId.Clear();
       _automatizmFromActionId.Clear();
       _automatizmFromPhraseId.Clear();

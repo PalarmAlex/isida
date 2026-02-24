@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -310,6 +310,11 @@ namespace ISIDA.Psychic.Automatism
     private int _lastActionsImageId = 0;
 
     /// <summary>
+    /// Быстрый поиск по ключу (kind, toneId, moodId, actIdList, phraseIdList) для проверки уникальности (O(1)).
+    /// </summary>
+    private readonly Dictionary<string, int> _unicumActionsImageKeyToId = new Dictionary<string, int>();
+
+    /// <summary>
     /// Флаг распознавания фразы из активации дерева автоматизмов
     /// </summary>
     private bool _isUnrecognizedPhraseFromAtmtzmTreeActivation = false;
@@ -390,10 +395,18 @@ namespace ISIDA.Psychic.Automatism
       };
 
       _actionsImages[newId] = image;
+      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId)] = newId;
       if (checkUnicum)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
+    }
+
+    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, int toneId, int moodId)
+    {
+      string actKey = actIdList == null || actIdList.Count == 0 ? "" : string.Join(",", actIdList.OrderBy(x => x));
+      string phraseKey = phraseIdList == null || phraseIdList.Count == 0 ? "" : string.Join(",", phraseIdList.OrderBy(x => x));
+      return $"{kind}_{toneId}_{moodId}_{actKey}_{phraseKey}";
     }
 
     /// <summary>
@@ -453,7 +466,7 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Проверить уникальность образа действий (без блокировки - для внутреннего использования)
+    /// Проверить уникальность образа действий (O(1) по индексу, иначе перебор).
     /// </summary>
     private (int Id, ActionsImage Image) CheckUnicumActionsImageNoLock(
         int kind,
@@ -462,6 +475,11 @@ namespace ISIDA.Psychic.Automatism
         int toneId,
         int moodId)
     {
+      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId);
+      if (_unicumActionsImageKeyToId.TryGetValue(key, out int existingId) &&
+          _actionsImages.TryGetValue(existingId, out var existingImg))
+        return (existingId, existingImg);
+
       foreach (var kvp in _actionsImages)
       {
         var v = kvp.Value;
@@ -480,6 +498,7 @@ namespace ISIDA.Psychic.Automatism
         if (toneId != v.ToneId || moodId != v.MoodId)
           continue;
 
+        _unicumActionsImageKeyToId[key] = kvp.Key;
         return (kvp.Key, v);
       }
 
@@ -495,6 +514,7 @@ namespace ISIDA.Psychic.Automatism
       try
       {
         _actionsImages.Clear();
+        _unicumActionsImageKeyToId.Clear();
         _lastActionsImageId = 0;
       }
       finally
@@ -546,6 +566,7 @@ namespace ISIDA.Psychic.Automatism
 
           File.WriteAllLines(filePath, lines);
           _actionsImages.Clear();
+          _unicumActionsImageKeyToId.Clear();
           _lastActionsImageId = 0;
           return;
         }
@@ -562,6 +583,7 @@ namespace ISIDA.Psychic.Automatism
         try
         {
           _actionsImages.Clear();
+          _unicumActionsImageKeyToId.Clear();
           _lastActionsImageId = 0;
 
           foreach (var line in File.ReadLines(filePath))

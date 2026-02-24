@@ -293,7 +293,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
       catch (Exception ex)
       {
-        Logger.Warning($"Ошибка при Dispose EpisodicMemorySystem: {ex.Message}");
+        Logger.Error(ex.Message);
       }
       finally
       {

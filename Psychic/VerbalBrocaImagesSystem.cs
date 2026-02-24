@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
@@ -109,6 +109,24 @@ namespace ISIDA.Psychic
     private readonly Dictionary<int, VerbalBrocaImage> _verbalbrocaImages = new Dictionary<int, VerbalBrocaImage>();
     private int _lastverbalbrocaImageId = 0;
 
+    /// <summary>
+    /// Быстрый поиск по ключу (simbolID, toneId, moodId, phraseIdList) для проверки уникальности (O(1)).
+    /// </summary>
+    private readonly Dictionary<string, int> _unicumVerbalBrocaKeyToId = new Dictionary<string, int>();
+
+    /// <summary>
+    /// Не логировать «Найден существующий образ» (для массовой загрузки).
+    /// </summary>
+    private bool _suppressFoundExistingLog = false;
+
+    /// <summary>
+    /// Отключить логирование при нахождении существующего образа (для массовой загрузки из файла).
+    /// </summary>
+    public void SetSuppressFoundExistingLog(bool suppress)
+    {
+      _suppressFoundExistingLog = suppress;
+    }
+
     #endregion
 
     #region Управление вербальными образами
@@ -176,7 +194,8 @@ namespace ISIDA.Psychic
           var existing = CheckUnicumVerbalBrocaImageNoLock(simbolID, phraseIdList, toneId, moodId);
           if (existing.Image != null)
           {
-            Logger.Info($"Найден существующий образ ID={existing.Id}");
+            if (!_suppressFoundExistingLog)
+              Logger.Info($"Найден существующий образ ID={existing.Id}");
             return existing;
           }
         }
@@ -252,14 +271,23 @@ namespace ISIDA.Psychic
       };
 
       _verbalbrocaImages[newId] = image;
-      if (checkUnicum)
+      _unicumVerbalBrocaKeyToId[VerbalBrocaUnicumKey(simbolID, phraseIdList, toneId, moodId)] = newId;
+      if (checkUnicum && !_suppressFoundExistingLog)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
+    private static string VerbalBrocaUnicumKey(int simbolID, List<int> phraseIdList, int toneId, int moodId)
+    {
+      string phraseKey = phraseIdList == null || phraseIdList.Count == 0
+        ? ""
+        : string.Join(",", phraseIdList.OrderBy(x => x));
+      return $"{simbolID}_{toneId}_{moodId}_{phraseKey}";
+    }
+
     /// <summary>
-    /// Проверить уникальность вербального образа (без блокировки - для внутреннего использования)
+    /// Проверить уникальность вербального образа (O(1) по индексу, иначе перебор).
     /// </summary>
     private (int Id, VerbalBrocaImage Image) CheckUnicumVerbalBrocaImageNoLock(
       int simbolID,
@@ -268,6 +296,11 @@ namespace ISIDA.Psychic
       int moodId
       )
     {
+      string key = VerbalBrocaUnicumKey(simbolID, phraseIdList, toneId, moodId);
+      if (_unicumVerbalBrocaKeyToId.TryGetValue(key, out int existingId) &&
+          _verbalbrocaImages.TryGetValue(existingId, out var existingImg))
+        return (existingId, existingImg);
+
       foreach (var kvp in _verbalbrocaImages)
       {
         var v = kvp.Value;
@@ -279,6 +312,7 @@ namespace ISIDA.Psychic
         if (!AddUtils.AreListsEqual(phraseIdList, v.PhraseIdList))
           continue;
 
+        _unicumVerbalBrocaKeyToId[key] = kvp.Key;
         return (kvp.Key, v);
       }
 
@@ -294,6 +328,7 @@ namespace ISIDA.Psychic
       try
       {
         _verbalbrocaImages.Clear();
+        _unicumVerbalBrocaKeyToId.Clear();
         _lastverbalbrocaImageId = 0;
       }
       finally
@@ -344,6 +379,7 @@ namespace ISIDA.Psychic
 
           File.WriteAllLines(filePath, lines);
           _verbalbrocaImages.Clear();
+          _unicumVerbalBrocaKeyToId.Clear();
           _lastverbalbrocaImageId = 0;
           return;
         }
@@ -360,6 +396,7 @@ namespace ISIDA.Psychic
         try
         {
           _verbalbrocaImages.Clear();
+          _unicumVerbalBrocaKeyToId.Clear();
           _lastverbalbrocaImageId = 0;
 
           foreach (var line in File.ReadLines(filePath))
