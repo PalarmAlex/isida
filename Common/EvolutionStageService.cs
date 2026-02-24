@@ -1,8 +1,10 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
@@ -219,6 +221,7 @@ namespace ISIDA.Common
           break;
 
         case 4:
+          ClearPsychicMemoryAndUnderstanding();
           break;
 
         case 5:
@@ -281,6 +284,40 @@ namespace ISIDA.Common
         }
         else
           Logger.Info("Система автоматизмов не инициализирована, очистка не требуется");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Полная очистка данных памяти и дерева проблем (каталоги Psychic\Memory и Psychic\Understanding).
+    /// Вызывается при переходе с стадии 4 на 3.
+    /// </summary>
+    private void ClearPsychicMemoryAndUnderstanding()
+    {
+      try
+      {
+        if (EpisodicMemorySystem.IsInitialized)
+        {
+          EpisodicMemorySystem.Instance.Clear();
+          Logger.Info("Данные эпизодической памяти (Psychic\\Memory) успешно очищены");
+        }
+        else
+          Logger.Info("Система эпизодической памяти не инициализирована, очистка не требуется");
+
+        if (ProblemTreeSystem.IsInitialized)
+        {
+          var result = ProblemTreeSystem.Instance.ClearProblemTree();
+          if (result.Success)
+            Logger.Info("Данные дерева проблем (Psychic\\Understanding) успешно очищены");
+          else
+            Logger.Warning($"Не удалось обновить файл дерева проблем после очистки: {result.ErrorMessage}");
+        }
+        else
+          Logger.Info("Система дерева проблем не инициализирована, очистка не требуется");
       }
       catch (Exception ex)
       {
