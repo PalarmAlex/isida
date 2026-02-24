@@ -291,6 +291,29 @@ namespace ISIDA.Psychic.Understanding
         CollectLines(c, lines);
     }
 
+    /// <summary>Очистить дерево проблем в памяти и сохранить пустое состояние на диск</summary>
+    /// <remarks>Вызывается при переходе с стадии 4 на 3 для полной очистки данных дерева проблем</remarks>
+    public (bool Success, string ErrorMessage) ClearProblemTree()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        Tree.Children.Clear();
+        _nodesById.Clear();
+        _nodesById[0] = Tree;
+        _lastNodeId = 0;
+        DetectedActiveLastProblemNodeId = 0;
+        OldDetectedActiveLastProblemNodeId = 0;
+
+        var result = SaveProblemTreeCore();
+        return result;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #endregion
 
     #region IDisposable

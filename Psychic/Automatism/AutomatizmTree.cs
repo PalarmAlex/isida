@@ -188,7 +188,8 @@ namespace ISIDA.Psychic.Automatism
     #region Управление узлами дерева
 
     /// <summary>
-    /// Создает новый узел дерева автоматизмов
+    /// Создает новый узел дерева автоматизмов.
+    /// Не допускает создание узла, когда оба ActivityID и VerbID равны 0 (допускается только для прямых потомков корня — три базовые ветки).
     /// </summary>
     public (int Id, AutomatizmNode Node) CreateNewAutomatizmNode(
         AutomatizmNode parent,
@@ -202,6 +203,11 @@ namespace ISIDA.Psychic.Automatism
         bool checkUnicum = true)
     {
       if (parent == null)
+        return (0, null);
+
+      // Не допускаем под не-корнем только узлы «только BaseID» (все остальные 0) — иначе разрешаем эмоцию, toneMood и т.д.
+      if (checkUnicum && parent.ID != 0
+          && emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0)
         return (0, null);
 
       try
@@ -472,6 +478,9 @@ namespace ISIDA.Psychic.Automatism
       if (conditions == null || conditions.Count == 0)
         return;
 
+      // Уровень, с которого при необходимости строить ветку (если не найдём совпадение или нет детей)
+      _currentStepCount = level;
+
       var remaining = conditions.Skip(1).ToList();
 
       foreach (var child in node.Children)
@@ -506,7 +515,8 @@ namespace ISIDA.Psychic.Automatism
         }
         else
         {
-          _currentStepCount = level - 1;
+          // Не сбрасывать на level-1: нужно строить ветку с текущего уровня (level), иначе FormingBranch создаст узел уровня 0 под уже найденным узлом
+          _currentStepCount = level;
           AppGlobalState.CurrentFindAtmzStepCount = _currentStepCount;
           continue;
         }
@@ -528,9 +538,22 @@ namespace ISIDA.Psychic.Automatism
       if (lastNode == null)
         return 0;
 
-      var lastNodeId = AddNewBranchFromNodes(lastLevel, condArr, lastNode);
+      // Когда от корня (fromId==0) и lastLevel > 0, нельзя вешать узлы на Tree —
+      // иначе все уровни (emotion, activity, …) станут прямыми детьми корня (плоское дерево).
+      // Сначала привязываемся к базовой ветке (узел с BaseID), затем строим от неё.
+      if (fromId == 0 && lastLevel > 0 && condArr != null && condArr.Count > 0)
+      {
+        int baseId = condArr[0];
+        foreach (var child in Tree.Children)
+        {
+          if (child.BaseID == baseId)
+          {
+            return AddNewBranchFromNodes(1, condArr, child);
+          }
+        }
+      }
 
-      return lastNodeId;
+      return AddNewBranchFromNodes(lastLevel, condArr, lastNode);
     }
 
     /// <summary>
@@ -614,7 +637,9 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Загружает дерево автоматизмов из файла
+    /// Загружает дерево автоматизмов из файла.
+    /// Файл должен быть сохранён в порядке обхода в глубину (родитель перед детьми), как у дерева рефлексов.
+    /// Если в файле у узла ParentID=0, но по условиям он не базовая ветка — родитель восстанавливается по иерархии условий.
     /// </summary>
     private void LoadAutomatizmTree()
     {
@@ -695,7 +720,16 @@ namespace ISIDA.Psychic.Automatism
           if (!int.TryParse(parts[7], out int verbID))
             verbID = 0;
 
-          var parent = GetNodeById(parentId);
+          AutomatizmNode parent = GetNodeById(parentId);
+          // Восстановление родителя при «плоском» файле (у всех ParentID=0): для не-базовых узлов ищем родителя по условиям
+          if (parentId == 0 && !IsBaseBranchNode(baseId, emotionId, activityId, toneMoodId, simbolId, verbID))
+          {
+            var (pBase, pEmo, pAct, pTone, pSim, pVerb) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
+            var (_, parentNode) = FindAutomatizmTreeNodeFromCondition(pBase, pEmo, pAct, pTone, pSim, pVerb);
+            if (parentNode != null)
+              parent = parentNode;
+          }
+
           if (parent != null)
             CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, false);
         }
@@ -705,6 +739,34 @@ namespace ISIDA.Psychic.Automatism
         Logger.Error(ex.Message);
         throw;
       }
+    }
+
+    /// <summary>
+    /// Узел считается базовой веткой (прямой потомок корня), если задан только BaseID и он из {-1,0,1}.
+    /// </summary>
+    private static bool IsBaseBranchNode(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID)
+    {
+      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0
+          && (baseId == -1 || baseId == 0 || baseId == 1);
+    }
+
+    /// <summary>
+    /// Возвращает условия «родительского» узла (на один уровень иерархии выше).
+    /// </summary>
+    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID) GetParentCondition(
+        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID)
+    {
+      if (verbID != 0)
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0);
+      if (simbolId != 0)
+        return (baseId, emotionId, activityId, toneMoodId, 0, 0);
+      if (toneMoodId != 0)
+        return (baseId, emotionId, activityId, 0, 0, 0);
+      if (activityId != 0)
+        return (baseId, emotionId, 0, 0, 0, 0);
+      if (emotionId != 0)
+        return (baseId, 0, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0, 0);
     }
 
     /// <summary>
@@ -721,6 +783,27 @@ namespace ISIDA.Psychic.Automatism
       {
         _lock.ExitReadLock();
       }
+    }
+
+    /// <summary>
+    /// Возвращает строки для узла и всех его потомков (обход в глубину), как в ReflexTreeSystem.GetReflexNodeStrings.
+    /// Порядок: родитель → дети, чтобы при загрузке по порядку строк родитель уже был в словаре.
+    /// </summary>
+    private static List<string> GetAutomatizmNodeStrings(AutomatizmNode node)
+    {
+      var lines = new List<string>();
+      if (node.ID == 0)
+        return lines;
+
+      lines.Add($"{node.ID}|{node.ParentID}|{node.BaseID}|{node.EmotionID}|" +
+                $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.VerbID}");
+
+      foreach (var child in node.Children)
+      {
+        lines.AddRange(GetAutomatizmNodeStrings(child));
+      }
+
+      return lines;
     }
 
     /// <summary>
@@ -743,25 +826,10 @@ namespace ISIDA.Psychic.Automatism
           FileValidator.FileHeaders.AutomatizmTreeFields8
         };
 
-        // Рекурсивный обход дерева для сохранения
-        void SaveNode(AutomatizmNode node)
-        {
-          if (node.ID == 0) // Пропускаем корневой узел
-            return;
-
-          var line = $"{node.ID}|{node.ParentID}|{node.BaseID}|{node.EmotionID}|" +
-                     $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.VerbID}";
-          lines.Add(line);
-
-          foreach (var child in node.Children)
-          {
-            SaveNode(child);
-          }
-        }
-
+        // Обход в глубину (как у дерева рефлексов): родитель всегда перед детьми — при загрузке по порядку родитель уже в словаре
         foreach (var child in Tree.Children)
         {
-          SaveNode(child);
+          lines.AddRange(GetAutomatizmNodeStrings(child));
         }
 
         var result = FileValidator.SafeSaveFile(

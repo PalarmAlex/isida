@@ -294,29 +294,30 @@ namespace ISIDA.Psychic.Automatism
       int firstSimbol = GetFirstSymbol(stimulus);
       int verbId = CreateVerbalImage(stimulus, firstSimbol, phraseId);
 
-      var existingNode = _treeSystem.FindAutomatizmTreeNodeFromCondition(
-          baseId, emotionId, activityId, toneMoodId, firstSimbol, verbId);
+      // Найти или создать узел с учётом иерархии (база → эмоция → activity → toneMood → simbol/verb)
+      return FindOrCreateTreeNodeByCondition(baseId, emotionId, activityId, toneMoodId, firstSimbol, verbId);
+    }
 
-      if (existingNode.Node != null)
-        return existingNode.Id;
+    /// <summary>
+    /// Находит узел по условиям или создаёт его и всю цепочку родителей (не вешая фразовые узлы прямо на базовую ветку).
+    /// </summary>
+    private int FindOrCreateTreeNodeByCondition(
+        int baseId,
+        int emotionId,
+        int activityId,
+        int toneMoodId,
+        int simbolId,
+        int verbId)
+    {
+      var existing = _treeSystem.FindAutomatizmTreeNodeFromCondition(
+          baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
+      if (existing.Node != null)
+        return existing.Id;
 
-      AutomatizmNode parentNode = null;
-      foreach (var child in _treeSystem.Tree.Children)
-      {
-        if (child.BaseID == baseId)
-        {
-          parentNode = child;
-          break;
-        }
-      }
-
+      AutomatizmNode parentNode = GetParentNodeForCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
       if (parentNode == null)
-      {
-        Logger.Error($"Не найден корневой узел с baseId={baseId}");
         return 0;
-      }
 
-      // Создаем новый узел с полным набором параметров
       var (newNodeId, newNode) = _treeSystem.CreateNewAutomatizmNode(
           parentNode,
           0,
@@ -324,11 +325,67 @@ namespace ISIDA.Psychic.Automatism
           emotionId,
           activityId,
           toneMoodId,
-          firstSimbol,
+          simbolId,
           verbId,
           true);
 
       return newNodeId;
+    }
+
+    /// <summary>
+    /// Возвращает родительский узел для заданных условий: на один уровень иерархии выше.
+    /// При необходимости рекурсивно создаёт промежуточные узлы.
+    /// </summary>
+    private AutomatizmNode GetParentNodeForCondition(
+        int baseId,
+        int emotionId,
+        int activityId,
+        int toneMoodId,
+        int simbolId,
+        int verbId)
+    {
+      var (pBase, pEmo, pAct, pTone, pSim, pVerb) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
+
+      // Родитель — базовая ветка (прямой потомок корня)
+      if (IsBaseBranchCondition(pBase, pEmo, pAct, pTone, pSim, pVerb))
+      {
+        foreach (var child in _treeSystem.Tree.Children)
+        {
+          if (child.BaseID == pBase)
+            return child;
+        }
+        Logger.Error($"Не найден корневой узел с baseId={pBase}");
+        return null;
+      }
+
+      // Родитель — промежуточный узел; находим или создаём его
+      int parentId = FindOrCreateTreeNodeByCondition(pBase, pEmo, pAct, pTone, pSim, pVerb);
+      if (parentId <= 0)
+        return null;
+
+      return _treeSystem.GetNodeById(parentId);
+    }
+
+    private static bool IsBaseBranchCondition(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId)
+    {
+      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbId == 0
+          && (baseId == -1 || baseId == 0 || baseId == 1);
+    }
+
+    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID) GetParentCondition(
+        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId)
+    {
+      if (verbId != 0)
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0);
+      if (simbolId != 0)
+        return (baseId, emotionId, activityId, toneMoodId, 0, 0);
+      if (toneMoodId != 0)
+        return (baseId, emotionId, activityId, 0, 0, 0);
+      if (activityId != 0)
+        return (baseId, emotionId, 0, 0, 0, 0);
+      if (emotionId != 0)
+        return (baseId, 0, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0, 0);
     }
 
     private static List<string> ParseStimuliLine(string line)

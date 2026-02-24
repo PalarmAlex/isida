@@ -83,7 +83,22 @@ namespace ISIDA.Psychic.Memory.Episodic
           }
         }
 
-        EpisodicMemoryNode parent = parentId == 0 ? root : (nodesById.TryGetValue(parentId, out var pn) ? pn : root);
+        // Родитель: из файла или при «плоском» файле (ParentID=0 у всех) — восстановить по иерархии условий
+        EpisodicMemoryNode parent = null;
+        if (parentId == 0)
+        {
+          if (IsRootLevelEpisodicNode(baseId, emotionId, nodePid, triggerId, actionId))
+            parent = root;
+          else
+            parent = FindEpisodicParentByCondition(nodesById, baseId, emotionId, nodePid, triggerId, actionId);
+        }
+        else if (nodesById.TryGetValue(parentId, out var pn))
+        {
+          parent = pn;
+        }
+        if (parent == null)
+          continue;
+
         var node = new EpisodicMemoryNode
         {
           ID = id,
@@ -189,6 +204,36 @@ namespace ISIDA.Psychic.Memory.Episodic
         lines.Add(line);
         CollectTreeLines(c, lines);
       }
+    }
+
+    /// <summary>Узел корневого уровня: задан только BaseID (остальные 0)</summary>
+    private static bool IsRootLevelEpisodicNode(int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+    {
+      return emotionId == 0 && nodePid == 0 && triggerId == 0 && actionId == 0;
+    }
+
+    /// <summary>Родительский узел по условиям (на один уровень иерархии выше)</summary>
+    private static EpisodicMemoryNode FindEpisodicParentByCondition(
+        Dictionary<int, EpisodicMemoryNode> nodesById,
+        int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+    {
+      var (pBase, pEmo, pPid, pTrig, pAct) = GetEpisodicParentCondition(baseId, emotionId, nodePid, triggerId, actionId);
+      foreach (var node in nodesById.Values)
+      {
+        if (node.BaseID == pBase && node.EmotionID == pEmo && node.NodePID == pPid && node.TriggerId == pTrig && node.ActionId == pAct)
+          return node;
+      }
+      return null;
+    }
+
+    private static (int BaseID, int EmotionID, int NodePID, int TriggerId, int ActionId) GetEpisodicParentCondition(
+        int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+    {
+      if (actionId != 0) return (baseId, emotionId, nodePid, triggerId, 0);
+      if (triggerId != 0) return (baseId, emotionId, nodePid, 0, 0);
+      if (nodePid != 0) return (baseId, emotionId, 0, 0, 0);
+      if (emotionId != 0) return (baseId, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0);
     }
 
     /// <summary>Сохранить историю эпизодов в файл</summary>
