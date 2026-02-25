@@ -447,10 +447,12 @@ namespace ISIDA.Psychic.Automatism
 
         if (DetectedActiveLastNodeId > 0)
         {
-          var conditionsCount = GetConditionsCount(condArr);
           CurrentAutomatizmTreeEnd = condArr.Skip(_currentStepCount).ToList();
 
-          if (_currentStepCount < conditionsCount)
+          // Строим ветку до листа с полным набором условий (baseId..verbID), чтобы узел был пусковым для автоматизма.
+          // Раньше использовалось _currentStepCount < GetConditionsCount(condArr): при verbID!=0 и нулях в середине
+          // (например [0,1,0,200,17,333]) получалось 5 < 4 → ветка не строилась, возвращался узел без VerbID/ActivityID.
+          if (_currentStepCount < condArr.Count)
             DetectedActiveLastNodeId = FormingBranch(DetectedActiveLastNodeId, _currentStepCount, condArr);
         }
         else

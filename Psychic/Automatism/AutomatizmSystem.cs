@@ -9,7 +9,8 @@ using System.Threading;
 namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
-  /// Автоматизм - может совершать внешние действия или внутренние произвольные действия
+  /// Автоматизм - может совершать внешние действия или внутренние произвольные действия.
+  /// NextID — ID цепочки, запускаемой после выполнения этого автоматизма (0 — цепочка не привязана); по этому полю движок определяет, стартовать ли цепочку.
   /// </summary>
   public class Automatizm
   {
@@ -34,9 +35,7 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     public int ActionsImageID { get; set; }
 
-    /// <summary>
-    /// ID следующей цепочки действий
-    /// </summary>
+    /// <summary>ID цепочки автоматизмов, запускаемой после этого автоматизма (0 — нет).</summary>
     public int NextID { get; set; }
 
     /// <summary>

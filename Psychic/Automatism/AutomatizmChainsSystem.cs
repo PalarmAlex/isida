@@ -14,7 +14,9 @@ using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
-  /// Система управления цепочками автоматизмов
+  /// Система управления цепочками автоматизмов.
+  /// Запуск цепочки — только по NextID в записи автоматизма (ID цепочки); стартовый автоматизм задаётся в цепочке как StartAutomatizmId.
+  /// TreeNodeId цепочки — привязка к узлу дерева (условия запуска): для валидации при добавлении звеньев (в узле должен быть автоматизм с каждым образом действий); при выполнении не используется.
   /// </summary>
   public sealed class AutomatizmChainsSystem : IDisposable
   {
