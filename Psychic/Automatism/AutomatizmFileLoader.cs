@@ -79,6 +79,77 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Загружает автоматизмы из текста цепочек (валидация в движке).
+    /// </summary>
+    /// <param name="csvContent">Текст цепочек: каждая строка — фразы через «;» или « - ».</param>
+    /// <param name="baseId">Базовое состояние.</param>
+    /// <param name="styleIds">Идентификаторы стилей.</param>
+    /// <returns>Количество обработанных цепочек.</returns>
+    /// <exception cref="ArgumentException">Текст пуст или не содержит корректных цепочек.</exception>
+    public int LoadFromContent(string csvContent, int baseId, List<int> styleIds)
+    {
+      if (_disposed)
+        throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
+
+      if (string.IsNullOrWhiteSpace(csvContent))
+        throw new ArgumentException("Текст цепочек не задан или пуст. Введите строки в формате: фраза1;фраза2;фраза3 или фраза1 - фраза2 - фраза3.", nameof(csvContent));
+
+      var lines = csvContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+      int validLinesCount = 0;
+      foreach (var line in lines)
+      {
+        var trimmed = line.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#"))
+          continue;
+        var stimuli = ParseStimuliLine(trimmed);
+        if (stimuli != null && stimuli.Count >= 2)
+          validLinesCount++;
+      }
+
+      if (validLinesCount == 0)
+        throw new ArgumentException(
+          "Текст не содержит корректных цепочек. Ожидается формат: в каждой строке несколько фраз, разделённых «;» или « - » (например: привет;как дела;нормально).",
+          nameof(csvContent));
+
+      if (!CheckSystems()) return 0;
+
+      _phraseIdCache.Clear();
+
+      if (!PreloadAllPhrases(lines))
+      {
+        Logger.Error("Не удалось загрузить фразы");
+        return 0;
+      }
+
+      _automatizmSystem.SetSuppressCreateLogging(true);
+      _emotionsImageSystem.SetSuppressFoundExistingLog(true);
+      _verbalBrocaSystem.SetSuppressFoundExistingLog(true);
+      try
+      {
+        int processedChains = 0;
+        foreach (var line in lines)
+        {
+          var trimmedLine = line.Trim();
+          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
+            continue;
+
+          var stimuli = ParseStimuliLine(trimmedLine);
+          if (stimuli.Count < 2) continue;
+
+          if (ProcessChainDirect(stimuli, baseId, styleIds))
+            processedChains++;
+        }
+        return processedChains;
+      }
+      finally
+      {
+        _automatizmSystem.SetSuppressCreateLogging(false);
+        _emotionsImageSystem.SetSuppressFoundExistingLog(false);
+        _verbalBrocaSystem.SetSuppressFoundExistingLog(false);
+      }
+    }
+
+    /// <summary>
     /// Загружает автоматизмы из файла
     /// </summary>
     public int LoadFromFile(int baseId, List<int> styleIds)
@@ -95,46 +166,16 @@ namespace ISIDA.Psychic.Automatism
         return 0;
       }
 
-      var lines = ReadAllLinesWithEncoding(filePath);
-      if (lines.Length == 0) return 0;
+      string content = File.ReadAllText(filePath, Encoding.UTF8);
+      if (string.IsNullOrWhiteSpace(content)) return 0;
 
-      _phraseIdCache.Clear();
-
-      if (!PreloadAllPhrases(lines))
-      {
-        Logger.Error("Не удалось загрузить фразы");
-        return 0;
-      }
-
-      // Отключаем детальное логирование при массовой генерации (ускоряет загрузку по 100+ строкам)
-      _automatizmSystem.SetSuppressCreateLogging(true);
-      _emotionsImageSystem.SetSuppressFoundExistingLog(true);
-      _verbalBrocaSystem.SetSuppressFoundExistingLog(true);
       try
       {
-        int processedChains = 0;
-        int totalLines = 0;
-
-        foreach (var line in lines)
-        {
-          var trimmedLine = line.Trim();
-          if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
-            continue;
-
-          totalLines++;
-          var stimuli = ParseStimuliLine(trimmedLine);
-          if (stimuli.Count < 2) continue;
-
-          if (ProcessChainDirect(stimuli, baseId, styleIds))
-            processedChains++;
-        }
-        return processedChains;
+        return LoadFromContent(content, baseId, styleIds);
       }
-      finally
+      catch (ArgumentException)
       {
-        _automatizmSystem.SetSuppressCreateLogging(false);
-        _emotionsImageSystem.SetSuppressFoundExistingLog(false);
-        _verbalBrocaSystem.SetSuppressFoundExistingLog(false);
+        return 0;
       }
     }
 
