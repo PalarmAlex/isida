@@ -75,7 +75,9 @@ namespace ISIDA.Psychic.Automatism
         // Первый шаг цикла не должен доминировать при выборе "лучшего" автоматизма.
         created.Usefulness = 0;
         created.Count = 0;
-        _automatizmSystem.SetAutomatizmBelief(created, 2);
+        // Не ставим Belief=2, если для этой ветки уже есть штатный автоматизм (сдвиг): иначе эхо перезапишет его при повторных прогонах.
+        if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
+          _automatizmSystem.SetAutomatizmBelief(created, 2);
 
         Logger.Info($"MirrorAutomatizm: стартовый автоматизм ID={id}, TriggerNode={detectedNodeId}, ActionsImage={responseActionsImageId}");
         return id;
@@ -164,7 +166,8 @@ namespace ISIDA.Psychic.Automatism
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
         // 2) Прямой автоматизм для нового шага: новый триггер -> его же ответ.
-        // Создается как "провокатор" следующей пары. В режиме наблюдения продолжаем цикл и для невербальных ответов.
+        // Создается как "провокатор" следующей пары (эхо). Belief=2 НЕ ставим: иначе эхо перезапишет
+        // уже выученный сдвиговый автоматизм для этой ветки при повторных запусках цепочки.
         bool continueCycle = _pendingResponseHasVerbalPart ||
             (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
         if (continueCycle)
@@ -174,7 +177,7 @@ namespace ISIDA.Psychic.Automatism
           {
             nextParrotAutomatizm.Usefulness = 0;
             nextParrotAutomatizm.Count = 0;
-            _automatizmSystem.SetAutomatizmBelief(nextParrotAutomatizm, 2);
+            // Не вызываем SetAutomatizmBelief(..., 2): штатным остаётся сдвиг (учительский), эхо — только запасной.
           }
         }
 

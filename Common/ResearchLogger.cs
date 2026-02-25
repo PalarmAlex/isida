@@ -667,8 +667,11 @@ namespace ISIDA.Common
         ["Триггер"] = (state.CurrentTriggerStimulusID.HasValue && state.CurrentTriggerStimulusID != _lastState.CurrentTriggerStimulusID)
             ? state.CurrentTriggerStimulusID.ToString() : "",
         ["ОР"] = orTypeString,
-        ["Б/у рефлекс"] = state.CurrentGeneticReflexID?.ToString() ?? "",
-        ["Усл. рефлекс"] = state.CurrentConditionReflexID?.ToString() ?? "",
+        // Б/у и усл. рефлекс — только при изменении (фиксация запуска), не дублировать на следующих пульсах
+        ["Б/у рефлекс"] = !AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
+            ? (state.CurrentGeneticReflexID?.ToString() ?? "") : "",
+        ["Усл. рефлекс"] = !AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
+            ? (state.CurrentConditionReflexID?.ToString() ?? "") : "",
         // Автоматизм — только при изменении (фиксация запуска), не дублировать на следующих пульсах
         ["Автоматизм"] = (state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID != _lastState.CurrentAutomatizmID)
             ? state.CurrentAutomatizmID.ToString() : "",
