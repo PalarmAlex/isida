@@ -1911,7 +1911,7 @@ namespace ISIDA.Gomeostas
     #region Управление состоянием агента
 
     /// <summary>
-    /// Установить флаг сна
+    /// Установить флаг сна.
     /// </summary>
     public void SetSleepState(bool isSleeping)
     {
