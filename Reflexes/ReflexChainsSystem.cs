@@ -1,4 +1,4 @@
-﻿﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Actions;
 using System;
 using System.Collections.Generic;
@@ -232,16 +232,21 @@ namespace ISIDA.Reflexes
         };
 
         _reflexChains.Add(newId, chain);
-        
-        // Полная валидация новой цепочки
+
+        foreach (var link in links)
+          if (link.ID > _lastLinkId)
+            _lastLinkId = link.ID;
+
+        // Полная валидация новой цепочки (без повторной блокировки — уже удерживается write lock)
         SaveReflexChainsCore();
-        var (isValid, validationIssues) = ValidateChain(newId);
-        if (!isValid)
+        var validationIssues = new List<string>();
+        ValidateChainCore(newId, validationIssues);
+        if (validationIssues.Any())
         {
           warnings.AddRange(validationIssues);
           Logger.Warning($"Цепочка {newId} создана с проблемами валидации: {string.Join("; ", validationIssues)}");
         }
-        
+
         return (newId, warnings.ToArray());
       }
       finally
@@ -272,6 +277,42 @@ namespace ISIDA.Reflexes
         }
 
         return removed;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Удаляет все цепочки рефлексов (включая не привязанные к рефлексам).
+    /// Используется при полной очистке безусловных рефлексов.
+    /// </summary>
+    /// <returns>True если операция выполнена успешно</returns>
+    public bool RemoveAllReflexChains()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        var chainIds = _reflexChains.Keys.ToList();
+        if (chainIds.Count == 0)
+          return true;
+
+        _reflexChains.Clear();
+        _lastChainId = 0;
+        _lastLinkId = 0;
+        SaveReflexChainsCore();
+
+        foreach (var chainId in chainIds)
+          OnReflexChainDeleted(chainId);
+
+        Logger.Info($"Удалены все цепочки рефлексов ({chainIds.Count})");
+        return true;
       }
       catch (Exception ex)
       {
@@ -501,60 +542,66 @@ namespace ISIDA.Reflexes
     public (bool IsValid, string[] Issues) ValidateChain(int chainId)
     {
       var issues = new List<string>();
-
       _lock.EnterReadLock();
       try
       {
-        if (!_reflexChains.TryGetValue(chainId, out var chain))
-        {
-          issues.Add($"Цепочка с ID {chainId} не найдена");
-          return (false, issues.ToArray());
-        }
-
-        if (chain.Links.Count < 1)
-        {
-          issues.Add("Цепочка должна содержать хотя бы одно звено");
-          return (false, issues.ToArray());
-        }
-
-        var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
-        foreach (var link in chain.Links)
-        {
-          if (!allActions.Any(a => a.Id == link.ActionId))
-            issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
-
-          if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
-            issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink}");
-
-          if (link.FailureNextLink != 0 && link.FailureNextLink <= link.ID)
-            issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.FailureNextLink}");
-
-          if (link.SuccessNextLink != 0 && link.SuccessNextLink != link.ID &&
-              !chain.Links.Any(l => l.ID == link.SuccessNextLink))
-            issues.Add($"Звено {link.ID}: следующее при успехе {link.SuccessNextLink} не найдено");
-
-          if (link.FailureNextLink != 0 && link.FailureNextLink != link.ID &&
-              !chain.Links.Any(l => l.ID == link.FailureNextLink))
-            issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
-        }
-
-        var terminalLinks = chain.Links.Where(l =>
-            l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
-
-        if (terminalLinks.Count == 0)
-        {
-          issues.Add("Цепочка не содержит конечных звеньев (обнаружена циклическая зависимость)");
-        }
-
-        // Проверка на циклические ссылки в цепочке
-        DetectCycles(chain, issues);
-
+        ValidateChainCore(chainId, issues);
         return (!issues.Any(), issues.ToArray());
       }
       finally
       {
         _lock.ExitReadLock();
       }
+    }
+
+    /// <summary>
+    /// Внутренняя проверка целостности цепочки. Вызывающий код должен удерживать read или write lock.
+    /// </summary>
+    private void ValidateChainCore(int chainId, List<string> issues)
+    {
+      if (issues == null)
+        return;
+
+      if (!_reflexChains.TryGetValue(chainId, out var chain))
+      {
+        issues.Add($"Цепочка с ID {chainId} не найдена");
+        return;
+      }
+
+      if (chain.Links.Count < 1)
+      {
+        issues.Add("Цепочка должна содержать хотя бы одно звено");
+        return;
+      }
+
+      var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
+      foreach (var link in chain.Links)
+      {
+        if (!allActions.Any(a => a.Id == link.ActionId))
+          issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
+
+        if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
+          issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink}");
+
+        if (link.FailureNextLink != 0 && link.FailureNextLink <= link.ID)
+          issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.FailureNextLink}");
+
+        if (link.SuccessNextLink != 0 && link.SuccessNextLink != link.ID &&
+            !chain.Links.Any(l => l.ID == link.SuccessNextLink))
+          issues.Add($"Звено {link.ID}: следующее при успехе {link.SuccessNextLink} не найдено");
+
+        if (link.FailureNextLink != 0 && link.FailureNextLink != link.ID &&
+            !chain.Links.Any(l => l.ID == link.FailureNextLink))
+          issues.Add($"Звено {link.ID}: следующее при неудаче {link.FailureNextLink} не найдено");
+      }
+
+      var terminalLinks = chain.Links.Where(l =>
+          l.SuccessNextLink == 0 && l.FailureNextLink == 0).ToList();
+
+      if (terminalLinks.Count == 0)
+        issues.Add("Цепочка не содержит конечных звеньев (обнаружена циклическая зависимость)");
+
+      DetectCycles(chain, issues);
     }
 
     /// <summary>

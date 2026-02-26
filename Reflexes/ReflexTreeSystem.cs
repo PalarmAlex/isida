@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -1033,6 +1033,43 @@ namespace ISIDA.Reflexes
       foreach (var child in node.Children)
       {
         ClearAllReflexesFromNode(child, ref clearedCount);
+      }
+    }
+
+    /// <summary>
+    /// Полностью очищает дерево рефлексов: удаляет все узлы, оставляет только корень.
+    /// Используется при полной очистке безусловных рефлексов.
+    /// </summary>
+    public void ClearReflexTreeCompletely()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        ReflexTree.Children.Clear();
+        ReflexTree.ID = 0;
+        ReflexTree.BaseID = 0;
+        ReflexTree.StyleID = 0;
+        ReflexTree.ActionID = 0;
+        ReflexTree.GeneticReflexID = 0;
+        ReflexTree.ConditionedReflex = 0;
+        ReflexTree.ReflexChainID = 0;
+        ReflexTreeFromID.Clear();
+        ReflexTreeFromID.Add(ReflexTree);
+        _lastReflexNodeID = 0;
+
+        var (success, errorMessage) = SaveReflexTreeInternal();
+        if (!success)
+          Logger.Error($"Ошибка сохранения дерева после полной очистки: {errorMessage}");
+        else
+          Logger.Info("Дерево рефлексов полностью очищено");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 

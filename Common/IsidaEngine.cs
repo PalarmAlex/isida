@@ -197,6 +197,11 @@ namespace ISIDA.Common
     public AutomatizmFileLoader AutomatizmFileLoader { get; internal set; }
 
     /// <summary>
+    /// Класс для загрузки безусловных рефлексов и цепочек из файла
+    /// </summary>
+    public GeneticReflexFileLoader GeneticReflexFileLoader { get; internal set; }
+
+    /// <summary>
     /// Система управления цепочками автоматизмов
     /// </summary>
     public AutomatizmChainsSystem AutomatizmChainsSystem  { get; internal set; }
@@ -403,6 +408,7 @@ namespace ISIDA.Common
       //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
       Logger.Info($"ConditionedReflexFormation успешно освобожден");
 
+      SafeDispose(GeneticReflexFileLoader, "GeneticReflexFileLoader");
       SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");
       SafeDispose(EpisodicMemory, "EpisodicMemory");
       SafeDispose(ProblemTree, "ProblemTree");
@@ -624,6 +630,9 @@ namespace ISIDA.Common
         // Шаг 10: Вторичная инициализация безусловных рефлексов с системой цепочек
         initializationStep = 10;
         GeneticReflexesSystem.InitializeWithChains(context.ReflexChains);
+
+        GeneticReflexFileLoader.InitializeInstance(config.BootDataFolder);
+        context.GeneticReflexFileLoader = GeneticReflexFileLoader.Instance;
 
         // Шаг 11: Образы восприятия
         initializationStep = 11;
