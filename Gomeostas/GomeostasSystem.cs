@@ -1126,6 +1126,30 @@ namespace ISIDA.Gomeostas
       /// Флаг первого пульса агента
       /// </summary>
       public bool IsFirstPulse { get; set; } = true;
+
+      // Расширенные свойства агента (форма «Свойства агента»)
+      public string BaseArchetype { get; set; }
+      public List<string> BaseArchetypeValues { get; set; } = new List<string>();
+      public string KeyMotivation { get; set; }
+      public List<string> KeyMotivationValues { get; set; } = new List<string>();
+      public string TemperamentActivity { get; set; }
+      public string TemperamentReactivity { get; set; }
+      public List<int> StressBehaviorIds { get; set; } = new List<int>();
+      public string Sociality { get; set; }
+      public List<string> SocialityValues { get; set; } = new List<string>();
+      public List<int> ThreatResponseIds { get; set; } = new List<int>();
+      public List<int> RewardResponseIds { get; set; } = new List<int>();
+      public List<int> PunishmentResponseIds { get; set; } = new List<int>();
+      public string SpecialTriggers { get; set; }
+      public List<string> SpecialTriggersValues { get; set; } = new List<string>();
+      public string SpecialTaboos { get; set; }
+      public List<string> SpecialTaboosValues { get; set; } = new List<string>();
+      public string AdditionalWishes { get; set; }
+
+      /// <summary>
+      /// Текст вставки в конец промпта для ИИ (шаблон с плейсхолдерами [stileCombination], [AdaptiveActionList], [InfluenceActionList]).
+      /// </summary>
+      public string PromptSuffix { get; set; }
     }
 
     /// <summary>
@@ -1418,6 +1442,96 @@ namespace ISIDA.Gomeostas
       /// Список текущих активных стилей поведения (максимум 3)
       /// </summary>
       public IReadOnlyList<BehaviorStyle> ActiveStyles { get; set; }
+
+      /// <summary>
+      /// Базовый психологический архетип агента (форма «Свойства агента»).
+      /// </summary>
+      public string BaseArchetype { get; set; }
+
+      /// <summary>
+      /// Список доступных значений для выбора базового архетипа.
+      /// </summary>
+      public IReadOnlyList<string> BaseArchetypeValues { get; set; }
+
+      /// <summary>
+      /// Ключевая мотивация агента — главный движущий мотив.
+      /// </summary>
+      public string KeyMotivation { get; set; }
+
+      /// <summary>
+      /// Список доступных значений для выбора ключевой мотивации.
+      /// </summary>
+      public IReadOnlyList<string> KeyMotivationValues { get; set; }
+
+      /// <summary>
+      /// Уровень общей активности темперамента (Низкая, Средняя, Высокая).
+      /// </summary>
+      public string TemperamentActivity { get; set; }
+
+      /// <summary>
+      /// Уровень реактивности темперамента (Низкая, Средняя, Высокая).
+      /// </summary>
+      public string TemperamentReactivity { get; set; }
+
+      /// <summary>
+      /// Список ID адаптивных действий — поведение в стрессе.
+      /// </summary>
+      public IReadOnlyList<int> StressBehaviorIds { get; set; }
+
+      /// <summary>
+      /// Стиль социального взаимодействия агента.
+      /// </summary>
+      public string Sociality { get; set; }
+
+      /// <summary>
+      /// Список доступных значений для выбора социальности.
+      /// </summary>
+      public IReadOnlyList<string> SocialityValues { get; set; }
+
+      /// <summary>
+      /// Список ID адаптивных действий — реакция на угрозу.
+      /// </summary>
+      public IReadOnlyList<int> ThreatResponseIds { get; set; }
+
+      /// <summary>
+      /// Список ID адаптивных действий — реакция на поощрение.
+      /// </summary>
+      public IReadOnlyList<int> RewardResponseIds { get; set; }
+
+      /// <summary>
+      /// Список ID адаптивных действий — реакция на наказание.
+      /// </summary>
+      public IReadOnlyList<int> PunishmentResponseIds { get; set; }
+
+      /// <summary>
+      /// Особые триггеры — факторы, вызывающие нестабильность или неадекватную реакцию.
+      /// </summary>
+      public string SpecialTriggers { get; set; }
+
+      /// <summary>
+      /// Список доступных значений для выбора особых триггеров.
+      /// </summary>
+      public IReadOnlyList<string> SpecialTriggersValues { get; set; }
+
+      /// <summary>
+      /// Особые табу — действия или ситуации, которых агент избегает.
+      /// </summary>
+      public string SpecialTaboos { get; set; }
+
+      /// <summary>
+      /// Список доступных значений для выбора особых табу.
+      /// </summary>
+      public IReadOnlyList<string> SpecialTaboosValues { get; set; }
+
+      /// <summary>
+      /// Дополнительные пожелания по поведению агента для учёта при генерации.
+      /// </summary>
+      public string AdditionalWishes { get; set; }
+
+      /// <summary>
+      /// Текст вставки в конец промпта для ИИ (шаблон с плейсхолдерами [stileCombination], [AdaptiveActionList], [InfluenceActionList]).
+      /// </summary>
+      public string PromptSuffix { get; set; }
     }
 
     /// <summary>
@@ -1638,7 +1752,25 @@ namespace ISIDA.Gomeostas
           IsFirstPulse = _agentState.IsFirstPulse,
           OverallState = homeostasisState.OverallState,
           AllBehaviorStyles = new ReadOnlyDictionary<int, BehaviorStyle>(_agentState.BehaviorStyles),
-          ActiveStyles = ActiveStyles.Where(s => s != null).ToList().AsReadOnly()
+          ActiveStyles = ActiveStyles.Where(s => s != null).ToList().AsReadOnly(),
+          BaseArchetype = _agentState.BaseArchetype,
+          BaseArchetypeValues = _agentState.BaseArchetypeValues?.AsReadOnly(),
+          KeyMotivation = _agentState.KeyMotivation,
+          KeyMotivationValues = _agentState.KeyMotivationValues?.AsReadOnly(),
+          TemperamentActivity = _agentState.TemperamentActivity,
+          TemperamentReactivity = _agentState.TemperamentReactivity,
+          StressBehaviorIds = _agentState.StressBehaviorIds?.AsReadOnly(),
+          Sociality = _agentState.Sociality,
+          SocialityValues = _agentState.SocialityValues?.AsReadOnly(),
+          ThreatResponseIds = _agentState.ThreatResponseIds?.AsReadOnly(),
+          RewardResponseIds = _agentState.RewardResponseIds?.AsReadOnly(),
+          PunishmentResponseIds = _agentState.PunishmentResponseIds?.AsReadOnly(),
+          SpecialTriggers = _agentState.SpecialTriggers,
+          SpecialTriggersValues = _agentState.SpecialTriggersValues?.AsReadOnly(),
+          SpecialTaboos = _agentState.SpecialTaboos,
+          SpecialTaboosValues = _agentState.SpecialTaboosValues?.AsReadOnly(),
+          AdditionalWishes = _agentState.AdditionalWishes,
+          PromptSuffix = _agentState.PromptSuffix
         };
       }
       finally
@@ -1841,6 +1973,68 @@ namespace ISIDA.Gomeostas
       {
         EnsureAgentState(AgentCheck.NotDead);
         _agentState.Description = description;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Устанавливает расширенные свойства агента (форма «Свойства агента»).
+    /// </summary>
+    public void SetExtendedAgentProperties(
+      string name,
+      string description,
+      int evolutionStage,
+      string baseArchetype,
+      IReadOnlyList<string> baseArchetypeValues,
+      string keyMotivation,
+      IReadOnlyList<string> keyMotivationValues,
+      string temperamentActivity,
+      string temperamentReactivity,
+      IReadOnlyList<int> stressBehaviorIds,
+      string sociality,
+      IReadOnlyList<string> socialityValues,
+      IReadOnlyList<int> threatResponseIds,
+      IReadOnlyList<int> rewardResponseIds,
+      IReadOnlyList<int> punishmentResponseIds,
+      string specialTriggers,
+      IReadOnlyList<string> specialTriggersValues,
+      string specialTaboos,
+      IReadOnlyList<string> specialTaboosValues,
+      string additionalWishes,
+      string promptSuffix)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_agentState.IsDead)
+          _agentState.Name = name ?? string.Empty;
+        _agentState.Description = description ?? string.Empty;
+        if (evolutionStage >= 0 && evolutionStage <= 5)
+        {
+          _agentState.EvolutionStage = evolutionStage;
+          AppGlobalState.EvolutionStage = evolutionStage;
+        }
+        _agentState.BaseArchetype = baseArchetype ?? string.Empty;
+        _agentState.BaseArchetypeValues = baseArchetypeValues?.ToList() ?? new List<string>();
+        _agentState.KeyMotivation = keyMotivation ?? string.Empty;
+        _agentState.KeyMotivationValues = keyMotivationValues?.ToList() ?? new List<string>();
+        _agentState.TemperamentActivity = temperamentActivity ?? string.Empty;
+        _agentState.TemperamentReactivity = temperamentReactivity ?? string.Empty;
+        _agentState.StressBehaviorIds = stressBehaviorIds?.ToList() ?? new List<int>();
+        _agentState.Sociality = sociality ?? string.Empty;
+        _agentState.SocialityValues = socialityValues?.ToList() ?? new List<string>();
+        _agentState.ThreatResponseIds = threatResponseIds?.ToList() ?? new List<int>();
+        _agentState.RewardResponseIds = rewardResponseIds?.ToList() ?? new List<int>();
+        _agentState.PunishmentResponseIds = punishmentResponseIds?.ToList() ?? new List<int>();
+        _agentState.SpecialTriggers = specialTriggers ?? string.Empty;
+        _agentState.SpecialTriggersValues = specialTriggersValues?.ToList() ?? new List<string>();
+        _agentState.SpecialTaboos = specialTaboos ?? string.Empty;
+        _agentState.SpecialTaboosValues = specialTaboosValues?.ToList() ?? new List<string>();
+        _agentState.AdditionalWishes = additionalWishes ?? string.Empty;
+        _agentState.PromptSuffix = promptSuffix ?? string.Empty;
       }
       finally
       {
@@ -2479,6 +2673,62 @@ namespace ISIDA.Gomeostas
               _agentState.PainValue = pain;
             else if (parts[0] == "JoyValue" && int.TryParse(parts[1], out int joy))
               _agentState.JoyValue = joy;
+            else if (parts[0] == "BaseArchetype")
+              _agentState.BaseArchetype = parts[1];
+            else if (parts[0] == "BaseArchetypeValues" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.BaseArchetypeValues = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            else if (parts[0] == "KeyMotivation")
+              _agentState.KeyMotivation = parts[1];
+            else if (parts[0] == "KeyMotivationValues" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.KeyMotivationValues = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            else if (parts[0] == "TemperamentActivity")
+              _agentState.TemperamentActivity = parts[1];
+            else if (parts[0] == "TemperamentReactivity")
+              _agentState.TemperamentReactivity = parts[1];
+            else if (parts[0] == "StressBehaviorIds" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.StressBehaviorIds = ParseIntList(parts[1]);
+            else if (parts[0] == "Sociality")
+              _agentState.Sociality = parts[1];
+            else if (parts[0] == "SocialityValues" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.SocialityValues = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            else if (parts[0] == "ThreatResponseIds" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.ThreatResponseIds = ParseIntList(parts[1]);
+            else if (parts[0] == "RewardResponseIds" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.RewardResponseIds = ParseIntList(parts[1]);
+            else if (parts[0] == "PunishmentResponseIds" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.PunishmentResponseIds = ParseIntList(parts[1]);
+            else if (parts[0] == "SpecialTriggers")
+              _agentState.SpecialTriggers = parts[1];
+            else if (parts[0] == "SpecialTriggersValues" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.SpecialTriggersValues = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            else if (parts[0] == "SpecialTaboos")
+              _agentState.SpecialTaboos = parts[1];
+            else if (parts[0] == "SpecialTaboosValues" && !string.IsNullOrWhiteSpace(parts[1]))
+              _agentState.SpecialTaboosValues = parts[1].Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            else if (parts[0] == "AdditionalWishes" && parts.Length >= 2)
+            {
+              var sb = new StringBuilder().Append(parts[1]);
+              for (int j = i + 1; j < lines.Length; j++)
+              {
+                var nextLine = lines[j];
+                if (string.IsNullOrWhiteSpace(nextLine)) { sb.AppendLine(); continue; }
+                if (nextLine.StartsWith("#") || nextLine.Contains("|")) break;
+                sb.AppendLine().Append(nextLine.Trim());
+              }
+              _agentState.AdditionalWishes = sb.ToString();
+            }
+            else if (parts[0] == "PromptSuffix" && parts.Length >= 2)
+            {
+              var sb = new StringBuilder().Append(parts[1]);
+              for (int j = i + 1; j < lines.Length; j++)
+              {
+                var nextLine = lines[j];
+                if (string.IsNullOrWhiteSpace(nextLine)) { sb.AppendLine(); continue; }
+                if (nextLine.StartsWith("#") || nextLine.Contains("|")) break;
+                sb.AppendLine().Append(nextLine.Trim());
+              }
+              _agentState.PromptSuffix = sb.ToString();
+            }
           }
         }
       }
@@ -2486,6 +2736,15 @@ namespace ISIDA.Gomeostas
       {
         Logger.Error(ex.Message);
       }
+    }
+
+    private static List<int> ParseIntList(string value)
+    {
+      return value.Split(',')
+        .Select(s => s.Trim())
+        .Where(s => s.Length > 0 && int.TryParse(s, out _))
+        .Select(int.Parse)
+        .ToList();
     }
 
     private void LoadAgentParameters()
@@ -2609,6 +2868,53 @@ namespace ISIDA.Gomeostas
             $"PainValue|{_agentState.PainValue}",
             $"JoyValue|{_agentState.JoyValue}"
         };
+
+        if (!string.IsNullOrEmpty(_agentState.BaseArchetype))
+          lines.Add($"BaseArchetype|{_agentState.BaseArchetype}");
+        if (_agentState.BaseArchetypeValues != null && _agentState.BaseArchetypeValues.Count > 0)
+          lines.Add($"BaseArchetypeValues|{string.Join(",", _agentState.BaseArchetypeValues)}");
+        if (!string.IsNullOrEmpty(_agentState.KeyMotivation))
+          lines.Add($"KeyMotivation|{_agentState.KeyMotivation}");
+        if (_agentState.KeyMotivationValues != null && _agentState.KeyMotivationValues.Count > 0)
+          lines.Add($"KeyMotivationValues|{string.Join(",", _agentState.KeyMotivationValues)}");
+        if (!string.IsNullOrEmpty(_agentState.TemperamentActivity))
+          lines.Add($"TemperamentActivity|{_agentState.TemperamentActivity}");
+        if (!string.IsNullOrEmpty(_agentState.TemperamentReactivity))
+          lines.Add($"TemperamentReactivity|{_agentState.TemperamentReactivity}");
+        if (_agentState.StressBehaviorIds != null && _agentState.StressBehaviorIds.Count > 0)
+          lines.Add($"StressBehaviorIds|{string.Join(",", _agentState.StressBehaviorIds)}");
+        if (!string.IsNullOrEmpty(_agentState.Sociality))
+          lines.Add($"Sociality|{_agentState.Sociality}");
+        if (_agentState.SocialityValues != null && _agentState.SocialityValues.Count > 0)
+          lines.Add($"SocialityValues|{string.Join(",", _agentState.SocialityValues)}");
+        if (_agentState.ThreatResponseIds != null && _agentState.ThreatResponseIds.Count > 0)
+          lines.Add($"ThreatResponseIds|{string.Join(",", _agentState.ThreatResponseIds)}");
+        if (_agentState.RewardResponseIds != null && _agentState.RewardResponseIds.Count > 0)
+          lines.Add($"RewardResponseIds|{string.Join(",", _agentState.RewardResponseIds)}");
+        if (_agentState.PunishmentResponseIds != null && _agentState.PunishmentResponseIds.Count > 0)
+          lines.Add($"PunishmentResponseIds|{string.Join(",", _agentState.PunishmentResponseIds)}");
+        if (!string.IsNullOrEmpty(_agentState.SpecialTriggers))
+          lines.Add($"SpecialTriggers|{_agentState.SpecialTriggers}");
+        if (_agentState.SpecialTriggersValues != null && _agentState.SpecialTriggersValues.Count > 0)
+          lines.Add($"SpecialTriggersValues|{string.Join(",", _agentState.SpecialTriggersValues)}");
+        if (!string.IsNullOrEmpty(_agentState.SpecialTaboos))
+          lines.Add($"SpecialTaboos|{_agentState.SpecialTaboos}");
+        if (_agentState.SpecialTaboosValues != null && _agentState.SpecialTaboosValues.Count > 0)
+          lines.Add($"SpecialTaboosValues|{string.Join(",", _agentState.SpecialTaboosValues)}");
+        if (!string.IsNullOrEmpty(_agentState.AdditionalWishes))
+        {
+          var wishesLines = _agentState.AdditionalWishes.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+          lines.Add($"AdditionalWishes|{wishesLines[0]}");
+          for (int k = 1; k < wishesLines.Length; k++)
+            lines.Add(wishesLines[k]);
+        }
+        if (!string.IsNullOrEmpty(_agentState.PromptSuffix))
+        {
+          var suffixLines = _agentState.PromptSuffix.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+          lines.Add($"PromptSuffix|{suffixLines[0]}");
+          for (int k = 1; k < suffixLines.Length; k++)
+            lines.Add(suffixLines[k]);
+        }
 
         var result = FileValidator.SafeSaveFile(
             GetAgentPropertiesPath(),
