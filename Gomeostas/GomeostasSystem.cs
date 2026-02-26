@@ -616,6 +616,8 @@ namespace ISIDA.Gomeostas
     private const string AgentPropertiesFileName = "AgentProperties";
     private const string DefaultAgentName = "Агент";
     private const string DefaultAgentDescription = "Простой агент";
+    /// <summary>Разделитель строк в однострочном представлении многострочного текста в файле (U+2028 LINE SEPARATOR).</summary>
+    private const string MultilinePlaceholder = "\u2028";
     internal string GomeostasFolderPath;
     private string GetAgentStylesFilePath() =>
       Path.Combine(GomeostasFolderPath, $"{StylesFileName}.dat");
@@ -1911,7 +1913,7 @@ namespace ISIDA.Gomeostas
     #region Управление состоянием агента
 
     /// <summary>
-    /// Установить флаг сна.
+    /// Установить флаг сна
     /// </summary>
     public void SetSleepState(bool isSleeping)
     {
@@ -2719,7 +2721,10 @@ namespace ISIDA.Gomeostas
             }
             else if (parts[0] == "PromptSuffix" && parts.Length >= 2)
             {
-              var sb = new StringBuilder().Append(parts[1]);
+              var sb = new StringBuilder();
+              var value = string.Join("|", parts.Skip(1));
+              sb.Append(value.Replace(MultilinePlaceholder, "\r\n"));
+              // Обратная совместимость: старый формат — продолжение следующими строками без "|"
               for (int j = i + 1; j < lines.Length; j++)
               {
                 var nextLine = lines[j];
@@ -2910,10 +2915,11 @@ namespace ISIDA.Gomeostas
         }
         if (!string.IsNullOrEmpty(_agentState.PromptSuffix))
         {
-          var suffixLines = _agentState.PromptSuffix.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-          lines.Add($"PromptSuffix|{suffixLines[0]}");
-          for (int k = 1; k < suffixLines.Length; k++)
-            lines.Add(suffixLines[k]);
+          var oneLine = _agentState.PromptSuffix
+            .Replace("\r\n", MultilinePlaceholder)
+            .Replace("\n", MultilinePlaceholder)
+            .Replace("\r", MultilinePlaceholder);
+          lines.Add($"PromptSuffix|{oneLine}");
         }
 
         var result = FileValidator.SafeSaveFile(

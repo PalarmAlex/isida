@@ -13,12 +13,13 @@ namespace ISIDA.Reflexes
   /// <summary>
   /// Загрузчик безусловных рефлексов и цепочек из текстового формата.
   /// Формат строки: Состояние|Стили|Триггер|Действие|Цепочка
-  /// Стили: имена через +. Цепочка: 1.Действие(успех,неудача);2.Действие(0,0) — 0 = конец.
+  /// Стили: имена через +. Триггер: имя внешнего воздействия или "Нет" — тогда рефлекс без триггера (только гомеостаз + стили).
+  /// Цепочка: 1.Действие(успех,неудача);2.Действие(0,0) — 0 = конец.
   /// </summary>
   public sealed class GeneticReflexFileLoader : IDisposable
   {
-    private const string ReflexGenerateListFileName = "reflex_generate_list.txt";
-    private const string PromptReflexGenerateFileName = "prompt_reflex_generate.txt";
+    private const string ReflexGenerateListFileName = "genetic_reflex_generate_list.txt";
+    private const string PromptReflexGenerateFileName = "prompt_genetic_reflex_generate.txt";
 
     private readonly string _bootDataFolder;
     private bool _disposed;
@@ -39,7 +40,7 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Инициализирует глобальный экземпляр загрузчика с указанным каталогом данных (тот же, что для автоматизмов).
     /// </summary>
-    /// <param name="bootDataFolder">Каталог с файлами reflex_generate_list.txt и prompt_reflex_generate.txt</param>
+    /// <param name="bootDataFolder">Каталог с файлами genetic_reflex_generate_list.txt и prompt_genetic_reflex_generate.txt</param>
     public static void InitializeInstance(string bootDataFolder)
     {
       if (_instance != null)
@@ -114,13 +115,13 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Возвращает полный путь к файлу списка рефлексов для генерации (reflex_generate_list.txt).
+    /// Возвращает полный путь к файлу списка рефлексов для генерации (genetic_reflex_generate_list.txt).
     /// </summary>
     public string GetGenerateListFilePath() =>
         Path.Combine(_bootDataFolder, ReflexGenerateListFileName);
 
     /// <summary>
-    /// Возвращает полный путь к файлу промпта для генерации рефлексов (prompt_reflex_generate.txt).
+    /// Возвращает полный путь к файлу промпта для генерации рефлексов (prompt_genetic_reflex_generate.txt).
     /// </summary>
     public string GetPromptFilePath() =>
         Path.Combine(_bootDataFolder, PromptReflexGenerateFileName);
@@ -206,10 +207,16 @@ namespace ISIDA.Reflexes
       return level2.Count > 0;
     }
 
+    /// <summary>
+    /// Парсит триггер. Если в ячейке указано "Нет" — рефлекс привязывается только к внутренним условиям гомеостаза (состояние + стили), без внешнего триггера.
+    /// </summary>
     private bool TryParseTrigger(string triggerStr, out List<int> level3)
     {
       level3 = new List<int>();
       if (string.IsNullOrWhiteSpace(triggerStr))
+        return true;
+      // "Нет" = рефлекс без триггера, только состояние агента + комбинации стилей
+      if (string.Equals(triggerStr.Trim(), "Нет", StringComparison.OrdinalIgnoreCase))
         return true;
       var influence = InfluenceActionSystem.Instance;
       var all = influence.GetAllInfluenceActions();
@@ -282,13 +289,13 @@ namespace ISIDA.Reflexes
         ordinalToActionId[ord] = action.Id;
       }
 
-      int nextLinkId = GetNextLinkIdBase();
+      // Нумерация звеньев индивидуальна для каждой цепочки: 1, 2, 3...
       var chainLinks = new List<ReflexChainsSystem.ChainLink>();
       var ordinalToLinkId = new Dictionary<int, int>();
       int idx = 0;
       foreach (var (ord, actionName, successOrd, failureOrd) in links.OrderBy(x => x.Ordinal))
       {
-        int linkId = nextLinkId + idx;
+        int linkId = idx + 1;
         ordinalToLinkId[ord] = linkId;
         idx++;
       }
@@ -322,18 +329,6 @@ namespace ISIDA.Reflexes
       foreach (var w in warnings)
         Logger.Warning(w);
       return true;
-    }
-
-    private static int GetNextLinkIdBase()
-    {
-      var chains = ReflexChainsSystem.Instance;
-      var all = chains.GetAllReflexChains();
-      int max = 0;
-      foreach (var chain in all.Values)
-        foreach (var link in chain.Links)
-          if (link.ID > max)
-            max = link.ID;
-      return max + 1;
     }
 
     /// <summary>
