@@ -11,6 +11,68 @@ using System.Text.RegularExpressions;
 namespace ISIDA.Reflexes
 {
   /// <summary>
+  /// Результат загрузки рефлексов из списка: сколько строк обработано, создано, пропущено и по каким причинам.
+  /// </summary>
+  public sealed class GeneticReflexLoadResult
+  {
+    /// <summary>Общее количество строк в загруженном тексте (файле).</summary>
+    public int TotalLines { get; set; }
+
+    /// <summary>Количество строк, пропущенных как пустые или начинающиеся с # (комментарии).</summary>
+    public int SkippedEmptyOrComment { get; set; }
+
+    /// <summary>Количество успешно созданных рефлексов.</summary>
+    public int Created { get; set; }
+
+    /// <summary>Количество строк с ошибкой формата (меньше 4 полей или неверное состояние).</summary>
+    public int InvalidFormat { get; set; }
+
+    /// <summary>Количество строк, где указанный стиль не найден в справочнике.</summary>
+    public int NotFoundStyle { get; set; }
+
+    /// <summary>Количество строк, где указанное внешнее воздействие не найдено в справочнике.</summary>
+    public int NotFoundTrigger { get; set; }
+
+    /// <summary>Количество строк, где указанное действие не найдено в справочнике.</summary>
+    public int NotFoundAction { get; set; }
+
+    /// <summary>Количество строк, пропущенных из-за дубликата (рефлекс с такими условиями уже существует).</summary>
+    public int Duplicate { get; set; }
+
+    /// <summary>Количество строк с прочими ошибками при добавлении рефлекса.</summary>
+    public int OtherError { get; set; }
+
+    /// <summary>Число строк с данными (всего строк минус пропущенные пустые и комментарии).</summary>
+    public int DataLines => TotalLines - SkippedEmptyOrComment;
+
+    /// <summary>Общее число строк, по которым не удалось создать рефлекс (все категории ошибок).</summary>
+    public int Failed => InvalidFormat + NotFoundStyle + NotFoundTrigger + NotFoundAction + Duplicate + OtherError;
+
+    /// <summary>Формирует текстовый отчёт по результату загрузки для отображения пользователю.</summary>
+    /// <returns>Многострочная строка с итогами.</returns>
+    public string ToSummaryString()
+    {
+      var parts = new List<string>
+      {
+        $"Всего строк в файле: {TotalLines}",
+        $"Пропущено (пустые/комментарии): {SkippedEmptyOrComment}",
+        $"Строк с данными: {DataLines}",
+        $"Создано рефлексов: {Created}"
+      };
+      if (Failed > 0)
+      {
+        if (InvalidFormat > 0) parts.Add($"Ошибка формата (меньше 4 полей): {InvalidFormat}");
+        if (NotFoundStyle > 0) parts.Add($"Стиль не найден в справочнике: {NotFoundStyle}");
+        if (NotFoundTrigger > 0) parts.Add($"Внешнее воздействие не найдено: {NotFoundTrigger}");
+        if (NotFoundAction > 0) parts.Add($"Действие не найдено в справочнике: {NotFoundAction}");
+        if (Duplicate > 0) parts.Add($"Дубликат (рефлекс уже есть): {Duplicate}");
+        if (OtherError > 0) parts.Add($"Прочие ошибки: {OtherError}");
+      }
+      return string.Join("\n", parts);
+    }
+  }
+
+  /// <summary>
   /// Загрузчик безусловных рефлексов и цепочек из текстового формата.
   /// Формат строки: Состояние|Стили|Триггер|Действие|Цепочка
   /// Стили: имена через +. Триггер: имя внешнего воздействия или "Нет" — тогда рефлекс без триггера (только гомеостаз + стили).
@@ -58,25 +120,45 @@ namespace ISIDA.Reflexes
     /// Одна строка — один рефлекс и при необходимости одна цепочка.
     /// </summary>
     /// <param name="content">Текст в формате: Состояние|Стили|Триггер|Действие|Цепочка</param>
-    /// <returns>Количество успешно обработанных строк</returns>
-    public int LoadFromContent(string content)
+    /// <returns>Детальный результат: сколько создано, сколько пропущено и по каким причинам</returns>
+    public GeneticReflexLoadResult LoadFromContent(string content)
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(GeneticReflexFileLoader));
       if (string.IsNullOrWhiteSpace(content))
         throw new ArgumentException("Текст генерации рефлексов не задан.", nameof(content));
 
+      var result = new GeneticReflexLoadResult();
       var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-      int validCount = 0;
+      result.TotalLines = lines.Length;
+
       foreach (var line in lines)
       {
         var trimmed = line.Trim();
         if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#"))
+        {
+          result.SkippedEmptyOrComment++;
           continue;
-        if (ParseAndApplyLine(trimmed))
-          validCount++;
+        }
+        var (ok, failReason) = ParseAndApplyLine(trimmed);
+        if (ok)
+          result.Created++;
+        else
+        {
+          switch (failReason)
+          {
+            case "Format": result.InvalidFormat++; break;
+            case "State": result.InvalidFormat++; break;
+            case "Style": result.NotFoundStyle++; break;
+            case "Trigger": result.NotFoundTrigger++; break;
+            case "Action": result.NotFoundAction++; break;
+            case "Duplicate": result.Duplicate++; break;
+            default: result.OtherError++; break;
+          }
+        }
       }
-      if (validCount == 0)
+
+      if (result.Created == 0)
         throw new ArgumentException(
           "Нет корректных строк. Ожидается формат: Состояние|Стили|Триггер|Действие|Цепочка (например: Норма|Расслабление+Игра|Поощрить|Радуется|1.Смеется(0,2);2.Удивляется(0,0)).",
           nameof(content));
@@ -92,13 +174,13 @@ namespace ISIDA.Reflexes
         if (!chainSaveOk)
           Logger.Warning($"Сохранение цепочек после загрузки: {chainSaveErr}");
       }
-      return validCount;
+      return result;
     }
 
     /// <summary>
     /// Загружает из файла данных генерации (тот же каталог, что и для автоматизмов).
     /// </summary>
-    public int LoadFromFile()
+    public GeneticReflexLoadResult LoadFromFile()
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(GeneticReflexFileLoader));
@@ -106,11 +188,11 @@ namespace ISIDA.Reflexes
       if (!File.Exists(path))
       {
         Logger.Info($"Файл не найден: {path}");
-        return 0;
+        return new GeneticReflexLoadResult();
       }
       string text = File.ReadAllText(path, Encoding.UTF8);
       if (string.IsNullOrWhiteSpace(text))
-        return 0;
+        return new GeneticReflexLoadResult();
       return LoadFromContent(text);
     }
 
@@ -126,11 +208,12 @@ namespace ISIDA.Reflexes
     public string GetPromptFilePath() =>
         Path.Combine(_bootDataFolder, PromptReflexGenerateFileName);
 
-    private bool ParseAndApplyLine(string line)
+    /// <summary>Обрабатывает одну строку. Возвращает (успех, причина сбоя: Format|State|Style|Trigger|Action|Duplicate|Other).</summary>
+    private (bool success, string failReason) ParseAndApplyLine(string line)
     {
       var parts = line.Split('|');
       if (parts.Length < 4)
-        return false;
+        return (false, "Format");
 
       string stateStr = parts[0].Trim();
       string stylesStr = parts[1].Trim();
@@ -139,13 +222,13 @@ namespace ISIDA.Reflexes
       string chainStr = parts.Length > 4 ? parts[4].Trim() : "";
 
       if (!TryParseState(stateStr, out int level1))
-        return false;
+        return (false, "State");
       if (!TryParseStyles(stylesStr, out List<int> level2) || level2 == null || level2.Count == 0)
-        return false;
+        return (false, "Style");
       if (!TryParseTrigger(triggerStr, out List<int> level3))
-        return false;
+        return (false, "Trigger");
       if (!TryParseAction(actionStr, out int actionId))
-        return false;
+        return (false, "Action");
 
       var adaptiveActions = new List<int> { actionId };
       int? chainId = null;
@@ -157,13 +240,64 @@ namespace ISIDA.Reflexes
       {
         var (reflexId, _) = gr.AddGeneticReflex(level1, level2, level3, adaptiveActions);
         if (chainId.HasValue && reflexId > 0)
+        {
           gr.AttachChainToReflex(reflexId, chainId.Value);
-        return true;
+          UpdateReflexTreeChainBinding(level1, level2, level3, chainId.Value);
+        }
+        return (true, null);
+      }
+      catch (ArgumentException ex) when (ex.Message != null && ex.Message.IndexOf("Дублирование", StringComparison.OrdinalIgnoreCase) >= 0)
+      {
+        Logger.Warning($"Строка не применена (дубликат): {line}. {ex.Message}");
+        return (false, "Duplicate");
       }
       catch (Exception ex)
       {
         Logger.Warning($"Строка не применена: {line}. {ex.Message}");
-        return false;
+        return (false, "Other");
+      }
+    }
+
+    /// <summary>
+    /// Обновляет привязку цепочки в дереве рефлексов. Цепочки запускаются через ReflexesActivator,
+    /// который ищет ReflexChainID в узлах дерева ReflexTreeSystem. При генерации из файла цепочка
+    /// привязывается к рефлексу (GeneticReflexesSystem), но узел дерева создаётся с ReflexChainID=0
+    /// (событие GeneticReflexCreated вызывается до AttachChainToReflex). Поэтому нужно явно обновить узел.
+    /// </summary>
+    private static void UpdateReflexTreeChainBinding(int level1, List<int> level2, List<int> level3, int chainId)
+    {
+      if (!ReflexTreeSystem.IsInitialized || !PerceptionImagesSystem.IsInitialized)
+      {
+        Logger.Warning("ReflexTreeSystem или PerceptionImagesSystem не инициализированы — привязка цепочки к дереву пропущена");
+        return;
+      }
+
+      try
+      {
+        int styleImageId = 0;
+        if (level2 != null && level2.Any())
+          styleImageId = PerceptionImagesSystem.Instance.AddBehaviorStyleImage(level2);
+
+        int actionImageId = 0;
+        if (level3 != null && level3.Any())
+          actionImageId = PerceptionImagesSystem.Instance.AddPerceptionImage(level3, new List<int>());
+
+        var (nodeId, node) = ReflexTreeSystem.Instance.FindReflexTreeNodeFromCondition(level1, styleImageId, actionImageId);
+        if (node != null && nodeId > 0)
+        {
+          ReflexTreeSystem.Instance.AttachChainToNode(nodeId, chainId);
+          var (saveOk, saveErr) = ReflexTreeSystem.Instance.SaveReflexTree();
+          if (!saveOk)
+            Logger.Warning($"Сохранение дерева рефлексов после привязки цепочки: {saveErr}");
+        }
+        else
+        {
+          Logger.Warning($"Узел дерева не найден для условий [Level1={level1}, StyleId={styleImageId}, ActionId={actionImageId}] — цепочка {chainId} не привязана к дереву");
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"Ошибка привязки цепочки {chainId} к дереву рефлексов: {ex.Message}");
       }
     }
 
@@ -273,6 +407,15 @@ namespace ISIDA.Reflexes
       }
       if (links.Count == 0)
         return false;
+
+      foreach (var link in links)
+      {
+        if (link.SuccessOrdinal < 0 || link.SuccessOrdinal > 2 || link.FailureOrdinal < 0 || link.FailureOrdinal > 2)
+        {
+          Logger.Warning($"В скобках цепочки допускаются только числа 0, 1, 2. Получено: ({link.SuccessOrdinal},{link.FailureOrdinal}). Цепочка не создана, рефлекс создаётся без неё.");
+          return false;
+        }
+      }
 
       var adaptive = AdaptiveActionsSystem.Instance;
       var allActions = adaptive.GetAllAdaptiveActionsList();
