@@ -78,6 +78,9 @@ namespace ISIDA.Reflexes
         LoadReflexTree();
         if (ReflexTree.Children.Count == 0)
           CreateBasicReflexTree();
+
+        // Создаём узлы дерева для условных рефлексов, уже загруженных из файла (при загрузке событие не вызывалось — подписчиков ещё не было)
+        _conditionedReflexesSystem.NotifyTreeOfLoadedReflexes();
       }
       catch (Exception ex)
       {
@@ -145,7 +148,19 @@ namespace ISIDA.Reflexes
           styleImageId = _perceptionImagesSystem.AddBehaviorStyleImage(e.Level2);
 
         int[] conditionArr = new int[] { e.Level1, styleImageId, e.Level3 };
-        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, 0, 0); // 0 для geneticReflexId, так как это условный
+
+        // Цепочка исходного безусловного рефлекса — чтобы условный рефлекс планировал цепочку с задержкой, как безусловный
+        int reflexChainID = 0;
+        var conditionedReflex = _conditionedReflexesSystem.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == e.ReflexId);
+        if (conditionedReflex != null && conditionedReflex.SourceGeneticReflexId > 0)
+        {
+          var geneticReflex = _geneticReflexesSystem.GetGeneticReflex(conditionedReflex.SourceGeneticReflexId);
+          if (geneticReflex != null && geneticReflex.ReflexChainID > 0)
+            reflexChainID = geneticReflex.ReflexChainID;
+        }
+
+        int treeNodeId = FindOrCreateNodeForReflex(conditionArr, 0, reflexChainID); // 0 для geneticReflexId, так как это условный
 
         if (treeNodeId > 0)
         {
@@ -154,7 +169,8 @@ namespace ISIDA.Reflexes
           {
             node.ConditionedReflex = e.ReflexId;
             SaveReflexTreeInternal();
-            Logger.Info($"Условный рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}");
+            Logger.Info($"Условный рефлекс {e.ReflexId} привязан к узлу дерева ID: {treeNodeId}" +
+                (reflexChainID > 0 ? $", цепочка: {reflexChainID}" : ""));
           }
         }
       }

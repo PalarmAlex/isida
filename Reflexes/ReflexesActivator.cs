@@ -1,4 +1,4 @@
-﻿using ISIDA.Psychic;
+using ISIDA.Psychic;
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
@@ -409,10 +409,11 @@ namespace ISIDA.Reflexes
         var conditions = GetCurrentConditionsArray();
         _reflexTree.ConditionsDetection(conditions);
 
-        // если нашелся у-рефлекс прерываем все текущие реакции
+        // Триггер с пульта (вербальный или нет) прерывает все цепочки — иначе условный рефлекс не запустится из-за проверки _isChainActive в ExecuteReflexes.
+        // Стадия 0: условные по фразе не используем. Стадии 1+ : при совпадении фразы с у-рефлексом прерываем. Стадия 2: клонирование в автоматизмы. Стадии 3+: всегда прерываем.
         var condFerList = FindConditionedReflexesByPhrase(phraseIdList);
-        bool shouldInterruptChain = (condFerList.Any() && AppGlobalState.EvolutionStage == 2) || AppGlobalState.EvolutionStage > 2;
-        
+        bool shouldInterruptChain = (condFerList.Any() && AppGlobalState.EvolutionStage > 0) || AppGlobalState.EvolutionStage > 2;
+
         if (shouldInterruptChain)
         {
           StopAllReflexChains(pulseCount);
@@ -498,7 +499,6 @@ namespace ISIDA.Reflexes
 
       try
       {
-        List<int> activatedGeneticReflexesFromConditioned = new List<int>();
         int lastActivatedReflexId = 0;
         bool lastWasConditioned = false;
 
@@ -523,7 +523,6 @@ namespace ISIDA.Reflexes
                 lastActivatedReflexId = conditionedReflexId;
                 lastWasConditioned = true;
 
-                activatedGeneticReflexesFromConditioned.Add(conditionedReflex.SourceGeneticReflexId);
                 Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
               }
             }
@@ -546,59 +545,14 @@ namespace ISIDA.Reflexes
           }
         }
 
-        // Проверяем цепочки после выполнения рефлексов
+        // Проверяем цепочки после выполнения рефлексов (отложенная активация через _reflexActionDuration пульсов,
+        // как у безусловных — условные не должны запускать цепочку сразу в том же пульсе)
         if (lastActivatedReflexId > 0)
           CheckForChainActivation(pulseCount, lastActivatedReflexId, lastWasConditioned);
-
-        // проверяем цепочки для безусловных рефлексов, активированных через условные
-        if (activatedGeneticReflexesFromConditioned.Any())
-          CheckChainsForGeneticReflexes(activatedGeneticReflexesFromConditioned, pulseCount);
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
-      }
-    }
-
-    /// <summary>
-    /// Проверяет цепочки для списка безусловных рефлексов
-    /// </summary>
-    private void CheckChainsForGeneticReflexes(List<int> geneticReflexIds, int pulseCount)
-    {
-      foreach (var geneticReflexId in geneticReflexIds)
-      {
-        if (geneticReflexId <= 0) continue;
-
-        // Находим безусловный рефлекс
-        var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
-            .FirstOrDefault(r => r.Id == geneticReflexId);
-
-        if (geneticReflex == null || geneticReflex.ReflexChainID <= 0)
-          continue;
-
-        // Ищем узел дерева с этой цепочкой
-        var chainNode = FindNodeWithChain(geneticReflex.ReflexChainID);
-        if (chainNode != null)
-        {
-          ExecuteChainFromReflex(chainNode, pulseCount);
-        }
-      }
-    }
-
-    /// <summary>
-    /// Находит узел дерева с указанной цепочкой
-    /// </summary>
-    private ReflexTreeSystem.ReflexNode FindNodeWithChain(int chainId)
-    {
-      try
-      {
-        var allNodes = GetAllReflexTreeNodes();
-        return allNodes?.FirstOrDefault(n => n.ReflexChainID == chainId);
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
-        return null;
       }
     }
 
@@ -770,18 +724,35 @@ namespace ISIDA.Reflexes
       if (detectedNodeId <= 0) return;
 
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
-      if (detectedNode == null || !detectedNode.IsChainNode) return;
+      if (detectedNode == null) return;
 
       bool reflexMatchesNode = (isConditionedReflex && detectedNode.ConditionedReflex == activeReflexId) ||
                               (!isConditionedReflex && detectedNode.GeneticReflexID == activeReflexId);
 
-      if (reflexMatchesNode && detectedNode.ReflexChainID > 0)
+      if (!reflexMatchesNode) return;
+
+      // ID цепочки: из узла или для условного рефлекса — из исходного безусловного (узел мог быть создан без ReflexChainID)
+      int chainId = detectedNode.ReflexChainID;
+      if (chainId <= 0 && isConditionedReflex && activeReflexId > 0)
       {
-        _pendingChainId = detectedNode.ReflexChainID;
+        var conditionedReflex = _conditionedReflexes.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Id == activeReflexId);
+        if (conditionedReflex != null && conditionedReflex.SourceGeneticReflexId > 0)
+        {
+          var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
+              .FirstOrDefault(r => r.Id == conditionedReflex.SourceGeneticReflexId);
+          if (geneticReflex != null && geneticReflex.ReflexChainID > 0)
+            chainId = geneticReflex.ReflexChainID;
+        }
+      }
+
+      if (chainId > 0)
+      {
+        _pendingChainId = chainId;
         _pendingChainActivationPulse = pulseCount + _reflexActionDuration;
         _pendingChainBaseID = _activeCurBaseID;
         _pendingChainStyleID = _activeCurBaseStyleID;
-        Logger.Info($"Цепочка рефлексов {detectedNode.ReflexChainID} запланирована к активации через {_reflexActionDuration} пульсов (на пульсе {pulseCount + _reflexActionDuration})");
+        Logger.Info($"Цепочка рефлексов {chainId} запланирована к активации через {_reflexActionDuration} пульсов (на пульсе {pulseCount + _reflexActionDuration})");
       }
     }
 

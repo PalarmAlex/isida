@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -984,6 +984,38 @@ namespace ISIDA.Reflexes
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
+      }
+    }
+
+    /// <summary>
+    /// Уведомляет подписчиков (дерево рефлексов) о всех уже загруженных условных рефлексах.
+    /// Вызывается ReflexTreeSystem после подписки на ConditionedReflexCreated, чтобы создать узлы для рефлексов, загруженных из файла.
+    /// </summary>
+    public void NotifyTreeOfLoadedReflexes()
+    {
+      List<(int Id, int Level1, List<int> Level2, int Level3)> toNotify;
+      _lock.EnterReadLock();
+      try
+      {
+        toNotify = _conditionedReflexes.Values
+          .Select(r => (r.Id, r.Level1, r.Level2 ?? new List<int>(), r.Level3))
+          .ToList();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      foreach (var (id, level1, level2, level3) in toNotify)
+      {
+        try
+        {
+          OnConditionedReflexCreated(id, level1, level2, level3);
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"Ошибка привязки загруженного условного рефлекса {id} к дереву: {ex.Message}");
+        }
       }
     }
 
