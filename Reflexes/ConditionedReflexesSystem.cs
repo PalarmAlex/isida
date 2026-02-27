@@ -692,10 +692,13 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверяет, находятся ли события в пределах временного окна
+    /// Проверяет, находятся ли события в пределах временного окна.
+    /// Если рефлекс ещё ни разу не активировался (lastActivationPulse == 0), считаем окно пройденным — рефлекс допускается до первой активации.
     /// </summary>
     private bool IsWithinTimeWindow(int currentPulse, int lastActivationPulse, int timeWindowPulses)
     {
+      if (lastActivationPulse == 0)
+        return true;
       return (currentPulse - lastActivationPulse) <= timeWindowPulses;
     }
 

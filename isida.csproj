@@ -134,6 +134,7 @@
     <Compile Include="Reflexes\PerceptionImagesSystem.cs" />
     <Compile Include="Reflexes\ReflexChainsSystem.cs" />
     <Compile Include="Reflexes\GeneticReflexFileLoader.cs" />
+    <Compile Include="Reflexes\ConditionedReflexFileLoader.cs" />
     <Compile Include="Reflexes\ReflexesActivator.cs" />
     <Compile Include="Reflexes\ReflexExecutionService.cs" />
     <Compile Include="Reflexes\ReflexTreeSystem.cs" />

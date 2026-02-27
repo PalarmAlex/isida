@@ -8,12 +8,27 @@ alwaysApply: false
 
 Apply these rules for every new class in `isida`.
 
+## XML-документация (обязательно, без исключений)
+
+**При создании или изменении любого публичного API в isida сразу добавляй полную XML-документацию.** Иначе сборка выдаёт CS1591 (DocumentationFile включён в проекте).
+
+- **Каждый** публично видимый тип, класс, интерфейс, перечисление — `<summary>`.
+- **Каждое** публичное и защищённое свойство, поле, константа — `<summary>`.
+- **Каждый** публичный и защищённый метод — `<summary>`, для каждого параметра — `<param name="...">`, для возвращаемого значения — `<returns>`; при выбросе исключений — `<exception cref="...">`.
+- **Каждый** публичный и защищённый конструктор — `<summary>`, `<param>`, при необходимости `<exception>`.
+
+Перед завершением правок проверь: нет ли предупреждений CS1591. Если есть — допиши недостающие комментарии.
+
+Примеры:
+- Свойство: `/// <summary>Описание</summary>`
+- Метод: `/// <summary>...</summary>` + `/// <param name="x">...</param>` + `/// <returns>...</returns>`
+- Конструктор: `/// <summary>...</summary>` + `/// <param name="bootDataFolder">...</param>` + `/// <exception cref="ArgumentNullException">...</exception>`
+
+---
+
 - Every new class must implement `IDisposable` and include `public void Dispose()` with safe one-time cleanup (`_disposed` guard).
 - If the class owns persisted data files, call the class save method from `Dispose()` by default (respect stage/validation constraints).
 - Register every new class/service in `Common/IsidaEngine.cs` in correct places: `IsidaContext` property, initialization step order, and disposal chain.
-- **XML-документация обязательна**: для каждого публичного типа, члена, метода, свойства и конструктора — добавить `<summary>`, для методов — `<param>` и `<returns>`; иначе CS1591. Примеры:
-  - `/// <summary>Описание</summary>` — свойство, поле
-  - `/// <param name="x">Описание</param>` `/// <returns>Описание</returns>` — метод
 - Organize class code into meaningful `#region` blocks (initialization, state, core logic, file I/O, dispose, etc.).
 - In `IsidaEngine` initialization, never use dependencies that are not initialized yet. If cyclic dependencies exist, use explicit secondary initialization methods.
 - Prefer constructor/initializer-injected references over direct `*.Instance` access inside class logic.
@@ -23,4 +38,4 @@ Apply these rules for every new class in `isida`.
 
 ## Перед завершением
 
-- [ ] Все публичные члены имеют XML-комментарии (иначе CS1591)
+- [ ] **Все публичные и защищённые типы, члены, методы, свойства, конструкторы** имеют полные XML-комментарии (`<summary>`, при необходимости `<param>`, `<returns>`, `<exception>`). Сборка без CS1591.
