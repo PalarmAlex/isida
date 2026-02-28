@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
@@ -92,6 +92,16 @@ namespace ISIDA.Reflexes
       /// ID исходного безусловного рефлекса
       /// </summary>
       public int GeneticReflexId { get; set; }
+
+      /// <summary>
+      /// ID тона пускового стимула (для условного стимула — фраза с пульта). 0 — нормальный.
+      /// </summary>
+      public int ToneId { get; set; }
+
+      /// <summary>
+      /// ID настроения пускового стимула (для условного стимула). 0 — нормальное.
+      /// </summary>
+      public int MoodId { get; set; }
     }
 
     // Последний безусловный стимул
@@ -103,12 +113,21 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Добавление стимула в историю
     /// </summary>
+    /// <param name="pulse">Время стимула (пульс)</param>
+    /// <param name="stimulusImageId">ID образа восприятия (стимула)</param>
+    /// <param name="baseState">Базовое состояние гомеостаза</param>
+    /// <param name="behaviorStyleImageId">ID образа стилей поведения</param>
+    /// <param name="geneticReflexId">ID исходного безусловного рефлекса (0 для условного стимула)</param>
+    /// <param name="toneId">ID тона (для условного стимула — фраза с пульта). 0 — по умолчанию.</param>
+    /// <param name="moodId">ID настроения (для условного стимула). 0 — по умолчанию.</param>
     public void RecordStimulus(
         int pulse,
         int stimulusImageId,
         int baseState,
         int behaviorStyleImageId,
-        int geneticReflexId = 0)
+        int geneticReflexId = 0,
+        int toneId = 0,
+        int moodId = 0)
     {
       _lock.EnterWriteLock();
       try
@@ -119,7 +138,9 @@ namespace ISIDA.Reflexes
           StimulusImageId = stimulusImageId,
           BaseState = baseState,
           BehaviorStyleImageId = behaviorStyleImageId,
-          GeneticReflexId = geneticReflexId
+          GeneticReflexId = geneticReflexId,
+          ToneId = toneId,
+          MoodId = moodId
         };
 
         if (geneticReflexId > 0)
@@ -217,7 +238,9 @@ namespace ISIDA.Reflexes
         foreach (var existingReflex in existingReflexes)
         {
           if (existingReflex.Level1 == conditionedStimulus.BaseState &&
-              existingReflex.Level2.OrderBy(x => x).SequenceEqual(GetCurrentStyleIds().OrderBy(x => x)))
+              existingReflex.Level2.OrderBy(x => x).SequenceEqual(GetCurrentStyleIds().OrderBy(x => x)) &&
+              existingReflex.ToneId == conditionedStimulus.ToneId &&
+              existingReflex.MoodId == conditionedStimulus.MoodId)
           {
             _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
             foundMatchingReflex = true;
@@ -249,7 +272,9 @@ namespace ISIDA.Reflexes
               level2: reflexStyles,
               level3: conditionedStimulus.StimulusImageId,
               sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId,
-              authoritativeMod: authoritativeMode);
+              authoritativeMod: authoritativeMode,
+              toneId: conditionedStimulus.ToneId,
+              moodId: conditionedStimulus.MoodId);
 
           if (newReflexId > 0)
             Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");

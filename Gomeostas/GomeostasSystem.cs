@@ -72,6 +72,8 @@ namespace ISIDA.Gomeostas
           GomeostasFolderPath,
           () => InternalBehaviorStyles,
           () => GetAllParameters());
+
+        UpdateAgentPropertiesPromptContent();
       }
       catch (Exception ex)
       {
@@ -2942,6 +2944,163 @@ namespace ISIDA.Gomeostas
         Logger.Error(error);
         return (false, error);
       }
+    }
+
+    /// <summary>
+    /// Формирует базовую часть промпта (общую для всех промптов) из текущего состояния агента и обновляет AppGlobalState.AgentPropertiesPromptContent.
+    /// Хранит ТОЛЬКО базовую часть — без PromptSuffix и без текстов вставки для конкретных типов генерации.
+    /// </summary>
+    public void UpdateAgentPropertiesPromptContent()
+    {
+      string baseArchetype, keyMotivation, temperamentActivity, temperamentReactivity;
+      string stressBehavior, sociality, threatResponse, rewardResponse, punishmentResponse;
+      string specialTriggers, specialTaboos, additionalWishes;
+
+      _lock.EnterReadLock();
+      try
+      {
+        baseArchetype = _agentState.BaseArchetype ?? string.Empty;
+        keyMotivation = _agentState.KeyMotivation ?? string.Empty;
+        temperamentActivity = _agentState.TemperamentActivity ?? string.Empty;
+        temperamentReactivity = _agentState.TemperamentReactivity ?? string.Empty;
+        stressBehavior = GetActionNamesFromIds(_agentState.StressBehaviorIds);
+        sociality = _agentState.Sociality ?? string.Empty;
+        threatResponse = GetActionNamesFromIds(_agentState.ThreatResponseIds);
+        rewardResponse = GetActionNamesFromIds(_agentState.RewardResponseIds);
+        punishmentResponse = GetActionNamesFromIds(_agentState.PunishmentResponseIds);
+        specialTriggers = _agentState.SpecialTriggers ?? string.Empty;
+        specialTaboos = _agentState.SpecialTaboos ?? string.Empty;
+        additionalWishes = _agentState.AdditionalWishes ?? string.Empty;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      string content = $@"БАЗОВЫЕ ПАРАМЕТРЫ:
+Базовый архетип (Базовый психологический архетип, определяющий фундаментальные паттерны поведения): [{baseArchetype}]
+Ключевая мотивация (Главный движущий мотив агента, определяет приоритеты в принятии решений): [{keyMotivation}]
+
+ТЕМПЕРАМЕНТ:
+Активность (Уровень общей активности: Низкая - флегматичность, экономия энергии; Средняя - сбалансированность; Высокая - гиперактивность, постоянное движение): [{temperamentActivity}]
+Реактивность (Скорость и интенсивность реакции на внешние стимулы: Низкая - замедленные реакции; Средняя - адекватные; Высокая - мгновенные, импульсивные): [{temperamentReactivity}]
+
+ПОВЕДЕНЧЕСКИЕ ХАРАКТЕРИСТИКИ:
+Поведение в стрессе (Набор возможных реакций на стрессовые ситуации. Может быть выбрано несколько вариантов): [{stressBehavior}]
+Социальность (Стиль социального взаимодействия: Одиночка - избегает контактов; Избирательный - выбирает узкий круг; Стайный - комфортно в группе; Зависимый - нуждается в постоянном общении): [{sociality}]
+Реакция на угрозу (Первичная, инстинктивная реакция при обнаружении угрозы): [{threatResponse}]
+Реакция на поощрение (Типичная реакция на получение поощрения, ресурса или положительной обратной связи): [{rewardResponse}]
+Реакция на наказание (Типичная реакция на наказание, порицание или лишение ресурса): [{punishmentResponse}]
+
+ОСОБЕННОСТИ:
+Особые триггеры (Факторы, которые могут вызвать нестабильность или неадекватную реакцию. Важно для ИИ при моделировании поведения): [{specialTriggers}]
+Особые табу (Действия или ситуации, которых агент избегает даже в хорошем состоянии. Критически важно для избегания неконсистентного поведения): [{specialTaboos}]
+
+ДОПОЛНИТЕЛЬНЫЕ ПОЖЕЛАНИЯ (Дополнительные замечания, особенности или пожелания по поведению агента, которые нужно учесть при генерации):
+[{additionalWishes}]
+".TrimEnd();
+
+      AppGlobalState.AgentPropertiesPromptContent = content;
+    }
+
+    /// <summary>
+    /// Собирает полный промпт для генерации безусловных рефлексов: базовая часть + вставка из AgentProperties.PromptSuffix.
+    /// </summary>
+    public string GetGeneticReflexFullPromptContent()
+    {
+      string promptSuffixTemplate;
+      _lock.EnterReadLock();
+      try { promptSuffixTemplate = _agentState.PromptSuffix ?? string.Empty; }
+      finally { _lock.ExitReadLock(); }
+
+      string basePart = AppGlobalState.AgentPropertiesPromptContent ?? string.Empty;
+      if (string.IsNullOrWhiteSpace(promptSuffixTemplate))
+        return basePart;
+      var suffix = ReplacePromptSuffixPlaceholders(promptSuffixTemplate);
+      return string.IsNullOrWhiteSpace(basePart) ? suffix.Trim() : (basePart.TrimEnd() + "\r\n\r\n" + suffix.Trim()).Trim();
+    }
+
+    /// <summary>
+    /// Возвращает строку имён адаптивных действий по списку ID через запятую.
+    /// </summary>
+    private static string GetActionNamesFromIds(IReadOnlyList<int> ids)
+    {
+      if (ids == null || ids.Count == 0) return "";
+      if (!AdaptiveActionsSystem.IsInitialized) return string.Join(", ", ids);
+      var all = AdaptiveActionsSystem.Instance.GetAllAdaptiveActions();
+      var names = ids.Select(id => all.FirstOrDefault(a => a.Id == id)?.Name ?? id.ToString()).ToList();
+      return string.Join(", ", names);
+    }
+
+    /// <summary>
+    /// Подставляет в шаблон текста вставки промпта плейсхолдеры:
+    /// [stileCombination], [AdaptiveActionList], [InfluenceActionList], [ReflexGenStyleCount], [ReflexGenTriggerCount] и др.
+    /// </summary>
+    private string ReplacePromptSuffixPlaceholders(string template)
+    {
+      if (string.IsNullOrEmpty(template)) return string.Empty;
+
+      var text = template;
+
+      var styleCombinationStrings = new List<string>();
+      try
+      {
+        // GenerateStyleCombinations загружает из файла или генерирует из привязок параметров
+        var combinations = GenerateStyleCombinations(forceRegenerate: false);
+        foreach (var combo in combinations)
+        {
+          var names = combo
+            .Where(s => s != null && !string.IsNullOrWhiteSpace(s.Name))
+            .Select(s => s.Name.Trim())
+            .ToList();
+          if (names.Count > 0)
+            styleCombinationStrings.Add(string.Join("+", names));
+        }
+      }
+      catch { /* игнорируем ошибки загрузки */ }
+      text = text.Replace("[stileCombination]", string.Join(", ", styleCombinationStrings));
+
+      var adaptiveNames = new List<string>();
+      if (AdaptiveActionsSystem.IsInitialized)
+      {
+        var actions = AdaptiveActionsSystem.Instance.GetAllAdaptiveActions();
+        adaptiveNames = actions.OrderBy(x => x.Id).Select(a => a.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+      }
+      text = text.Replace("[AdaptiveActionList]", string.Join(", ", adaptiveNames));
+
+      var influenceNames = new List<string>();
+      if (InfluenceActionSystem.IsInitialized)
+      {
+        var influences = InfluenceActionSystem.Instance.GetAllInfluenceActions();
+        influenceNames = influences.OrderBy(x => x.Id).Select(i => i.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+      }
+      text = text.Replace("[InfluenceActionList]", string.Join(", ", influenceNames));
+
+      int styleCount = styleCombinationStrings.Count;
+      int triggerCount = influenceNames.Count;
+      int linesPerState = styleCount * triggerCount;
+      int linesThreeStates = 3 * linesPerState;
+      int stage1PerState = styleCount;
+      int stage1ThreeStates = 3 * styleCount;
+
+      text = text.Replace("[ReflexGenStyleCount]", styleCount.ToString());
+      text = text.Replace("[ReflexGenTriggerCount]", triggerCount.ToString());
+      text = text.Replace("[ReflexGenLinesPerState]", linesPerState.ToString());
+      text = text.Replace("[ReflexGenLinesThreeStates]", linesThreeStates.ToString());
+      text = text.Replace("[ReflexGenLinesStage1PerState]", stage1PerState.ToString());
+      text = text.Replace("[ReflexGenLinesStage1ThreeStates]", stage1ThreeStates.ToString());
+
+      return text;
+    }
+
+    /// <summary>
+    /// Подставляет в произвольный шаблон плейсхолдеры промпта.
+    /// Используется для формирования промпта вставки (например, в ConditionedReflexLoadDialog).
+    /// </summary>
+    public string ReplacePromptTemplatePlaceholders(string template)
+    {
+      if (string.IsNullOrEmpty(template)) return string.Empty;
+      return ReplacePromptSuffixPlaceholders(template);
     }
 
     /// <summary>

@@ -184,6 +184,16 @@ namespace ISIDA.Reflexes
       public int SourceGeneticReflexId { get; set; }
 
       /// <summary>
+      /// ID тона пускового стимула (фразы с пульта). 0 — нормальный.
+      /// </summary>
+      public int ToneId { get; set; }
+
+      /// <summary>
+      /// ID настроения пускового стимула (фразы с пульта). 0 — нормальное.
+      /// </summary>
+      public int MoodId { get; set; }
+
+      /// <summary>
       /// Максимальная достигнутая крепость связи
       /// </summary>
       public float MaxAchievedStrength { get; private set; }
@@ -517,7 +527,9 @@ namespace ISIDA.Reflexes
         List<int> level2,
         int level3,
         int sourceGeneticReflexId,
-        bool authoritativeMod = false)
+        bool authoritativeMod = false,
+        int toneId = 0,
+        int moodId = 0)
     {
       if (AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
@@ -536,7 +548,9 @@ namespace ISIDA.Reflexes
       {
         Level1 = level1,
         Level2 = level2?.OrderBy(x => x).ToList() ?? new List<int>(),
-        Level3 = level3
+        Level3 = level3,
+        ToneId = toneId,
+        MoodId = moodId
       };
 
       _lock.EnterReadLock();
@@ -557,10 +571,13 @@ namespace ISIDA.Reflexes
         _lock.ExitReadLock();
       }
 
+      int newId = 0;
+      List<int> level2Copy = null;
+
       _lock.EnterWriteLock();
       try
       {
-        int newId = ++_lastConditionedReflexId;
+        newId = ++_lastConditionedReflexId;
         int currentLifetime = GetAgentLifetime();
         float _associationStrength = _settings.MinAssociationStrength + 0.1f;
 
@@ -576,26 +593,33 @@ namespace ISIDA.Reflexes
           AssociationStrength = _associationStrength,
           LastActivation = currentLifetime,
           BirthTime = currentLifetime,
-          SourceGeneticReflexId = sourceGeneticReflexId
+          SourceGeneticReflexId = sourceGeneticReflexId,
+          ToneId = toneId,
+          MoodId = moodId
         };
 
         _conditionedReflexes.Add(newId, conditionedReflex);
-
-        try
-        {
-          OnConditionedReflexCreated(newId, level1, level2, level3);
-        }
-        catch (Exception ex)
-        {
-          warnings.Add($"Ошибка при обработке создания условного рефлекса: {ex.Message}");
-        }
-
-        return (newId, warnings.ToArray());
+        level2Copy = level2?.ToList();
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие вызываем после снятия блокировки: подписчик (ReflexTreeSystem) вызывает GetAllConditionedReflexes(), которому нужна блокировка чтения
+      if (newId > 0)
+      {
+        try
+        {
+          OnConditionedReflexCreated(newId, level1, level2Copy ?? level2 ?? new List<int>(), level3);
+        }
+        catch (Exception ex)
+        {
+          warnings.Add($"Ошибка при обработке создания условного рефлекса: {ex.Message}");
+        }
+      }
+
+      return (newId, warnings.ToArray());
     }
 
     /// <summary>
@@ -842,6 +866,7 @@ namespace ISIDA.Reflexes
       if (a == null || b == null) return false;
       if (a.Level1 != b.Level1) return false;
       if (a.Level3 != b.Level3) return false;
+      if (a.ToneId != b.ToneId || a.MoodId != b.MoodId) return false;
       if (!a.Level2.OrderBy(x => x).SequenceEqual(b.Level2.OrderBy(x => x))) return false;
       return true;
     }
@@ -971,7 +996,9 @@ namespace ISIDA.Reflexes
               AssociationStrength = float.Parse(parts[4]),
               LastActivation = int.Parse(parts[5]),
               BirthTime = int.Parse(parts[6]),
-              SourceGeneticReflexId = parts.Length > 7 ? int.Parse(parts[7]) : 0
+              SourceGeneticReflexId = parts.Length > 7 ? int.Parse(parts[7]) : 0,
+              ToneId = parts.Length > 8 && int.TryParse(parts[8], out int tid) ? tid : 0,
+              MoodId = parts.Length > 9 && int.TryParse(parts[9], out int mid) ? mid : 0
             };
 
             _conditionedReflexes[id] = reflex;
@@ -1083,7 +1110,9 @@ namespace ISIDA.Reflexes
           FileHeaders.ConditionedReflexesLevel1,
           FileHeaders.ConditionedReflexesLevel2,
           FileHeaders.ConditionedReflexesLevel3,
-          FileHeaders.ConditionedReflexesActions
+          FileHeaders.ConditionedReflexesActions,
+          FileHeaders.ConditionedReflexesToneId,
+          FileHeaders.ConditionedReflexesMoodId
         };
 
         foreach (var reflex in _conditionedReflexes.Values.OrderBy(r => r.Id))
@@ -1091,7 +1120,7 @@ namespace ISIDA.Reflexes
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|{reflex.Level3}|" +
                    $"{reflex.AssociationStrength}|{reflex.LastActivation}|" +
-                   $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}");
+                   $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}|{reflex.ToneId}|{reflex.MoodId}");
         }
 
         var result = FileValidator.SafeSaveFile(

@@ -80,6 +80,35 @@ public static class AppGlobalState
 
   #endregion
 
+  #region Промпт свойств агента
+
+  /// <summary>
+  /// Базовая часть промпта (общая для всех генераций) — параметры агента без текстов вставки.
+  /// Обновляется движком через GomeostasSystem.UpdateAgentPropertiesPromptContent().
+  /// </summary>
+  private static string _agentPropertiesPromptContent = string.Empty;
+
+  /// <summary>
+  /// Текстовая строка промпта для генерации
+  /// </summary>
+  public static string AgentPropertiesPromptContent
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _agentPropertiesPromptContent ?? string.Empty; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _agentPropertiesPromptContent = value ?? string.Empty; }
+      finally { _lock.ExitWriteLock(); }
+    }
+  }
+
+  #endregion
+
   #region Эпизодическая память
 
   /// <summary>Образ стимула (действий оператора) перед ответом Beast</summary>

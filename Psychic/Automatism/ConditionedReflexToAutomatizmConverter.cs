@@ -411,8 +411,10 @@ namespace ISIDA.Psychic
 
         var phrases = perceptionImage.PhraseIdList ?? new List<int>();
         var actions = perceptionImage.InfluenceActionsList ?? new List<int>();
+        int toneId = conditionedReflex.ToneId;
+        int moodId = conditionedReflex.MoodId;
 
-        return (actions, phrases, 0, 0);
+        return (actions, phrases, toneId, moodId);
       }
       catch (Exception ex)
       {

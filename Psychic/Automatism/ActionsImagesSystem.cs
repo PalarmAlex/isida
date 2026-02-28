@@ -203,6 +203,61 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Нормализует строку для сравнения: обрезка пробелов, удаление невидимых символов, замена латинских омоглифов на кириллицу.
+    /// </summary>
+    private static string NormalizeTextForMatch(string text)
+    {
+      if (string.IsNullOrWhiteSpace(text))
+        return string.Empty;
+      // Удаляем BOM и zero-width символы
+      var normalized = new string(text.Where(c =>
+          c != '\uFEFF' && c != '\u200B' && c != '\u200C' && c != '\u200D' && c != '\u2060').ToArray());
+      return normalized.Trim();
+    }
+
+    /// <summary>
+    /// Получает ID тона по текстовому обозначению (строгое совпадение без учёта регистра).
+    /// Допустимые значения: Вялый, Нормальный, Повышенный. Входная строка нормализуется (невидимые символы удаляются).
+    /// </summary>
+    /// <param name="text">Текстовое обозначение тона (без учёта регистра)</param>
+    /// <returns>ID тона или 0, если не найден (нормальный по умолчанию)</returns>
+    public static int GetToneIdByText(string text)
+    {
+      if (string.IsNullOrWhiteSpace(text))
+        return 0;
+      var key = NormalizeTextForMatch(text);
+      if (string.IsNullOrEmpty(key))
+        return 0;
+      foreach (var kvp in _toneDictionary)
+      {
+        if (string.Equals(kvp.Value.Description, key, StringComparison.OrdinalIgnoreCase))
+          return kvp.Key;
+      }
+      return 0;
+    }
+
+    /// <summary>
+    /// Получает ID настроения по текстовому обозначению (строгое совпадение без учёта регистра).
+    /// Допустимые значения: Нормальное, Хорошее, Плохое, Игривое, Учитель, Агрессивное, Защитное, Протест. Входная строка нормализуется.
+    /// </summary>
+    /// <param name="text">Текстовое обозначение настроения (без учёта регистра)</param>
+    /// <returns>ID настроения или 0, если не найден (нормальное по умолчанию)</returns>
+    public static int GetMoodIdByText(string text)
+    {
+      if (string.IsNullOrWhiteSpace(text))
+        return 0;
+      var key = NormalizeTextForMatch(text);
+      if (string.IsNullOrEmpty(key))
+        return 0;
+      foreach (var kvp in _moodDictionary)
+      {
+        if (string.Equals(kvp.Value.Description, key, StringComparison.OrdinalIgnoreCase))
+          return kvp.Key;
+      }
+      return 0;
+    }
+
+    /// <summary>
     /// Получает полную информацию о тоне
     /// </summary>
     public static (string Description, bool IsThreatening) GetToneInfo(int toneId)

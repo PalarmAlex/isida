@@ -1,6 +1,7 @@
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
@@ -68,7 +69,7 @@ namespace ISIDA.Reflexes
       };
       if (Failed > 0)
       {
-        if (InvalidFormat > 0) parts.Add($"Ошибка формата (ожидается 4 поля): {InvalidFormat}");
+        if (InvalidFormat > 0) parts.Add($"Ошибка формата (ожидается минимум 4 поля, опционально 6 с тоном и настроением): {InvalidFormat}");
         if (NotFoundState > 0) parts.Add($"Состояние не распознано: {NotFoundState}");
         if (NotFoundStyle > 0) parts.Add($"Стиль не найден: {NotFoundStyle}");
         if (NotFoundTrigger > 0) parts.Add($"Триггер (воздействие с пульта) не найден: {NotFoundTrigger}");
@@ -167,7 +168,7 @@ namespace ISIDA.Reflexes
 
       if (result.Created == 0)
         throw new ArgumentException(
-          "Нет корректных строк. Ожидается формат: Состояние|Стили|Триггер безусловного рефлекса|Новый триггер (фраза).",
+          "Нет корректных строк. Ожидается формат: Состояние|Стили|Триггер безусловного рефлекса|Новый триггер [|Тон|Настроение].",
           nameof(content));
 
       var cr = ConditionedReflexesSystem.Instance;
@@ -186,6 +187,10 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>Обрабатывает одну строку. Возвращает (успех, причина сбоя).</summary>
+    /// <remarks>
+    /// Формат: Состояние|Стили|Триггер|Новый триггер [|Тон|Настроение]. Разделитель полей — только |, внутри ячеек его быть не должно.
+    /// Почему тон/настроение могут оказаться 0: (1) В тексте только 4 поля — загружен старый список или не тот файл; содержимое берётся из окна «Текст рефлексов», при открытии диалога подгружается conditioned_reflex_generate_list.txt. (2) Строка тона/настроения не совпадает со справочником (опечатка, лишние слова, неверный порядок колонок Тон|Настроение). (3) GetToneIdByText/GetMoodIdByText — только точное совпадение без учёта регистра; при несовпадении возвращают 0. В этих случаях в лог пишется предупреждение с полученной строкой.
+    /// </remarks>
     private (bool success, string failReason) ParseAndApplyLine(string line)
     {
       var parts = line.Split('|');
@@ -196,6 +201,25 @@ namespace ISIDA.Reflexes
       string stylesStr = parts[1].Trim();
       string triggerStr = parts[2].Trim();
       string phraseStr = parts[3].Trim();
+      string toneStr = parts.Length > 4 ? parts[4].Trim() : string.Empty;
+      string moodStr = parts.Length > 5 ? parts[5].Trim() : string.Empty;
+
+      int toneId = string.IsNullOrEmpty(toneStr) ? 0 : ActionsImagesSystem.GetToneIdByText(toneStr);
+      int moodId = string.IsNullOrEmpty(moodStr) ? 0 : ActionsImagesSystem.GetMoodIdByText(moodStr);
+
+      // Если в строке были указаны тон/настроение, но не распознаны (получили 0 и это не «Нормальный»/«Нормальное») — в лог коды символов
+      string normalToneText = ActionsImagesSystem.GetToneText(0);
+      if (!string.IsNullOrEmpty(toneStr) && toneId == 0 && !string.Equals(toneStr.Trim(), normalToneText, StringComparison.OrdinalIgnoreCase))
+      {
+        var codes = string.Join(" ", toneStr.Trim().Take(15).Select(c => "U+" + ((int)c).ToString("X4")));
+        Logger.Warning($"Тон не распознан (будет Нормальный): \"{toneStr}\". Коды символов: {codes}. Допустимы: Вялый, Нормальный, Повышенный.");
+      }
+      string normalMoodText = ActionsImagesSystem.GetMoodText(0);
+      if (!string.IsNullOrEmpty(moodStr) && moodId == 0 && !string.Equals(moodStr.Trim(), normalMoodText, StringComparison.OrdinalIgnoreCase))
+      {
+        var codes = string.Join(" ", moodStr.Trim().Take(15).Select(c => "U+" + ((int)c).ToString("X4")));
+        Logger.Warning($"Настроение не распознано (будет Нормальное): \"{moodStr}\". Коды символов: {codes}. Допустимы: Нормальное, Хорошее, Плохое, Игривое, Учитель, Агрессивное, Защитное, Протест.");
+      }
 
       if (!TryParseState(stateStr, out int level1))
         return (false, "State");
@@ -225,7 +249,9 @@ namespace ISIDA.Reflexes
             level2,
             level3ImageId,
             geneticReflex.Id,
-            authoritativeMod: true);
+            authoritativeMod: true,
+            toneId: toneId,
+            moodId: moodId);
 
         foreach (var w in warnings)
           Logger.Warning(w);

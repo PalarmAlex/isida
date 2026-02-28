@@ -434,13 +434,15 @@ namespace ISIDA.Reflexes
 
         if (_activeCurTriggerStimulusID != 0)
         {
-          // Сохраняем как условный стимул
+          // Сохраняем как условный стимул (с тоном и настроением фразы с пульта)
           _reflexFormationService.RecordStimulus(
             pulseCount,
             _activeCurTriggerStimulusID,
             _activeCurBaseID,
             _activeCurBaseStyleID,
-            0);
+            0,
+            toneId,
+            moodId);
         }
 
         if (_activeConditionReflexID != 0)
