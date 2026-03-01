@@ -517,7 +517,9 @@ namespace ISIDA.Psychic
       if (_disposed) return;
       try
       {
-        SaveVerbalBrocaImages();
+        var (success, error) = SaveVerbalBrocaImages();
+        if (!success && !string.IsNullOrEmpty(error))
+          Logger.Error($"VerbalBrocaImagesSystem: не удалось сохранить вербальные образы: {error}");
       }
       catch (Exception ex)
       {

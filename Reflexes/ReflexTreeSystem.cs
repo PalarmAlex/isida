@@ -136,12 +136,17 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Обработчик создания условного рефлекса
+    /// Обработчик создания условного рефлекса.
+    /// Привязка нужна только при создании нового рефлекса. При загрузке из файла дерево уже содержит ConditionedReflex в узлах — пропускаем.
     /// </summary>
     private void OnConditionedReflexCreated(ConditionedReflexesSystem.ConditionedReflexCreatedEventArgs e)
     {
       try
       {
+        // Если рефлекс уже привязан к узлу (загружен из файла дерева) — не перепривязываем
+        if (IsConditionedReflexInTree(e.ReflexId))
+          return;
+
         int styleImageId = 0;
 
         if (PerceptionImagesSystem.IsInitialized && e.Level2 != null && e.Level2.Any())
@@ -1152,6 +1157,20 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Проверяет, привязан ли условный рефлекс к какому-либо узлу дерева (например, при загрузке из файла)
+    /// </summary>
+    private bool IsConditionedReflexInTree(int reflexId)
+    {
+      if (reflexId <= 0) return false;
+      foreach (var node in ReflexTreeFromID)
+      {
+        if (node != null && node.ConditionedReflex == reflexId)
+          return true;
+      }
+      return false;
     }
 
     /// <summary>

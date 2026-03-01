@@ -226,11 +226,20 @@ namespace ISIDA.Sensors
     #region Работа с первичными сенсорами
 
     /// <summary>
-    /// Получить ID первичного символоа 
+    /// Получить ID первичного символа.
+    /// При отсутствии прямого совпадения пробует строчный вариант (для "Х" → "х"), т.к. в первичных сенсорах часто заданы только строчные.
     /// </summary>
     public int GetPrimarySensorId(char symbol)
     {
-      return _primarySensors.TryGetValue(symbol, out int id) ? id : 0;
+      if (_primarySensors.TryGetValue(symbol, out int id))
+        return id;
+
+      // Фразы в дереве могут храниться с заглавной, а в первичных сенсорах — только строчные
+      char lower = char.ToLowerInvariant(symbol);
+      if (lower != symbol && _primarySensors.TryGetValue(lower, out id))
+        return id;
+
+      return 0;
     }
 
     /// <summary>

@@ -832,7 +832,8 @@ namespace ISIDA.Common
         if (!int.TryParse(parts[0], out int id) || id <= 0)
           return false;
 
-        if (!int.TryParse(parts[1], out int simbolID) || simbolID <= 0)
+        // SimbolID может быть 0 (формат: "0 если нет фразы")
+        if (!int.TryParse(parts[1], out int simbolID) || simbolID < 0)
           return false;
 
         // ToneId должен быть валидным (-1, 0, 1)

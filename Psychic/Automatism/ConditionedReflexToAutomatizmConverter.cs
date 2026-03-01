@@ -171,8 +171,8 @@ namespace ISIDA.Psychic
               if (AddUtils.FloatLessOrEqual(conditionedReflex.AssociationStrength, actReflexTreshold))
                 continue; // пропускаем рефлекс с крепостью <= пороговой
 
-              var (actions, phrases, _, _) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
-              var imageHash = CalculateImageHash(conditionedReflex.Level1, actions, phrases);
+              var (actions, phrases, toneId, moodId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
+              var imageHash = CalculateImageHash(conditionedReflex.Level1, conditionedReflex.Level2, actions, phrases, toneId, moodId);
 
               if (processedImageIds.Contains(imageHash))
               {
@@ -250,7 +250,18 @@ namespace ISIDA.Psychic
 
         if (phrases?.Any() == true)
         {
-          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phrases[0]);
+          int phraseId0 = phrases[0];
+          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseId0);
+          if (symbolId == 0)
+          {
+            var phraseText = _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(phraseId0);
+            char firstChar = '\0';
+            if (!string.IsNullOrEmpty(phraseText))
+            {
+              var trimmed = phraseText.TrimStart();
+              if (trimmed.Length > 0) firstChar = trimmed[0];
+            }
+          }
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
         }
 
@@ -367,14 +378,21 @@ namespace ISIDA.Psychic
     #region Вспомогательные методы
 
     /// <summary>
-    /// Вычисляет хэш образа для обнаружения дубликатов
+    /// Вычисляет хэш образа для обнаружения дубликатов.
+    /// Учитывает: Level1, Level2 (эмоции), пусковые действия, фразы, тон, настроение.
     /// </summary>
-    private int CalculateImageHash(int baseId, List<int> actions, List<int> phrases)
+    private int CalculateImageHash(int baseId, List<int> level2, List<int> actions, List<int> phrases, int toneId, int moodId)
     {
       unchecked
       {
         int hash = 17;
         hash = hash * 31 + baseId.GetHashCode();
+
+        if (level2 != null)
+        {
+          foreach (var emotionId in level2.OrderBy(x => x))
+            hash = hash * 31 + emotionId.GetHashCode();
+        }
 
         if (actions != null)
         {
@@ -387,6 +405,9 @@ namespace ISIDA.Psychic
           foreach (var phraseId in phrases.OrderBy(x => x))
             hash = hash * 31 + phraseId.GetHashCode();
         }
+
+        hash = hash * 31 + toneId.GetHashCode();
+        hash = hash * 31 + moodId.GetHashCode();
 
         return hash;
       }
@@ -767,7 +788,18 @@ namespace ISIDA.Psychic
         int verbId = 0;
         if (phrases?.Any() == true)
         {
-          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phrases[0]);
+          int phraseId0 = phrases[0];
+          symbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseId0);
+          if (symbolId == 0)
+          {
+            var phraseText = _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(phraseId0);
+            char firstChar = '\0';
+            if (!string.IsNullOrEmpty(phraseText))
+            {
+              var trimmed = phraseText.TrimStart();
+              if (trimmed.Length > 0) firstChar = trimmed[0];
+            }
+          }
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
         }
 
