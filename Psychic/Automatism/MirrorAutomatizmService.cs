@@ -132,6 +132,144 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Создаёт на 2-й стадии эхо-автоматизм по вербальному стимулу с пульта; при нескольких частях (разбивка по пробелам) — эхо по первой части и цепочку из не более чем 2 звеньев (второе звено — последняя часть, промежуточные отбрасываются).
+    /// Пусковые условия: текущее состояние + стили + образ действий с пульта (вербальная часть с тоном/настроением + невербальная; одна из частей может быть пустой, обе — нет).
+    /// </summary>
+    /// <param name="detectedNodeId">ID узла дерева автоматизмов (триггер)</param>
+    /// <param name="fullStimulusActionsImageId">ID полного образа действий стимула (вся фраза + действие)</param>
+    /// <param name="partPhraseIds">Список ID фраз по частям (по одному на слово после разбивки по пробелам)</param>
+    /// <param name="actionIdList">Действия с пульта (могут быть пустыми)</param>
+    /// <param name="toneId">Тон</param>
+    /// <param name="moodId">Настроение</param>
+    /// <returns>ID созданного эхо-автоматизма или 0</returns>
+    public int TryCreateStage2EchoWithChain(
+      int detectedNodeId,
+      int fullStimulusActionsImageId,
+      List<int> partPhraseIds,
+      List<int> actionIdList,
+      int toneId,
+      int moodId)
+    {
+      if (AppGlobalState.EvolutionStage != 2)
+        return 0;
+      if (detectedNodeId <= 0 || fullStimulusActionsImageId <= 0)
+        return 0;
+      if (partPhraseIds == null || partPhraseIds.Count == 0)
+        return 0;
+
+      var actList = actionIdList ?? new List<int>();
+
+      // Образ для первой части (первое слово + действие с пульта) и ответный образ для эхо
+      var (firstPartImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 0,
+          actIdList: actList,
+          phraseIdList: new List<int> { partPhraseIds[0] },
+          toneId: toneId,
+          moodId: moodId,
+          checkUnicum: true);
+      if (firstPartImageId <= 0)
+        return 0;
+
+      int responseFirstPartImageId = GetOrCreateResponseActionsImageWithAdaptiveIds(firstPartImageId);
+      if (responseFirstPartImageId <= 0)
+        return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        var (echoId, created) = _automatizmSystem.CreateNewAutomatizm(detectedNodeId, responseFirstPartImageId, true);
+        if (created == null)
+          return 0;
+
+        created.Usefulness = 0;
+        created.Count = 0;
+        if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
+          _automatizmSystem.SetAutomatizmBelief(created, 2);
+
+        if (partPhraseIds.Count == 1)
+        {
+          Logger.Info($"Stage2 echo automatism ID={echoId}, node={detectedNodeId}, one part");
+          return echoId;
+        }
+
+        // Цепочка: не более 2 звеньев. Второе звено — вторая часть, последнее звено — последняя часть (промежуточные отбрасываются)
+        int partForLink1 = partPhraseIds[1];
+        int partForLink2 = partPhraseIds[partPhraseIds.Count - 1];
+
+        var (img1Id, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+            kind: 0,
+            actIdList: new List<int>(),
+            phraseIdList: new List<int> { partForLink1 },
+            toneId: toneId,
+            moodId: moodId,
+            checkUnicum: true);
+        var (img2Id, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+            kind: 0,
+            actIdList: new List<int>(),
+            phraseIdList: new List<int> { partForLink2 },
+            toneId: toneId,
+            moodId: moodId,
+            checkUnicum: true);
+        if (img1Id <= 0 || img2Id <= 0)
+          return echoId;
+
+        int responseImg1 = GetOrCreateResponseActionsImageWithAdaptiveIds(img1Id);
+        int responseImg2 = GetOrCreateResponseActionsImageWithAdaptiveIds(img2Id);
+        if (responseImg1 <= 0 || responseImg2 <= 0)
+          return echoId;
+
+        var link1 = new AutomatizmChainsSystem.ChainLink
+        {
+          ID = 0,
+          ChainID = 0,
+          ActionsImageId = responseImg1,
+          SuccessNextLink = 0,
+          FailureNextLink = 0,
+          Description = "Звено 1 (вторая часть)",
+          ChainUsefulness = 1
+        };
+        var link2 = new AutomatizmChainsSystem.ChainLink
+        {
+          ID = 0,
+          ChainID = 0,
+          ActionsImageId = responseImg2,
+          SuccessNextLink = 0,
+          FailureNextLink = 0,
+          Description = "Звено 2 (последняя часть)",
+          ChainUsefulness = 1
+        };
+        var links = new List<AutomatizmChainsSystem.ChainLink> { link1, link2 };
+
+        if (!AutomatizmChainsSystem.IsInitialized)
+          return echoId;
+
+        var (chainId, warnings) = AutomatizmChainsSystem.Instance.AddAutomatizmChain(
+            name: "Эхо-цепочка ст.2",
+            description: $"Эхо + цепочка по частям (узёл {detectedNodeId})",
+            links: links,
+            treeNodeId: detectedNodeId,
+            startAutomatizmId: echoId);
+
+        if (chainId == 0)
+          return echoId;
+
+        links[0].SuccessNextLink = links[1].ID;
+        _automatizmSystem.AttachChainToAutomatizm(echoId, chainId);
+
+        var saveResult = AutomatizmChainsSystem.Instance.SaveAutomatizmChains();
+        if (!saveResult.Success)
+          Logger.Warning($"Stage2 echo+chain: цепочка {chainId} создана, сохранение: {saveResult.ErrorMessage}");
+
+        Logger.Info($"Stage2 echo+chain: automatism ID={echoId}, chain ID={chainId}, node={detectedNodeId}");
+        return echoId;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Создать зеркальный автоматизм (второй шаг) на ответ оператора.
     /// </summary>
     public int TryCreateMirrorFromPendingOperatorResponse()

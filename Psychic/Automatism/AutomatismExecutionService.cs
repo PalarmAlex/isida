@@ -249,7 +249,8 @@ namespace ISIDA.Psychic.Automatism
           ? ActionActivationSource.AutomatizmVerbalResponse
           : ActionActivationSource.Automatizm;
 
-        return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId);
+        int actionImageIdForToneMood = isVerbalResponse ? automatizm.ActionsImageID : 0;
+        return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId, actionImageIdForToneMood);
       }
       catch (Exception ex)
       {
@@ -295,11 +296,17 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Выполняет последовательность адаптивных действий автоматизма
     /// </summary>
+    /// <param name="actionIds">Список ID действий для выполнения</param>
+    /// <param name="activationSource">Источник активации (автоматизм, вербальный ответ и т.д.)</param>
+    /// <param name="automatizmId">ID автоматизма (0 для цепочек)</param>
+    /// <param name="phraseId">ID фразы при вербальном ответе</param>
+    /// <param name="actionImageIdForToneMood">ID образа действий автоматизма для отображения тона/настроения (при вербальном ответе)</param>
     public (bool Success, string ErrorMessage) ExecuteAdaptiveActions(
         List<int> actionIds,
         ActionActivationSource activationSource,
         int automatizmId = 0,
-        int phraseId = 0)
+        int phraseId = 0,
+        int actionImageIdForToneMood = 0)
     {
       if (actionIds == null || !actionIds.Any())
         return (false, "Нет действий для выполнения");
@@ -323,7 +330,7 @@ namespace ISIDA.Psychic.Automatism
             action.ActivationPulse = GlobalTimer.GlobalPulsCount;
           }
 
-          bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId);
+          bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId, actionImageIdForToneMood);
           if (applied)
           {
             successfulActions.Add(actionId);
@@ -496,18 +503,45 @@ namespace ISIDA.Psychic.Automatism
 
       // Получаем образ действий
       var actionsImage = _actionsImagesSystem.GetActionsImage(currentLink.ActionsImageId);
-      if (actionsImage == null || actionsImage.ActIdList == null || !actionsImage.ActIdList.Any())
+      if (actionsImage == null)
       {
-        Logger.Warning($"Образ действий {currentLink.ActionsImageId} не найден или не содержит действий");
+        Logger.Warning($"Образ действий {currentLink.ActionsImageId} не найден");
         StopCurrentAutomatizmChain(pulseCount);
         return;
       }
 
-      // Выполняем действия
+      int phraseId = actionsImage.PhraseIdList?.FirstOrDefault() ?? 0;
+      var actionIds = actionsImage.ActIdList?.ToList() ?? new List<int>();
+      bool isVerbalOnly = !actionIds.Any() && phraseId > 0;
+
+      if (!actionIds.Any() && phraseId <= 0)
+      {
+        Logger.Warning($"Образ действий {currentLink.ActionsImageId} не содержит ни действий, ни фразы");
+        StopCurrentAutomatizmChain(pulseCount);
+        return;
+      }
+
+      if (isVerbalOnly)
+      {
+        if (_adaptiveActionsSystem.DefaultAdaptiveActionId <= 0)
+        {
+          Logger.Warning($"Невозможно выполнить вербальное звено: не задано действие по умолчанию");
+          StopCurrentAutomatizmChain(pulseCount);
+          return;
+        }
+        actionIds.Add(_adaptiveActionsSystem.DefaultAdaptiveActionId);
+      }
+
+      var activationSource = isVerbalOnly ? ActionActivationSource.AutomatizmVerbalResponse : ActionActivationSource.Automatizm;
+      int actionImageIdForToneMood = phraseId > 0 ? currentLink.ActionsImageId : 0;
+
+      // Выполняем действия (для вербальной части передаём ID образа звена — для отображения тона и настроения)
       var result = ExecuteAdaptiveActions(
-          actionsImage.ActIdList,
-          ActionActivationSource.Automatizm,
-          0);
+          actionIds,
+          activationSource,
+          0,
+          phraseId,
+          actionImageIdForToneMood);
 
       if (!result.Success)
       {
@@ -516,8 +550,8 @@ namespace ISIDA.Psychic.Automatism
         return;
       }
 
-      // Логируем выполнение звена цепочки (используем первое действие из образа)
-      int firstActionId = actionsImage.ActIdList.First();
+      // Логируем выполнение звена цепочки (используем первое действие из списка)
+      int firstActionId = actionIds.First();
       _researchLogger?.LogChainLinkExecution(_activeChain.ChainId, _activeChain.CurrentLinkId, firstActionId, pulseCount);
 
       // Устанавливаем состояние ожидания оценки (оценка — по эффекту стимула оператора в период ожидания)

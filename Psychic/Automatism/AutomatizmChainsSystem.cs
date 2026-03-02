@@ -286,6 +286,14 @@ namespace ISIDA.Psychic.Automatism
       {
         int newId = ++_lastChainId;
 
+        // Присваиваем ID звеньям, если они не заданы (для программно создаваемых цепочек)
+        foreach (var link in links)
+        {
+          if (link.ID == 0)
+            link.ID = ++_lastLinkId;
+          link.ChainID = newId;
+        }
+
         var chain = new AutomatizmChain
         {
           ID = newId,

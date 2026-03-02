@@ -244,6 +244,8 @@ namespace ISIDA.Actions
     private readonly Dictionary<int, AdaptiveAction> _actions = new Dictionary<int, AdaptiveAction>();
     private readonly List<AdaptiveAction> _activeActions = new List<AdaptiveAction>();
     private readonly Dictionary<int, int> _activeActionPhrases = new Dictionary<int, int>();
+    /// <summary>Для вербальных ответов автоматизма: actionId → ActionsImageID образа автоматизма (для отображения тона и настроения).</summary>
+    private readonly Dictionary<int, int> _activeActionPhrasesImageId = new Dictionary<int, int>();
 
     /// <summary>
     /// Событие удаления адаптивного действия
@@ -600,6 +602,7 @@ namespace ISIDA.Actions
         _activeActions.RemoveAll(a => a.Id == actionId);
         AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
         _activeActionPhrases.Remove(actionId);
+        _activeActionPhrasesImageId.Remove(actionId);
 
         // Удаляем ссылки на это действие как антагониста в других действиях
         foreach (var action in _actions.Values)
@@ -644,6 +647,7 @@ namespace ISIDA.Actions
       try
       {
         _activeActionPhrases.Clear();
+        _activeActionPhrasesImageId.Clear();
       }
       catch (Exception ex)
       {
@@ -676,6 +680,7 @@ namespace ISIDA.Actions
       {
         _activeActions.Remove(action);
         _activeActionPhrases.Remove(action.Id);
+        _activeActionPhrasesImageId.Remove(action.Id);
         action.ActivationSource = 0;
       }
       AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
@@ -686,9 +691,10 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="actionId">ID применяемого действия</param>
     /// <param name="phraseId">ID фразы, по умолчанию 0</param>
+    /// <param name="actionImageIdForToneMood">ID образа действий автоматизма для отображения тона/настроения (при вербальном ответе)</param>
     /// <returns>True, если действие было успешно применено</returns>
     /// <exception cref="KeyNotFoundException">Выбрасывается если действие не найдено</exception>
-    public bool ApplyAction(int actionId, int phraseId = 0)
+    public bool ApplyAction(int actionId, int phraseId = 0, int actionImageIdForToneMood = 0)
     {
       _lock.EnterWriteLock();
       try
@@ -713,6 +719,7 @@ namespace ISIDA.Actions
             {
               _activeActions.Remove(activeAction);
               _activeActionPhrases.Remove(activeAction.Id);
+              _activeActionPhrasesImageId.Remove(activeAction.Id);
             }
             else
             {
@@ -726,10 +733,17 @@ namespace ISIDA.Actions
         if (!_activeActions.Any(a => a.Id == actionId))
         {
           _activeActions.Add(action);
-          _activeActionPhrases[actionId] = phraseId;
           action.ActivationPulse = GlobalTimer.GlobalPulsCount;
           AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
         }
+        else
+          action.ActivationPulse = GlobalTimer.GlobalPulsCount;
+
+        // Всегда обновляем фразу и образ для отображения (при цепочке автоматизмов — вербальные образы звеньев, а не стартового автоматизма)
+        if (phraseId != 0)
+          _activeActionPhrases[actionId] = phraseId;
+        if (phraseId != 0 && actionImageIdForToneMood > 0)
+          _activeActionPhrasesImageId[actionId] = actionImageIdForToneMood;
 
         return true;
       }
@@ -748,6 +762,23 @@ namespace ISIDA.Actions
       try
       {
         return _activeActionPhrases.TryGetValue(actionId, out int phraseId) ? phraseId : 0;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Для вербального ответа автоматизма возвращает ID образа действий (с правильными тоном и настроением).
+    /// Если не задан — возвращает 0 (тогда UI может использовать actionId как образ действий).
+    /// </summary>
+    public int GetActionImageIdForPhraseDisplay(int actionId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _activeActionPhrasesImageId.TryGetValue(actionId, out int imageId) ? imageId : 0;
       }
       finally
       {

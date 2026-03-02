@@ -762,6 +762,38 @@ namespace ISIDA.Sensors
       return string.Join(" ", words);
     }
 
+    /// <summary>
+    /// Разбивает фразу на части по пробелам и возвращает список ID фраз (по одному на каждое слово).
+    /// Используется для генерации эхо-автоматизма с цепочкой на 2-й стадии.
+    /// </summary>
+    /// <param name="phraseId">ID фразы (вербального стимула)</param>
+    /// <returns>Список ID фраз, по одному на каждое слово; пустой список при ошибке или пустой фразе</returns>
+    public List<int> GetPartPhraseIdsFromPhraseId(int phraseId)
+    {
+      if (phraseId <= 0)
+        return new List<int>();
+
+      string phraseText = GetPhraseFromPhraseId(phraseId);
+      if (string.IsNullOrWhiteSpace(phraseText))
+        return new List<int>();
+
+      var words = Regex.Matches(phraseText.Trim(), @"(\S+)")
+          .Cast<Match>()
+          .Select(m => m.Value)
+          .ToList();
+      if (words.Count == 0)
+        return new List<int>();
+
+      var partPhraseIds = new List<int>();
+      foreach (var word in words)
+      {
+        int partId = FindPhraseId(word);
+        if (partId != 0)
+          partPhraseIds.Add(partId);
+      }
+      return partPhraseIds;
+    }
+
     #endregion
 
     #region Обработка текста

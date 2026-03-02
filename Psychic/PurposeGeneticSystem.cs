@@ -1,6 +1,7 @@
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
 using System.IO.Pipes;
@@ -22,6 +23,9 @@ namespace ISIDA.Psychic
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
     private ConditionedReflexToAutomatizmConverter _conditionedReflexToAutomatizm;
     private AutomatizmChainsSystem _automatizmChainsSystem;
+    private MirrorAutomatizmService _mirrorAutomatizmService;
+    private VerbalBrocaImagesSystem _verbalBrocaImagesSystem;
+    private SensorySystem _sensorySystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -93,6 +97,18 @@ namespace ISIDA.Psychic
       _automatizmChainsSystem = automatizmChainsSystem ?? throw new ArgumentNullException(nameof(automatizmChainsSystem));
     }
 
+    /// <summary>
+    /// Зависимости для создания эхо-автоматизма с цепочкой на 2-й стадии (при отсутствии автоматизма и !VeryActual).
+    /// </summary>
+    public void SetStage2EchoDependencies(
+      MirrorAutomatizmService mirrorAutomatizmService,
+      VerbalBrocaImagesSystem verbalBrocaImagesSystem,
+      SensorySystem sensorySystem)
+    {
+      _mirrorAutomatizmService = mirrorAutomatizmService;
+      _verbalBrocaImagesSystem = verbalBrocaImagesSystem;
+      _sensorySystem = sensorySystem;
+    }
 
     #endregion
 
@@ -209,7 +225,9 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить автоматизм по гомеостатической цели
+    /// Получить автоматизм по гомеостатической цели.
+    /// При VeryActual / FlgConditionReflexes / отсутствии вербального стимула — создаётся автоматизм по генетической цели.
+    /// Иначе на 2-й стадии при наличии вербального стимула создаётся эхо-автоматизм с цепочкой (только если VeryActual == false).
     /// </summary>
     public Automatizm GetAutomatizmByGeneticPurpose()
     {
@@ -220,16 +238,64 @@ namespace ISIDA.Psychic
         
         if (purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
         {
-          if(purposeGenetic.ActionImage != null)
+          if (purposeGenetic.ActionImage != null)
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
         }
+        else if (!purposeGenetic.VeryActual &&
+                 AppGlobalState.EvolutionStage == 2 &&
+                 AppGlobalState.CurActiveVerbalId != 0 &&
+                 _mirrorAutomatizmService != null &&
+                 _verbalBrocaImagesSystem != null &&
+                 _sensorySystem?.VerbalChannel != null)
+        {
+          atmz = TryCreateStage2EchoWithChainFromStimulusContext();
+        }
+
         return atmz;
       }
-      catch(Exception ex)
+      catch (Exception ex)
       {
         Logger.Error(ex.Message);
         return null;
       }
+    }
+
+    /// <summary>
+    /// Создаёт эхо-автоматизм с цепочкой на 2-й стадии по контексту стимула с пульта (AppGlobalState + CurActiveVerbalId).
+    /// </summary>
+    private Automatizm TryCreateStage2EchoWithChainFromStimulusContext()
+    {
+      int nodeId = AppGlobalState.AutomatizmNodeId;
+      int actionsImageId = AppGlobalState.CurrentStimulusActionsImageId;
+      var actionIdList = AppGlobalState.CurrentStimulusActionIdList ?? new List<int>();
+      int toneId = AppGlobalState.CurrentStimulusToneId;
+      int moodId = AppGlobalState.CurrentStimulusMoodId;
+
+      if (nodeId <= 0 || actionsImageId <= 0)
+        return null;
+
+      var verbalImage = _verbalBrocaImagesSystem.GetVerbalBrocaImage(AppGlobalState.CurActiveVerbalId);
+      var phraseIdList = verbalImage?.PhraseIdList;
+      if (phraseIdList == null || phraseIdList.Count == 0)
+        return null;
+
+      List<int> parts = phraseIdList.Count == 1
+          ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
+          : phraseIdList.ToList();
+      if (parts == null || parts.Count == 0)
+        return null;
+
+      int echoId = _mirrorAutomatizmService.TryCreateStage2EchoWithChain(
+          nodeId,
+          actionsImageId,
+          parts,
+          actionIdList,
+          toneId,
+          moodId);
+      if (echoId <= 0)
+        return null;
+
+      return _automatizmSystem.GetAutomatizmById(echoId);
     }
 
     /// <summary>

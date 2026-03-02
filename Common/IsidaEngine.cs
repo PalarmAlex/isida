@@ -846,6 +846,10 @@ namespace ISIDA.Common
         context.PurposeGeneticImageSystem.SetDopPurposeGeneticImageSystem(
           context.ConditionedReflexToAutomatizm,
           context.AutomatizmChainsSystem);
+        context.PurposeGeneticImageSystem.SetStage2EchoDependencies(
+          context.MirrorAutomatizmService,
+          context.VerbalBrocaImagesSystem,
+          context.SensorySystem);
 
         // Шаг 34: Сервис переключения стадий эволюции
         initializationStep = 34;

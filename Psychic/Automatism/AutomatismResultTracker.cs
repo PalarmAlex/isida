@@ -449,7 +449,9 @@ namespace ISIDA.Psychic
         _lastAutomatizmResults[automatizmId] = trackingResult;
         AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
         AppGlobalState.UpdateAutomatizmInfo(automatizmId, GlobalTimer.GlobalPulsCount);
-        AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
+        // Период ожидания ответа оператора активируется только начиная с 4 стадии
+        if (AppGlobalState.EvolutionStage >= 4)
+          AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
 
         Logger.Info($"Начато отслеживание автоматизма ID={automatizmId}, ветка={branchId}");
 
@@ -629,13 +631,9 @@ namespace ISIDA.Psychic
         // Проверяем, было ли ожидание ответа оператора
         var executionTime = result.EndPulse - result.StartPulse;
         if (executionTime > AppGlobalState.WaitingPeriodForActionsVal)
-        {
           result.Result = ExecutionResult.WaitingForResponse;
-        }
         else
-        {
           result.Result = ExecutionResult.Skipped;
-        }
       }
     }
 

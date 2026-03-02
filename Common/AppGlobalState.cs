@@ -751,14 +751,6 @@ public static class AppGlobalState
     LastRunAutomatizmPulsCount = 0;
   }
 
-  ///// <summary>
-  ///// Сохранить состояние перед воздействием оператора для оценки
-  ///// </summary>
-  //public static void SaveStateForEvaluation(HomeostasisState currentState)
-  //{
-  //  StateBeforeOperatorImpact = currentState;
-  //}
-
   /// <summary>
   /// Проверить, является ли текущий момент временем оценки предыдущего автоматизма
   /// </summary>
@@ -789,6 +781,27 @@ public static class AppGlobalState
     get => _curActiveVerbalId;
     set => _curActiveVerbalId = value;
   }
+
+  #endregion
+
+  #region Контекст стимула с пульта (для ОР1 / эхо на 2-й стадии)
+
+  private static int _currentStimulusActionsImageId = 0;
+  private static List<int> _currentStimulusActionIdList = new List<int>();
+  private static int _currentStimulusToneId = 0;
+  private static int _currentStimulusMoodId = 0;
+
+  /// <summary>ID образа действий текущего стимула с пульта (устанавливается перед вызовом ОР1)</summary>
+  public static int CurrentStimulusActionsImageId { get => _currentStimulusActionsImageId; set => _currentStimulusActionsImageId = value; }
+
+  /// <summary>Список ID действий текущего стимула с пульта</summary>
+  public static List<int> CurrentStimulusActionIdList { get => _currentStimulusActionIdList; set => _currentStimulusActionIdList = value ?? new List<int>(); }
+
+  /// <summary>Тон текущего стимула с пульта</summary>
+  public static int CurrentStimulusToneId { get => _currentStimulusToneId; set => _currentStimulusToneId = value; }
+
+  /// <summary>Настроение текущего стимула с пульта</summary>
+  public static int CurrentStimulusMoodId { get => _currentStimulusMoodId; set => _currentStimulusMoodId = value; }
 
   #endregion
 }

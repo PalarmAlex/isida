@@ -328,6 +328,38 @@ namespace ISIDA.Psychic
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
 
+          // На 2-й стадии при отсутствии автоматизма и нескольких частях вербального стимула — пусковой образ без пробелов (например "со ба ка" → "собака")
+          if (foundAutomatizm == null &&
+              AppGlobalState.EvolutionStage == 2 &&
+              activationType >= 2 &&
+              hasVerbalPart &&
+              phraseIdList != null && phraseIdList.Count > 0)
+          {
+            List<int> partsForMerge = phraseIdList.Count == 1
+                ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
+                : phraseIdList.ToList();
+            if (partsForMerge != null && partsForMerge.Count > 1)
+            {
+              string mergedText = string.Concat(partsForMerge
+                  .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
+              if (!string.IsNullOrEmpty(mergedText))
+              {
+                var wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(mergedText);
+                if (wordIdOpt.HasValue)
+                  _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordIdOpt.Value });
+                int mergedPhraseId = _sensorySystem.VerbalChannel.FindPhraseId(mergedText);
+                if (mergedPhraseId != 0)
+                {
+                  int firstSymbolMerged = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(mergedPhraseId);
+                  (int verbIdMerged, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSymbolMerged, new List<int> { mergedPhraseId }, toneId, moodId, true);
+                  int nodeIdMerged = AutomatizmTreeActivation(activationType, currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSymbolMerged, verbIdMerged);
+                  if (nodeIdMerged > 0)
+                    AppGlobalState.AutomatizmNodeId = nodeIdMerged;
+                }
+              }
+            }
+          }
+
           if (foundAutomatizm == null &&
               AppGlobalState.EvolutionStage == 3 &&
               !AppGlobalState.WaitingForOperatorEvaluation &&
@@ -348,6 +380,15 @@ namespace ISIDA.Psychic
                 return ExecuteAutomatizm(parrotAutomatizm);
               }
             }
+          }
+
+          // Контекст стимула для ОР1 / эхо на 2-й стадии (используется в GetAutomatizmByGeneticPurpose)
+          if (foundAutomatizm == null)
+          {
+            AppGlobalState.CurrentStimulusActionsImageId = actionsImageId;
+            AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
+            AppGlobalState.CurrentStimulusToneId = toneId;
+            AppGlobalState.CurrentStimulusMoodId = moodId;
           }
 
           atmz = _orientationReflexSystem.OrientationReflex(
@@ -466,8 +507,9 @@ namespace ISIDA.Psychic
         {
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
-          // Включить ожидание оценки оператора
-          AppGlobalState.WaitingForOperatorEvaluation = true;
+          // Включить ожидание оценки оператора только начиная с 4 стадии
+          if (AppGlobalState.EvolutionStage >= 4)
+            AppGlobalState.WaitingForOperatorEvaluation = true;
           AppGlobalState.LastRunAutomatizmPulsCount = PulseCount;
           _currentAutomatizmId = automatizm.ID;
         }
