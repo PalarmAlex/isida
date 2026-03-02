@@ -84,7 +84,7 @@ namespace ISIDA.Psychic.Automatism
     /// Обработчик удаления автоматизма. Событие передаёт ID автоматизма (не ActionsImageId).
     /// Удаляются целые цепочки, у которых StartAutomatizmId совпадает с удалённым автоматизмом.
     /// </summary>
-    private void OnAutomatizmDeleted(int automatizmId)
+    private void OnAutomatizmDeleted(int automatizmId, bool isMassCleanup)
     {
       _lock.EnterWriteLock();
       try
@@ -98,13 +98,14 @@ namespace ISIDA.Psychic.Automatism
 
         foreach (var chainId in chainsToRemove)
         {
-          RemoveAutomatizmChainNoBlock(chainId);
+          RemoveAutomatizmChainNoBlock(chainId, silent: isMassCleanup);
         }
 
         if (chainsToRemove.Any())
         {
           SaveAutomatizmChainsCore();
-          Logger.Info($"Удалены цепочки автоматизмов {string.Join(", ", chainsToRemove)} при удалении автоматизма {automatizmId}");
+          if (!isMassCleanup)
+            Logger.Info($"Удалены цепочки автоматизмов {string.Join(", ", chainsToRemove)} при удалении автоматизма {automatizmId}");
         }
       }
       finally
@@ -327,7 +328,7 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
-    internal bool RemoveAutomatizmChainNoBlock(int chainId)
+    internal bool RemoveAutomatizmChainNoBlock(int chainId, bool silent = false)
     {
       try
       {
@@ -352,7 +353,8 @@ namespace ISIDA.Psychic.Automatism
         {
           SaveAutomatizmChainsCore();
           OnAutomatizmChainDeleted(chainId);
-          Logger.Info($"Цепочка автоматизмов {chainId} удалена. Удалено звеньев: {linkIds.Count}");
+          if (!silent)
+            Logger.Info($"Цепочка автоматизмов {chainId} удалена. Удалено звеньев: {linkIds.Count}");
         }
 
         return removed;
@@ -735,7 +737,51 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Получаем данные для следующего шага в активной цепочке
+    /// Пропускает звенья с ChainUsefulness &lt; 0 (переход по FailureNextLink), пока не найдётся звено с ChainUsefulness >= 0 или цепочка не завершится.
+    /// </summary>
+    /// <returns>(CanExecute, LinkId): можно выполнять текущее звено и его ID, либо (false, 0) при завершении цепочки</returns>
+    internal (bool CanExecute, int LinkId) TrySkipToExecutableLink(int chainId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_activeChains.TryGetValue(chainId, out int currentLinkId))
+          return (false, 0);
+        if (!_automatizmChains.TryGetValue(chainId, out var chain))
+        {
+          StopChain(chainId);
+          return (false, 0);
+        }
+        while (true)
+        {
+          var link = chain.Links.FirstOrDefault(l => l.ID == currentLinkId);
+          if (link == null)
+          {
+            StopChain(chainId);
+            return (false, 0);
+          }
+          if (link.ChainUsefulness >= 0)
+            return (true, currentLinkId);
+          int next = link.FailureNextLink;
+          if (next == 0)
+          {
+            Logger.Info($"Цепочка {chainId}: звено {currentLinkId} с полезностью < 0, FailureNextLink=0, завершение");
+            StopChain(chainId);
+            return (false, 0);
+          }
+          Logger.Info($"Цепочка {chainId}: пропуск звена {currentLinkId} (ChainUsefulness < 0) → звено {next}");
+          currentLinkId = next;
+          _activeChains[chainId] = next;
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Получаем данные для следующего шага в активной цепочке (ветвление: usefulness >= 0 → SuccessNextLink, иначе → FailureNextLink)
     /// </summary>
     internal (int ExecutedActionsImageId, int NextLinkId, bool ChainCompleted)
         GetNextChainStepData(int chainId, int usefulness)

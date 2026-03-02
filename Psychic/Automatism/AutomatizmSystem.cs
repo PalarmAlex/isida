@@ -115,16 +115,18 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Событие удаления автоматизма
+    /// Событие удаления автоматизма. Второй параметр — массовая очистка (не логировать).
     /// </summary>
-    public event Action<int> AutomatizmDeleted;
+    public event Action<int, bool> AutomatizmDeleted;
 
     /// <summary>
     /// Вызывает событие удаления автоматизма
     /// </summary>
-    private void OnAutomatizmDeleted(int automatizmId)
+    /// <param name="automatizmId">ID удалённого автоматизма</param>
+    /// <param name="isMassCleanup">True при массовой очистке — подписчики не должны логировать</param>
+    private void OnAutomatizmDeleted(int automatizmId, bool isMassCleanup = false)
     {
-      AutomatizmDeleted?.Invoke(automatizmId);
+      AutomatizmDeleted?.Invoke(automatizmId, isMassCleanup);
     }
 
     #endregion
@@ -443,7 +445,7 @@ namespace ISIDA.Psychic.Automatism
           removed = _automatizmsById.Remove(atmzId);
 
           if (removed)
-            OnAutomatizmDeleted(atmzId);
+            OnAutomatizmDeleted(atmzId, isMassCleanup: true);
           else
             break;
         }

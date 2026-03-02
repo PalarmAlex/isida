@@ -387,6 +387,9 @@ namespace ISIDA.Psychic.Automatism
       public int LastStepPulse { get; set; }
       public List<int> CompletedActions { get; set; } = new List<int>();
       public bool IsWaitingForResult { get; set; }
+      /// <summary>Состояние гомеостаза на момент начала ожидания (для оценки по эффекту стимула)</summary>
+      public int StateAtWaitStart { get; set; }
+      /// <summary>Была ли оценка задана (по стимулу или по таймауту с дефолтом)</summary>
       public bool OperatorEvaluated => LastEvaluation.HasValue;
       public int? LastEvaluation { get; set; }
     }
@@ -448,7 +451,8 @@ namespace ISIDA.Psychic.Automatism
         StartPulse = pulseCount,
         LastStepPulse = pulseCount,
         LastEvaluation = null,
-        CurrentLinkId = _automatizmChainsSystem.GetCurrentChainLink(chainId)
+        CurrentLinkId = _automatizmChainsSystem.GetCurrentChainLink(chainId),
+        StateAtWaitStart = (int)AppGlobalState.CurrentOverallState
       };
 
       AppGlobalState.IsAutomatizmChainActive = true;
@@ -464,12 +468,21 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Выполняет звено цепочки
+    /// Выполняет звено цепочки. Звенья с ChainUsefulness &lt; 0 не выполняются — переход по FailureNextLink.
     /// </summary>
     private void ExecuteChainLink(int pulseCount)
     {
       if (_activeChain == null)
         return;
+
+      // Пропуск звеньев с отрицательной полезностью (ветвление 3.1)
+      var (canExecute, linkId) = _automatizmChainsSystem.TrySkipToExecutableLink(_activeChain.ChainId);
+      if (!canExecute)
+      {
+        StopCurrentAutomatizmChain(pulseCount);
+        return;
+      }
+      _activeChain.CurrentLinkId = linkId;
 
       // Получаем текущее звено
       var chain = _automatizmChainsSystem.GetChain(_activeChain.ChainId);
@@ -507,16 +520,54 @@ namespace ISIDA.Psychic.Automatism
       int firstActionId = actionsImage.ActIdList.First();
       _researchLogger?.LogChainLinkExecution(_activeChain.ChainId, _activeChain.CurrentLinkId, firstActionId, pulseCount);
 
-      // Устанавливаем состояние ожидания оценки
+      // Устанавливаем состояние ожидания оценки (оценка — по эффекту стимула оператора в период ожидания)
       _activeChain.IsWaitingForResult = true;
       _activeChain.LastStepPulse = pulseCount;
+      _activeChain.StateAtWaitStart = (int)AppGlobalState.CurrentOverallState;
 
       Logger.Info($"Выполнено звено {_activeChain.CurrentLinkId} цепочки {_activeChain.ChainId}, " +
                   $"ожидание оценки в течение {_reflexActionDuration} пульсов");
     }
 
     /// <summary>
-    /// Устанавливает результат выполнения шага цепочки
+    /// Применяет эффект стимула оператора к активному звену цепочки и переходит к следующему звену (или завершает цепочку).
+    /// Вызывается после применения воздействий с пульта в период ожидания. Оценка звена: -1, 0 или +1 по изменению состояния гомеостаза.
+    /// </summary>
+    public bool ApplyStimulusEffectAndAdvanceChain()
+    {
+      if (_activeChain == null || !_activeChain.IsWaitingForResult)
+        return false;
+
+      int chainId = _activeChain.ChainId;
+      int stateNow = (int)AppGlobalState.CurrentOverallState;
+      int stateBefore = _activeChain.StateAtWaitStart;
+      int effect = stateNow > stateBefore ? 1 : (stateNow < stateBefore ? -1 : 0);
+
+      _activeChain.LastEvaluation = effect;
+      Logger.Info($"Оценка звена {_activeChain.CurrentLinkId} цепочки {chainId} по эффекту стимула: {effect} (состояние {stateBefore} → {stateNow})");
+
+      _automatizmChainsSystem.UpdateLinkUsefulness(chainId, _activeChain.CurrentLinkId, effect);
+      var nextStep = _automatizmChainsSystem.GetNextChainStepData(chainId, effect);
+
+      int pulseCount = GlobalTimer.GlobalPulsCount;
+
+      if (nextStep.ChainCompleted)
+      {
+        StopCurrentAutomatizmChain(pulseCount);
+        return true;
+      }
+
+      _activeChain.CurrentLinkId = nextStep.NextLinkId;
+      _activeChain.LastStepPulse = pulseCount;
+      _activeChain.IsWaitingForResult = false;
+      _activeChain.LastEvaluation = null;
+
+      ExecuteChainLink(pulseCount);
+      return true;
+    }
+
+    /// <summary>
+    /// Устанавливает результат выполнения шага цепочки (используется только для цепочек рефлексов; для автоматизмов — ApplyStimulusEffectAndAdvanceChain).
     /// </summary>
     public bool SetChainStepResult(int chainId, int usefulness)
     {

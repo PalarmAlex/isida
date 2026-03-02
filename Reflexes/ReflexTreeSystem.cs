@@ -955,7 +955,7 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          Logger.Info($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} безусловных рефлексов");
+          // Логирование при массовой очистке не выводим — тормозит процесс
         }
       }
       catch (Exception ex)
@@ -1024,7 +1024,7 @@ namespace ISIDA.Reflexes
         if (clearedCount > 0)
         {
           SaveReflexTreeInternal();
-          Logger.Info($"Очищено {clearedCount} ссылок на безусловные рефлексы");
+          // Логирование при массовой очистке не выводим
         }
       }
       catch (Exception ex)
@@ -1081,8 +1081,7 @@ namespace ISIDA.Reflexes
         var (success, errorMessage) = SaveReflexTreeInternal();
         if (!success)
           Logger.Error($"Ошибка сохранения дерева после полной очистки: {errorMessage}");
-        else
-          Logger.Info("Дерево рефлексов полностью очищено");
+        // При массовой очистке Info не логируем
       }
       catch (Exception ex)
       {
@@ -1146,7 +1145,7 @@ namespace ISIDA.Reflexes
         if (removedCount > 0)
         {
           SaveReflexTreeInternal();
-          Logger.Info($"Удалено {removedCount} ссылок на {reflexIdsSet.Count} условных рефлексов");
+          // Логирование при массовой очистке не выводим — тормозит процесс
         }
       }
       catch (Exception ex)
