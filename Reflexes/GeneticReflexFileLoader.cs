@@ -128,6 +128,10 @@ namespace ISIDA.Reflexes
       if (string.IsNullOrWhiteSpace(content))
         throw new ArgumentException("Текст генерации рефлексов не задан.", nameof(content));
 
+      content = GenerateListContentPreprocessor.Preprocess(content);
+      if (string.IsNullOrWhiteSpace(content))
+        throw new ArgumentException("Текст генерации рефлексов не задан.", nameof(content));
+
       var result = new GeneticReflexLoadResult();
       var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
       result.TotalLines = lines.Length;

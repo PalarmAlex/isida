@@ -91,6 +91,7 @@
     <Compile Include="Common\AppGlobalState.cs" />
     <Compile Include="Common\EvolutionStageService.cs" />
     <Compile Include="Common\FileValidator.cs" />
+    <Compile Include="Common\GenerateListContentPreprocessor.cs" />
     <Compile Include="Common\GlobalTimer.cs" />
     <Compile Include="Common\IDisposableState.cs" />
     <Compile Include="Common\ILogWriter.cs" />
@@ -115,6 +116,7 @@
     <Compile Include="Psychic\Automatism\MirrorAutomatizmService.cs" />
     <Compile Include="Psychic\Automatism\InfluenceActionImagesSystem.cs" />
     <Compile Include="Psychic\Automatism\ConditionedReflexToAutomatizmConverter.cs" />
+    <Compile Include="Psychic\Automatism\Stage2PrimitivesLoader.cs" />
     <Compile Include="Psychic\Understanding\ProblemTreeNode.cs" />
     <Compile Include="Psychic\Understanding\ProblemTreeSystem.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryNode.cs" />

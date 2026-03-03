@@ -202,16 +202,19 @@ namespace ISIDA.Psychic.Automatism
       return _moodDictionary.ContainsKey(moodId);
     }
 
+    private static readonly HashSet<char> HiddenCharsToRemove = new HashSet<char>
+    {
+      '\uFEFF', '\u200B', '\u200C', '\u200D', '\u200E', '\u200F', '\u2060', '\u00A0', '\u2028', '\u2029'
+    };
+
     /// <summary>
-    /// Нормализует строку для сравнения: обрезка пробелов, удаление невидимых символов, замена латинских омоглифов на кириллицу.
+    /// Нормализует строку для сравнения: удаление невидимых символов (BOM, zero-width и т.п.), Trim.
     /// </summary>
     private static string NormalizeTextForMatch(string text)
     {
       if (string.IsNullOrWhiteSpace(text))
         return string.Empty;
-      // Удаляем BOM и zero-width символы
-      var normalized = new string(text.Where(c =>
-          c != '\uFEFF' && c != '\u200B' && c != '\u200C' && c != '\u200D' && c != '\u2060').ToArray());
+      var normalized = new string(text.Where(c => !HiddenCharsToRemove.Contains(c)).ToArray());
       return normalized.Trim();
     }
 
@@ -223,17 +226,29 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>ID тона или 0, если не найден (нормальный по умолчанию)</returns>
     public static int GetToneIdByText(string text)
     {
+      return TryGetToneIdByText(text, out int id) ? id : 0;
+    }
+
+    /// <summary>
+    /// Пытается получить ID тона по тексту. Отличает «не найден» от «Нормальный» (id=0).
+    /// </summary>
+    public static bool TryGetToneIdByText(string text, out int toneId)
+    {
+      toneId = 0;
       if (string.IsNullOrWhiteSpace(text))
-        return 0;
+        return false;
       var key = NormalizeTextForMatch(text);
       if (string.IsNullOrEmpty(key))
-        return 0;
+        return false;
       foreach (var kvp in _toneDictionary)
       {
         if (string.Equals(kvp.Value.Description, key, StringComparison.OrdinalIgnoreCase))
-          return kvp.Key;
+        {
+          toneId = kvp.Key;
+          return true;
+        }
       }
-      return 0;
+      return false;
     }
 
     /// <summary>
@@ -244,17 +259,29 @@ namespace ISIDA.Psychic.Automatism
     /// <returns>ID настроения или 0, если не найден (нормальное по умолчанию)</returns>
     public static int GetMoodIdByText(string text)
     {
+      return TryGetMoodIdByText(text, out int id) ? id : 0;
+    }
+
+    /// <summary>
+    /// Пытается получить ID настроения по тексту. Отличает «не найден» от «Нормальное» (id=0).
+    /// </summary>
+    public static bool TryGetMoodIdByText(string text, out int moodId)
+    {
+      moodId = 0;
       if (string.IsNullOrWhiteSpace(text))
-        return 0;
+        return false;
       var key = NormalizeTextForMatch(text);
       if (string.IsNullOrEmpty(key))
-        return 0;
+        return false;
       foreach (var kvp in _moodDictionary)
       {
         if (string.Equals(kvp.Value.Description, key, StringComparison.OrdinalIgnoreCase))
-          return kvp.Key;
+        {
+          moodId = kvp.Key;
+          return true;
+        }
       }
-      return 0;
+      return false;
     }
 
     /// <summary>

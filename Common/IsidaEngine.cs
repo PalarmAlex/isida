@@ -197,6 +197,11 @@ namespace ISIDA.Common
     public AutomatizmFileLoader AutomatizmFileLoader { get; internal set; }
 
     /// <summary>
+    /// Загрузчик базовых примитивов (эхо+цепочка) по шаблону для стадии 2.
+    /// </summary>
+    public Stage2PrimitivesLoader Stage2PrimitivesLoader { get; internal set; }
+
+    /// <summary>
     /// Класс для загрузки безусловных рефлексов и цепочек из файла
     /// </summary>
     public GeneticReflexFileLoader GeneticReflexFileLoader { get; internal set; }
@@ -850,6 +855,16 @@ namespace ISIDA.Common
           context.MirrorAutomatizmService,
           context.VerbalBrocaImagesSystem,
           context.SensorySystem);
+
+        // Шаг 33a: Загрузчик базовых примитивов по шаблону (стадия 2)
+        context.Stage2PrimitivesLoader = new Stage2PrimitivesLoader(
+          context.Gomeostas,
+          context.EmotionsImageSystem,
+          context.SensorySystem,
+          context.VerbalBrocaImagesSystem,
+          context.AutomatizmTree,
+          context.ActionsImages,
+          context.MirrorAutomatizmService);
 
         // Шаг 34: Сервис переключения стадий эволюции
         initializationStep = 34;

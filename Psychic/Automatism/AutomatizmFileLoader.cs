@@ -94,6 +94,10 @@ namespace ISIDA.Psychic.Automatism
       if (string.IsNullOrWhiteSpace(csvContent))
         throw new ArgumentException("Текст цепочек не задан или пуст. Введите строки в формате: фраза1;фраза2;фраза3 или фраза1 - фраза2 - фраза3.", nameof(csvContent));
 
+      csvContent = GenerateListContentPreprocessor.Preprocess(csvContent);
+      if (string.IsNullOrWhiteSpace(csvContent))
+        throw new ArgumentException("Текст цепочек не задан или пуст. Введите строки в формате: фраза1;фраза2;фраза3 или фраза1 - фраза2 - фраза3.", nameof(csvContent));
+
       var lines = csvContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
       int validLinesCount = 0;
       foreach (var line in lines)
