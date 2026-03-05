@@ -299,6 +299,68 @@ namespace ISIDA.Sensors
     }
 
     /// <summary>
+    /// Возвращает путь от корня до узла (последовательность элементов ветки).
+    /// </summary>
+    /// <param name="branchEndNodeId">ID конечного узла ветки.</param>
+    /// <returns>Список элементов от корня к узлу или пустой список.</returns>
+    public List<TElement> GetBranchPath(TNodeId branchEndNodeId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        if (!_nodes.TryGetValue(branchEndNodeId, out var node) || node == null)
+          return new List<TElement>();
+        var path = new List<TElement>();
+        while (node != null && !EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
+        {
+          path.Add(node.Element);
+          node = node.Parent;
+        }
+        path.Reverse();
+        return path;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Возвращает всех кандидатов на следующий элемент после контекста с их вероятностями.
+    /// Используется для контекстно-ограниченной генерации (гуление).
+    /// </summary>
+    public List<(TElement element, double probability)> GetNextCandidatesWithProbabilities(IEnumerable<TElement> context)
+    {
+      var result = new List<(TElement, double)>();
+      _lock.EnterReadLock();
+      try
+      {
+        if (!_nodes.TryGetValue(default(TNodeId), out var node))
+          return result;
+        var elements = context?.ToList() ?? new List<TElement>();
+        foreach (var e in elements)
+        {
+          var child = node.Children.FirstOrDefault(c => c.Element.Equals(e));
+          if (child == null) break;
+          node = child;
+        }
+        var candidates = new HashSet<TElement>(node.TransitionCounts.Keys);
+        foreach (var c in node.Children)
+          candidates.Add(c.Element);
+        foreach (var elem in candidates)
+        {
+          double p = node.GetTransitionProbability(elem, _smoothingAlpha);
+          result.Add((elem, p));
+        }
+        return result;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Находит самый длинный существующий контекст и возвращает наиболее вероятное следующее значение.
     /// </summary>
     /// <param name="context">Контекст (префикс последовательности).</param>

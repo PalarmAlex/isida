@@ -556,6 +556,15 @@ namespace ISIDA.Sensors
     }
 
     /// <summary>
+    /// Возвращает список ID слов, образующих фразу (путь в дереве фраз от корня до узла phraseId).
+    /// </summary>
+    public List<int> GetWordIdsFromPhraseId(int phraseId)
+    {
+      if (phraseId <= 0) return new List<int>();
+      return PhraseTree.GetBranchPath(phraseId);
+    }
+
+    /// <summary>
     /// Проверяет существование фразы в дереве фраз
     /// </summary>
     /// <param name="phraseWords">Список слов фразы</param>

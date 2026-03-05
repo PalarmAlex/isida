@@ -335,6 +335,54 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Создаёт на 2-й стадии эхо-автоматизм для сгенерированного слова (гуление): триггер — узел дерева по новому слову, ответ — произнесение этого слова.
+    /// Usefulness=0, Belief=0, Energy=5 для последующей оценки на стадии 3.
+    /// </summary>
+    /// <param name="triggerNodeId">ID узла дерева автоматизмов (триггер по новому слову)</param>
+    /// <param name="phraseIdForWord">ID фразы из одного слова (образ произнесения)</param>
+    /// <param name="toneId">Тон</param>
+    /// <param name="moodId">Настроение</param>
+    /// <returns>ID созданного автоматизма или 0</returns>
+    public int TryCreateStage2BabblingEcho(int triggerNodeId, int phraseIdForWord, int toneId, int moodId)
+    {
+      if (AppGlobalState.EvolutionStage != 2)
+        return 0;
+      if (triggerNodeId <= 0 || phraseIdForWord <= 0)
+        return 0;
+
+      var (actionsImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: new List<int> { phraseIdForWord },
+          toneId: toneId,
+          moodId: moodId,
+          checkUnicum: true);
+      if (actionsImageId <= 0)
+        return 0;
+
+      int responseImageId = GetOrCreateResponseActionsImageWithAdaptiveIds(actionsImageId);
+      if (responseImageId <= 0)
+        return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        var (echoId, created) = _automatizmSystem.CreateNewAutomatizm(triggerNodeId, responseImageId, true);
+        if (created == null)
+          return 0;
+        created.Usefulness = 0;
+        created.Belief = 0;
+        created.Energy = 5;
+        created.Count = 0;
+        return echoId;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Сбросить состояние текущего зеркального диалогового цикла.
     /// </summary>
     public void ResetDialogMirror()

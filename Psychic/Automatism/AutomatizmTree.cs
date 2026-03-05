@@ -351,6 +351,64 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Возвращает ID всех узлов в поддереве контекста (baseId, emotionId, activityId, toneMoodId).
+    /// Используется для гуления: поиск автоматизмов с Usefulness &gt; 0 в этом контексте.
+    /// </summary>
+    public List<int> GetNodeIdsByContext(int baseId, int emotionId, int activityId, int toneMoodId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        var list = new List<int>();
+        AutomatizmNode n = null;
+        foreach (var c in Tree.Children)
+          if (c.BaseID == baseId) { n = c; break; }
+        if (n == null) return list;
+        if (emotionId != 0)
+        {
+          AutomatizmNode next = null;
+          foreach (var c in n.Children)
+            if (c.EmotionID == emotionId) { next = c; break; }
+          if (next == null) return list;
+          n = next;
+        }
+        if (activityId != 0)
+        {
+          AutomatizmNode next = null;
+          foreach (var c in n.Children)
+            if (c.ActivityID == activityId) { next = c; break; }
+          if (next == null) return list;
+          n = next;
+        }
+        if (toneMoodId != 0)
+        {
+          AutomatizmNode next = null;
+          foreach (var c in n.Children)
+            if (c.ToneMoodID == toneMoodId) { next = c; break; }
+          if (next == null) return list;
+          n = next;
+        }
+        CollectNodeIds(n, list);
+        return list;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    private static void CollectNodeIds(AutomatizmNode node, List<int> list)
+    {
+      if (node == null) return;
+      list.Add(node.ID);
+      if (node.Children != null)
+      {
+        foreach (var c in node.Children)
+          CollectNodeIds(c, list);
+      }
+    }
+
+    /// <summary>
     /// Обновляет VerbID узла (для склейки вербального триггера: «ма ма» → «мама» без создания нового узла).
     /// </summary>
     public bool SetNodeVerbID(int nodeId, int verbId)
