@@ -286,11 +286,12 @@ namespace ISIDA.Psychic.Automatism
       {
         int newId = ++_lastChainId;
 
-        // Присваиваем ID звеньям, если они не заданы (для программно создаваемых цепочек)
+        // Присваиваем ID звеньям внутри цепочки (1, 2, 3...). У каждой цепочки своя нумерация.
+        int linkNum = 1;
         foreach (var link in links)
         {
           if (link.ID == 0)
-            link.ID = ++_lastLinkId;
+            link.ID = linkNum++;
           link.ChainID = newId;
         }
 
@@ -460,7 +461,8 @@ namespace ISIDA.Psychic.Automatism
             warnings.Add($"Ссылка на предыдущее звено (ID:{failureNextLink}) запрещена");
         }
 
-        int newLinkId = ++_lastLinkId;
+        // Нумерация звеньев внутри цепочки: следующая после максимального в этой цепочке
+        int newLinkId = chain.Links.Count == 0 ? 1 : chain.Links.Max(l => l.ID) + 1;
 
         var link = new ChainLink
         {

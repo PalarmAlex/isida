@@ -289,24 +289,31 @@ namespace ISIDA.Psychic
         if (AppGlobalState.WaitingForOperatorEvaluation &&  activationType >= 2 && AppGlobalState.IsEvaluationTime())
           _isAnswer = true;
 
-        int actionsImageId = CreateActionsImage(actionIdList, phraseIdList, toneId, moodId);
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
         int toneMood = GetToneMoodID(toneId, moodId);
 
         int firstSimbol = 0;
         int verbId = 0;
+        int verbIdForTree = 0;
+        int actionsImageId = 0;
+        List<int> phraseIdListForStimulus = phraseIdList;
 
         if (phraseIdList?.Any() == true)
         {
-          firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseIdList[0]);
-          (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true);
+          (verbId, verbIdForTree, firstSimbol, phraseIdListForStimulus) = PrepareVerbalStimulusForStage2(
+              phraseIdList, actionIdList, toneId, moodId);
           AppGlobalState.CurActiveVerbalId = verbId;
-          var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdList);
+          var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdListForStimulus);
           AppGlobalState.LastTriggerStimulusID = perceptionImageId;
         }
         else
+        {
           AppGlobalState.CurActiveVerbalId = 0;
+        }
+
+        actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId);
+        int stimulusActionsImageIdForContext = actionsImageId;
 
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
@@ -316,7 +323,7 @@ namespace ISIDA.Psychic
             currentActivityId,
             toneMood,
             firstSimbol,
-            verbId);
+            verbIdForTree);
 
         if (automatizmNodeId > 0)
         {
@@ -327,38 +334,6 @@ namespace ISIDA.Psychic
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
-
-          // На 2-й стадии при отсутствии автоматизма и нескольких частях вербального стимула — пусковой образ без пробелов (например "со ба ка" → "собака")
-          if (foundAutomatizm == null &&
-              AppGlobalState.EvolutionStage == 2 &&
-              activationType >= 2 &&
-              hasVerbalPart &&
-              phraseIdList != null && phraseIdList.Count > 0)
-          {
-            List<int> partsForMerge = phraseIdList.Count == 1
-                ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
-                : phraseIdList.ToList();
-            if (partsForMerge != null && partsForMerge.Count > 1)
-            {
-              string mergedText = string.Concat(partsForMerge
-                  .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
-              if (!string.IsNullOrEmpty(mergedText))
-              {
-                var wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(mergedText);
-                if (wordIdOpt.HasValue)
-                  _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordIdOpt.Value });
-                int mergedPhraseId = _sensorySystem.VerbalChannel.FindPhraseId(mergedText);
-                if (mergedPhraseId != 0)
-                {
-                  int firstSymbolMerged = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(mergedPhraseId);
-                  (int verbIdMerged, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSymbolMerged, new List<int> { mergedPhraseId }, toneId, moodId, true);
-                  int nodeIdMerged = AutomatizmTreeActivation(activationType, currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSymbolMerged, verbIdMerged);
-                  if (nodeIdMerged > 0)
-                    AppGlobalState.AutomatizmNodeId = nodeIdMerged;
-                }
-              }
-            }
-          }
 
           if (foundAutomatizm == null &&
               AppGlobalState.EvolutionStage == 3 &&
@@ -385,7 +360,7 @@ namespace ISIDA.Psychic
           // Контекст стимула для ОР1 / эхо на 2-й стадии (используется в GetAutomatizmByGeneticPurpose)
           if (foundAutomatizm == null)
           {
-            AppGlobalState.CurrentStimulusActionsImageId = actionsImageId;
+            AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
             AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
             AppGlobalState.CurrentStimulusToneId = toneId;
             AppGlobalState.CurrentStimulusMoodId = moodId;
@@ -441,6 +416,53 @@ namespace ISIDA.Psychic
           isUnrecognizedPhrase);
 
       return detectedNodeId;
+    }
+
+    /// <summary>
+    /// Готовит вербальный стимул: для стадии 2 при нескольких фразах («ма ма») склеивает в одну («мама») для образа стимула и узла дерева; CurActiveVerbalId остаётся по исходному списку для цепочки.
+    /// </summary>
+    /// <returns>(verbId для CurActiveVerbalId, verbId для дерева, firstSymbol, phraseIdList для образа стимула)</returns>
+    private (int verbIdForCurActive, int verbIdForTree, int firstSimbol, List<int> phraseIdListForStimulus) PrepareVerbalStimulusForStage2(
+        List<int> phraseIdList,
+        List<int> actionIdList,
+        int toneId,
+        int moodId)
+    {
+      int firstSimbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(phraseIdList[0]);
+      int verbId = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSimbol, phraseIdList, toneId, moodId, true).Item1;
+
+      // RecognizeText с пульта для "ма ма" возвращает один phraseId (фраза "ма ма" целиком), а не два. Части получаем разбивкой по пробелу/дефису.
+      List<int> partsForMerge = phraseIdList.Count == 1
+          ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
+          : phraseIdList;
+
+      string originalPhraseText = phraseIdList.Count == 1
+          ? _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(phraseIdList[0])
+          : string.Join(" ", phraseIdList.Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
+      // Склеиваем только если в исходном вводе был пробел («ма ма» → «мама»). При дефисе («тик-так») триггер не склеиваем.
+      bool shouldMerge = AppGlobalState.EvolutionStage == 2 && partsForMerge != null && partsForMerge.Count > 1
+          && !string.IsNullOrEmpty(originalPhraseText) && originalPhraseText.Contains(' ');
+
+      if (shouldMerge)
+      {
+        string mergedText = string.Concat(partsForMerge
+            .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
+        if (!string.IsNullOrEmpty(mergedText))
+        {
+          var wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(mergedText);
+          if (wordIdOpt.HasValue)
+            _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordIdOpt.Value });
+          int mergedPhraseId = _sensorySystem.VerbalChannel.FindPhraseId(mergedText);
+          if (mergedPhraseId != 0)
+          {
+            int firstSymbolMerged = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(mergedPhraseId);
+            int verbIdMerged = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSymbolMerged, new List<int> { mergedPhraseId }, toneId, moodId, true).Item1;
+            return (verbId, verbIdMerged, firstSymbolMerged, new List<int> { mergedPhraseId });
+          }
+        }
+      }
+
+      return (verbId, verbId, firstSimbol, phraseIdList);
     }
 
     /// <summary>
