@@ -279,23 +279,36 @@ namespace ISIDA.Psychic
       if (phraseIdList == null || phraseIdList.Count == 0)
         return null;
 
-      List<int> parts = phraseIdList.Count == 1
-          ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
-          : phraseIdList.ToList();
-      if (parts == null || parts.Count == 0)
-        return null;
+      // Для одной фразы с дефисом («кора-мора») включаем авторитарный режим, чтобы части добавились в канал и нашлись для цепочки
+      var verbal = _sensorySystem?.VerbalChannel;
+      bool wasAuthoritative = verbal?.AuthoritativeMode ?? false;
+      if (verbal != null && phraseIdList.Count == 1)
+        verbal.AuthoritativeMode = true;
+      try
+      {
+        List<int> parts = phraseIdList.Count == 1
+            ? _sensorySystem.VerbalChannel.GetPartPhraseIdsFromPhraseId(phraseIdList[0])
+            : phraseIdList.ToList();
+        if (parts == null || parts.Count == 0)
+          return null;
 
-      int echoId = _mirrorAutomatizmService.TryCreateStage2EchoWithChain(
-          nodeId,
-          actionsImageId,
-          parts,
-          actionIdList,
-          toneId,
-          moodId);
-      if (echoId <= 0)
-        return null;
+        int echoId = _mirrorAutomatizmService.TryCreateStage2EchoWithChain(
+            nodeId,
+            actionsImageId,
+            parts,
+            actionIdList,
+            toneId,
+            moodId);
+        if (echoId <= 0)
+          return null;
 
-      return _automatizmSystem.GetAutomatizmById(echoId);
+        return _automatizmSystem.GetAutomatizmById(echoId);
+      }
+      finally
+      {
+        if (verbal != null && phraseIdList.Count == 1)
+          verbal.AuthoritativeMode = wasAuthoritative;
+      }
     }
 
     /// <summary>

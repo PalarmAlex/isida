@@ -400,6 +400,9 @@ namespace ISIDA.Actions
     {
       string errorMessage = string.Empty;
 
+      if (!GlobalTimer.IsPulsationRunning)
+        return (false, "Пульсация выключена — воздействия не применяются");
+
       // Безопасная проверка состояния агента
       if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
         return (false, "Агент неактивен или мертв - воздействие невозможно");

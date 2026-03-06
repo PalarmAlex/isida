@@ -217,30 +217,28 @@ namespace ISIDA.Psychic.Automatism
       int activityId = 0;
       int toneMoodId = PsychicSystem.GetToneMoodID(toneId, moodId);
 
-      // Образ стимула (полная фраза по частям + тон/настроение)
+      // Вербальная часть образа восприятия — введённая строка без пробелов (напр. "со ба ка" → "собака")
+      string fullPhraseText = string.Concat(patternStr.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+      var wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(fullPhraseText);
+      if (wordIdOpt.HasValue)
+        _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordIdOpt.Value });
+      int fullPhraseId = _sensorySystem.VerbalChannel.FindPhraseId(fullPhraseText);
+      if (fullPhraseId == 0)
+        return (false, "Pattern");
+
+      // Образ стимула (полная фраза как на пульте + тон/настроение)
       var (fullStimulusImageId, _) = _actionsImagesSystem.CreateNewActionsImage(
           kind: 0,
           actIdList: new List<int>(),
-          phraseIdList: new List<int>(partPhraseIds),
+          phraseIdList: new List<int> { fullPhraseId },
           toneId: toneId,
           moodId: moodId,
           checkUnicum: true);
       if (fullStimulusImageId <= 0)
         return (false, "Other");
 
-      // Узел дерева по объединённому паттерну (без пробелов)
-      string mergedText = string.Concat(partPhraseIds
-          .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
-      if (string.IsNullOrEmpty(mergedText))
-        return (false, "Pattern");
-
-      var wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(mergedText);
-      if (wordIdOpt.HasValue)
-        _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordIdOpt.Value });
-      int mergedPhraseId = _sensorySystem.VerbalChannel.FindPhraseId(mergedText);
-      if (mergedPhraseId == 0)
-        return (false, "Pattern");
-
+      // Узел дерева по полной вербальной фразе (как ввели на пульте)
+      int mergedPhraseId = fullPhraseId;
       int firstSymbol = _sensorySystem.VerbalChannel.GetFirstSymbolFromPhraseId(mergedPhraseId);
       (int verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(
           firstSymbol, new List<int> { mergedPhraseId }, toneId, moodId, true);
@@ -292,12 +290,13 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Разбивает паттерн по пробелам, добавляет слова в канал, возвращает список phraseId по частям.
+    /// Разбивает паттерн по пробелам и дефисам, добавляет части в канал, возвращает список phraseId по частям.
+    /// Вербальный триггер с пульта (напр. "со ба ка" или "тик-так") даёт автоматизм по первой части и цепочку по остальным.
     /// </summary>
     private List<int> GetPartPhraseIdsFromPattern(string pattern)
     {
       if (string.IsNullOrWhiteSpace(pattern)) return null;
-      var words = pattern.Trim().Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+      var words = pattern.Trim().Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
       if (words.Length == 0) return null;
       var partPhraseIds = new List<int>();
       var verbal = _sensorySystem.VerbalChannel;

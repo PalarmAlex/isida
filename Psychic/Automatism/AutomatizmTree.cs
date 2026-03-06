@@ -351,6 +351,25 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Обновляет VerbID узла (для склейки вербального триггера: «ма ма» → «мама» без создания нового узла).
+    /// </summary>
+    public bool SetNodeVerbID(int nodeId, int verbId)
+    {
+      if (nodeId <= 0) return false;
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_nodesById.TryGetValue(nodeId, out var node)) return false;
+        node.VerbID = verbId;
+        return true;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Полностью очищает дерево автоматизмов, сбрасывая все данные
     /// </summary>
     /// <returns>True если очистка выполнена успешно</returns>

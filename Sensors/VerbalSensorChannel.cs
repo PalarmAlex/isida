@@ -763,11 +763,11 @@ namespace ISIDA.Sensors
     }
 
     /// <summary>
-    /// Разбивает фразу на части по пробелам и возвращает список ID фраз (по одному на каждое слово).
-    /// Используется для генерации эхо-автоматизма с цепочкой на 2-й стадии.
+    /// Разбивает фразу на части по пробелам и дефисам, возвращает список ID фраз (по одному на часть).
+    /// Для цепочки: «тик-так» → [тик, так], «со ба ка» → [со, ба, ка]. Триггер при этом не меняется (остаётся «тик-так» или «собака»).
     /// </summary>
     /// <param name="phraseId">ID фразы (вербального стимула)</param>
-    /// <returns>Список ID фраз, по одному на каждое слово; пустой список при ошибке или пустой фразе</returns>
+    /// <returns>Список ID фраз по частям; пустой список при ошибке или пустой фразе</returns>
     public List<int> GetPartPhraseIdsFromPhraseId(int phraseId)
     {
       if (phraseId <= 0)
@@ -777,16 +777,18 @@ namespace ISIDA.Sensors
       if (string.IsNullOrWhiteSpace(phraseText))
         return new List<int>();
 
-      var words = Regex.Matches(phraseText.Trim(), @"(\S+)")
-          .Cast<Match>()
-          .Select(m => m.Value)
-          .ToList();
-      if (words.Count == 0)
+      var words = phraseText.Trim()
+          .Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
+      if (words.Length == 0)
         return new List<int>();
 
       var partPhraseIds = new List<int>();
       foreach (var word in words)
       {
+        if (string.IsNullOrEmpty(word)) continue;
+        var wordIdOpt = ProcessWord(word);
+        if (wordIdOpt.HasValue)
+          ProcessPhrase(new List<int> { wordIdOpt.Value });
         int partId = FindPhraseId(word);
         if (partId != 0)
           partPhraseIds.Add(partId);

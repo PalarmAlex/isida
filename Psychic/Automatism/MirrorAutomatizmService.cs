@@ -72,8 +72,6 @@ namespace ISIDA.Psychic.Automatism
         if (created == null)
           return 0;
 
-        // Первый шаг цикла не должен доминировать при выборе "лучшего" автоматизма.
-        created.Usefulness = 0;
         created.Count = 0;
         // Не ставим Belief=2, если для этой ветки уже есть штатный автоматизм (сдвиг): иначе эхо перезапишет его при повторных прогонах.
         if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
@@ -132,12 +130,12 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создаёт на 2-й стадии эхо-автоматизм по вербальному стимулу с пульта; при нескольких частях (разбивка по пробелам) — эхо по первой части и цепочку из не более чем 2 звеньев (второе звено — последняя часть, промежуточные отбрасываются).
+    /// Создаёт на 2-й стадии эхо-автоматизм по вербальному стимулу с пульта; при нескольких частях (разбивка по пробелу или дефису) — эхо по первой части и цепочку из не более чем 2 звеньев (второе звено — последняя часть, промежуточные отбрасываются).
     /// Пусковые условия: текущее состояние + стили + образ действий с пульта (вербальная часть с тоном/настроением + невербальная; одна из частей может быть пустой, обе — нет).
     /// </summary>
     /// <param name="detectedNodeId">ID узла дерева автоматизмов (триггер)</param>
     /// <param name="fullStimulusActionsImageId">ID полного образа действий стимула (вся фраза + действие)</param>
-    /// <param name="partPhraseIds">Список ID фраз по частям (по одному на слово после разбивки по пробелам)</param>
+    /// <param name="partPhraseIds">Список ID фраз по частям (по одному на слог после разбивки по пробелу или дефису)</param>
     /// <param name="actionIdList">Действия с пульта (могут быть пустыми)</param>
     /// <param name="toneId">Тон</param>
     /// <param name="moodId">Настроение</param>
@@ -181,7 +179,6 @@ namespace ISIDA.Psychic.Automatism
         if (created == null)
           return 0;
 
-        created.Usefulness = 0;
         created.Count = 0;
         if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
           _automatizmSystem.SetAutomatizmBelief(created, 2);
@@ -192,10 +189,9 @@ namespace ISIDA.Psychic.Automatism
           return echoId;
         }
 
-        // Цепочка: не более 2 звеньев. Второе звено — вторая часть, последнее звено — последняя часть (промежуточные отбрасываются)
+        // Цепочка: не более 2 звеньев. При 2 частях — 1 звено (вторая часть); при 3+ — 2 звена (вторая часть → последняя, промежуточные отбрасываются)
+        var links = new List<AutomatizmChainsSystem.ChainLink>();
         int partForLink1 = partPhraseIds[1];
-        int partForLink2 = partPhraseIds[partPhraseIds.Count - 1];
-
         var (img1Id, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
             kind: 0,
             actIdList: new List<int>(),
@@ -203,22 +199,12 @@ namespace ISIDA.Psychic.Automatism
             toneId: toneId,
             moodId: moodId,
             checkUnicum: true);
-        var (img2Id, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
-            kind: 0,
-            actIdList: new List<int>(),
-            phraseIdList: new List<int> { partForLink2 },
-            toneId: toneId,
-            moodId: moodId,
-            checkUnicum: true);
-        if (img1Id <= 0 || img2Id <= 0)
+        if (img1Id <= 0)
           return echoId;
-
         int responseImg1 = GetOrCreateResponseActionsImageWithAdaptiveIds(img1Id);
-        int responseImg2 = GetOrCreateResponseActionsImageWithAdaptiveIds(img2Id);
-        if (responseImg1 <= 0 || responseImg2 <= 0)
+        if (responseImg1 <= 0)
           return echoId;
-
-        var link1 = new AutomatizmChainsSystem.ChainLink
+        links.Add(new AutomatizmChainsSystem.ChainLink
         {
           ID = 0,
           ChainID = 0,
@@ -227,18 +213,34 @@ namespace ISIDA.Psychic.Automatism
           FailureNextLink = 0,
           Description = "Звено 1 (вторая часть)",
           ChainUsefulness = 1
-        };
-        var link2 = new AutomatizmChainsSystem.ChainLink
+        });
+
+        if (partPhraseIds.Count >= 3)
         {
-          ID = 0,
-          ChainID = 0,
-          ActionsImageId = responseImg2,
-          SuccessNextLink = 0,
-          FailureNextLink = 0,
-          Description = "Звено 2 (последняя часть)",
-          ChainUsefulness = 1
-        };
-        var links = new List<AutomatizmChainsSystem.ChainLink> { link1, link2 };
+          int partForLink2 = partPhraseIds[partPhraseIds.Count - 1];
+          var (img2Id, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+              kind: 0,
+              actIdList: new List<int>(),
+              phraseIdList: new List<int> { partForLink2 },
+              toneId: toneId,
+              moodId: moodId,
+              checkUnicum: true);
+          if (img2Id <= 0)
+            return echoId;
+          int responseImg2 = GetOrCreateResponseActionsImageWithAdaptiveIds(img2Id);
+          if (responseImg2 <= 0)
+            return echoId;
+          links.Add(new AutomatizmChainsSystem.ChainLink
+          {
+            ID = 0,
+            ChainID = 0,
+            ActionsImageId = responseImg2,
+            SuccessNextLink = 0,
+            FailureNextLink = 0,
+            Description = "Звено 2 (последняя часть)",
+            ChainUsefulness = 1
+          });
+        }
 
         if (!AutomatizmChainsSystem.IsInitialized)
           return echoId;
@@ -253,7 +255,8 @@ namespace ISIDA.Psychic.Automatism
         if (chainId == 0)
           return echoId;
 
-        links[0].SuccessNextLink = links[1].ID;
+        if (links.Count >= 2)
+          links[0].SuccessNextLink = links[1].ID;
         _automatizmSystem.AttachChainToAutomatizm(echoId, chainId);
 
         var saveResult = AutomatizmChainsSystem.Instance.SaveAutomatizmChains();
@@ -313,7 +316,6 @@ namespace ISIDA.Psychic.Automatism
           var (_, nextParrotAutomatizm) = _automatizmSystem.CreateNewAutomatizm(_pendingResponseNodeId, responseActionsImageId, true);
           if (nextParrotAutomatizm != null)
           {
-            nextParrotAutomatizm.Usefulness = 0;
             nextParrotAutomatizm.Count = 0;
             // Не вызываем SetAutomatizmBelief(..., 2): штатным остаётся сдвиг (учительский), эхо — только запасной.
           }
