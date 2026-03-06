@@ -58,20 +58,6 @@ namespace ISIDA.Sensors
     /// </summary>
     protected TNodeId _lastNodeId;
 
-    /// <summary>
-    /// Параметр сглаживания Лапласа для редких контекстов (по умолчанию 0.01).
-    /// </summary>
-    private double _smoothingAlpha = 0.01;
-
-    /// <summary>
-    /// Параметр сглаживания для вероятностной модели переходов.
-    /// </summary>
-    public double SmoothingAlpha
-    {
-      get => _smoothingAlpha;
-      set => _smoothingAlpha = value < 0 ? 0 : value;
-    }
-
     #endregion
 
     #region Инициализация
@@ -266,278 +252,7 @@ namespace ISIDA.Sensors
 
     #endregion
 
-    #region Вероятностная статистика (PST)
-
-    /// <summary>
-    /// Обновляет счётчики переходов по всей последовательности (каждый префикс контекста учитывается).
-    /// </summary>
-    public void UpdateTransitionStatistics(IEnumerable<TElement> sequence)
-    {
-      if (sequence == null) return;
-
-      var elements = sequence.ToList();
-      if (elements.Count == 0) return;
-
-      _lock.EnterWriteLock();
-      try
-      {
-        if (!_nodes.TryGetValue(default(TNodeId), out var node))
-          return;
-
-        foreach (var next in elements)
-        {
-          node.AddTransition(next);
-          var child = node.Children.FirstOrDefault(c => c.Element.Equals(next));
-          if (child == null) break;
-          node = child;
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Возвращает путь от корня до узла (последовательность элементов ветки).
-    /// </summary>
-    /// <param name="branchEndNodeId">ID конечного узла ветки.</param>
-    /// <returns>Список элементов от корня к узлу или пустой список.</returns>
-    public List<TElement> GetBranchPath(TNodeId branchEndNodeId)
-    {
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_nodes.TryGetValue(branchEndNodeId, out var node) || node == null)
-          return new List<TElement>();
-        var path = new List<TElement>();
-        while (node != null && !EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
-        {
-          path.Add(node.Element);
-          node = node.Parent;
-        }
-        path.Reverse();
-        return path;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Возвращает всех кандидатов на следующий элемент после контекста с их вероятностями.
-    /// Используется для контекстно-ограниченной генерации (гуление).
-    /// </summary>
-    public List<(TElement element, double probability)> GetNextCandidatesWithProbabilities(IEnumerable<TElement> context)
-    {
-      var result = new List<(TElement, double)>();
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_nodes.TryGetValue(default(TNodeId), out var node))
-          return result;
-        var elements = context?.ToList() ?? new List<TElement>();
-        foreach (var e in elements)
-        {
-          var child = node.Children.FirstOrDefault(c => c.Element.Equals(e));
-          if (child == null) break;
-          node = child;
-        }
-        var candidates = new HashSet<TElement>(node.TransitionCounts.Keys);
-        foreach (var c in node.Children)
-          candidates.Add(c.Element);
-        foreach (var elem in candidates)
-        {
-          double p = node.GetTransitionProbability(elem, _smoothingAlpha);
-          result.Add((elem, p));
-        }
-        return result;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Находит самый длинный существующий контекст и возвращает наиболее вероятное следующее значение.
-    /// </summary>
-    /// <param name="context">Контекст (префикс последовательности).</param>
-    /// <param name="nextElement">Наиболее вероятный следующий элемент.</param>
-    /// <param name="probability">Вероятность перехода.</param>
-    /// <returns>true, если найден узел с ненулевой статистикой.</returns>
-    public bool GetMostProbableNext(IEnumerable<TElement> context, out TElement nextElement, out double probability)
-    {
-      nextElement = default;
-      probability = 0;
-
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_nodes.TryGetValue(default(TNodeId), out var node))
-          return false;
-
-        var elements = context?.ToList() ?? new List<TElement>();
-        foreach (var e in elements)
-        {
-          var child = node.Children.FirstOrDefault(c => c.Element.Equals(e));
-          if (child == null) break;
-          node = child;
-        }
-
-        return node.GetMostProbableNext(_smoothingAlpha, out nextElement, out probability);
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Вычисляет вероятность последовательности по модели (произведение вероятностей переходов).
-    /// </summary>
-    public double GetSequenceProbability(IEnumerable<TElement> sequence)
-    {
-      if (sequence == null) return 0;
-
-      var elements = sequence.ToList();
-      if (elements.Count == 0) return 1.0;
-
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_nodes.TryGetValue(default(TNodeId), out var node))
-          return 0;
-
-        double product = 1.0;
-        foreach (var next in elements)
-        {
-          product *= node.GetTransitionProbability(next, _smoothingAlpha);
-          var child = node.Children.FirstOrDefault(c => c.Element.Equals(next));
-          if (child == null) break;
-          node = child;
-        }
-        return product;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Лог-потери последовательности: −∑ log2(p_i). Чем меньше, тем правдоподобнее последовательность.
-    /// </summary>
-    public double GetSequenceLogLoss(IEnumerable<TElement> sequence)
-    {
-      if (sequence == null) return double.PositiveInfinity;
-
-      var elements = sequence.ToList();
-      if (elements.Count == 0) return 0;
-
-      _lock.EnterReadLock();
-      try
-      {
-        if (!_nodes.TryGetValue(default(TNodeId), out var node))
-          return double.PositiveInfinity;
-
-        double sumLog = 0;
-        foreach (var next in elements)
-        {
-          double p = node.GetTransitionProbability(next, _smoothingAlpha);
-          if (p <= 0) return double.PositiveInfinity;
-          sumLog -= Math.Log(p, 2);
-          var child = node.Children.FirstOrDefault(c => c.Element.Equals(next));
-          if (child == null) break;
-          node = child;
-        }
-        return sumLog;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>
-    /// Проверяет правдоподобность последовательности: log-loss не превышает порог (чем меньше порог, тем строже).
-    /// </summary>
-    public bool IsPlausible(IEnumerable<TElement> sequence, double logLossThreshold)
-    {
-      if (double.IsInfinity(logLossThreshold) || logLossThreshold < 0) return true;
-      return GetSequenceLogLoss(sequence) <= logLossThreshold;
-    }
-
-    /// <summary>
-    /// Перестраивает статистику переходов по всем существующим веткам (каждая ветка учитывается как одно наблюдение).
-    /// </summary>
-    public void RebuildStatistics()
-    {
-      Logger.Info($"Пересчёт статистики PST дерева '{_treeName}': начало");
-      _lock.EnterWriteLock();
-      try
-      {
-        foreach (var node in _nodes.Values)
-          node.ClearTransitionStatistics();
-
-        foreach (var branch in _branches.Values)
-        {
-          foreach (var leaf in branch)
-          {
-            var path = new List<TElement>();
-            var n = leaf;
-            while (n != null && !EqualityComparer<TNodeId>.Default.Equals(n.Id, default(TNodeId)))
-            {
-              path.Add(n.Element);
-              n = n.Parent;
-            }
-            path.Reverse();
-            if (path.Count == 0) continue;
-
-            if (!_nodes.TryGetValue(default(TNodeId), out var node))
-              continue;
-            foreach (var next in path)
-            {
-              node.AddTransition(next);
-              var child = node.Children.FirstOrDefault(c => c.Element.Equals(next));
-              if (child == null) break;
-              node = child;
-            }
-          }
-        }
-        Logger.Info($"Пересчёт статистики PST дерева '{_treeName}': конец");
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    #endregion
-
     #region Загрузка и сохранение
-
-    /// <summary>
-    /// Сериализует элемент для блока статистики (char — как код, int — как число).
-    /// </summary>
-    private static string SerializeElementForStats(TElement element)
-    {
-      if (typeof(TElement) == typeof(char))
-        return ((int)(char)(object)element).ToString();
-      return ((object)element).ToString();
-    }
-
-    /// <summary>
-    /// Десериализует элемент из блока статистики.
-    /// </summary>
-    private static TElement ParseElementForStats(string s)
-    {
-      int n = int.Parse(s);
-      if (typeof(TElement) == typeof(char))
-        return (TElement)(object)(char)n;
-      return (TElement)Convert.ChangeType(n, typeof(TElement));
-    }
 
     /// <summary>
     /// Загружает состояние дерева из файла
@@ -562,10 +277,10 @@ namespace ISIDA.Sensors
           return; // Файла нет - возвращаем только корневой узел
         }
 
-        // Временное хранилище для данных узлов (element, parentId, опциональный блок статистики)
-        var nodeData = new Dictionary<TNodeId, (TElement element, TNodeId parentId, string statsPart)>();
+        // Временное хранилище для данных узлов (element, parentId)
+        var nodeData = new Dictionary<TNodeId, (TElement element, TNodeId parentId)>();
 
-        // Чтение и парсинг файла
+        // Чтение и парсинг файла (третий фрагмент строки |#|... при наличии игнорируется)
         foreach (var line in File.ReadLines(path))
         {
           if (string.IsNullOrWhiteSpace(line)) continue;
@@ -581,9 +296,8 @@ namespace ISIDA.Sensors
             var id = (TNodeId)Convert.ChangeType(idParts[0], typeof(TNodeId));
             var parentId = (TNodeId)Convert.ChangeType(idParts[1], typeof(TNodeId));
             var element = (TElement)Convert.ChangeType(parts[1], typeof(TElement));
-            var statsPart = parts.Length >= 3 ? parts[2] : null;
 
-            nodeData[id] = (element, parentId, statsPart);
+            nodeData[id] = (element, parentId);
 
             // Обновляем последний ID
             if (Comparer<TNodeId>.Default.Compare(id, _lastNodeId) > 0)
@@ -622,31 +336,6 @@ namespace ISIDA.Sensors
           }
         }
 
-        // Загружаем статистику переходов (если есть в файле)
-        foreach (var kv in nodeData)
-        {
-          if (string.IsNullOrWhiteSpace(kv.Value.statsPart)) continue;
-          if (!_nodes.TryGetValue(kv.Key, out var node)) continue;
-          try
-          {
-            var statsTokens = kv.Value.statsPart.Split('|');
-            if (statsTokens.Length == 0) continue;
-            int visitCount = int.Parse(statsTokens[0]);
-            var counts = new Dictionary<TElement, int>();
-            for (int i = 1; i < statsTokens.Length; i++)
-            {
-              var pair = statsTokens[i].Split(':');
-              if (pair.Length != 2) continue;
-              counts[ParseElementForStats(pair[0])] = int.Parse(pair[1]);
-            }
-            node.SetLoadedTransitionStatistics(visitCount, counts);
-          }
-          catch
-          {
-            // игнорируем повреждённый блок статистики
-          }
-        }
-
         // Заполняем ветки (конечные узлы)
         foreach (var node in _nodes.Values)
         {
@@ -673,20 +362,13 @@ namespace ISIDA.Sensors
         var path = Path.Combine(_treeFolderPath, $"{_treeName}.dat");
         var lines = new List<string>();
 
-        // Сохраняем все узлы, кроме корневого (с опциональным блоком статистики)
+        // Сохраняем все узлы, кроме корневого
         foreach (var node in _nodes.Values)
         {
           if (node.Parent == null && !EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
             continue;
 
           var line = $"{node.Id}|{node.ParentID}|#|{node.Element}";
-          if (node.VisitCount > 0 || node.TransitionCounts.Count > 0)
-          {
-            var statsTokens = new List<string> { node.VisitCount.ToString() };
-            foreach (var kv in node.TransitionCounts)
-              statsTokens.Add($"{SerializeElementForStats(kv.Key)}:{kv.Value}");
-            line += "|#|" + string.Join("|", statsTokens);
-          }
           lines.Add(line);
         }
 
@@ -775,22 +457,6 @@ namespace ISIDA.Sensors
       public List<TreeNode<T>> Children { get; } = new List<TreeNode<T>>();
 
       /// <summary>
-      /// Счётчики переходов к следующим элементам (элемент → количество наблюдений).
-      /// </summary>
-      public Dictionary<T, int> TransitionCounts { get; } = new Dictionary<T, int>();
-
-      /// <summary>
-      /// Количество «посещений» узла — сколько раз из него был совершён переход (сумма по TransitionCounts).
-      /// </summary>
-      public int VisitCount { get; private set; }
-
-      /// <summary>
-      /// Кэш вероятностей переходов; инвалидируется при вызове AddTransition.
-      /// </summary>
-      private Dictionary<T, double> _cachedProbabilities;
-      private double _cachedSmoothingAlpha = double.NaN;
-
-      /// <summary>
       /// Инициализирует новый экземпляр узла дерева.
       /// </summary>
       /// <param name="id">Уникальный идентификатор узла.</param>
@@ -821,110 +487,6 @@ namespace ISIDA.Sensors
       {
         Parent = parent;
         ParentID = parent != null ? parent.Id : default(TNodeId);
-      }
-
-      /// <summary>
-      /// Загружает сохранённую статистику переходов (вызывается при десериализации из файла).
-      /// </summary>
-      public void SetLoadedTransitionStatistics(int visitCount, IReadOnlyDictionary<T, int> transitionCounts)
-      {
-        TransitionCounts.Clear();
-        if (transitionCounts != null)
-        {
-          foreach (var kv in transitionCounts)
-            TransitionCounts[kv.Key] = kv.Value;
-        }
-        VisitCount = visitCount;
-        _cachedProbabilities = null;
-        _cachedSmoothingAlpha = double.NaN;
-      }
-
-      /// <summary>
-      /// Очищает счётчики переходов и кэш (используется при RebuildStatistics).
-      /// </summary>
-      public void ClearTransitionStatistics()
-      {
-        TransitionCounts.Clear();
-        VisitCount = 0;
-        _cachedProbabilities = null;
-        _cachedSmoothingAlpha = double.NaN;
-      }
-
-      /// <summary>
-      /// Учитывает один переход к следующему элементу (обновляет счётчики и инвалидирует кэш вероятностей).
-      /// </summary>
-      public void AddTransition(T nextElement)
-      {
-        if (!TransitionCounts.TryGetValue(nextElement, out _))
-          TransitionCounts[nextElement] = 0;
-        TransitionCounts[nextElement]++;
-        VisitCount++;
-        _cachedProbabilities = null;
-        _cachedSmoothingAlpha = double.NaN;
-      }
-
-      /// <summary>
-      /// Возвращает вероятность перехода к заданному следующему элементу при сглаживании Лапласа.
-      /// Использует кэш по smoothingAlpha.
-      /// </summary>
-      /// <param name="nextElement">Следующий элемент.</param>
-      /// <param name="smoothingAlpha">Параметр сглаживания (alpha).</param>
-      public double GetTransitionProbability(T nextElement, double smoothingAlpha)
-      {
-        if (smoothingAlpha < 0) smoothingAlpha = 0;
-        if (smoothingAlpha == _cachedSmoothingAlpha && _cachedProbabilities != null &&
-            _cachedProbabilities.TryGetValue(nextElement, out var cached))
-          return cached;
-
-        int count = TransitionCounts.TryGetValue(nextElement, out var c) ? c : 0;
-        int k = TransitionCounts.Count + 1;
-        double denom = VisitCount + smoothingAlpha * Math.Max(1, k);
-        double p = (count + smoothingAlpha) / denom;
-
-        if (_cachedProbabilities == null || _cachedSmoothingAlpha != smoothingAlpha)
-        {
-          _cachedProbabilities = new Dictionary<T, double>();
-          _cachedSmoothingAlpha = smoothingAlpha;
-        }
-        _cachedProbabilities[nextElement] = p;
-        return p;
-      }
-
-      /// <summary>
-      /// Возвращает наиболее вероятный следующий элемент и его вероятность.
-      /// </summary>
-      /// <param name="smoothingAlpha">Параметр сглаживания.</param>
-      /// <param name="nextElement">Наиболее вероятный следующий элемент (default при отсутствии данных).</param>
-      /// <param name="probability">Вероятность этого перехода.</param>
-      /// <returns>true, если есть хотя бы один учтённый переход.</returns>
-      public bool GetMostProbableNext(double smoothingAlpha, out T nextElement, out double probability)
-      {
-        nextElement = default;
-        probability = 0;
-
-        var candidates = new HashSet<T>(TransitionCounts.Keys);
-        foreach (var child in Children)
-          candidates.Add(child.Element);
-
-        if (candidates.Count == 0 && VisitCount == 0)
-          return false;
-
-        T best = default;
-        double bestProb = -1;
-        foreach (var e in candidates)
-        {
-          double p = GetTransitionProbability(e, smoothingAlpha);
-          if (p > bestProb)
-          {
-            bestProb = p;
-            best = e;
-          }
-        }
-
-        if (bestProb < 0) return false;
-        nextElement = best;
-        probability = bestProb;
-        return true;
       }
     }
   }

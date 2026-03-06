@@ -349,7 +349,6 @@ namespace ISIDA.Reflexes
           GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
         }
         CollectReflexesForExecution();
-        AppGlobalState.LastStimulusPulseCount = pulseCount;
         bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
@@ -423,7 +422,6 @@ namespace ISIDA.Reflexes
         }
 
         CollectReflexesForExecution();
-        AppGlobalState.LastStimulusPulseCount = pulseCount;
         bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
