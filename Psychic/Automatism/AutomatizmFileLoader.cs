@@ -1,4 +1,5 @@
 using ISIDA.Common;
+using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Sensors;
 using System;
@@ -14,7 +15,14 @@ namespace ISIDA.Psychic.Automatism
   /// </summary>
   public sealed class AutomatizmFileLoader : IDisposable
   {
-    private const string AutomatizmChainsFileName = "automatizm_generate_list.csv";
+    private const string AutomatizmChainsFileName = "automatizm_chains_list.txt";
+
+    private static readonly Dictionary<string, int> StateMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+    {
+      { "Плохо", -1 },
+      { "Норма", 0 },
+      { "Хорошо", 1 }
+    };
     private readonly Dictionary<string, int> _phraseIdCache = new Dictionary<string, int>();
     private readonly string _bootDataFolder;
     private bool _disposed = false;
@@ -140,7 +148,7 @@ namespace ISIDA.Psychic.Automatism
           var stimuli = ParseStimuliLine(trimmedLine);
           if (stimuli.Count < 2) continue;
 
-          if (ProcessChainDirect(stimuli, baseId, styleIds))
+          if (ProcessChainDirect(stimuli, baseId, styleIds, 0, 0))
             processedChains++;
         }
         return processedChains;
@@ -154,7 +162,136 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Загружает автоматизмы из файла
+    /// Загружает автоматизмы из текста. Формат строки: Состояние|Комбинации стилей|фраза1 - фраза2 - фраза3|Тон|Настроение.
+    /// Состояние: Плохо, Норма, Хорошо. Комбинации стилей: имена через +. Тон и Настроение — по справочнику (опционально, пусто = 0).
+    /// </summary>
+    public int LoadFromContent(string content)
+    {
+      if (_disposed)
+        throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
+
+      if (string.IsNullOrWhiteSpace(content))
+        throw new ArgumentException("Текст не задан. Ожидается формат: Состояние|Комбинации стилей|фраза1 - фраза2 - фраза3|Тон|Настроение.", nameof(content));
+
+      content = GenerateListContentPreprocessor.Preprocess(content);
+      if (string.IsNullOrWhiteSpace(content))
+        throw new ArgumentException("Текст не задан. Ожидается формат: Состояние|Комбинации стилей|фраза1 - фраза2 - фраза3|Тон|Настроение.", nameof(content));
+
+      var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+      var validLines = new List<(int baseId, List<int> styleIds, string phrasePart, int toneId, int moodId)>();
+
+      foreach (var line in lines)
+      {
+        var trimmed = line.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#"))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 5)
+          continue;
+
+        string stateStr = parts[0].Trim();
+        string stylesStr = parts[1].Trim();
+        string phrasePart = parts[2].Trim();
+        string toneStr = parts[3].Trim();
+        string moodStr = parts[4].Trim();
+
+        if (!TryParseState(stateStr, out int baseId))
+          continue;
+        if (!TryParseStyles(stylesStr, out List<int> styleIds) || styleIds == null || styleIds.Count == 0)
+          continue;
+
+        int toneId = string.IsNullOrWhiteSpace(toneStr) ? 0 : ActionsImagesSystem.GetToneIdByText(toneStr);
+        int moodId = string.IsNullOrWhiteSpace(moodStr) ? 0 : ActionsImagesSystem.GetMoodIdByText(moodStr);
+        string normalToneText = ActionsImagesSystem.GetToneText(0);
+        if (!string.IsNullOrWhiteSpace(toneStr) && toneId == 0 && !string.Equals(toneStr, normalToneText, StringComparison.OrdinalIgnoreCase))
+        {
+          var codes = string.Join(" ", toneStr.Take(15).Select(c => "U+" + ((int)c).ToString("X4")));
+          Logger.Warning($"Тон не распознан (будет Нормальный): \"{toneStr}\". Коды: {codes}. Допустимы: Вялый, Нормальный, Повышенный.");
+        }
+        string normalMoodText = ActionsImagesSystem.GetMoodText(0);
+        if (!string.IsNullOrWhiteSpace(moodStr) && moodId == 0 && !string.Equals(moodStr, normalMoodText, StringComparison.OrdinalIgnoreCase))
+        {
+          var codes = string.Join(" ", moodStr.Take(15).Select(c => "U+" + ((int)c).ToString("X4")));
+          Logger.Warning($"Настроение не распознано (будет Нормальное): \"{moodStr}\". Коды: {codes}. Допустимы: Нормальное, Хорошее, Плохое, Игривое, Учитель, Агрессивное, Защитное, Протест.");
+        }
+
+        var stimuli = ParseStimuliLine(phrasePart);
+        if (stimuli == null || stimuli.Count < 2)
+          continue;
+
+        validLines.Add((baseId, styleIds, phrasePart, toneId, moodId));
+      }
+
+      if (validLines.Count == 0)
+        throw new ArgumentException(
+          "Нет корректных строк. Ожидается формат: Состояние|Комбинации стилей|фраза1 - фраза2 - фраза3|Тон|Настроение (например: Норма|Поиск+Игра|привет - как дела - все ок|Нормальный|Хорошее).",
+          nameof(content));
+
+      if (!CheckSystems()) return 0;
+
+      _phraseIdCache.Clear();
+
+      if (!PreloadAllPhrasesFromPhraseParts(validLines.Select(x => x.phrasePart)))
+      {
+        Logger.Error("Не удалось загрузить фразы");
+        return 0;
+      }
+
+      _automatizmSystem.SetSuppressCreateLogging(true);
+      _emotionsImageSystem.SetSuppressFoundExistingLog(true);
+      _verbalBrocaSystem.SetSuppressFoundExistingLog(true);
+      try
+      {
+        int processedChains = 0;
+        foreach (var (baseId, styleIds, phrasePart, toneId, moodId) in validLines)
+        {
+          var stimuli = ParseStimuliLine(phrasePart);
+          if (stimuli != null && stimuli.Count >= 2 && ProcessChainDirect(stimuli, baseId, styleIds, toneId, moodId))
+            processedChains++;
+        }
+        return processedChains;
+      }
+      finally
+      {
+        _automatizmSystem.SetSuppressCreateLogging(false);
+        _emotionsImageSystem.SetSuppressFoundExistingLog(false);
+        _verbalBrocaSystem.SetSuppressFoundExistingLog(false);
+      }
+    }
+
+    /// <summary>
+    /// Загружает автоматизмы из файла (формат: Состояние|Комбинации стилей|фраза1 - фраза2).
+    /// </summary>
+    public int LoadFromFile()
+    {
+      if (_disposed)
+        throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
+
+      if (!CheckSystems()) return 0;
+
+      string filePath = Path.Combine(_bootDataFolder, AutomatizmChainsFileName);
+      if (!File.Exists(filePath))
+      {
+        Logger.Info($"Файл не найден: {filePath}");
+        return 0;
+      }
+
+      string content = File.ReadAllText(filePath, Encoding.UTF8);
+      if (string.IsNullOrWhiteSpace(content)) return 0;
+
+      try
+      {
+        return LoadFromContent(content);
+      }
+      catch (ArgumentException)
+      {
+        return 0;
+      }
+    }
+
+    /// <summary>
+    /// Загружает автоматизмы из файла (старый формат: только цепочки фраз, одно состояние и стили для всего файла).
     /// </summary>
     public int LoadFromFile(int baseId, List<int> styleIds)
     {
@@ -181,6 +318,94 @@ namespace ISIDA.Psychic.Automatism
       {
         return 0;
       }
+    }
+
+    private static bool TryParseState(string stateStr, out int baseId)
+    {
+      baseId = 0;
+      if (string.IsNullOrWhiteSpace(stateStr))
+        return false;
+      return StateMap.TryGetValue(stateStr.Trim(), out baseId);
+    }
+
+    private bool TryParseStyles(string stylesStr, out List<int> styleIds)
+    {
+      styleIds = new List<int>();
+      if (string.IsNullOrWhiteSpace(stylesStr))
+        return false;
+      var names = stylesStr.Split('+').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+      if (names.Count == 0)
+        return false;
+      var gomeostas = GomeostasSystem.Instance;
+      var allStyles = gomeostas.GetAllBehaviorStyles();
+      foreach (var name in names)
+      {
+        var style = allStyles.Values.FirstOrDefault(s =>
+            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (style == null)
+        {
+          Logger.Warning($"Стиль не найден: {name}");
+          return false;
+        }
+        styleIds.Add(style.Id);
+      }
+      styleIds = styleIds.OrderBy(x => x).Distinct().ToList();
+      return styleIds.Count > 0;
+    }
+
+    private bool PreloadAllPhrasesFromPhraseParts(IEnumerable<string> phraseParts)
+    {
+      if (_disposed)
+        throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
+
+      var allUniquePhrases = new HashSet<string>();
+
+      foreach (var phrasePart in phraseParts)
+      {
+        foreach (var stimulus in ParseStimuliLine(phrasePart))
+        {
+          string normalized = stimulus.Trim().ToLowerInvariant();
+          if (!string.IsNullOrEmpty(normalized))
+            allUniquePhrases.Add(normalized);
+        }
+      }
+
+      bool originalMode = _verbalChannel.AuthoritativeMode;
+      _verbalChannel.AuthoritativeMode = true;
+
+      int successCount = 0;
+
+      try
+      {
+        foreach (var phrase in allUniquePhrases)
+        {
+          var phraseIds = _verbalChannel.RecognizeText(phrase, authoritativeWrite: true);
+
+          if (phraseIds != null && phraseIds.Count > 0)
+          {
+            _phraseIdCache[phrase] = phraseIds[0];
+            successCount++;
+          }
+          else
+          {
+            int phraseId = _verbalChannel.FindPhraseId(phrase);
+            if (phraseId > 0)
+            {
+              _phraseIdCache[phrase] = phraseId;
+              successCount++;
+            }
+          }
+        }
+      }
+      finally
+      {
+        _verbalChannel.AuthoritativeMode = originalMode;
+      }
+
+      _verbalChannel.WordTree.Save();
+      _verbalChannel.PhraseTree.Save();
+
+      return successCount > 0;
     }
 
     private bool CheckSystems()
@@ -259,7 +484,7 @@ namespace ISIDA.Psychic.Automatism
       return successCount > 0;
     }
 
-    private bool ProcessChainDirect(List<string> stimuli, int baseId, List<int> styleIds)
+    private bool ProcessChainDirect(List<string> stimuli, int baseId, List<int> styleIds, int toneId, int moodId)
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
@@ -274,7 +499,7 @@ namespace ISIDA.Psychic.Automatism
         if (!_phraseIdCache.TryGetValue(operatorStimulus, out int phraseId))
           continue;
 
-        int actionsImageId = CreateActionsImageForStimulus(phraseId);
+        int actionsImageId = CreateActionsImageForStimulus(phraseId, toneId, moodId);
         if (actionsImageId <= 0) continue;
 
         // ВАЖНО: Для каждого стимула создаем уникальный узел
@@ -282,7 +507,9 @@ namespace ISIDA.Psychic.Automatism
             operatorStimulus,
             phraseId,
             baseId,
-            styleIds);
+            styleIds,
+            toneId,
+            moodId);
 
         if (nodeId <= 0) continue;
 
@@ -321,7 +548,9 @@ namespace ISIDA.Psychic.Automatism
         string stimulus,
         int phraseId,
         int baseId,
-        List<int> styleIds)
+        List<int> styleIds,
+        int toneId,
+        int moodId)
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
@@ -335,9 +564,9 @@ namespace ISIDA.Psychic.Automatism
       }
 
       int activityId = 0;
-      int toneMoodId = PsychicSystem.GetToneMoodID(0, 0);
+      int toneMoodId = PsychicSystem.GetToneMoodID(toneId, moodId);
       int firstSimbol = GetFirstSymbol(stimulus);
-      int verbId = CreateVerbalImage(stimulus, firstSimbol, phraseId);
+      int verbId = CreateVerbalImage(stimulus, firstSimbol, phraseId, toneId, moodId);
 
       // Найти или создать узел с учётом иерархии (база → эмоция → activity → toneMood → simbol/verb)
       return FindOrCreateTreeNodeByCondition(baseId, emotionId, activityId, toneMoodId, firstSimbol, verbId);
@@ -457,7 +686,7 @@ namespace ISIDA.Psychic.Automatism
       return result;
     }
 
-    private int CreateActionsImageForStimulus(int phraseId)
+    private int CreateActionsImageForStimulus(int phraseId, int toneId, int moodId)
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
@@ -466,8 +695,8 @@ namespace ISIDA.Psychic.Automatism
           kind: 0,
           actIdList: new List<int>(),
           phraseIdList: new List<int> { phraseId },
-          toneId: 0,
-          moodId: 0,
+          toneId: toneId,
+          moodId: moodId,
           checkUnicum: true);
 
       return id;
@@ -482,7 +711,7 @@ namespace ISIDA.Psychic.Automatism
       return _verbalChannel.GetPrimarySensorId(word[0]);
     }
 
-    private int CreateVerbalImage(string stimulus, int firstSimbol, int phraseId)
+    private int CreateVerbalImage(string stimulus, int firstSimbol, int phraseId, int toneId, int moodId)
     {
       if (_disposed)
         throw new ObjectDisposedException(nameof(AutomatizmFileLoader));
@@ -490,8 +719,8 @@ namespace ISIDA.Psychic.Automatism
       var (id, _) = _verbalBrocaSystem.CreateNewVerbalBrocaImage(
           firstSimbol,
           new List<int> { phraseId },
-          0,
-          0,
+          toneId,
+          moodId,
           true);
 
       return id;
