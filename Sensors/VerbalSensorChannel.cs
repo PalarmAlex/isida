@@ -168,6 +168,8 @@ namespace ISIDA.Sensors
       {
         WordTree.Load();
         PhraseTree.Load();
+        // Статистика переходов загружается из того же .dat (блок |#|visitCount|e:c|...).
+        // Для старых файлов без блока статистики вызовите RebuildStatistics() при необходимости.
       }
       catch
       {
@@ -323,7 +325,11 @@ namespace ISIDA.Sensors
       {
         // Проверяем в дереве
         var existingId = WordTree.FindBranchInternal(word);
-        if (existingId != 0) return existingId;
+        if (existingId != 0)
+        {
+          WordTree.UpdateTransitionStatistics(word);
+          return existingId;
+        }
 
         // Фильтр мусора
         if (IsGarbageWord(word)) return null;
@@ -332,6 +338,7 @@ namespace ISIDA.Sensors
         if (_authoritativeMode)
         {
           var newId = WordTree.AddBranch(word);
+          WordTree.UpdateTransitionStatistics(word);
           WordTree.Save(); // Явное сохранение
           return newId;
         }
@@ -341,6 +348,7 @@ namespace ISIDA.Sensors
         if (!isNew && count >= _recognitionThreshold)
         {
           var newId = WordTree.AddBranch(word);
+          WordTree.UpdateTransitionStatistics(word);
           WordSandbox.Remove(word);
           WordTree.Save(); // Явное сохранение
           return newId;
@@ -548,6 +556,15 @@ namespace ISIDA.Sensors
     }
 
     /// <summary>
+    /// Возвращает список ID слов, образующих фразу (путь в дереве фраз от корня до узла phraseId).
+    /// </summary>
+    public List<int> GetWordIdsFromPhraseId(int phraseId)
+    {
+      if (phraseId <= 0) return new List<int>();
+      return PhraseTree.GetBranchPath(phraseId);
+    }
+
+    /// <summary>
     /// Проверяет существование фразы в дереве фраз
     /// </summary>
     /// <param name="phraseWords">Список слов фразы</param>
@@ -670,7 +687,11 @@ namespace ISIDA.Sensors
       {
         // Проверяем в дереве
         var existingId = PhraseTree.FindBranchInternal(wordIds);
-        if (existingId != 0) return existingId;
+        if (existingId != 0)
+        {
+          PhraseTree.UpdateTransitionStatistics(wordIds);
+          return existingId;
+        }
 
         //// Фильтр мусора
         //if (IsGarbagePhrase(wordIds)) return null;
@@ -679,6 +700,7 @@ namespace ISIDA.Sensors
         if (_authoritativeMode)
         {
           var newId = PhraseTree.AddBranch(wordIds);
+          PhraseTree.UpdateTransitionStatistics(wordIds);
           PhraseTree.Save(); // Явное сохранение
           return newId;
         }
@@ -688,6 +710,7 @@ namespace ISIDA.Sensors
         if (!isNew && count >= _recognitionThreshold)
         {
           var newId = PhraseTree.AddBranch(wordIds);
+          PhraseTree.UpdateTransitionStatistics(wordIds);
           PhraseSandbox.Remove(wordIds);
           PhraseTree.Save(); // Явное сохранение
           return newId;

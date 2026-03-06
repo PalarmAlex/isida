@@ -791,6 +791,14 @@ public static class AppGlobalState
   private static int _currentStimulusToneId = 0;
   private static int _currentStimulusMoodId = 0;
 
+  /// <summary>Пульс последнего внешнего стимула (действие/фраза с пульта). Для гуления: если прошло CompareLevel пульсов без стимула — генерация пробника.</summary>
+  private static int _lastStimulusPulseCount = 0;
+  /// <summary>Контекст для гуления: последние BaseID, EmotionID, ActivityID, ToneMoodID при активации дерева.</summary>
+  private static int _lastBabblingContextBaseId = 0;
+  private static int _lastBabblingContextEmotionId = 0;
+  private static int _lastBabblingContextActivityId = 0;
+  private static int _lastBabblingContextToneMoodId = 0;
+
   /// <summary>ID образа действий текущего стимула с пульта (устанавливается перед вызовом ОР1)</summary>
   public static int CurrentStimulusActionsImageId { get => _currentStimulusActionsImageId; set => _currentStimulusActionsImageId = value; }
 
@@ -802,6 +810,18 @@ public static class AppGlobalState
 
   /// <summary>Настроение текущего стимула с пульта</summary>
   public static int CurrentStimulusMoodId { get => _currentStimulusMoodId; set => _currentStimulusMoodId = value; }
+
+  /// <summary>Пульс последнего внешнего стимула (устанавливается при активации по действию/фразе с пульта)</summary>
+  public static int LastStimulusPulseCount { get => _lastStimulusPulseCount; set => _lastStimulusPulseCount = value; }
+
+  /// <summary>Контекст для гуления: BaseID при последней активации</summary>
+  public static int LastBabblingContextBaseId { get => _lastBabblingContextBaseId; set => _lastBabblingContextBaseId = value; }
+  /// <summary>Контекст для гуления: EmotionID при последней активации</summary>
+  public static int LastBabblingContextEmotionId { get => _lastBabblingContextEmotionId; set => _lastBabblingContextEmotionId = value; }
+  /// <summary>Контекст для гуления: ActivityID при последней активации</summary>
+  public static int LastBabblingContextActivityId { get => _lastBabblingContextActivityId; set => _lastBabblingContextActivityId = value; }
+  /// <summary>Контекст для гуления: ToneMoodID при последней активации</summary>
+  public static int LastBabblingContextToneMoodId { get => _lastBabblingContextToneMoodId; set => _lastBabblingContextToneMoodId = value; }
 
   #endregion
 }
