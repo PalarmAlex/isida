@@ -531,7 +531,7 @@ namespace ISIDA.Psychic.Automatism
           var (mirrorId, mirrorAtmz) = _automatizmSystem.CreateNewAutomatizm(previousNodeId.Value, actionsImageId, true);
           if (mirrorAtmz != null)
           {
-            mirrorAtmz.Usefulness = 1;
+            mirrorAtmz.Usefulness = 2;
             mirrorAtmz.Count = 1;
             _automatizmSystem.SetAutomatizmBelief(mirrorAtmz, 2);
             anySuccess = true;
