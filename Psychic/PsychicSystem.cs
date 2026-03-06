@@ -253,22 +253,6 @@ namespace ISIDA.Psychic
         if (mirrorAutomatizm != null)
           ExecuteAutomatizm(mirrorAutomatizm);
       }
-      else if (AppGlobalState.EvolutionStage == 2 &&
-               !AppGlobalState.WaitingForOperatorEvaluation &&
-               !IsSleeping)
-      {
-        int waitingPeriod = AppGlobalState.WaitingPeriodForActionsVal;
-        if (pulseCount - AppGlobalState.LastStimulusPulseCount >= waitingPeriod)
-        {
-          int babblingAutomatizmId = TryBabblingIfIdle(pulseCount);
-          if (babblingAutomatizmId > 0)
-          {
-            var babblingAutomatizm = _automatizmSystem.GetAutomatizmById(babblingAutomatizmId);
-            if (babblingAutomatizm != null && ExecuteAutomatizm(babblingAutomatizm))
-              AppGlobalState.LastStimulusPulseCount = pulseCount;
-          }
-        }
-      }
     }
 
     /// <summary>
@@ -283,7 +267,7 @@ namespace ISIDA.Psychic
     /// <param name="moodId">ID настроения сообщения</param>
     /// <returns>True если нужно заблокировать рефлексы</returns>
     internal bool SensorActivation(
-      int activationType,  
+      int activationType,
       int currentBaseId,
       List<int> stileIdList, // хотя через пульсы передается StileIdList, от действия может поменяться stileIdList на текущем пульсе
       List<int> actionIdList,
@@ -296,23 +280,18 @@ namespace ISIDA.Psychic
         Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов");
         return false;
       }
-      
+
       if ((actionIdList == null || actionIdList.Count == 0) && (phraseIdList == null || phraseIdList.Count == 0))
         return false;
 
       try
       {
-        if (AppGlobalState.WaitingForOperatorEvaluation &&  activationType >= 2 && AppGlobalState.IsEvaluationTime())
+        if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
           _isAnswer = true;
 
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
         int toneMood = GetToneMoodID(toneId, moodId);
-
-        AppGlobalState.LastBabblingContextBaseId = currentBaseId;
-        AppGlobalState.LastBabblingContextEmotionId = currentEmotionId;
-        AppGlobalState.LastBabblingContextActivityId = currentActivityId;
-        AppGlobalState.LastBabblingContextToneMoodId = toneMood;
 
         int firstSimbol = 0;
         int verbId = 0;
@@ -388,7 +367,7 @@ namespace ISIDA.Psychic
           }
 
           atmz = _orientationReflexSystem.OrientationReflex(
-            foundAutomatizm?.ID ?? 0, 
+            foundAutomatizm?.ID ?? 0,
             currentEmotionId,
             actionsImageId);
         }
@@ -595,157 +574,6 @@ namespace ISIDA.Psychic
       finally
       {
         _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Максимальная длина сгенерированного слова при гулении.
-    /// </summary>
-    private const int MaxGeneratedWordLength = 15;
-
-    /// <summary>
-    /// Гуление: при отсутствии стимулов в контексте ищет автоматизм с Usefulness &gt; 0 и возвращает его ID для запуска;
-    /// если таких нет — генерирует слово по PST, создаёт эхо-автоматизм с Usefulness=0 и возвращает его ID.
-    /// </summary>
-    /// <returns>ID автоматизма для запуска или 0</returns>
-    private int TryBabblingIfIdle(int pulseCount)
-    {
-      if (_sensorySystem?.VerbalChannel == null) return 0;
-
-      int baseId = AppGlobalState.LastBabblingContextBaseId;
-      int emotionId = AppGlobalState.LastBabblingContextEmotionId;
-      int activityId = AppGlobalState.LastBabblingContextActivityId;
-      int toneMoodId = AppGlobalState.LastBabblingContextToneMoodId;
-
-      var nodeIds = _automatizmTreeSystem.GetNodeIdsByContext(baseId, emotionId, activityId, toneMoodId);
-      Automatizm best = null;
-      foreach (int nodeId in nodeIds)
-      {
-        var belief = _automatizmSystem.GetBelief2AutomatizmFromTreeId(nodeId);
-        if (belief != null && belief.Usefulness > 0 && (best == null || belief.Usefulness > best.Usefulness))
-          best = belief;
-        var list = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(nodeId);
-        foreach (var a in list)
-          if (a.Usefulness > 0 && (best == null || a.Usefulness > best.Usefulness))
-            best = a;
-      }
-      if (best != null)
-        return best.ID;
-
-      // Слова контекста: только из узлов, где есть автоматизм с Usefulness >= 0 (чтобы не попадали неадекватные).
-      var contextWords = new HashSet<string>(StringComparer.Ordinal);
-      foreach (int nodeId in nodeIds)
-      {
-        var belief = _automatizmSystem.GetBelief2AutomatizmFromTreeId(nodeId);
-        var motors = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(nodeId);
-        bool hasAdequate = (belief != null && belief.Usefulness >= 0) ||
-            (motors != null && motors.Any(a => a.Usefulness >= 0));
-        if (!hasAdequate) continue;
-
-        var node = _automatizmTreeSystem.GetNodeById(nodeId);
-        if (node?.VerbID == 0) continue;
-        var vb = _verbalBrocaImages.GetVerbalBrocaImage(node.VerbID);
-        if (vb?.PhraseIdList == null) continue;
-        foreach (int phraseId in vb.PhraseIdList)
-        {
-          var wordIds = _sensorySystem.VerbalChannel.GetWordIdsFromPhraseId(phraseId);
-          foreach (int wid in wordIds)
-          {
-            var w = _sensorySystem.VerbalChannel.GetWordFromWordId(wid);
-            if (!string.IsNullOrEmpty(w)) contextWords.Add(w);
-          }
-        }
-      }
-
-      char? startChar = null;
-      if (nodeIds.Count > 0)
-      {
-        var firstNode = _automatizmTreeSystem.GetNodeById(nodeIds[0]);
-        if (firstNode?.SimbolID > 0)
-        {
-          char c = _sensorySystem.VerbalChannel.GetPrimarySensorSymbol(firstNode.SimbolID);
-          if (c != '\0')
-            startChar = c;
-        }
-      }
-
-      var wordTree = _sensorySystem.VerbalChannel.WordTree;
-      var chars = new List<char>();
-      if (startChar.HasValue)
-        chars.Add(startChar.Value);
-      bool useContextFilter = contextWords.Count > 0;
-
-      while (chars.Count < MaxGeneratedWordLength)
-      {
-        var candidates = wordTree.GetNextCandidatesWithProbabilities(chars);
-        if (candidates == null || candidates.Count == 0) break;
-
-        char next = default;
-        double bestProb = -1;
-        string prefix = new string(chars.ToArray());
-
-        if (useContextFilter)
-        {
-          var allowed = candidates.Where(t => contextWords.Any(w => w.StartsWith(prefix + t.element, StringComparison.Ordinal))).ToList();
-          if (allowed.Count == 0)
-            allowed = candidates;
-          foreach (var (element, probability) in allowed)
-          {
-            if (probability > bestProb) { bestProb = probability; next = element; }
-          }
-        }
-        else
-        {
-          foreach (var (element, probability) in candidates)
-          {
-            if (probability > bestProb) { bestProb = probability; next = element; }
-          }
-        }
-
-        if (bestProb < 0) break;
-        chars.Add(next);
-      }
-      if (chars.Count == 0)
-        return 0;
-      string word = new string(chars.ToArray());
-
-      bool wasAuthoritative = _sensorySystem.VerbalChannel.AuthoritativeMode;
-      _sensorySystem.VerbalChannel.AuthoritativeMode = true;
-      try
-      {
-        int? wordIdOpt = _sensorySystem.VerbalChannel.ProcessWord(word);
-        if (!wordIdOpt.HasValue) return 0;
-        int wordId = wordIdOpt.Value;
-        int? phraseIdOpt = _sensorySystem.VerbalChannel.ProcessPhrase(new List<int> { wordId });
-        if (!phraseIdOpt.HasValue) return 0;
-        int phraseId = phraseIdOpt.Value;
-
-        int firstSymbolId = _sensorySystem.VerbalChannel.GetFirstSymbolFromWordId(wordId);
-        int toneId = 0;
-        int moodId = 0;
-        if (toneMoodId >= 100 && toneMoodId <= 307)
-        {
-          try
-          {
-            (toneId, moodId) = GetToneMoodFromID(toneMoodId);
-          }
-          catch
-          {
-            toneId = 0;
-            moodId = 0;
-          }
-        }
-
-        (int verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(firstSymbolId, new List<int> { phraseId }, toneId, moodId, true);
-        int triggerNodeId = AutomatizmTreeActivation(2, baseId, emotionId, activityId, toneMoodId, firstSymbolId, verbId, false);
-        if (triggerNodeId <= 0) return 0;
-
-        int echoId = _mirrorAutomatizmService.TryCreateStage2BabblingEcho(triggerNodeId, phraseId, toneId, moodId);
-        return echoId;
-      }
-      finally
-      {
-        _sensorySystem.VerbalChannel.AuthoritativeMode = wasAuthoritative;
       }
     }
 
