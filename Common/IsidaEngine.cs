@@ -824,7 +824,8 @@ namespace ISIDA.Common
         context.PsychicSystem.SetPsychicSystemDop(
           context.AutomatismExecution, 
           context.OrientationReflex,
-          context.PerceptionImages);
+          context.PerceptionImages,
+          context.EpisodicMemory);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);

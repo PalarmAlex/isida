@@ -179,17 +179,27 @@ namespace ISIDA.Psychic.Memory.Episodic
     {
       if (system?.History == null || startNodeIds == null || startNodeIds.Count == 0)
         return null;
+
       var entries = system.History.Entries;
       if (entries.Count == 0) return null;
+
       var tree = system.TreeLogic;
       var root = system.Tree;
       var chains = new List<List<EpisodicRule>>();
+
       for (int i = entries.Count - 1; i >= 0; i--)
       {
         if (entries[i].NodeId == -1) continue;
         if (!startNodeIds.Contains(entries[i].NodeId)) continue;
+
         var chain = BuildChainFromHistory(entries, i, limit, tree, root, typeRule);
+
         if (chain == null || chain.Count == 0) continue;
+
+        // Конечное звено цепочки должно быть положительным по эффекту
+        int lastEffect = chain[chain.Count - 1].Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : chain[chain.Count - 1].Effect;
+        if (lastEffect < 0) continue;
+        // Суммарный эффект всех звеньев тоже должен быть положительным
         int effectSum = chain.Sum(r => EpisodicMemoryRules.GetWpower(
             r.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : r.Effect, r.Count));
         if (effectSum > 0)
@@ -199,9 +209,11 @@ namespace ISIDA.Psychic.Memory.Episodic
         }
       }
       if (chains.Count == 0) return null;
+
       var best = chains.OrderByDescending(c => c.Count > 0 ? EpisodicMemoryRules.GetWpower(
           c[c.Count - 1].Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : c[c.Count - 1].Effect,
           c[c.Count - 1].Count) : 0).FirstOrDefault();
+
       return best;
     }
 
@@ -238,18 +250,23 @@ namespace ISIDA.Psychic.Memory.Episodic
     {
       if (system == null || !EpisodicMemorySystem.IsInitialized || AppGlobalState.EvolutionStage < 4)
         return null;
+
       if (limit <= 0) limit = GetLimitCount();
       List<int> nodeIds = null;
+
       for (int lev = 0; lev <= 2; lev++)
       {
         var (baseId, emotionId, nodePid) = system.GetCurrentConditions(false);
         nodeIds = GetEpisodeNodeIdsFromConditions(system.Tree, baseId, emotionId, nodePid, 1, lev, triggerId, 0);
         if (nodeIds != null && nodeIds.Count > 0) break;
       }
+
       if (nodeIds == null || nodeIds.Count == 0) return null;
       var chain = GetPositiveChainsFromHistory(system, nodeIds, 1, limit);
+
       if (chain != null && chain.Count > 0) return chain;
       var rules = NodesToRules(system.Tree, nodeIds, 1, system.TreeLogic);
+
       return rules.Count > 0 ? new List<EpisodicRule> { EpisodicMemoryRules.FindBestRule(rules).Rule } : null;
     }
 

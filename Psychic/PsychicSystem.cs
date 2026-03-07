@@ -34,6 +34,7 @@ namespace ISIDA.Psychic
     private OrientationReflexSystem _orientationReflexSystem;
     private AutomatismExecutionService _automatismExecutionService;
     private PerceptionImagesSystem _perceptionImagesSystem;
+    private EpisodicMemorySystem _episodicMemorySystem;
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
 
     #region Инициализация
@@ -102,16 +103,18 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Установка сервиса выполнения автоматизмов
+    /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память)
     /// </summary>
     public void SetPsychicSystemDop(
       AutomatismExecutionService executionService,
       OrientationReflexSystem orientationReflexSystem,
-      PerceptionImagesSystem perceptionImagesSystem)
+      PerceptionImagesSystem perceptionImagesSystem,
+      EpisodicMemorySystem episodicMemorySystem = null)
     {
       _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
       _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+      _episodicMemorySystem = episodicMemorySystem;
     }
 
     /// <summary>
@@ -319,9 +322,7 @@ namespace ISIDA.Psychic
           AppGlobalState.LastTriggerStimulusID = perceptionImageId;
         }
         else
-        {
           AppGlobalState.CurActiveVerbalId = 0;
-        }
 
         actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId);
         int stimulusActionsImageIdForContext = actionsImageId;
@@ -343,14 +344,10 @@ namespace ISIDA.Psychic
           if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2)
           {
             if (AppGlobalState.IsEvaluationTime())
-            {
               _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
-            }
             else
-            {
               // Окно оценки истекло — начинаем отзеркаливание с начала: сброс, далее для нового стимула может создаться стартовый эхо-автоматизм.
               ResetAutomatizmWaitingState();
-            }
           }
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
@@ -385,10 +382,10 @@ namespace ISIDA.Psychic
             }
           }
 
-          if (foundAutomatizm == null && AppGlobalState.EvolutionStage >= 4 && EpisodicMemorySystem.IsInitialized)
+          if (foundAutomatizm == null && AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
           {
-            var chain = EpisodicMemorySystem.Instance.GetTargetChain(actionsImageId);
-            var rule = (chain != null && chain.Count > 0) ? chain[0] : EpisodicMemorySystem.Instance.GetSingleBestRule(3, actionsImageId);
+            var chain = _episodicMemorySystem.GetTargetChain(actionsImageId);
+            var rule = (chain != null && chain.Count > 0) ? chain[0] : _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
             if (rule != null && rule.ActionId > 0)
             {
               var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
@@ -664,8 +661,8 @@ namespace ISIDA.Psychic
     /// </summary>
     private void ResetAutomatizmWaitingState()
     {
-      if (AppGlobalState.EvolutionStage >= 4 && EpisodicMemorySystem.IsInitialized)
-        EpisodicMemorySystem.Instance.SetInterruption();
+      if (AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
+        _episodicMemorySystem.SetInterruption();
       AppGlobalState.ResetWaitingForOperatorEvaluation();
       AppGlobalState.ResetAutomatizmInfo();
       AppGlobalState.WaitingForOperatorEvaluation = false;
