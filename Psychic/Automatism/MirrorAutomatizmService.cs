@@ -127,12 +127,20 @@ namespace ISIDA.Psychic.Automatism
       bool hasVerbalPart,
       bool hasNonVerbalPart = false)
     {
-      if (actionsImageId <= 0 || detectedNodeId <= 0 || AppGlobalState.EvolutionStage != 3)
+      if (actionsImageId <= 0 || detectedNodeId <= 0)
+        return;
+      if (AppGlobalState.EvolutionStage != 3 && AppGlobalState.EvolutionStage < 4)
         return;
 
       _lock.EnterWriteLock();
       try
       {
+        if (AppGlobalState.EvolutionStage >= 4)
+        {
+          _pendingResponseActionsImageId = actionsImageId;
+          _pendingResponseNodeId = detectedNodeId;
+          return;
+        }
         if (!_dialogMirrorActive)
           return;
 
@@ -393,6 +401,14 @@ namespace ISIDA.Psychic.Automatism
       _pendingResponseNodeId = 0;
       _pendingResponseHasVerbalPart = false;
       _pendingResponseHasNonVerbalPart = false;
+    }
+
+    /// <summary>ID образа действий ответа оператора (для FixTeacherRule, stage 4)</summary>
+    public int GetPendingOperatorResponseActionsImageId()
+    {
+      _lock.EnterReadLock();
+      try { return _pendingResponseActionsImageId; }
+      finally { _lock.ExitReadLock(); }
     }
 
     /// <summary>

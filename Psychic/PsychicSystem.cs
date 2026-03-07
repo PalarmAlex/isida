@@ -1,6 +1,7 @@
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
@@ -384,6 +385,27 @@ namespace ISIDA.Psychic
             }
           }
 
+          if (foundAutomatizm == null && AppGlobalState.EvolutionStage >= 4 && EpisodicMemorySystem.IsInitialized)
+          {
+            var chain = EpisodicMemorySystem.Instance.GetTargetChain(actionsImageId);
+            var rule = (chain != null && chain.Count > 0) ? chain[0] : EpisodicMemorySystem.Instance.GetSingleBestRule(3, actionsImageId);
+            if (rule != null && rule.ActionId > 0)
+            {
+              var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
+                  .FirstOrDefault(a => a.ActionsImageID == rule.ActionId);
+              if (episodicAtmz == null)
+              {
+                var (newId, _) = _automatizmSystem.CreateNewAutomatizm(automatizmNodeId, rule.ActionId, true);
+                episodicAtmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
+              }
+              if (episodicAtmz != null)
+              {
+                AppGlobalState.CurStimulusImageId = actionsImageId;
+                return ExecuteAutomatizm(episodicAtmz);
+              }
+            }
+          }
+
           // Контекст стимула для ОР1 / эхо на 2-й стадии (используется в GetAutomatizmByGeneticPurpose)
           if (foundAutomatizm == null)
           {
@@ -642,6 +664,8 @@ namespace ISIDA.Psychic
     /// </summary>
     private void ResetAutomatizmWaitingState()
     {
+      if (AppGlobalState.EvolutionStage >= 4 && EpisodicMemorySystem.IsInitialized)
+        EpisodicMemorySystem.Instance.SetInterruption();
       AppGlobalState.ResetWaitingForOperatorEvaluation();
       AppGlobalState.ResetAutomatizmInfo();
       AppGlobalState.WaitingForOperatorEvaluation = false;
@@ -673,12 +697,13 @@ namespace ISIDA.Psychic
       // Время реакции оператора
       int responseTime = PulseCount - AppGlobalState.LastRunAutomatizmPulsCount;
 
-      // Отметить распознавание оператором
+      int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
           true, // распознано оператором
           assessment,
-          responseTime);
+          responseTime,
+          operatorResponseImageId);
 
       int mirrorAutomatizmId = 0;
       if (AppGlobalState.EvolutionStage == 3)

@@ -504,7 +504,12 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Отметить результат распознавания оператором
     /// </summary>
-    public void MarkOperatorRecognition(int automatizmId, bool recognized, int assessment = 0, int responseTime = 0)
+    /// <param name="automatizmId">ID автоматизма</param>
+    /// <param name="recognized">Признак распознавания оператором</param>
+    /// <param name="assessment">Оценка (-1..1)</param>
+    /// <param name="responseTime">Время реакции оператора</param>
+    /// <param name="operatorResponseActionsImageId">ID образа действий оператора (для FixTeacherRule, stage 4)</param>
+    public void MarkOperatorRecognition(int automatizmId, bool recognized, int assessment = 0, int responseTime = 0, int operatorResponseActionsImageId = 0)
     {
       _lock.EnterWriteLock();
       try
@@ -515,22 +520,29 @@ namespace ISIDA.Psychic
           result.OperatorAssessment = assessment;
           result.OperatorResponseTime = responseTime;
 
+          if (_episodicRulesService != null && operatorResponseActionsImageId > 0 && result.ActionsImageId > 0)
+            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, result.ActionsImageId, AppGlobalState.PrevStimulsEffect);
+
           // Обновляем полезность автоматизма на основе оценки оператора
           UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(result);
         }
         else
         {
-          // Если нет записи в результатах, создаем новую
+          var atmz = _automatizmSystem.GetAutomatizmById(automatizmId);
           var newResult = new AutomatizmResult
           {
             AutomatizmId = automatizmId,
+            ActionsImageId = atmz?.ActionsImageID ?? 0,
             RecognizedByOperator = recognized,
             OperatorAssessment = assessment,
             OperatorResponseTime = responseTime,
             Result = assessment > 0 ? ExecutionResult.Success :
                       assessment < 0 ? ExecutionResult.Error : ExecutionResult.Skipped
           };
+
+          if (_episodicRulesService != null && operatorResponseActionsImageId > 0 && newResult.ActionsImageId > 0)
+            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, newResult.ActionsImageId, AppGlobalState.PrevStimulsEffect);
 
           _lastAutomatizmResults[automatizmId] = newResult;
           UpdateAutomatizmUsefulness(automatizmId, assessment);

@@ -95,6 +95,8 @@ namespace ISIDA.Psychic.Memory.Episodic
       EpisodicMemoryStorage.LoadEpisodicTree(_dataPath, Tree, _nodesById, ref _lastNodeId);
       _nodesById[0] = Tree;
       EpisodicMemoryStorage.LoadEpisodicHistory(_dataPath, History);
+      if (History.Entries.Count > 0)
+        History.SetInterruption(0);
       _treeLogic.SetLastNodeId(_lastNodeId);
     }
 
@@ -276,6 +278,22 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     internal EpisodicMemoryTree TreeLogic => _treeLogic;
     internal EpisodicMemoryNode Root => Tree;
+
+    #endregion
+
+    #region Поиск правил (для PsychicSystem, stage 4)
+
+    /// <summary>GPT-цепочка: цепочка правил с конечным позитивом для данного стимула</summary>
+    public List<EpisodicRule> GetTargetChain(int triggerId, int limit = 0)
+    {
+      return EpisodicMemorySearch.GetTargetChain(this, triggerId, limit);
+    }
+
+    /// <summary>Лучшее правило по условиям (typeRule: 1-прямые, 2-учительские, 3-все)</summary>
+    public EpisodicRule GetSingleBestRule(int typeRule, int triggerId)
+    {
+      return EpisodicMemorySearch.GetSingleBestRule(this, typeRule, triggerId);
+    }
 
     #endregion
 

@@ -126,6 +126,7 @@
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemorySystem.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRulesService.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRules.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicMemorySearch.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />
