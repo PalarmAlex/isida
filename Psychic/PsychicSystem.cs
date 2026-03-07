@@ -224,6 +224,16 @@ namespace ISIDA.Psychic
             // Время ожидания оценки автоматизма истекло
             if (!AppGlobalState.IsEvaluationTime())
             {
+              // Если оператор успел прислать ответ в окне, но следующий пульс пришёл уже после его закрытия — всё равно создаём зеркальные автоматизмы
+              if (_isAnswer)
+              {
+                int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
+                if (automatizmToEvaluate > 0)
+                {
+                  mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(automatizmToEvaluate);
+                  _isAnswer = false;
+                }
+              }
               ResetAutomatizmWaitingState();
               Logger.Info($"Время ожидания оценки истекло для автоматизма ID={_currentAutomatizmId}");
             }
@@ -329,11 +339,28 @@ namespace ISIDA.Psychic
         {
           bool hasVerbalPart = phraseIdList?.Any() == true;
           bool hasNonVerbalPart = actionIdList?.Any() == true;
-          if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
-            _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
+          if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2)
+          {
+            if (AppGlobalState.IsEvaluationTime())
+            {
+              _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
+            }
+            else
+            {
+              // Окно оценки истекло — начинаем отзеркаливание с начала: сброс, далее для нового стимула может создаться стартовый эхо-автоматизм.
+              ResetAutomatizmWaitingState();
+            }
+          }
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
           var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
+
+          // При выполнении существующего автоматизма на стимул с пульта — включаем цикл зеркалирования: триггером для следующей пары должен быть узел ответа агента («как дела»), чтобы получилась пара «как дела — все ок».
+          if (foundAutomatizm != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+          {
+            int responseNodeId = GetTreeNodeIdForResponseActionsImage(foundAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+            _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+          }
 
           if (foundAutomatizm == null &&
               AppGlobalState.EvolutionStage == 3 &&
@@ -489,6 +516,39 @@ namespace ISIDA.Psychic
           .OrderByDescending(a => a.Usefulness)
           .ThenByDescending(a => a.Count)
           .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Получить ID узла дерева автоматизмов для образа ответа (например, ответа агента «как дела»).
+    /// Используется для зеркалирования: триггером учительской пары должен быть узел ответа агента, а не стимула.
+    /// </summary>
+    /// <param name="responseActionsImageId">ID образа действий (ответ автоматизма).</param>
+    /// <param name="currentBaseId">Текущее базовое состояние.</param>
+    /// <param name="currentEmotionId">Текущий образ эмоций.</param>
+    /// <param name="currentActivityId">Текущая активность.</param>
+    /// <returns>ID узла дерева или 0, если узел по вербальной части не найден.</returns>
+    private int GetTreeNodeIdForResponseActionsImage(
+      int responseActionsImageId,
+      int currentBaseId,
+      int currentEmotionId,
+      int currentActivityId)
+    {
+      if (responseActionsImageId <= 0 || _actionsImagesSystem == null)
+        return 0;
+
+      var img = _actionsImagesSystem.GetActionsImage(responseActionsImageId);
+      if (img?.PhraseIdList == null || !img.PhraseIdList.Any())
+        return 0;
+
+      var phraseIdList = img.PhraseIdList;
+      var actionIdList = img.ActIdList ?? new List<int>();
+      int toneId = img.ToneId;
+      int moodId = img.MoodId;
+
+      var (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(phraseIdList, actionIdList, toneId, moodId);
+      int toneMood = GetToneMoodID(toneId, moodId);
+
+      return AutomatizmTreeActivation(2, currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree);
     }
 
     /// <summary>

@@ -283,6 +283,8 @@ namespace ISIDA.Reflexes
         else
         {
           if (pulseCount > _weitPulceCount + _reflexActionDuration)
+            _weitPulceCount = 0;
+          if (AppGlobalState.IsNewConditions)
             ActiveFromConditionChange(pulseCount);
         }
       }
@@ -422,6 +424,11 @@ namespace ISIDA.Reflexes
         }
 
         CollectReflexesForExecution();
+        // Безусловные рефлексы — только на триггеры действий с пульта или изменение состояния/стилей.
+        // На одну лишь фразу с пульта (без смены гомеостаза/стилей) безусловные не запускаем.
+        _geneticReflexesToRun.Clear();
+        GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+
         bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
         if (psychicBlocked)
         {
@@ -477,7 +484,6 @@ namespace ISIDA.Reflexes
 
       if (_geneticReflexesToRun.Contains(-1) && _reflexTree.DetectedLevel < 2)
       {
-        // Пропускаем сбор рефлексов, сразу выполняем рефлекс по умолчанию
         var result = _reflexExecutionService.ExecuteGeneticReflex(-1);
         if (result.Success)
         {
@@ -487,7 +493,6 @@ namespace ISIDA.Reflexes
         return;
       }
 
-      // если установлен рефлекс по умолчанию - запускаем его
       if (_geneticReflexesToRun.Any() && _geneticReflexesToRun[0] == -1)
       {
         var result = _reflexExecutionService.ExecuteGeneticReflex(-1);

@@ -87,6 +87,29 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Запустить цикл зеркалирования для уже существующего автоматизма: следующий стимул оператора в окне ожидания будет считаться ответом и создаст пары эхо и сдвиг.
+    /// Вызывается при выполнении найденного автоматизма (не попугайского), чтобы следующий стимул с пульта образовывал пары «новый стимул — новый стимул» и «предыдущий ответ агента — новый стимул».
+    /// </summary>
+    /// <param name="triggerNodeId">ID узла дерева автоматизмов (триггер выполнившегося автоматизма).</param>
+    public void StartDialogMirrorForExistingAutomatizm(int triggerNodeId)
+    {
+      if (AppGlobalState.EvolutionStage != 3 || triggerNodeId <= 0)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        _dialogMirrorActive = true;
+        _dialogTriggerNodeId = triggerNodeId;
+        ClearPendingOperatorResponse();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Сохранить образ ответа оператора в период ожидания оценки.
     /// </summary>
     /// <param name="actionsImageId">ID образа действий (ответ оператора).</param>

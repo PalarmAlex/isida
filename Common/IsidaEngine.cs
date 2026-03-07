@@ -912,12 +912,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V2.4";
+    public const string ProjectVersion = "V2.5";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.02.24";
+    public const string BuildDate = "2026.03.07";
 
     /// <summary>
     /// Краткое описание концепции проекта
