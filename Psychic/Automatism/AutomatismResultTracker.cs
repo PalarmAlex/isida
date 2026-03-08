@@ -788,7 +788,7 @@ namespace ISIDA.Psychic
         if (automatizm != null)
         {
           automatizm.Usefulness += assessment;
-          automatizm.Usefulness = Math.Max(-10, Math.Min(10, automatizm.Usefulness));
+          automatizm.Usefulness = AddUtils.Clamp(automatizm.Usefulness, -10, 10);
         }
       }
       catch (Exception ex)

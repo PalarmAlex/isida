@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -91,6 +91,22 @@ namespace ISIDA.Common
     public static bool FloatLessOrEqual(float a, float b, float tolerance = 0.0001f)
     {
       return a < b || Math.Abs(a - b) <= tolerance;
+    }
+
+    /// <summary>
+    /// Приводит целое число к заданному диапазону [min, max].
+    /// </summary>
+    public static int Clamp(int value, int min, int max)
+    {
+      return Math.Max(min, Math.Min(max, value));
+    }
+
+    /// <summary>
+    /// Приводит число с плавающей точкой к заданному диапазону [min, max].
+    /// </summary>
+    public static float Clamp(float value, float min, float max)
+    {
+      return Math.Max(min, Math.Min(max, value));
     }
   }
 }

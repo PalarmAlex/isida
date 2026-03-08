@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -389,7 +389,7 @@ namespace ISIDA.Common
     /// <returns>Ограниченное значение в диапазоне [-10:10]</returns>
     public static int ClampChainLinkUsefulness(int value)
     {
-      return Math.Max(-10, Math.Min(10, value));
+      return AddUtils.Clamp(value, -10, 10);
     }
 
     #endregion

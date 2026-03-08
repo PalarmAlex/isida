@@ -35,7 +35,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (actionId <= 0) return;
       if (triggerId <= 0) return; // нет стимула — не записывать (кроме провокации, TODO)
 
-      int effect = Math.Max(-10, Math.Min(10, usefulnessDelta));
+      int effect = AddUtils.Clamp(usefulnessDelta, -10, 10);
       _episodicMemory.SaveNewEpisode(triggerId, actionId, effect, stimulsEffect, useOldCondition: false);
     }
 

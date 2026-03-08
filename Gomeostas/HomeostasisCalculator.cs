@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -223,7 +223,7 @@ namespace ISIDA.Gomeostas
 
       float value = param.Value;
       float threshold = param.NormaWell;
-      float weight = Math.Max(0f, Math.Min(1f, param.Weight / 100f));
+      float weight = AddUtils.Clamp(param.Weight / 100f, 0f, 1f);
 
       bool isDeficitOriented = param.Speed < 0;
       bool isExcessOriented = !isDeficitOriented;
@@ -251,7 +251,7 @@ namespace ISIDA.Gomeostas
         }
       }
 
-      return Math.Max(0f, Math.Min(1f, urgency));
+      return AddUtils.Clamp(urgency, 0f, 1f);
     }
 
     /// <summary>

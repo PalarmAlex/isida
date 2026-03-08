@@ -1,3 +1,4 @@
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -99,10 +100,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       {
         EpisodicParams pars = level == 4 ? newParams : null;
         if (pars != null && pars.Effect != 100)
-        {
-          if (pars.Effect > 10) pars.Effect = 10;
-          if (pars.Effect < -10) pars.Effect = -10;
-        }
+          pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
 
         _lastNodeId++;
         node = new EpisodicMemoryNode
@@ -135,14 +133,11 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (effect != 100)
       {
         int w = (p.Effect * (count - 1) + effect) / count;
-        if (w > 10) w = 10;
-        if (w < -10) w = -10;
-        p.Effect = w;
+        p.Effect = AddUtils.Clamp(w, -10, 10);
       }
 
       int sw = (p.StimulsEffect * (count - 1) + stimulsEffect) / count;
-      if (sw > 10) sw = 10;
-      if (sw < -10) sw = -10;
+      p.StimulsEffect = AddUtils.Clamp(sw, -10, 10);
       p.StimulsEffect = sw;
       p.Count = count;
     }

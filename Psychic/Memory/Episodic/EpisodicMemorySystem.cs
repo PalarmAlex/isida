@@ -169,10 +169,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           StimulsEffect = stimulsEffect
         };
         if (effect != 100)
-        {
-          if (pars.Effect > 10) pars.Effect = 10;
-          if (pars.Effect < -10) pars.Effect = -10;
-        }
+          pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
 
         var condArr = new[] { baseId, emotionId, nodePid, triggerId, actionId };
         var (idOld, nodeOld) = _treeLogic.CheckBranchFromCondition(Tree, baseId, emotionId, nodePid, triggerId, actionId);
