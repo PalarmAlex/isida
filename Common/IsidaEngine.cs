@@ -342,6 +342,21 @@ namespace ISIDA.Common
     public OrientationReflexSystem OrientationReflex { get; internal set; }
 
     /// <summary>
+    /// Справочник типов ситуаций
+    /// </summary>
+    public Psychic.Understanding.SituationTypeSystem SituationTypeSystem { get; internal set; }
+
+    /// <summary>
+    /// Система образов ситуаций
+    /// </summary>
+    public Psychic.Understanding.SituationImageSystem SituationImageSystem { get; internal set; }
+
+    /// <summary>
+    /// Дерево понимания ситуации (Understanding)
+    /// </summary>
+    public Psychic.Understanding.UnderstandingTreeSystem UnderstandingTreeSystem { get; internal set; }
+
+    /// <summary>
     /// Дерево проблем (для эпизодической памяти)
     /// </summary>
     public Psychic.Understanding.ProblemTreeSystem ProblemTree { get; internal set; }
@@ -418,6 +433,9 @@ namespace ISIDA.Common
       SafeDispose(GeneticReflexFileLoader, "GeneticReflexFileLoader");
       SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");
       SafeDispose(EpisodicMemory, "EpisodicMemory");
+      SafeDispose(UnderstandingTreeSystem, "UnderstandingTreeSystem");
+      SafeDispose(SituationImageSystem, "SituationImageSystem");
+      SafeDispose(SituationTypeSystem, "SituationTypeSystem");
       SafeDispose(ProblemTree, "ProblemTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(MirrorAutomatizmService, "MirrorAutomatizmService");
@@ -728,34 +746,46 @@ namespace ISIDA.Common
         if (context.AutomatizmTree.Tree.Children.Count == 0)
           context.AutomatizmTree.CreateBasicAutomatizmTree();
 
-        // Шаг 20: Дерево проблем (для эпизодической памяти)
+        // Шаг 19a: Справочник типов ситуаций и образы ситуаций (для Understanding)
         initializationStep = 20;
+        Psychic.Understanding.SituationTypeSystem.InitializeInstance(config.PsychicDataFolder);
+        context.SituationTypeSystem = Psychic.Understanding.SituationTypeSystem.Instance;
+        Psychic.Understanding.SituationImageSystem.InitializeInstance(config.PsychicDataFolder);
+        context.SituationImageSystem = Psychic.Understanding.SituationImageSystem.Instance;
+
+        // Шаг 20: Дерево проблем (для эпизодической памяти)
+        initializationStep = 21;
         Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.ProblemTree = Psychic.Understanding.ProblemTreeSystem.Instance;
         context.AutomatizmTree.SetProblemTree(context.ProblemTree);
 
-        // Шаг 21: Система автоматизмов
-        initializationStep = 21;
+        // Шаг 20a: Дерево понимания ситуации (Understanding)
+        initializationStep = 22;
+        Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        context.UnderstandingTreeSystem = Psychic.Understanding.UnderstandingTreeSystem.Instance;
+
+        // Шаг 23: Система автоматизмов
+        initializationStep = 23;
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
-        // Шаг 22: Система эмоций
-        initializationStep = 22;
+        // Шаг 24: Система эмоций
+        initializationStep = 24;
         EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
         context.EmotionsImageSystem = EmotionsImageSystem.Instance;
 
-        // Шаг 23: Система вербальных образов
-        initializationStep = 23;
+        // Шаг 25: Система вербальных образов
+        initializationStep = 25;
         VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
-        // Шаг 24: Сервис отслеживания выполнения резульатов автоматизмов
-        initializationStep = 24;
+        // Шаг 26: Сервис отслеживания выполнения резульатов автоматизмов
+        initializationStep = 26;
         AutomatismResultTracker.InitializeInstance(context.AutomatizmSystem);
         context.AutomatismResult = AutomatismResultTracker.Instance;
 
-        // Шаг 25: Моторная эпизодическая память
-        initializationStep = 25;
+        // Шаг 27: Моторная эпизодическая память
+        initializationStep = 27;
         Psychic.Memory.Episodic.EpisodicMemorySystem.InitializeInstance(
           config.PsychicDataFolder,
           context.AutomatizmTree,
@@ -767,8 +797,8 @@ namespace ISIDA.Common
         context.EpisodicMemoryRulesService = new Psychic.Memory.Episodic.EpisodicMemoryRulesService(context.EpisodicMemory);
         context.AutomatismResult.SetEpisodicMemoryRulesService(context.EpisodicMemoryRulesService);
 
-        // Шаг 26: Система психики
-        initializationStep = 26;
+        // Шаг 28: Система психики
+        initializationStep = 28;
         PsychicSystem.InitializeInstance(
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
@@ -781,8 +811,8 @@ namespace ISIDA.Common
           context.PsychicSystem = PsychicSystem.Instance;
           context.MirrorAutomatizmService = context.PsychicSystem.MirrorAutomatizmService;        
 
-        // Шаг 27: Система управления гомеостатическими целями
-        initializationStep = 27;
+        // Шаг 29: Система управления гомеостатическими целями
+        initializationStep = 29;
         PurposeGeneticImageSystem.InitializeInstance(
           context.InformationEnvironmentSystem, 
           context.ActionsImages,
@@ -790,33 +820,33 @@ namespace ISIDA.Common
           context.AdaptiveActions);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
-        // Шаг 28: Класс для загрузки автоматизмов из файла
-        initializationStep = 28;
+        // Шаг 30: Класс для загрузки автоматизмов из файла
+        initializationStep = 30;
         AutomatizmFileLoader.InitializeInstance(config.BootDataFolder);
         context.AutomatizmFileLoader = AutomatizmFileLoader.Instance;
 
-        // Шаг 29: Сервис выполнения автоматизмов
-        initializationStep = 29;
+        // Шаг 31: Сервис выполнения автоматизмов
+        initializationStep = 31;
         AutomatismExecutionService.InitializeInstance(
             context.AdaptiveActions,
             context.ActionsImages);
         context.AutomatismExecution = AutomatismExecutionService.Instance;
 
-        // Шаг 30: Система ориентировочного рефлекса
-        initializationStep = 30;
+        // Шаг 32: Система ориентировочного рефлекса
+        initializationStep = 32;
         OrientationReflexSystem.InitializeInstance(
             context.InformationEnvironmentSystem,
             context.PurposeGeneticImageSystem);
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
 
-        // Шаг 31: Система управления цепочками автоматизмов
-        initializationStep = 31;
+        // Шаг 33: Система управления цепочками автоматизмов
+        initializationStep = 33;
         AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
         context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
-        // Шаг 32: Сервис выполнения автоматизмов
-        initializationStep = 32;
+        // Шаг 34: Сервис выполнения автоматизмов
+        initializationStep = 34;
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
@@ -828,14 +858,16 @@ namespace ISIDA.Common
           context.OrientationReflex,
           context.PerceptionImages,
           context.EpisodicMemory);
+        if (context.EpisodicMemory != null)
+          context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
 
-        // Шаг 33: Сервис конвертирования условных рефлексов в автоматизмы
-        initializationStep = 33;
+        // Шаг 35: Сервис конвертирования условных рефлексов в автоматизмы
+        initializationStep = 35;
         ConditionedReflexToAutomatizmConverter.InitializeInstance(
             context.ConditionedReflexes,
             context.GeneticReflexes,
@@ -869,8 +901,8 @@ namespace ISIDA.Common
           context.ActionsImages,
           context.MirrorAutomatizmService);
 
-        // Шаг 34: Сервис переключения стадий эволюции
-        initializationStep = 34;
+        // Шаг 36: Сервис переключения стадий эволюции
+        initializationStep = 36;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes,

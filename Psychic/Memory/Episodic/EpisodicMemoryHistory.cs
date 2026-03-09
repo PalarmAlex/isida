@@ -13,13 +13,15 @@ namespace ISIDA.Psychic.Memory.Episodic
     /// <summary>Список записей истории (только чтение)</summary>
     public IReadOnlyList<EpisodicHistoryEntry> Entries => _entries;
 
-    /// <summary>Добавить запись в историю</summary>
+    /// <summary>Добавить запись в историю. Пустой кадр (nodeId=-1) не добавляется подряд — разрыв цепочки всегда один.</summary>
     public void Append(int nodeId, int lifeTime)
     {
+      if (nodeId == -1 && _entries.Count > 0 && _entries[_entries.Count - 1].NodeId == -1)
+        return;
       _entries.Add(new EpisodicHistoryEntry { NodeId = nodeId, LifeTime = lifeTime });
     }
 
-    /// <summary>Вставить пустой кадр (ID=-1) — конец темы</summary>
+    /// <summary>Вставить пустой кадр (ID=-1) — разрыв цепочки правил. Подряд более одного пустого кадра не допускается.</summary>
     public void SetInterruption(int lifeTime)
     {
       if (_entries.Count == 0) return;

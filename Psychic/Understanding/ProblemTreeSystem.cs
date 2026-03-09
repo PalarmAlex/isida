@@ -84,10 +84,20 @@ namespace ISIDA.Psychic.Understanding
     #region Управление активной веткой
 
     /// <summary>
-    /// Обновить активную ветку по ID узла дерева автоматизмов (упрощённый режим)
+    /// Обновить активную ветку по ID узла дерева автоматизмов (упрощённый режим, без Understanding)
     /// </summary>
-    /// <remarks>Доступно с 4 стадии развития</remarks>
+    /// <remarks>Доступно с 4 стадии развития. Вызывается из AutomatizmTree при отсутствии Understanding.</remarks>
     public void UpdateActiveBranchFromAutomatizmTree(int automatizmTreeNodeId)
+    {
+      UpdateActiveBranchFromUnderstandingInfo(automatizmTreeNodeId, 0);
+    }
+
+    /// <summary>
+    /// Обновить активную ветку по данным от Understanding (autTreeID, situationTreeID)
+    /// </summary>
+    /// <param name="automatizmTreeNodeId">ID узла дерева автоматизмов</param>
+    /// <param name="situationTreeId">ID образа ситуации (0 — упрощённый режим)</param>
+    public void UpdateActiveBranchFromUnderstandingInfo(int automatizmTreeNodeId, int situationTreeId)
     {
       if (AppGlobalState.EvolutionStage < 4)
       {
@@ -105,7 +115,9 @@ namespace ISIDA.Psychic.Understanding
           return;
         }
 
-        var (id, _) = FindOrCreateByAutTreeId(automatizmTreeNodeId);
+        var (id, _) = situationTreeId > 0
+            ? FindOrCreateByAutTreeAndSituation(automatizmTreeNodeId, situationTreeId)
+            : FindOrCreateByAutTreeId(automatizmTreeNodeId);
         DetectedActiveLastProblemNodeId = id;
       }
       finally
@@ -114,7 +126,53 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Найти или создать узел по AutTreeID</summary>
+    /// <summary>Найти или создать узел по AutTreeID и SituationTreeID (4 уровня)</summary>
+    private (int Id, ProblemTreeNode Node) FindOrCreateByAutTreeAndSituation(int autTreeId, int situationTreeId)
+    {
+      foreach (var child in Tree.Children)
+      {
+        var found = FindByAutTreeAndSituationRecursive(child, autTreeId, situationTreeId);
+        if (found.Node != null)
+          return found;
+      }
+
+      var autNode = FindOrCreateByAutTreeId(autTreeId);
+      if (autNode.Node == null) return (0, null);
+
+      foreach (var c in autNode.Node.Children)
+      {
+        if (c.SituationTreeID == situationTreeId)
+          return (c.ID, c);
+      }
+
+      _lastNodeId++;
+      var node = new ProblemTreeNode
+      {
+        ID = _lastNodeId,
+        ParentID = autNode.Node.ID,
+        ParentNode = autNode.Node,
+        AutTreeID = autTreeId,
+        SituationTreeID = situationTreeId
+      };
+      autNode.Node.Children.Add(node);
+      _nodesById[node.ID] = node;
+      return (node.ID, node);
+    }
+
+    private (int Id, ProblemTreeNode Node) FindByAutTreeAndSituationRecursive(ProblemTreeNode n, int autTreeId, int situationTreeId)
+    {
+      if (n.AutTreeID == autTreeId && n.SituationTreeID == situationTreeId)
+        return (n.ID, n);
+      foreach (var c in n.Children)
+      {
+        var r = FindByAutTreeAndSituationRecursive(c, autTreeId, situationTreeId);
+        if (r.Node != null)
+          return r;
+      }
+      return (0, null);
+    }
+
+    /// <summary>Найти или создать узел по AutTreeID (упрощённо, situation=0)</summary>
     private (int Id, ProblemTreeNode Node) FindOrCreateByAutTreeId(int autTreeId)
     {
       foreach (var child in Tree.Children)

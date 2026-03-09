@@ -119,6 +119,13 @@
     <Compile Include="Psychic\Automatism\Stage2PrimitivesLoader.cs" />
     <Compile Include="Psychic\Understanding\ProblemTreeNode.cs" />
     <Compile Include="Psychic\Understanding\ProblemTreeSystem.cs" />
+    <Compile Include="Psychic\Understanding\SituationTypeRecord.cs" />
+    <Compile Include="Psychic\Understanding\SituationTypeSystem.cs" />
+    <Compile Include="Psychic\Understanding\SituationImageRecord.cs" />
+    <Compile Include="Psychic\Understanding\SituationImageSystem.cs" />
+    <Compile Include="Psychic\Understanding\SituationImageService.cs" />
+    <Compile Include="Psychic\Understanding\UnderstandingTreeNode.cs" />
+    <Compile Include="Psychic\Understanding\UnderstandingTreeSystem.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryNode.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryTree.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryHistory.cs" />
@@ -129,6 +136,8 @@
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemorySearch.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
+    <Compile Include="Psychic\Importance\ExtremImportance.cs" />
+    <Compile Include="Psychic\Importance\ObjectImportanceService.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
     <Compile Include="Psychic\PurposeGeneticSystem.cs" />

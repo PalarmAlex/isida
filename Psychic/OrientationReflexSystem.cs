@@ -1,5 +1,7 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Importance;
+using ISIDA.Psychic.Memory.Episodic;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +23,7 @@ namespace ISIDA.Psychic
     private readonly PurposeGeneticImageSystem _purposeGeneticImageSystem;
     private AutomatizmSystem _automatizmSystem;
     private AutomatizmTreeSystem _automatizmTreeSystem;
+    private EpisodicMemorySystem _episodicMemorySystem;
 
     #region Инициализация
 
@@ -70,6 +73,14 @@ namespace ISIDA.Psychic
     {
       _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
       _purposeGeneticImageSystem = purposeGeneticImageSystem ?? throw new ArgumentNullException(nameof(purposeGeneticImageSystem));
+    }
+
+    /// <summary>
+    /// Установить систему эпизодической памяти (для определения значимости объекта при обновлении информационной среды).
+    /// </summary>
+    public void SetEpisodicMemorySystem(EpisodicMemorySystem episodicMemorySystem)
+    {
+      _episodicMemorySystem = episodicMemorySystem;
     }
 
     /// <summary>
@@ -128,6 +139,8 @@ namespace ISIDA.Psychic
 
         Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+        if (_episodicMemorySystem != null)
+          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId);
         if (AppGlobalState.EvolutionStage < 3)
           atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
@@ -153,6 +166,8 @@ namespace ISIDA.Psychic
 
         Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+        if (_episodicMemorySystem != null)
+          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId);
         atmz = _purposeGeneticImageSystem.GetBasicAutomatizmByPurpose(automatizmID);
 
         return atmz;

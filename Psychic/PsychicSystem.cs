@@ -2,6 +2,7 @@ using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
@@ -222,8 +223,16 @@ namespace ISIDA.Psychic
             // Начало мышления
             WakeUpping(activetStyleIds);
 
-            // Первый запуск дерева автоматизмов
-            AutomatizmTreeActivation(1, 0, 0, 0, 0, 0, 0);
+            // Первый запуск дерева автоматизмов и активация Understanding
+            int wakeNodeId = AutomatizmTreeActivation(1, 0, 0, 0, 0, 0, 0);
+            if (UnderstandingTreeSystem.IsInitialized && wakeNodeId > 0 && ProblemTreeSystem.IsInitialized)
+            {
+              int baseId = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad ? -1
+                  : AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Well ? 1 : 0;
+              int emotionId = _emotionsImageSystem.CreateNewEmotionsImage(activetStyleIds ?? new List<int>(), true).Item1;
+              UnderstandingTreeSystem.Instance.ActivateSituation(
+                1, wakeNodeId, baseId, emotionId, ProblemTreeSystem.Instance);
+            }
             WakeUppingActivation = false;
           }
 
@@ -340,6 +349,16 @@ namespace ISIDA.Psychic
             toneMood,
             firstSimbol,
             verbIdForTree);
+
+        if (UnderstandingTreeSystem.IsInitialized && automatizmNodeId > 0 && ProblemTreeSystem.IsInitialized)
+        {
+          UnderstandingTreeSystem.Instance.ActivateSituation(
+            activationType,
+            automatizmNodeId,
+            currentBaseId,
+            currentEmotionId,
+            ProblemTreeSystem.Instance);
+        }
 
         if (automatizmNodeId > 0)
         {

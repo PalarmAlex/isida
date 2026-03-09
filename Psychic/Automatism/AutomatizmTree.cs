@@ -166,22 +166,15 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     private bool _notAllowScanInTreeThisTime = false;
 
-    /// <summary>
-    /// Ссылка на дерево проблем (вторичная инициализация)
-    /// </summary>
-    private ProblemTreeSystem _problemTree;
-
     #endregion
 
     #region Вторичная инициализация
 
     /// <summary>
-    /// Установить ссылку на дерево проблем (вызывать после инициализации ProblemTree)
+    /// Установить ссылку на дерево проблем. Оставлен для совместимости.
+    /// Дерево проблем обновляется через UnderstandingTreeSystem.ActivateSituation в PsychicSystem.
     /// </summary>
-    public void SetProblemTree(ProblemTreeSystem problemTree)
-    {
-      _problemTree = problemTree;
-    }
+    public void SetProblemTree(ProblemTreeSystem problemTree) { }
 
     #endregion
 
@@ -480,9 +473,7 @@ namespace ISIDA.Psychic.Automatism
           CurrentAutomatizmTreeEnd = condArr;
         }
 
-        if (AppGlobalState.EvolutionStage >= 4 && _problemTree != null)
-          _problemTree.UpdateActiveBranchFromAutomatizmTree(DetectedActiveLastNodeId);
-
+        // Обновление дерева проблем выполняет PsychicSystem через UnderstandingTreeSystem.ActivateSituation
         return DetectedActiveLastNodeId;
       }
       finally
