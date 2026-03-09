@@ -351,7 +351,14 @@ namespace ISIDA.Psychic
           }
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
-          var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId);
+          int preferredActionIdFromEpisodic = 0;
+          if (AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
+          {
+            var rule = _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
+            if (rule != null && rule.ActionId > 0)
+              preferredActionIdFromEpisodic = rule.ActionId;
+          }
+          var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId, preferredActionIdFromEpisodic);
 
           // При выполнении существующего автоматизма на стимул с пульта — включаем цикл зеркалирования: триггером для следующей пары должен быть узел ответа агента («как дела»), чтобы получилась пара «как дела — все ок».
           if (foundAutomatizm != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2)
@@ -512,9 +519,11 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить автоматизм из узла дерева
+    /// Получить автоматизм из узла дерева. При preferredActionId > 0 предпочитается автоматизм с данным ActionsImageID (из эпизодической памяти).
     /// </summary>
-    internal Automatizm GetAutomatizmFromNode(int nodeId)
+    /// <param name="nodeId">ID узла дерева автоматизмов</param>
+    /// <param name="preferredActionId">ID образа действий из эпизодического правила (0 — не учитывать)</param>
+    internal Automatizm GetAutomatizmFromNode(int nodeId, int preferredActionId = 0)
     {
       if (nodeId <= 0)
         return null;
@@ -529,9 +538,20 @@ namespace ISIDA.Psychic
       if (automatizms.Count == 0)
         return null;
 
+      var suitable = automatizms.Where(a => a.Usefulness >= 0).ToList();
+      if (suitable.Count == 0)
+        return null;
+
+      // При наличии предпочтительного действия из эпизодической памяти — ставим его выше в приоритете
+      if (preferredActionId > 0)
+      {
+        var preferred = suitable.FirstOrDefault(a => a.ActionsImageID == preferredActionId);
+        if (preferred != null)
+          return preferred;
+      }
+
       // Выбираем самый успешный автоматизм
-      return automatizms
-          .Where(a => a.Usefulness >= 0)
+      return suitable
           .OrderByDescending(a => a.Usefulness)
           .ThenByDescending(a => a.Count)
           .FirstOrDefault();

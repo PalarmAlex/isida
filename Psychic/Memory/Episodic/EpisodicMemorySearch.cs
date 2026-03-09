@@ -67,18 +67,19 @@ namespace ISIDA.Psychic.Memory.Episodic
       return new EpisodicMemoryTree().FindNodeById(root, id);
     }
 
-    /// <summary>Преобразовать ID узлов в EpisodicRule (kind: 0 — все, 1 — только позитивные, 2 — только негативные)</summary>
+    /// <summary>Преобразовать ID узлов в EpisodicRule (kind: 0 — все, 1 — только позитивные, 2 — только негативные). При system != null используется O(1) GetNodeById.</summary>
     private static List<EpisodicRule> NodesToRules(
         EpisodicMemoryNode root,
         IReadOnlyList<int> nodeIds,
         int kind,
-        EpisodicMemoryTree tree)
+        EpisodicMemoryTree tree,
+        EpisodicMemorySystem system = null)
     {
       var result = new List<EpisodicRule>();
       if (tree == null || root == null) return result;
       foreach (var nid in nodeIds ?? Array.Empty<int>())
       {
-        var node = tree.FindNodeById(root, nid);
+        var node = system != null ? system.GetNodeById(nid) : tree.FindNodeById(root, nid);
         if (node?.Params == null) continue;
         int effect = node.Params.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : node.Params.Effect;
         if (kind == 1 && effect < 0) continue;
@@ -152,7 +153,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       var nodeIds = GetEpisodeNodeIdsFromConditions(
           system.Tree, baseId, emotionId, nodePid, typeRule, level, triggerId, actionId);
       var tree = system.TreeLogic;
-      return NodesToRules(system.Tree, nodeIds, 0, tree);
+      return NodesToRules(system.Tree, nodeIds, 0, tree, system);
     }
 
     private static Dictionary<int, EpisodicMemoryNode> GetNodesById(EpisodicMemoryNode root)
@@ -192,7 +193,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         if (entries[i].NodeId == -1) continue;
         if (!startNodeIds.Contains(entries[i].NodeId)) continue;
 
-        var chain = BuildChainFromHistory(entries, i, limit, tree, root, typeRule);
+        var chain = BuildChainFromHistory(entries, i, limit, tree, root, typeRule, system);
 
         if (chain == null || chain.Count == 0) continue;
 
@@ -223,14 +224,15 @@ namespace ISIDA.Psychic.Memory.Episodic
         int limit,
         EpisodicMemoryTree tree,
         EpisodicMemoryNode root,
-        int typeRule)
+        int typeRule,
+        EpisodicMemorySystem system = null)
     {
       var chain = new List<EpisodicRule>();
       if (tree == null || root == null) return chain;
       for (int n = startIdx; n < entries.Count && (n - startIdx) < limit; n++)
       {
         if (entries[n].NodeId == -1) break;
-        var node = tree.FindNodeById(root, entries[n].NodeId);
+        var node = system != null ? system.GetNodeById(entries[n].NodeId) : tree.FindNodeById(root, entries[n].NodeId);
         if (node?.Params == null) continue;
         if (!MatchTypeRule(node, typeRule)) continue;
         chain.Add(new EpisodicRule
@@ -265,7 +267,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       var chain = GetPositiveChainsFromHistory(system, nodeIds, 1, limit);
 
       if (chain != null && chain.Count > 0) return chain;
-      var rules = NodesToRules(system.Tree, nodeIds, 1, system.TreeLogic);
+      var rules = NodesToRules(system.Tree, nodeIds, 1, system.TreeLogic, system);
 
       return rules.Count > 0 ? new List<EpisodicRule> { EpisodicMemoryRules.FindBestRule(rules).Rule } : null;
     }

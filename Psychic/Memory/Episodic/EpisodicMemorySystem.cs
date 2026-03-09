@@ -271,6 +271,31 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     #endregion
 
+    #region Доступ по ID (O(1) через словарь)
+
+    /// <summary>
+    /// Получить узел дерева по ID. Использует словарь для быстрого доступа.
+    /// </summary>
+    /// <param name="id">ID узла эпизода</param>
+    /// <returns>Узел или null</returns>
+    public EpisodicMemoryNode GetNodeById(int id)
+    {
+      if (id < 0) return null;
+      _lock.EnterReadLock();
+      try
+      {
+        if (_nodesById.TryGetValue(id, out var node))
+          return node;
+        return _treeLogic.FindNodeById(Tree, id);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    #endregion
+
     #region Доступ к правилам (для EpisodicMemoryRulesService)
 
     internal EpisodicMemoryTree TreeLogic => _treeLogic;
