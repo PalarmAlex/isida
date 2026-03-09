@@ -113,12 +113,12 @@ namespace ISIDA.Psychic.Memory.Episodic
       return 0;
     }
 
-    /// <summary>ID эмоции из информационной среды</summary>
+    /// <summary>ID образа эмоции из информационной среды (для дерева эпизодов)</summary>
     private int GetEmotionId()
     {
       try
       {
-        return _infoEnv?.CurrentInformationEnvironment?.PsyMood ?? 0;
+        return _infoEnv?.CurrentInformationEnvironment?.PsyEmotionId ?? 0;
       }
       catch { return 0; }
     }

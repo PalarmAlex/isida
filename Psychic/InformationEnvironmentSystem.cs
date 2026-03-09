@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -293,13 +293,14 @@ namespace ISIDA.Psychic
       CurrentInformationEnvironment.LifeTime = LifeTime;
       CurrentInformationEnvironment.IsSleep = IsSleeping;
       CurrentInformationEnvironment.PsyEmotionId = currentEmotionId;
+      CurrentInformationEnvironment.PsyMood = currentEmotionId;
       CurrentInformationEnvironment.ActionsImageID = actionsImageId;
 
+      PsyMood = currentEmotionId;
 
       // CurrentInformationEnvironment.VeryActualSituation, CurrentInformationEnvironment.CurTargetArrID = gomeostas.FindTargetGomeostazID();
       // CurrentInformationEnvironment.Danger = GetAttentionDanger();
       // CurrentInformationEnvironment.Mood = GetCurMood();
-      // CurrentInformationEnvironment.PsyMood = PsyMood;
 
       WriteInformationEnvironmentMarker();
     }
