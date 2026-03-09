@@ -198,6 +198,10 @@ namespace ISIDA.Psychic
         PulseCount = pulseCount;
         LifeTime = AppGlobalState.Lifetime;
 
+        // При первом запуске (на 2-м пульсе) вставить пустой кадр — разрыв цепочки с предыдущей сессией
+        if (pulseCount == 2 && AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
+          _episodicMemorySystem.SetInterruption();
+
         if (sleepingType > 0)
         {
           IsSleeping = true;

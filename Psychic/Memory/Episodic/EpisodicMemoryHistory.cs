@@ -27,13 +27,22 @@ namespace ISIDA.Psychic.Memory.Episodic
       _entries.Add(new EpisodicHistoryEntry { NodeId = -1, LifeTime = lifeTime });
     }
 
-    /// <summary>Последние limit записей</summary>
+    /// <summary>Последние limit записей (только NodeId)</summary>
     public List<int> GetLastSequence(int limit)
     {
       var len = _entries.Count;
       if (len == 0) return new List<int>();
       if (len < limit) limit = len;
       return _entries.Skip(len - limit).Select(e => e.NodeId).ToList();
+    }
+
+    /// <summary>Последние limit записей истории (от старых к новым)</summary>
+    public List<EpisodicHistoryEntry> GetLastEntries(int limit)
+    {
+      var len = _entries.Count;
+      if (len == 0) return new List<EpisodicHistoryEntry>();
+      if (len < limit) limit = len;
+      return _entries.Skip(len - limit).ToList();
     }
 
     /// <summary>Очистить историю</summary>

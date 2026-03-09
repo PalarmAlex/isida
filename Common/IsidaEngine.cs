@@ -372,11 +372,13 @@ namespace ISIDA.Common
     /// Отменить период ожидания оценки и сбросить состояние зеркального диалога (цепочки эхо/сдвиг).
     /// Вызывать при клике по плашке сброса времени ожидания, чтобы при следующем прогоне не использовались
     /// устаревшие _dialogMirrorActive/_dialogTriggerNodeId и не перезаписывался Belief штатного сдвига эхо-автоматизмом.
+    /// Вставляет пустой кадр в историю эпизодической памяти (разрыв цепочки правил реагирования).
     /// </summary>
     public void CancelWaitingPeriodAndResetMirror()
     {
       AppGlobalState.ForceStopWaitingForOperatorEvaluation();
       MirrorAutomatizmService?.ResetDialogMirror();
+      EpisodicMemory?.SetInterruption();
     }
 
     /// <summary>

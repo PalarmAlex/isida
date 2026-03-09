@@ -74,6 +74,28 @@ namespace ISIDA.Psychic.Memory.Episodic
       return lev;
     }
 
+    /// <summary>Найти среди детей родителя узел с заданным ключом уровня (как в BOT: один узел на уровень — без дубликатов «Эмоция», «NodePID»).</summary>
+    private static EpisodicMemoryNode FindChildByLevelKey(EpisodicMemoryNode parent, int level, int[] condArr)
+    {
+      if (parent?.Children == null || level < 0 || level >= condArr.Length) return null;
+      int key = level < condArr.Length ? condArr[level] : 0;
+      foreach (var c in parent.Children)
+      {
+        int nodeKey;
+        switch (level)
+        {
+          case 0: nodeKey = c.BaseID; break;
+          case 1: nodeKey = c.EmotionID; break;
+          case 2: nodeKey = c.NodePID; break;
+          case 3: nodeKey = c.TriggerId; break;
+          case 4: nodeKey = c.ActionId; break;
+          default: nodeKey = 0; break;
+        }
+        if (nodeKey == key) return c;
+      }
+      return null;
+    }
+
     /// <summary>Добавить/дорастить ветку</summary>
     public int AddBranch(
         EpisodicMemoryNode fromNode,
@@ -92,7 +114,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           fromNode, vArr[0], vArr[1], vArr[2], vArr[3], vArr[4]);
 
       // Использовать найденный узел только если он совпадает с условием текущего уровня (vArr).
-      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда создаём нового ребёнка у fromNode.
+      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда ищем по ключу уровня (как в BOT: один узел на уровень).
       bool nodeMatchesLevel = nodeOld != null &&
           nodeOld.BaseID == vArr[0] && nodeOld.EmotionID == vArr[1] && nodeOld.NodePID == vArr[2] &&
           nodeOld.TriggerId == vArr[3] && nodeOld.ActionId == vArr[4];
@@ -106,24 +128,33 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
       else
       {
-        EpisodicParams pars = level == 4 ? newParams : null;
-        if (pars != null && pars.Effect != 100)
-          pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
-
-        _lastNodeId++;
-        node = new EpisodicMemoryNode
+        // Перед созданием нового узла проверить: нет ли уже дочернего с тем же ключом уровня (избегаем дубликатов «Эмоция», «NodePID»).
+        node = FindChildByLevelKey(fromNode, level, condArr);
+        if (node == null)
         {
-          ID = _lastNodeId,
-          ParentID = fromNode.ID,
-          ParentNode = fromNode,
-          BaseID = vArr[0],
-          EmotionID = vArr[1],
-          NodePID = vArr[2],
-          TriggerId = vArr[3],
-          ActionId = vArr[4],
-          Params = pars
-        };
-        fromNode.Children.Add(node);
+          EpisodicParams pars = level == 4 ? newParams : null;
+          if (pars != null && pars.Effect != 100)
+            pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
+
+          _lastNodeId++;
+          node = new EpisodicMemoryNode
+          {
+            ID = _lastNodeId,
+            ParentID = fromNode.ID,
+            ParentNode = fromNode,
+            BaseID = vArr[0],
+            EmotionID = vArr[1],
+            NodePID = vArr[2],
+            TriggerId = vArr[3],
+            ActionId = vArr[4],
+            Params = pars
+          };
+          fromNode.Children.Add(node);
+        }
+        else if (level == 4 && newParams != null)
+        {
+          AverageEffect(node, newParams.Effect, newParams.StimulsEffect);
+        }
       }
 
       level++;
