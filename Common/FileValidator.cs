@@ -131,7 +131,7 @@ namespace ISIDA.Common
       public const string ProblemTreeFields2 = "# AutTreeID: ID узла дерева автоматизмов";
 
       // Эпизодическая память
-      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect";
+      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect (в каждой строке 10 полей; порядок: обход в глубину, родитель перед детьми)";
       public const string EpisodicTreeId = "# ID: уникальный идентификатор узла";
       public const string EpisodicTreeParentId = "# ParentID: ID родительского узла (0 для корня)";
       public const string EpisodicTreeBaseId = "# BaseID: Базовое состояние. -1: Плохо 0: Норма 1: Хорошо";

@@ -194,13 +194,21 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
     }
 
+    /// <summary>Сбор строк в порядке обхода в глубину (родитель перед детьми), как у дерева автоматизмов — при загрузке родитель уже в словаре.</summary>
     private static void CollectTreeLines(EpisodicMemoryNode n, List<string> lines)
     {
       foreach (var c in n.Children)
       {
         var line = $"{c.ID}|{c.ParentID}|{c.BaseID}|{c.EmotionID}|{c.NodePID}|{c.TriggerId}|{c.ActionId}";
+        // Всегда одна структура строки: 7 полей + # + Effect|Count|StimulsEffect (у промежуточных узлов 0|0|0)
+        int eff = 0, count = 0, stimEff = 0;
         if (c.Params != null && c.ActionId > 0)
-          line += $"#{c.Params.Effect}|{c.Params.Count}|{c.Params.StimulsEffect}";
+        {
+          eff = c.Params.Effect;
+          count = c.Params.Count;
+          stimEff = c.Params.StimulsEffect;
+        }
+        line += $"#{eff}|{count}|{stimEff}";
         lines.Add(line);
         CollectTreeLines(c, lines);
       }

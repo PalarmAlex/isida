@@ -50,7 +50,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
     }
 
-    /// <summary>Найти узел по частичным условиям (level 0-2)</summary>
+    /// <summary>Найти узел по частичным условиям (level 0-2). Поиск по 3 уровням: BaseID, EmotionID, NodePID. Trigger/Action — в фильтрации потомков.</summary>
     private static EpisodicMemoryNode FindNodeByPartialConditions(
         EpisodicMemoryNode root,
         int baseId,
@@ -59,9 +59,9 @@ namespace ISIDA.Psychic.Memory.Episodic
         int level)
     {
       if (root == null) return null;
-      int[] cond = level == 0 ? new[] { baseId, emotionId, nodePid, 0, 0 } :
-                   level == 1 ? new[] { baseId, emotionId, 0, 0, 0 } :
-                   new[] { baseId, 0, 0, 0, 0 };
+      int[] cond = level == 0 ? new[] { baseId, emotionId, nodePid } :
+                   level == 1 ? new[] { baseId, emotionId } :
+                   new[] { baseId };
       var (id, lev) = new EpisodicMemoryTree().FindBranch(0, cond, root);
       if (id <= 0) return null;
       return new EpisodicMemoryTree().FindNodeById(root, id);

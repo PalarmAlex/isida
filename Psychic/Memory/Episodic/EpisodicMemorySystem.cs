@@ -174,7 +174,9 @@ namespace ISIDA.Psychic.Memory.Episodic
         var condArr = new[] { baseId, emotionId, nodePid, triggerId, actionId };
         var (idOld, nodeOld) = _treeLogic.CheckBranchFromCondition(Tree, baseId, emotionId, nodePid, triggerId, actionId);
 
-        if (idOld > 0 && nodeOld != null)
+        // Обновлять существующий узел (AverageEffect) и выходить — только если нашли именно листовой узел с тем же Trigger+Action.
+        // Иначе CheckBranchFromCondition мог вернуть родительский узел (при частичном совпадении по GetTrueLevel), и мы бы никогда не доращивали ветку.
+        if (idOld > 0 && nodeOld != null && nodeOld.TriggerId == triggerId && nodeOld.ActionId == actionId)
         {
           History.Append(idOld, AppGlobalState.Lifetime);
           _treeLogic.AverageEffect(nodeOld, effect, stimulsEffect);

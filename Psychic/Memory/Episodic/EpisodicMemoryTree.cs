@@ -6,7 +6,8 @@ using System.Linq;
 namespace ISIDA.Psychic.Memory.Episodic
 {
   /// <summary>
-  /// Логика дерева эпизодической памяти: поиск, доращивание веток, усреднение
+  /// Логика дерева эпизодической памяти: поиск, доращивание веток, усреднение.
+  /// Правило проекта: Состояние (BaseID), Тон, Настроение (EmotionID) имеют рабочий код 0 — не считать 0 отсутствием параметра (см. .cursor/rules/isida-tree-zero-valid-params.mdc).
   /// </summary>
   public class EpisodicMemoryTree
   {
@@ -61,6 +62,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       return true;
     }
 
+    /// <summary>Индекс первого нуля в cond (для CheckBranchFromCondition). Учитывать: BaseID=0 и EmotionID=0 — рабочие коды (Норма/нейтральная эмоция), не «параметр отсутствует».</summary>
     private static int GetTrueLevel(int[] cond)
     {
       int lev = 0;
@@ -89,8 +91,14 @@ namespace ISIDA.Psychic.Memory.Episodic
       var (idOld, nodeOld) = CheckBranchFromCondition(
           fromNode, vArr[0], vArr[1], vArr[2], vArr[3], vArr[4]);
 
+      // Использовать найденный узел только если он совпадает с условием текущего уровня (vArr).
+      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда создаём нового ребёнка у fromNode.
+      bool nodeMatchesLevel = nodeOld != null &&
+          nodeOld.BaseID == vArr[0] && nodeOld.EmotionID == vArr[1] && nodeOld.NodePID == vArr[2] &&
+          nodeOld.TriggerId == vArr[3] && nodeOld.ActionId == vArr[4];
+
       EpisodicMemoryNode node;
-      if (idOld > 0 && nodeOld != null)
+      if (idOld > 0 && nodeOld != null && nodeMatchesLevel)
       {
         node = nodeOld;
         if (level == 4 && newParams != null)

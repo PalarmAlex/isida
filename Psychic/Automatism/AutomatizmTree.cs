@@ -20,7 +20,7 @@ namespace ISIDA.Psychic.Automatism
     public int ID { get; set; }
 
     /// <summary>
-    /// Базовое состояние: -1 - Плохо, 0 - Норма, 1 - Хорошо
+    /// Базовое состояние: -1 - Плохо, 0 - Норма, 1 - Хорошо. Ноль — рабочий код, не «отсутствует».
     /// </summary>
     public int BaseID { get; set; }
 
@@ -35,7 +35,7 @@ namespace ISIDA.Psychic.Automatism
     public int ActivityID { get; set; }
 
     /// <summary>
-    /// ID образа контекста сообщения: сочетание Tone и Mood
+    /// ID образа контекста сообщения: сочетание Tone и Mood. Ноль — допустимый рабочий код (тон/настроение по умолчанию).
     /// </summary>
     public int ToneMoodID { get; set; }
 
@@ -66,7 +66,7 @@ namespace ISIDA.Psychic.Automatism
   }
 
   /// <summary>
-  /// Система дерева автоматизмов
+  /// Система дерева автоматизмов. При обходе и построении веток: Состояние (BaseID), Тон/Настроение (ToneMoodID) имеют рабочий код 0 — не трактовать 0 как отсутствие параметра (см. .cursor/rules/isida-tree-zero-valid-params.mdc).
   /// </summary>
   public sealed class AutomatizmTreeSystem : IDisposable
   {
