@@ -5,7 +5,6 @@ namespace ISIDA.Psychic.Understanding
   /// Используется при активации дерева Understanding.
   /// </summary>
   /// <remarks>
-  /// TODO ⚠️ BOT-INTEGRATION: Расширить логику по BOT understanding_situation_image.go.
   /// Сейчас: минимальная реализация (тип 4 — Experiment). Полная: Usefulness, LastRunAutomatizmPulsCount,
   /// WaitingPeriodForActionsVal, curActiveActions (mood, кнопки). 11–17 — настроение; 21–37 — кнопки.
   /// </remarks>

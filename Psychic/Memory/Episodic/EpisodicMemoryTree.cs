@@ -74,7 +74,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       return lev;
     }
 
-    /// <summary>Найти среди детей родителя узел с заданным ключом уровня (как в BOT: один узел на уровень — без дубликатов «Эмоция», «NodePID»).</summary>
+    /// <summary>Найти среди детей родителя узел с заданным ключом уровня.</summary>
     private static EpisodicMemoryNode FindChildByLevelKey(EpisodicMemoryNode parent, int level, int[] condArr)
     {
       if (parent?.Children == null || level < 0 || level >= condArr.Length) return null;
@@ -114,7 +114,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           fromNode, vArr[0], vArr[1], vArr[2], vArr[3], vArr[4]);
 
       // Использовать найденный узел только если он совпадает с условием текущего уровня (vArr).
-      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда ищем по ключу уровня (как в BOT: один узел на уровень).
+      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда ищем по ключу уровня.
       bool nodeMatchesLevel = nodeOld != null &&
           nodeOld.BaseID == vArr[0] && nodeOld.EmotionID == vArr[1] && nodeOld.NodePID == vArr[2] &&
           nodeOld.TriggerId == vArr[3] && nodeOld.ActionId == vArr[4];

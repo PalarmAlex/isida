@@ -94,7 +94,8 @@ namespace ISIDA.Psychic.Understanding
     {
       var path = Path.Combine(_dataPath, FileName);
       _byId.Clear();
-      if (!File.Exists(path)) return;
+      if (!File.Exists(path) || !FileValidator.IsValidSituationTypeFile(path))
+        return;
 
       foreach (var line in File.ReadLines(path))
       {
@@ -118,13 +119,20 @@ namespace ISIDA.Psychic.Understanding
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>
         {
-          "# Id|Name|Code",
-          "# Справочник типов ситуаций. Редактируется на пульте."
+          FileValidator.FileHeaders.SituationTypesFormat,
+          FileValidator.FileHeaders.SituationTypesDesc
         };
         foreach (var r in _byId.Values.OrderBy(x => x.Id))
           lines.Add($"{r.Id}|{r.Name ?? ""}|{r.Code ?? ""}");
-        File.WriteAllLines(path, lines);
-        return (true, null);
+
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            p => FileValidator.IsValidSituationTypeFile(p),
+            minLinesCount: 2,
+            fileDescription: "справочника типов ситуаций");
+
+        return result.Success ? (true, null) : (false, result.ErrorMessage);
       }
       catch (Exception ex)
       {

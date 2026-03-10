@@ -85,7 +85,6 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>ID текущей ситуации для активации Understanding (упрощённая логика).</summary>
     /// <remarks>
     /// Минимальная реализация: при automatizmNodeId > 0 возвращает образ с типом 4 (Experiment).
-    /// TODO BOT-INTEGRATION: полная логика getCurSituationImageID — Usefulness, LastRunAutomatizmPulsCount,
     /// WaitingPeriodForActionsVal, curActiveActions (mood, кнопки).
     /// </remarks>
     public int GetCurSituationImageId(int automatizmTreeNodeId)
@@ -121,7 +120,8 @@ namespace ISIDA.Psychic.Understanding
       _byId.Clear();
       _unicumKeyToId.Clear();
       _lastId = 0;
-      if (!File.Exists(path)) return;
+      if (!File.Exists(path) || !FileValidator.IsValidSituationImageFile(path))
+        return;
 
       foreach (var line in File.ReadLines(path))
       {
@@ -154,13 +154,20 @@ namespace ISIDA.Psychic.Understanding
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>
         {
-          "# Id|AutomatizmTreeNodeId|SituationTypeId",
-          "# Образы ситуаций"
+          FileValidator.FileHeaders.SituationImagesFormat,
+          FileValidator.FileHeaders.SituationImagesDesc
         };
         foreach (var r in _byId.Values.OrderBy(x => x.Id))
           lines.Add($"{r.Id}|{r.AutomatizmTreeNodeId}|{r.SituationTypeId}");
-        File.WriteAllLines(path, lines);
-        return (true, null);
+
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            p => FileValidator.IsValidSituationImageFile(p),
+            minLinesCount: 2,
+            fileDescription: "образов ситуаций");
+
+        return result.Success ? (true, null) : (false, result.ErrorMessage);
       }
       catch (Exception ex)
       {

@@ -8,7 +8,6 @@ namespace ISIDA.Psychic.Importance
 {
   /// <summary>
   /// Сервис определения значимости объектов восприятия по эпизодической памяти.
-  /// Перенос логики из BOT: importance.go, importance_funcs.go.
   /// Значимость формируется в эпиз. памяти (StimulsEffect), определяется в контексте условий (BaseID, EmotionID, NodePID).
   /// </summary>
   public static class ObjectImportanceService
@@ -118,7 +117,7 @@ namespace ISIDA.Psychic.Importance
 
     /// <summary>
     /// Определить текущий объект максимальной значимости для стимула (curActiveActions) и записать в информационную среду.
-    /// Вызывать при каждом новом стимуле (после установки ActionsImageID). По аналогии с getExtremImportanceObject() в BOT.
+    /// Вызывать при каждом новом стимуле (после установки ActionsImageID).
     /// </summary>
     public static void UpdateExtremImportanceObject(
       EpisodicMemorySystem episodic,
@@ -148,10 +147,10 @@ namespace ISIDA.Psychic.Importance
       if (obj != null && Math.Abs(obj.ExtremVal) > MinSignificantImportance)
       {
         infoEnv.CurrentInformationEnvironment.ExtremImportanceObjectID = obj.ObjId;
-        // При высокой значимости можно вызывать смену темы и т.п. (runNewTheme в BOT) — при необходимости расширить.
+        // При высокой значимости можно вызывать смену темы и т.п. — при необходимости расширить.
         if (Math.Abs(obj.ExtremVal) > HighImportanceThreshold && obj.ExtremVal < -HighImportanceThreshold)
         {
-          // Проблемный объект с отрицательным эффектом — можно сохранить для последующей обработки (problemExtremImportanceObject в BOT).
+          // Проблемный объект с отрицательным эффектом — можно сохранить для последующей обработки 
         }
       }
       else
@@ -160,7 +159,6 @@ namespace ISIDA.Psychic.Importance
 
     /// <summary>
     /// Знаком ли образ actID для данных условий (есть ли запись в эпизодической памяти). Новизна.
-    /// По аналогии с isUnknownActionsImage в BOT.
     /// </summary>
     public static bool IsUnknownActionsImage(
       EpisodicMemorySystem episodic,
@@ -175,7 +173,7 @@ namespace ISIDA.Psychic.Importance
     }
 
     /// <summary>
-    /// Собрать правила с ненулевой значимостью по текущим условиям и выбрать лучшее по Importence*Count (как getBestRuleFromImpotrents / choseBestRuleFromImpotrents в BOT).
+    /// Собрать правила с ненулевой значимостью по текущим условиям и выбрать лучшее по Importence*Count
     /// Условия: BaseID, EmotionID, NodePID (в isida нет отдельного Understanding, используем Problem).
     /// </summary>
     public static EpisodicRule GetBestRuleFromImportants(
@@ -247,7 +245,6 @@ namespace ISIDA.Psychic.Importance
 
     /// <summary>
     /// Найти действие в учительских правилах с наивысшей значимостью в данных условиях (StimulsEffect*Count).
-    /// По аналогии с findBestPositiveAction в BOT.
     /// </summary>
     public static int FindBestPositiveAction(
       EpisodicMemorySystem episodic,

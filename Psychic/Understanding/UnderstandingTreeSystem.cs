@@ -219,7 +219,8 @@ namespace ISIDA.Psychic.Understanding
       _nodesById.Clear();
       _nodesById[0] = Tree;
       _lastNodeId = 0;
-      if (!File.Exists(path)) return;
+      if (!File.Exists(path) || !FileValidator.IsValidUnderstandingTreeFile(path))
+        return;
 
       var lines = File.ReadAllLines(path).ToList();
       int lineNum = 0;
@@ -265,13 +266,20 @@ namespace ISIDA.Psychic.Understanding
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>
         {
-          "# ID|ParentID|Mood|EmotionID|SituationID",
-          "# Дерево понимания ситуации"
+          FileValidator.FileHeaders.UnderstandingTreeFormat,
+          FileValidator.FileHeaders.UnderstandingTreeDesc
         };
         foreach (var node in Tree.Children)
           CollectLines(node, lines);
-        File.WriteAllLines(path, lines);
-        return (true, null);
+
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            p => FileValidator.IsValidUnderstandingTreeFile(p),
+            minLinesCount: 2,
+            fileDescription: "дерева понимания ситуации");
+
+        return result.Success ? (true, null) : (false, result.ErrorMessage);
       }
       catch (Exception ex)
       {

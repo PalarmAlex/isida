@@ -130,6 +130,18 @@ namespace ISIDA.Common
       public const string ProblemTreeFields1 = "# ID: уникальный идентификатор узла дерева проблем";
       public const string ProblemTreeFields2 = "# AutTreeID: ID узла дерева автоматизмов";
 
+      // Дерево понимания ситуации
+      public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
+      public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
+
+      // Справочник типов ситуаций
+      public const string SituationTypesFormat = "# Id|Name|Code";
+      public const string SituationTypesDesc = "# Справочник типов ситуаций. Редактируется на пульте.";
+
+      // Образы ситуаций
+      public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";
+      public const string SituationImagesDesc = "# Образы ситуаций";
+
       // Эпизодическая память
       public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect (в каждой строке 10 полей; порядок: обход в глубину, родитель перед детьми)";
       public const string EpisodicTreeId = "# ID: уникальный идентификатор узла";
@@ -1328,6 +1340,123 @@ namespace ISIDA.Common
         if (p.Length < 2) continue; // пропускаем части без формата id,time (напр. "..." в шапке)
         if (!int.TryParse(p[0], out _)) continue; // шапка или нечисловое — пропустить
         if (!int.TryParse(p[1], out _)) return false; // число,xxx но xxx не число — ошибка
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidUnderstandingTreeFile
+
+    /// <summary>Проверяет валидность файла дерева понимания ситуации по пути</summary>
+    public static bool IsValidUnderstandingTreeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidUnderstandingTreeFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла дерева понимания ситуации</summary>
+    public static bool IsValidUnderstandingTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 5) return false;
+        if (!int.TryParse(p[0], out int id) || id < 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidSituationTypeFile
+
+    /// <summary>Проверяет валидность файла справочника типов ситуаций по пути</summary>
+    public static bool IsValidSituationTypeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidSituationTypeFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла справочника типов ситуаций</summary>
+    public static bool IsValidSituationTypeFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 2) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidSituationImageFile
+
+    /// <summary>Проверяет валидность файла образов ситуаций по пути</summary>
+    public static bool IsValidSituationImageFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidSituationImageFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла образов ситуаций</summary>
+    public static bool IsValidSituationImageFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 3) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        if (!int.TryParse(p[2], out _)) return false;
+        return true;
       }
       return true;
     }

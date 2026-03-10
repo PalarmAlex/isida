@@ -2,7 +2,6 @@ namespace ISIDA.Psychic.Importance
 {
   /// <summary>
   /// Объект с экстремальной значимостью — для выделения самого значимого объекта восприятия.
-  /// По аналогии с BOT: extremImportance { objID, extremVal }.
   /// Значимости в коде обычно имеют значения от -10 до 10.
   /// </summary>
   public sealed class ExtremImportance
