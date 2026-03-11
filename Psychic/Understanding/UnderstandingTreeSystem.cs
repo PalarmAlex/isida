@@ -64,6 +64,14 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Данные для активации дерева проблем (autTreeID, situationTreeID)</summary>
     public (int AutTreeId, int SituationTreeId) ProblemTreeInfo { get; private set; }
 
+    private SituationImageSystem _situationImageSystem;
+
+    /// <summary>Установить систему образов ситуаций (вызывается при инициализации движка после создания обеих систем)</summary>
+    public void SetSituationImageSystem(SituationImageSystem situationImageSystem)
+    {
+      _situationImageSystem = situationImageSystem;
+    }
+
     #endregion
 
     #region Активация
@@ -76,20 +84,24 @@ namespace ISIDA.Psychic.Understanding
     /// <param name="baseId">Базовое состояние (-1/0/1)</param>
     /// <param name="emotionId">ID образа эмоций</param>
     /// <param name="problemTree">Дерево проблем для обновления</param>
+    /// <param name="situationContext">Контекст для выбора типа ситуации (наличие автоматизма в ветке, настроение/кнопки с пульта) или null</param>
     public void ActivateSituation(
       int activationType,
       int automatizmTreeNodeId,
       int baseId,
       int emotionId,
-      ProblemTreeSystem problemTree)
+      ProblemTreeSystem problemTree,
+      SituationImageContext situationContext = null)
     {
       if (AppGlobalState.EvolutionStage < 4) return;
       if (AppGlobalState.Lifetime < 4) return;
 
-      int situationImageId = SituationImageService.GetCurSituationImageId(automatizmTreeNodeId);
-      if (situationImageId == 0 && automatizmTreeNodeId > 0)
+      int situationImageId = _situationImageSystem != null
+          ? SituationImageService.GetCurSituationImageId(_situationImageSystem, automatizmTreeNodeId, situationContext)
+          : 0;
+      if (situationImageId == 0 && automatizmTreeNodeId > 0 && _situationImageSystem != null)
       {
-        situationImageId = SituationImageService.GetCurSituationImageId(0);
+        situationImageId = SituationImageService.GetCurSituationImageId(_situationImageSystem, 0, situationContext);
       }
       if (situationImageId == 0)
       {

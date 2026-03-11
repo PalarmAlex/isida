@@ -36,6 +36,8 @@ namespace ISIDA.Psychic
     private AutomatismExecutionService _automatismExecutionService;
     private PerceptionImagesSystem _perceptionImagesSystem;
     private EpisodicMemorySystem _episodicMemorySystem;
+    private UnderstandingTreeSystem _understandingTreeSystem;
+    private ProblemTreeSystem _problemTreeSystem;
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
 
     #region Инициализация
@@ -104,18 +106,22 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память)
+    /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память, дерево понимания)
     /// </summary>
     public void SetPsychicSystemDop(
       AutomatismExecutionService executionService,
       OrientationReflexSystem orientationReflexSystem,
       PerceptionImagesSystem perceptionImagesSystem,
-      EpisodicMemorySystem episodicMemorySystem = null)
+      EpisodicMemorySystem episodicMemorySystem = null,
+      UnderstandingTreeSystem understandingTreeSystem = null,
+      ProblemTreeSystem problemTreeSystem = null)
     {
       _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
       _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
       _episodicMemorySystem = episodicMemorySystem;
+      _understandingTreeSystem = understandingTreeSystem;
+      _problemTreeSystem = problemTreeSystem;
     }
 
     /// <summary>
@@ -225,13 +231,17 @@ namespace ISIDA.Psychic
 
             // Первый запуск дерева автоматизмов и активация Understanding
             int wakeNodeId = AutomatizmTreeActivation(1, 0, 0, 0, 0, 0, 0);
-            if (UnderstandingTreeSystem.IsInitialized && wakeNodeId > 0 && ProblemTreeSystem.IsInitialized)
+            if (_understandingTreeSystem != null && _problemTreeSystem != null && wakeNodeId > 0)
             {
               int baseId = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad ? -1
                   : AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Well ? 1 : 0;
               int emotionId = _emotionsImageSystem.CreateNewEmotionsImage(activetStyleIds ?? new List<int>(), true).Item1;
-              UnderstandingTreeSystem.Instance.ActivateSituation(
-                1, wakeNodeId, baseId, emotionId, ProblemTreeSystem.Instance);
+              var wakeCtx = new SituationImageContext
+              {
+                HasAutomatismInBranch = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(wakeNodeId).Count > 0
+              };
+              _understandingTreeSystem.ActivateSituation(
+                1, wakeNodeId, baseId, emotionId, _problemTreeSystem, wakeCtx);
             }
             WakeUppingActivation = false;
           }
@@ -350,14 +360,21 @@ namespace ISIDA.Psychic
             firstSimbol,
             verbIdForTree);
 
-        if (UnderstandingTreeSystem.IsInitialized && automatizmNodeId > 0 && ProblemTreeSystem.IsInitialized)
+        if (_understandingTreeSystem != null && _problemTreeSystem != null && automatizmNodeId > 0)
         {
-          UnderstandingTreeSystem.Instance.ActivateSituation(
+          var situationCtx = new SituationImageContext
+          {
+            HasAutomatismInBranch = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId).Count > 0,
+            MoodId = toneMood,
+            ActionIds = actionIdList?.ToArray()
+          };
+          _understandingTreeSystem.ActivateSituation(
             activationType,
             automatizmNodeId,
             currentBaseId,
             currentEmotionId,
-            ProblemTreeSystem.Instance);
+            _problemTreeSystem,
+            situationCtx);
         }
 
         if (automatizmNodeId > 0)

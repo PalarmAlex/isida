@@ -750,7 +750,7 @@ namespace ISIDA.Common
         initializationStep = 20;
         Psychic.Understanding.SituationTypeSystem.InitializeInstance(config.PsychicDataFolder);
         context.SituationTypeSystem = Psychic.Understanding.SituationTypeSystem.Instance;
-        Psychic.Understanding.SituationImageSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.SituationImageSystem.InitializeInstance(config.PsychicDataFolder, context.SituationTypeSystem);
         context.SituationImageSystem = Psychic.Understanding.SituationImageSystem.Instance;
 
         // Шаг 20: Дерево проблем (для эпизодической памяти)
@@ -763,6 +763,7 @@ namespace ISIDA.Common
         initializationStep = 22;
         Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.UnderstandingTreeSystem = Psychic.Understanding.UnderstandingTreeSystem.Instance;
+        context.UnderstandingTreeSystem.SetSituationImageSystem(context.SituationImageSystem);
 
         // Шаг 23: Система автоматизмов
         initializationStep = 23;
@@ -854,10 +855,12 @@ namespace ISIDA.Common
         context.AutomatismExecution = AutomatismExecutionService.Instance;
 
         context.PsychicSystem.SetPsychicSystemDop(
-          context.AutomatismExecution, 
+          context.AutomatismExecution,
           context.OrientationReflex,
           context.PerceptionImages,
-          context.EpisodicMemory);
+          context.EpisodicMemory,
+          context.UnderstandingTreeSystem,
+          context.ProblemTree);
         if (context.EpisodicMemory != null)
           context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
