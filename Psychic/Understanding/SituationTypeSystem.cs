@@ -7,13 +7,20 @@ using System.Linq;
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Справочник типов ситуаций (редактируется на пульте).
-  /// Id неизменяем после использования в SituationImage.
+  /// Справочник типов ситуаций: связь ID с MoodId (настроение) и InfluenceId (воздействие).
+  /// Обязательные значения 1–5 нельзя удалять. Редактируется на пульте.
   /// </summary>
   public sealed class SituationTypeSystem : IDisposable
   {
+    /// <summary>ID обязательных записей по умолчанию (нельзя удалять)</summary>
+    public static readonly int[] DefaultRequiredIds = { 1, 2, 3, 4, 5 };
+
     private readonly string _dataPath;
     private readonly Dictionary<int, SituationTypeRecord> _byId = new Dictionary<int, SituationTypeRecord>();
+    private readonly Dictionary<int, int> _byMoodId = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _byInfluenceId = new Dictionary<int, int>();
+    private int _nextMoodId = 11;
+    private int _nextInfluenceId = 21;
     private bool _disposed;
 
     #region Инициализация
@@ -44,8 +51,8 @@ namespace ISIDA.Psychic.Understanding
           : Path.Combine(psychicDataPath, "Understanding");
       EnsureDirectory();
       Load();
-      if (_byId.Count == 0)
-        CreateDefaultTypes();
+      EnsureDefaultTypes();
+      RebuildIndexes();
     }
 
     #endregion
@@ -58,12 +65,16 @@ namespace ISIDA.Psychic.Understanding
       return _byId.TryGetValue(id, out var r) ? r : null;
     }
 
-    /// <summary>Получить тип по коду</summary>
-    public SituationTypeRecord GetByCode(string code)
+    /// <summary>ID типа ситуации по MoodId (настроение). 0 если не найдено.</summary>
+    public int GetIdByMoodId(int moodId)
     {
-      if (string.IsNullOrEmpty(code)) return null;
-      return _byId.Values.FirstOrDefault(r =>
-          string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase));
+      return moodId <= 0 ? 0 : (_byMoodId.TryGetValue(moodId, out int id) ? id : 0);
+    }
+
+    /// <summary>ID типа ситуации по InfluenceId (воздействие). 0 если не найдено.</summary>
+    public int GetIdByInfluenceId(int influenceId)
+    {
+      return influenceId <= 0 ? 0 : (_byInfluenceId.TryGetValue(influenceId, out int id) ? id : 0);
     }
 
     /// <summary>Все типы</summary>
@@ -76,6 +87,71 @@ namespace ISIDA.Psychic.Understanding
     public bool Exists(int id)
     {
       return _byId.ContainsKey(id);
+    }
+
+    /// <summary>Обязательная запись по умолчанию (1–5) — удалять нельзя</summary>
+    public static bool IsRequiredDefault(int id)
+    {
+      return Array.IndexOf(DefaultRequiredIds, id) >= 0;
+    }
+
+    #endregion
+
+    #region Создание и удаление
+
+    /// <summary>Создать запись по MoodId (ID 11–20). Дубликаты не создаются.</summary>
+    public (int Id, string Error) AddByMoodId(int moodId, string description)
+    {
+      if (moodId <= 0) return (0, "MoodId должен быть > 0");
+      if (FindByMoodId(moodId) != null) return (0, "Запись с таким MoodId уже есть");
+      if (_nextMoodId > 20) return (0, "Превышен лимит ID для настроения (11–20)");
+      int id = _nextMoodId++;
+      var rec = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = 0, Description = description ?? "" };
+      _byId[id] = rec;
+      _byMoodId[moodId] = id;
+      return (id, null);
+    }
+
+    /// <summary>Создать запись по InfluenceId (ID 21+). Дубликаты не создаются.</summary>
+    public (int Id, string Error) AddByInfluenceId(int influenceId, string description)
+    {
+      if (influenceId <= 0) return (0, "InfluenceId должен быть > 0");
+      if (FindByInfluenceId(influenceId) != null) return (0, "Запись с таким InfluenceId уже есть");
+      int id = _nextInfluenceId++;
+      var rec = new SituationTypeRecord { Id = id, MoodId = 0, InfluenceId = influenceId, Description = description ?? "" };
+      _byId[id] = rec;
+      _byInfluenceId[influenceId] = id;
+      return (id, null);
+    }
+
+    /// <summary>Удалить запись. Для ID 1–5 возвращает ошибку.</summary>
+    public (bool Success, string Error) Remove(int id)
+    {
+      if (IsRequiredDefault(id)) return (false, $"Запись ID={id} обязательна, удаление запрещено");
+      if (!_byId.TryGetValue(id, out var rec)) return (false, "Запись не найдена");
+      _byId.Remove(id);
+      if (rec.MoodId > 0) _byMoodId.Remove(rec.MoodId);
+      if (rec.InfluenceId > 0) _byInfluenceId.Remove(rec.InfluenceId);
+      return (true, null);
+    }
+
+    private SituationTypeRecord FindByMoodId(int moodId) =>
+        _byId.Values.FirstOrDefault(r => r.MoodId == moodId);
+
+    private SituationTypeRecord FindByInfluenceId(int influenceId) =>
+        _byId.Values.FirstOrDefault(r => r.InfluenceId == influenceId);
+
+    private void RebuildIndexes()
+    {
+      _byMoodId.Clear();
+      _byInfluenceId.Clear();
+      foreach (var r in _byId.Values)
+      {
+        if (r.MoodId > 0) _byMoodId[r.MoodId] = r.Id;
+        if (r.InfluenceId > 0) _byInfluenceId[r.InfluenceId] = r.Id;
+      }
+      _nextMoodId = _byId.Keys.Where(k => k >= 11 && k <= 20).DefaultIfEmpty(10).Max() + 1;
+      _nextInfluenceId = _byId.Keys.Where(k => k >= 21).DefaultIfEmpty(20).Max() + 1;
     }
 
     #endregion
@@ -102,11 +178,12 @@ namespace ISIDA.Psychic.Understanding
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
-        if (p.Length < 2) continue;
+        if (p.Length < 4) continue;
         if (!int.TryParse(p[0], out int id) || id <= 0) continue;
-        var name = p.Length > 1 ? p[1] : "";
-        var code = p.Length > 2 ? p[2] : "";
-        _byId[id] = new SituationTypeRecord { Id = id, Name = name, Code = code };
+        if (!int.TryParse(p[1], out int moodId)) moodId = 0;
+        if (!int.TryParse(p[2], out int influenceId)) influenceId = 0;
+        var desc = p.Length > 3 ? p[3] : "";
+        _byId[id] = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = influenceId, Description = desc };
       }
     }
 
@@ -123,7 +200,7 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.SituationTypesDesc
         };
         foreach (var r in _byId.Values.OrderBy(x => x.Id))
-          lines.Add($"{r.Id}|{r.Name ?? ""}|{r.Code ?? ""}");
+          lines.Add($"{r.Id}|{r.MoodId}|{r.InfluenceId}|{r.Description ?? ""}");
 
         var result = FileValidator.SafeSaveFile(
             path,
@@ -140,29 +217,37 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    private void CreateDefaultTypes()
+    private void EnsureDefaultTypes()
     {
       var defaults = new[]
       {
-        (1, "Ответное действие", "ResponseAction"),
-        (2, "Запуск автоматизма", "AutomatizmRun"),
-        (3, "Нужно осмысление", "NeedThinking"),
-        (4, "Экспериментировать", "Experiment"),
-        (5, "Игнор оператора", "OperatorIgnore")
+        (1, 0, 0, "ResponseAction"),
+        (2, 0, 0, "AutomatizmRun"),
+        (3, 0, 0, "NeedThinking"),
+        (4, 0, 0, "Experiment"),
+        (5, 0, 0, "OperatorIgnore")
       };
       foreach (var d in defaults)
-        _byId[d.Item1] = new SituationTypeRecord { Id = d.Item1, Name = d.Item2, Code = d.Item3 };
-      Save();
+      {
+        if (!_byId.ContainsKey(d.Item1))
+          _byId[d.Item1] = new SituationTypeRecord { Id = d.Item1, MoodId = d.Item2, InfluenceId = d.Item3, Description = d.Item4 };
+      }
     }
 
     #endregion
 
     #region IDisposable
 
-    /// <summary>Освобождает ресурсы, сохраняет справочник типов ситуаций на диск</summary>
+    /// <summary>Освобождает ресурсы, сохраняет справочник на диск</summary>
     public void Dispose()
     {
       if (_disposed) return;
+      try
+      {
+        var (ok, err) = Save();
+        if (!ok && !string.IsNullOrEmpty(err)) Logger.Warning($"Ошибка сохранения SituationTypeSystem: {err}");
+      }
+      catch { }
       _disposed = true;
     }
 

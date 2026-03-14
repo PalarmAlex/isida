@@ -147,22 +147,30 @@ namespace ISIDA.Psychic.Understanding
       return Experiment;
     }
 
-    private static int ResolvePultMoodOrActionType(SituationImageContext context)
+    private int ResolvePultMoodOrActionType(SituationImageContext context)
     {
-      if (context == null) return 0;
+      if (context == null || _situationTypeSystem == null) return 0;
       int maxPrior = 0;
       int sitId = 0;
       if (context.MoodId != 0)
       {
-        int prior = GetPrioritetOfPultMoodActions(context.MoodId);
-        if (prior > maxPrior) { maxPrior = prior; sitId = 10 + context.MoodId; }
+        int id = _situationTypeSystem.GetIdByMoodId(context.MoodId);
+        if (id > 0)
+        {
+          int prior = GetPrioritetOfPultMoodActions(context.MoodId);
+          if (prior > maxPrior) { maxPrior = prior; sitId = id; }
+        }
       }
       if (context.ActionIds != null && context.ActionIds.Length > 0)
       {
         foreach (int actId in context.ActionIds)
         {
-          int prior = GetPrioritetOfPultButtonActions(actId);
-          if (prior > maxPrior) { maxPrior = prior; sitId = 20 + actId; }
+          int id = _situationTypeSystem.GetIdByInfluenceId(actId);
+          if (id > 0)
+          {
+            int prior = GetPrioritetOfPultButtonActions(actId);
+            if (prior > maxPrior) { maxPrior = prior; sitId = id; }
+          }
         }
       }
       return sitId;
@@ -212,9 +220,7 @@ namespace ISIDA.Psychic.Understanding
 
     private int GetDefaultSituationTypeId()
     {
-      if (_situationTypeSystem == null) return 4;
-      var t = _situationTypeSystem.GetByCode("Experiment") ?? _situationTypeSystem.GetById(4);
-      return t?.Id ?? 4;
+      return _situationTypeSystem?.GetById(4)?.Id ?? 4;
     }
 
     #endregion

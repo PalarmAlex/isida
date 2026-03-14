@@ -134,9 +134,9 @@ namespace ISIDA.Common
       public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
-      // Справочник типов ситуаций
-      public const string SituationTypesFormat = "# Id|Name|Code";
-      public const string SituationTypesDesc = "# Справочник типов ситуаций. Редактируется на пульте.";
+      // Справочник типов ситуаций (связь MoodId/InfluenceId с ID типа)
+      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|Description";
+      public const string SituationTypesDesc = "# Справочник типов ситуаций. Id 1-5 обязательны. MoodId из ActionsImagesSystem, InfluenceId из InfluenceActionSystem.";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";
@@ -1414,8 +1414,10 @@ namespace ISIDA.Common
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
-        if (p.Length < 2) return false;
+        if (p.Length < 4) return false;
         if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        if (!int.TryParse(p[2], out _)) return false;
         return true;
       }
       return true;
