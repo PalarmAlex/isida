@@ -434,6 +434,10 @@ namespace ISIDA.Common
       SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");
       SafeDispose(EpisodicMemory, "EpisodicMemory");
       SafeDispose(UnderstandingTreeSystem, "UnderstandingTreeSystem");
+      if (Psychic.Understanding.ThemeImageSystem.IsInitialized)
+        SafeDispose(Psychic.Understanding.ThemeImageSystem.Instance, "ThemeImageSystem");
+      if (Psychic.Understanding.PurposeImageSystem.IsInitialized)
+        SafeDispose(Psychic.Understanding.PurposeImageSystem.Instance, "PurposeImageSystem");
       SafeDispose(SituationImageSystem, "SituationImageSystem");
       SafeDispose(SituationTypeSystem, "SituationTypeSystem");
       SafeDispose(ProblemTree, "ProblemTree");
@@ -753,25 +757,30 @@ namespace ISIDA.Common
         Psychic.Understanding.SituationImageSystem.InitializeInstance(config.PsychicDataFolder, context.SituationTypeSystem);
         context.SituationImageSystem = Psychic.Understanding.SituationImageSystem.Instance;
 
-        // Шаг 20: Дерево проблем (для эпизодической памяти)
+        // Шаг 20: Образы тем и целей (для дерева проблем, 4 уровня)
         initializationStep = 21;
+        Psychic.Understanding.ThemeImageSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.PurposeImageSystem.InitializeInstance(config.PsychicDataFolder);
+
+        // Шаг 21: Дерево проблем (для эпизодической памяти)
+        initializationStep = 22;
         Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.ProblemTree = Psychic.Understanding.ProblemTreeSystem.Instance;
         context.AutomatizmTree.SetProblemTree(context.ProblemTree);
 
-        // Шаг 20a: Дерево понимания ситуации (Understanding)
-        initializationStep = 22;
+        // Шаг 22: Дерево понимания ситуации (Understanding)
+        initializationStep = 23;
         Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.UnderstandingTreeSystem = Psychic.Understanding.UnderstandingTreeSystem.Instance;
         context.UnderstandingTreeSystem.SetSituationImageSystem(context.SituationImageSystem);
 
-        // Шаг 23: Система автоматизмов
-        initializationStep = 23;
+        // Шаг 24: Система автоматизмов
+        initializationStep = 24;
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
-        // Шаг 24: Система эмоций
-        initializationStep = 24;
+        // Шаг 25: Система эмоций
+        initializationStep = 25;
         EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
         context.EmotionsImageSystem = EmotionsImageSystem.Instance;
 

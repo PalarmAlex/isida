@@ -26,6 +26,7 @@ Apply these rules for every new class in `isida`.
 
 ---
 
+- **При создании нового .cs файла обязательно добавить его в `isida.csproj`** в секцию `<ItemGroup><Compile Include="...">` — проект использует явное включение файлов (не автоматический glob). Вставь строку `<Compile Include="путь\к\файлу.cs" />` в правильное место по алфавиту/папкам.
 - Every new class must implement `IDisposable` and include `public void Dispose()` with safe one-time cleanup (`_disposed` guard).
 - If the class owns persisted data files, call the class save method from `Dispose()` by default (respect stage/validation constraints).
 - Register every new class/service in `Common/IsidaEngine.cs` in correct places: `IsidaContext` property, initialization step order, and disposal chain.

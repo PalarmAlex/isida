@@ -129,6 +129,17 @@ namespace ISIDA.Common
       public const string ProblemTreeFormat = "# Формат записи: ID|ParentID|AutTreeID|SituationTreeID|ThemeID|PurposeID";
       public const string ProblemTreeFields1 = "# ID: уникальный идентификатор узла дерева проблем";
       public const string ProblemTreeFields2 = "# AutTreeID: ID узла дерева автоматизмов";
+      public const string ProblemTreeFields3 = "# SituationTreeID: ID образа ситуации";
+      public const string ProblemTreeFields4 = "# ThemeID: ID образа темы мышления";
+      public const string ProblemTreeFields5 = "# PurposeID: ID образа цели";
+
+      // Образы тем мышления
+      public const string ThemeImagesFormat = "# Формат: ID|Weight|Type|PulsCount";
+      public const string ThemeImagesDesc = "# Weight: вес (1-10), Type: тип темы (ThemeTypeStr), PulsCount: время актуализации";
+
+      // Образы целей
+      public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";
+      public const string PurposeImagesDesc = "# Target: 1=повторение, 2=улучшение; MoodId/EmotionId/SituationId: параметры цели";
 
       // Дерево понимания ситуации
       public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
@@ -1258,7 +1269,7 @@ namespace ISIDA.Common
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
-        if (p.Length < 5) return false;
+        if (p.Length < 6) return false;
         if (!int.TryParse(p[0], out int id) || id <= 0) return false;
         if (!int.TryParse(p[1], out _)) return false;
         return true;
@@ -1458,6 +1469,89 @@ namespace ISIDA.Common
         if (!int.TryParse(p[0], out int id) || id <= 0) return false;
         if (!int.TryParse(p[1], out _)) return false;
         if (!int.TryParse(p[2], out _)) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidThemeImagesFile
+
+    /// <summary>Проверяет валидность файла образов тем по пути</summary>
+    public static bool IsValidThemeImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidThemeImagesFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла образов тем</summary>
+    public static bool IsValidThemeImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 4) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out int weight) || weight < 1 || weight > 10) return false;
+        if (!int.TryParse(p[2], out _)) return false;
+        if (!int.TryParse(p[3], out _)) return false;
+        return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidPurposeImagesFile
+
+    /// <summary>Проверяет валидность файла образов целей по пути</summary>
+    public static bool IsValidPurposeImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidPurposeImagesFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла образов целей</summary>
+    public static bool IsValidPurposeImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 5) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[1], out int target) || target < 1 || target > 2) return false;
+        if (!int.TryParse(p[2], out _)) return false;
+        if (!int.TryParse(p[3], out _)) return false;
+        if (!int.TryParse(p[4], out _)) return false;
         return true;
       }
       return true;

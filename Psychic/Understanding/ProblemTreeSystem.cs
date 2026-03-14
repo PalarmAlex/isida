@@ -93,11 +93,14 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>
-    /// Обновить активную ветку по данным от Understanding (autTreeID, situationTreeID)
+    /// Обновить активную ветку по данным от Understanding (до 4 уровней).
     /// </summary>
     /// <param name="automatizmTreeNodeId">ID узла дерева автоматизмов</param>
     /// <param name="situationTreeId">ID образа ситуации (0 — упрощённый режим)</param>
-    public void UpdateActiveBranchFromUnderstandingInfo(int automatizmTreeNodeId, int situationTreeId)
+    /// <param name="themeId">ID образа темы мышления (0 — без темы)</param>
+    /// <param name="purposeId">ID образа цели (0 — без цели)</param>
+    public void UpdateActiveBranchFromUnderstandingInfo(
+        int automatizmTreeNodeId, int situationTreeId, int themeId = 0, int purposeId = 0)
     {
       if (AppGlobalState.EvolutionStage < 4)
       {
@@ -115,8 +118,8 @@ namespace ISIDA.Psychic.Understanding
           return;
         }
 
-        var (id, _) = situationTreeId > 0
-            ? FindOrCreateByAutTreeAndSituation(automatizmTreeNodeId, situationTreeId)
+        var (id, _) = (situationTreeId > 0 || themeId > 0 || purposeId > 0)
+            ? FindOrCreateBy4Levels(automatizmTreeNodeId, situationTreeId, themeId, purposeId)
             : FindOrCreateByAutTreeId(automatizmTreeNodeId);
         DetectedActiveLastProblemNodeId = id;
       }
@@ -126,48 +129,81 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Найти или создать узел по AutTreeID и SituationTreeID (4 уровня)</summary>
-    private (int Id, ProblemTreeNode Node) FindOrCreateByAutTreeAndSituation(int autTreeId, int situationTreeId)
+    /// <summary>Найти или создать узел по 4 уровням (AutTreeID, SituationTreeID, ThemeID, PurposeID)</summary>
+    private (int Id, ProblemTreeNode Node) FindOrCreateBy4Levels(int autTreeId, int situationTreeId, int themeId, int purposeId)
     {
-      foreach (var child in Tree.Children)
+      var found = FindBy4Levels(Tree.Children, autTreeId, situationTreeId, themeId, purposeId);
+      if (found.Node != null)
+        return found;
+
+      var autNode = FindOrCreateByAutTreeId(autTreeId).Node;
+      if (autNode == null) return (0, null);
+
+      ProblemTreeNode cur = autNode;
+      if (situationTreeId > 0)
       {
-        var found = FindByAutTreeAndSituationRecursive(child, autTreeId, situationTreeId);
-        if (found.Node != null)
-          return found;
+        cur = FindOrCreateChild(cur, autTreeId, situationTreeId, 0, 0);
+        if (themeId <= 0 && purposeId <= 0)
+          return (cur.ID, cur);
       }
-
-      var autNode = FindOrCreateByAutTreeId(autTreeId);
-      if (autNode.Node == null) return (0, null);
-
-      foreach (var c in autNode.Node.Children)
+      if (themeId > 0)
       {
-        if (c.SituationTreeID == situationTreeId)
-          return (c.ID, c);
+        cur = FindOrCreateChild(cur, autTreeId, situationTreeId, themeId, 0);
+        if (purposeId <= 0)
+          return (cur.ID, cur);
       }
+      if (purposeId > 0)
+      {
+        cur = FindOrCreateChild(cur, autTreeId, situationTreeId, themeId, purposeId);
+      }
+      return (cur.ID, cur);
+    }
 
+    private ProblemTreeNode FindOrCreateChild(ProblemTreeNode parent, int autTreeId, int situationTreeId, int themeId, int purposeId)
+    {
+      foreach (var c in parent.Children)
+      {
+        if (c.AutTreeID == autTreeId && c.SituationTreeID == situationTreeId && c.ThemeID == themeId && c.PurposeID == purposeId)
+          return c;
+      }
       _lastNodeId++;
       var node = new ProblemTreeNode
       {
         ID = _lastNodeId,
-        ParentID = autNode.Node.ID,
-        ParentNode = autNode.Node,
+        ParentID = parent.ID,
+        ParentNode = parent,
         AutTreeID = autTreeId,
-        SituationTreeID = situationTreeId
+        SituationTreeID = situationTreeId,
+        ThemeID = themeId,
+        PurposeID = purposeId
       };
-      autNode.Node.Children.Add(node);
+      parent.Children.Add(node);
       _nodesById[node.ID] = node;
-      return (node.ID, node);
+      return node;
     }
 
-    private (int Id, ProblemTreeNode Node) FindByAutTreeAndSituationRecursive(ProblemTreeNode n, int autTreeId, int situationTreeId)
+    private (int Id, ProblemTreeNode Node) FindBy4Levels(
+        List<ProblemTreeNode> children, int autTreeId, int situationTreeId, int themeId, int purposeId)
     {
-      if (n.AutTreeID == autTreeId && n.SituationTreeID == situationTreeId)
-        return (n.ID, n);
-      foreach (var c in n.Children)
+      if (children == null) return (0, null);
+      foreach (var n in children)
       {
-        var r = FindByAutTreeAndSituationRecursive(c, autTreeId, situationTreeId);
-        if (r.Node != null)
-          return r;
+        if (n.AutTreeID != autTreeId) continue;
+        if (situationTreeId > 0 && n.SituationTreeID != situationTreeId) continue;
+        if (situationTreeId <= 0 && n.SituationTreeID != 0) continue;
+        if (themeId > 0 && n.ThemeID != themeId) continue;
+        if (themeId <= 0 && n.ThemeID != 0) continue;
+        if (purposeId > 0 && n.PurposeID != purposeId) continue;
+        if (purposeId <= 0 && n.PurposeID != 0) continue;
+        return (n.ID, n);
+      }
+      foreach (var n in children)
+      {
+        if (n.AutTreeID != autTreeId) continue;
+        if (situationTreeId > 0 && n.SituationTreeID != situationTreeId) continue;
+        if (situationTreeId <= 0 && n.SituationTreeID != 0) continue;
+        var r = FindBy4Levels(n.Children, autTreeId, situationTreeId, themeId, purposeId);
+        if (r.Node != null) return r;
       }
       return (0, null);
     }
@@ -263,7 +299,7 @@ namespace ISIDA.Psychic.Understanding
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
 
         var p = t.Split('|');
-        if (p.Length < 5) continue;
+        if (p.Length < 6) continue;
         if (!int.TryParse(p[0], out int id)) continue;
         if (!int.TryParse(p[1], out int parentId)) continue;
         if (!int.TryParse(p[2], out int autTreeId)) continue;
@@ -322,7 +358,10 @@ namespace ISIDA.Psychic.Understanding
         {
           FileValidator.FileHeaders.ProblemTreeFormat,
           FileValidator.FileHeaders.ProblemTreeFields1,
-          FileValidator.FileHeaders.ProblemTreeFields2
+          FileValidator.FileHeaders.ProblemTreeFields2,
+          FileValidator.FileHeaders.ProblemTreeFields3,
+          FileValidator.FileHeaders.ProblemTreeFields4,
+          FileValidator.FileHeaders.ProblemTreeFields5
         };
         foreach (var node in Tree.Children)
           CollectLines(node, lines);
@@ -330,8 +369,8 @@ namespace ISIDA.Psychic.Understanding
         var result = FileValidator.SafeSaveFile(
             path,
             lines,
-            content => FileValidator.IsValidProblemTreeFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: 3,
+            filePath => FileValidator.IsValidProblemTreeFile(filePath),
+            minLinesCount: 6,
             fileDescription: "дерева проблем");
 
         return (result.Success, result.ErrorMessage);

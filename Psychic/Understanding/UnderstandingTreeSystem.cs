@@ -61,8 +61,8 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>ID последнего активного узла</summary>
     public int DetectedActiveLastUnderstandingNodeId { get; private set; }
 
-    /// <summary>Данные для активации дерева проблем (autTreeID, situationTreeID)</summary>
-    public (int AutTreeId, int SituationTreeId) ProblemTreeInfo { get; private set; }
+    /// <summary>Данные для активации дерева проблем (autTreeID, situationTreeID, themeId, purposeId)</summary>
+    public (int AutTreeId, int SituationTreeId, int ThemeId, int PurposeId) ProblemTreeInfo { get; private set; }
 
     private SituationImageSystem _situationImageSystem;
 
@@ -105,7 +105,7 @@ namespace ISIDA.Psychic.Understanding
       }
       if (situationImageId == 0)
       {
-        ProblemTreeInfo = (automatizmTreeNodeId, 0);
+        ProblemTreeInfo = (automatizmTreeNodeId, 0, 0, 0);
         if (problemTree != null)
           problemTree.UpdateActiveBranchFromUnderstandingInfo(automatizmTreeNodeId, 0);
         return;
@@ -124,10 +124,13 @@ namespace ISIDA.Psychic.Understanding
         int stepCount = 0;
         var foundId = FindOrExtendBranch(0, condArr, Tree, ref stepCount);
         DetectedActiveLastUnderstandingNodeId = foundId;
-        ProblemTreeInfo = (automatizmTreeNodeId, situationImageId);
+
+        int themeId = RunNewThemeSimplified(situationImageId);
+        int purposeId = GetMentalPurposeSimplified(baseId, emotionId, situationImageId);
+        ProblemTreeInfo = (automatizmTreeNodeId, situationImageId, themeId, purposeId);
 
         if (problemTree != null)
-          problemTree.UpdateActiveBranchFromUnderstandingInfo(automatizmTreeNodeId, situationImageId);
+          problemTree.UpdateActiveBranchFromUnderstandingInfo(automatizmTreeNodeId, situationImageId, themeId, purposeId);
       }
       finally
       {
@@ -157,6 +160,41 @@ namespace ISIDA.Psychic.Understanding
 
       var newNode = AddBranch(node, level, cond);
       return newNode?.Id ?? 0;
+    }
+
+    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы.</summary>
+    private static int RunNewThemeSimplified(int situationImageId)
+    {
+      if (situationImageId <= 0) return 0;
+      if (!ThemeImageSystem.IsInitialized) return 0;
+      try
+      {
+        var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
+        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, 4, pulsCount);
+        return id;
+      }
+      catch
+      {
+        return 0;
+      }
+    }
+
+    /// <summary>Упрощённая логика цели: получает или создаёт образ цели по настроению, эмоции и ситуации.</summary>
+    private static int GetMentalPurposeSimplified(int baseId, int emotionId, int situationImageId)
+    {
+      if (situationImageId <= 0) return 0;
+      if (!PurposeImageSystem.IsInitialized) return 0;
+      try
+      {
+        var target = 2;
+        var moodId = baseId >= -1 && baseId <= 1 ? baseId : 0;
+        var (id, _) = PurposeImageSystem.Instance.CreateOrGet(target, moodId, emotionId, situationImageId);
+        return id;
+      }
+      catch
+      {
+        return 0;
+      }
     }
 
     private UnderstandingTreeNode AddBranch(UnderstandingTreeNode parent, int level, int[] cond)

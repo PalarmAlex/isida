@@ -124,6 +124,10 @@
     <Compile Include="Psychic\Understanding\SituationImageRecord.cs" />
     <Compile Include="Psychic\Understanding\SituationImageSystem.cs" />
     <Compile Include="Psychic\Understanding\SituationImageService.cs" />
+    <Compile Include="Psychic\Understanding\ThemeImageRecord.cs" />
+    <Compile Include="Psychic\Understanding\ThemeImageSystem.cs" />
+    <Compile Include="Psychic\Understanding\PurposeImageRecord.cs" />
+    <Compile Include="Psychic\Understanding\PurposeImageSystem.cs" />
     <Compile Include="Psychic\Understanding\UnderstandingTreeNode.cs" />
     <Compile Include="Psychic\Understanding\UnderstandingTreeSystem.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryNode.cs" />
