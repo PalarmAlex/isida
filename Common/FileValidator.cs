@@ -136,7 +136,7 @@ namespace ISIDA.Common
 
       // Справочник типов ситуаций (связь MoodId/InfluenceId с ID типа)
       public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|Description";
-      public const string SituationTypesDesc = "# Справочник типов ситуаций. Id 1-5 обязательны. MoodId из ActionsImagesSystem, InfluenceId из InfluenceActionSystem.";
+      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие, 0=Нормальное (mood), 1+=коды. Id 1-5 обязательны.";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";

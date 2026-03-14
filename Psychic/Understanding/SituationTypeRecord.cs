@@ -10,10 +10,10 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Уникальный ID (не изменять после использования в SituationImage)</summary>
     public int Id { get; set; }
 
-    /// <summary>Код настроения из ActionsImagesSystem (0 для типов 1–5 и для записей по воздействию)</summary>
+    /// <summary>Код настроения из ActionsImagesSystem. -1=отсутствие, 0=Нормальное, 1+ — другие.</summary>
     public int MoodId { get; set; }
 
-    /// <summary>Код воздействия из InfluenceActionSystem (0 для типов 1–5 и для записей по настроению)</summary>
+    /// <summary>Код воздействия из InfluenceActionSystem. -1=отсутствие.</summary>
     public int InfluenceId { get; set; }
 
     /// <summary>Описание типа</summary>

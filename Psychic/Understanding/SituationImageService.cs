@@ -23,7 +23,7 @@ namespace ISIDA.Psychic.Understanding
   /// Используется при активации дерева Understanding.
   /// </summary>
   /// <remarks>
-  /// Типы 1–5: ResponseAction, AutomatizmRun, NeedThinking, Experiment, OperatorIgnore.
+  /// Типы 1–5: Ответное действие, Запуск автоматизма, Нужно осмысление, Экспериментировать, Игнор оператора.
   /// Типы 11–17 — настроение с пульта, 21–37 — кнопки (при наличии контекста с MoodId/ActionIds и соответствующих типов в справочнике).
   /// </remarks>
   public static class SituationImageService

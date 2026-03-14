@@ -176,46 +176,22 @@ namespace ISIDA.Psychic.Understanding
       return sitId;
     }
 
-    /// <summary>Приоритет настроения с пульта.</summary>
-    private static int GetPrioritetOfPultMoodActions(int moodId)
+    /// <summary>Приоритет настроения с пульта по данным SituationTypeSystem (ID 11–20). Меньший ID слота = выше приоритет.</summary>
+    private int GetPrioritetOfPultMoodActions(int moodId)
     {
-      switch (moodId)
-      {
-        case 1: return 1;
-        case 6: return 2;
-        case 7: return 3;
-        case 3: return 4;
-        case 4: return 5;
-        case 2: return 6;
-        case 5: return 7;
-        default: return 0;
-      }
+      if (_situationTypeSystem == null) return 0;
+      int typeId = _situationTypeSystem.GetIdByMoodId(moodId);
+      if (typeId < 11 || typeId > 20) return 0;
+      return 21 - typeId;
     }
 
-    /// <summary>Приоритет кнопки действия с пульта.</summary>
-    private static int GetPrioritetOfPultButtonActions(int actionId)
+    /// <summary>Приоритет кнопки действия с пульта по данным SituationTypeSystem (ID 21–40). Меньший ID слота = выше приоритет.</summary>
+    private int GetPrioritetOfPultButtonActions(int actionId)
     {
-      switch (actionId)
-      {
-        case 6: return 1;
-        case 16: return 2;
-        case 9: return 3;
-        case 11: return 4;
-        case 2: return 5;
-        case 1: return 6;
-        case 17: return 7;
-        case 5: return 8;
-        case 14: return 9;
-        case 15: return 10;
-        case 12: return 11;
-        case 7: return 12;
-        case 8: return 13;
-        case 13: return 3;
-        case 4: return 15;
-        case 10: return 16;
-        case 3: return 17;
-        default: return 0;
-      }
+      if (_situationTypeSystem == null) return 0;
+      int typeId = _situationTypeSystem.GetIdByInfluenceId(actionId);
+      if (typeId < 21 || typeId > 40) return 0;
+      return 41 - typeId;
     }
 
     private int GetDefaultSituationTypeId()

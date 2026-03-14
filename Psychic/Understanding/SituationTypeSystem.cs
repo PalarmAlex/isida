@@ -12,6 +12,9 @@ namespace ISIDA.Psychic.Understanding
   /// </summary>
   public sealed class SituationTypeSystem : IDisposable
   {
+    /// <summary>Код «отсутствие значения» для слотов. 0 — Нормальное (настроение).</summary>
+    public const int EmptySlotValue = -1;
+
     /// <summary>ID обязательных записей по умолчанию (нельзя удалять)</summary>
     public static readonly int[] DefaultRequiredIds = { 1, 2, 3, 4, 5 };
 
@@ -52,7 +55,46 @@ namespace ISIDA.Psychic.Understanding
       EnsureDirectory();
       Load();
       EnsureDefaultTypes();
+      EnsureSlots();
       RebuildIndexes();
+    }
+
+    /// <summary>
+    /// Досоздаёт записи 6–10 (расширение по умолчанию), 11–20 (слоты MoodId) и 21–40 (слоты InfluenceId), если их нет.
+    /// </summary>
+    private void EnsureSlots()
+    {
+      for (int id = 6; id <= 10; id++)
+      {
+        if (!_byId.ContainsKey(id))
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+      }
+      for (int id = 11; id <= 20; id++)
+      {
+        if (!_byId.ContainsKey(id))
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+      }
+      for (int id = 21; id <= 40; id++)
+      {
+        if (!_byId.ContainsKey(id))
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+      }
+    }
+
+    /// <summary>
+    /// Вызвать EnsureSlots и сохранить, если были добавлены новые записи. Вызывается при открытии страницы.
+    /// </summary>
+    public (bool Saved, string Error) EnsureSlotsAndSaveIfNeeded()
+    {
+      int countBefore = _byId.Count;
+      EnsureSlots();
+      RebuildIndexes();
+      if (_byId.Count > countBefore)
+      {
+        var (ok, err) = Save();
+        return (ok, err);
+      }
+      return (true, null);
     }
 
     #endregion
@@ -65,16 +107,16 @@ namespace ISIDA.Psychic.Understanding
       return _byId.TryGetValue(id, out var r) ? r : null;
     }
 
-    /// <summary>ID типа ситуации по MoodId (настроение). 0 если не найдено.</summary>
+    /// <summary>ID типа ситуации по MoodId (настроение). 0 если не найдено. 0 = Нормальное — валидный код.</summary>
     public int GetIdByMoodId(int moodId)
     {
-      return moodId <= 0 ? 0 : (_byMoodId.TryGetValue(moodId, out int id) ? id : 0);
+      return moodId < 0 ? 0 : (_byMoodId.TryGetValue(moodId, out int id) ? id : 0);
     }
 
     /// <summary>ID типа ситуации по InfluenceId (воздействие). 0 если не найдено.</summary>
     public int GetIdByInfluenceId(int influenceId)
     {
-      return influenceId <= 0 ? 0 : (_byInfluenceId.TryGetValue(influenceId, out int id) ? id : 0);
+      return influenceId < 0 ? 0 : (_byInfluenceId.TryGetValue(influenceId, out int id) ? id : 0);
     }
 
     /// <summary>Все типы</summary>
@@ -99,14 +141,14 @@ namespace ISIDA.Psychic.Understanding
 
     #region Создание и удаление
 
-    /// <summary>Создать запись по MoodId (ID 11–20). Дубликаты не создаются.</summary>
+    /// <summary>Создать запись по MoodId (ID 11–20). Дубликаты не создаются. 0 = Нормальное.</summary>
     public (int Id, string Error) AddByMoodId(int moodId, string description)
     {
-      if (moodId <= 0) return (0, "MoodId должен быть > 0");
+      if (moodId < 0) return (0, "MoodId должен быть >= 0 (0=Нормальное)");
       if (FindByMoodId(moodId) != null) return (0, "Запись с таким MoodId уже есть");
       if (_nextMoodId > 20) return (0, "Превышен лимит ID для настроения (11–20)");
       int id = _nextMoodId++;
-      var rec = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = 0, Description = description ?? "" };
+      var rec = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = EmptySlotValue, Description = description ?? "" };
       _byId[id] = rec;
       _byMoodId[moodId] = id;
       return (id, null);
@@ -115,10 +157,10 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Создать запись по InfluenceId (ID 21+). Дубликаты не создаются.</summary>
     public (int Id, string Error) AddByInfluenceId(int influenceId, string description)
     {
-      if (influenceId <= 0) return (0, "InfluenceId должен быть > 0");
+      if (influenceId < 0) return (0, "InfluenceId должен быть >= 0");
       if (FindByInfluenceId(influenceId) != null) return (0, "Запись с таким InfluenceId уже есть");
       int id = _nextInfluenceId++;
-      var rec = new SituationTypeRecord { Id = id, MoodId = 0, InfluenceId = influenceId, Description = description ?? "" };
+      var rec = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = influenceId, Description = description ?? "" };
       _byId[id] = rec;
       _byInfluenceId[influenceId] = id;
       return (id, null);
@@ -130,8 +172,8 @@ namespace ISIDA.Psychic.Understanding
       if (IsRequiredDefault(id)) return (false, $"Запись ID={id} обязательна, удаление запрещено");
       if (!_byId.TryGetValue(id, out var rec)) return (false, "Запись не найдена");
       _byId.Remove(id);
-      if (rec.MoodId > 0) _byMoodId.Remove(rec.MoodId);
-      if (rec.InfluenceId > 0) _byInfluenceId.Remove(rec.InfluenceId);
+      if (rec.MoodId >= 0) _byMoodId.Remove(rec.MoodId);
+      if (rec.InfluenceId >= 0) _byInfluenceId.Remove(rec.InfluenceId);
       return (true, null);
     }
 
@@ -147,8 +189,8 @@ namespace ISIDA.Psychic.Understanding
       _byInfluenceId.Clear();
       foreach (var r in _byId.Values)
       {
-        if (r.MoodId > 0) _byMoodId[r.MoodId] = r.Id;
-        if (r.InfluenceId > 0) _byInfluenceId[r.InfluenceId] = r.Id;
+        if (r.MoodId >= 0) _byMoodId[r.MoodId] = r.Id;
+        if (r.InfluenceId >= 0) _byInfluenceId[r.InfluenceId] = r.Id;
       }
       _nextMoodId = _byId.Keys.Where(k => k >= 11 && k <= 20).DefaultIfEmpty(10).Max() + 1;
       _nextInfluenceId = _byId.Keys.Where(k => k >= 21).DefaultIfEmpty(20).Max() + 1;
@@ -180,10 +222,59 @@ namespace ISIDA.Psychic.Understanding
         var p = t.Split('|');
         if (p.Length < 4) continue;
         if (!int.TryParse(p[0], out int id) || id <= 0) continue;
-        if (!int.TryParse(p[1], out int moodId)) moodId = 0;
-        if (!int.TryParse(p[2], out int influenceId)) influenceId = 0;
+        if (!int.TryParse(p[1], out int moodId)) moodId = EmptySlotValue;
+        if (!int.TryParse(p[2], out int influenceId)) influenceId = EmptySlotValue;
         var desc = p.Length > 3 ? p[3] : "";
         _byId[id] = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = influenceId, Description = desc };
+      }
+    }
+
+    /// <summary>Проверка на дубликаты MoodId в слотах 11–20 и InfluenceId в слотах 21–40. Пустые слоты (0 и ниже) не считаются.</summary>
+    /// <returns>(true, null) если валидно; (false, "сообщение") при дублях</returns>
+    public (bool Valid, string Error) ValidateRecordsNoDuplicates(
+        IEnumerable<SituationTypeRecord> moodRecords,
+        IEnumerable<SituationTypeRecord> influenceRecords)
+    {
+      if (moodRecords != null)
+      {
+        var usedMood = new HashSet<int>();
+        foreach (var r in moodRecords)
+        {
+          if (r == null || r.Id < 11 || r.Id > 20) continue;
+          if (r.MoodId < 0) continue;
+          if (usedMood.Contains(r.MoodId))
+            return (false, $"Дубликат настроения: «{r.MoodId}» встречается в нескольких слотах (11–20). Укажите уникальные значения.");
+          usedMood.Add(r.MoodId);
+        }
+      }
+      if (influenceRecords != null)
+      {
+        var usedInfluence = new HashSet<int>();
+        foreach (var r in influenceRecords)
+        {
+          if (r == null || r.Id < 21 || r.Id > 40) continue;
+          if (r.InfluenceId < 0) continue;
+          if (usedInfluence.Contains(r.InfluenceId))
+            return (false, $"Дубликат воздействия: «{r.InfluenceId}» встречается в нескольких слотах (21–40). Укажите уникальные значения.");
+          usedInfluence.Add(r.InfluenceId);
+        }
+      }
+      return (true, null);
+    }
+
+    /// <summary>Синхронизировать данные из переданных записей в _byId и сохранить. Вызывать перед Save, чтобы гарантировать сохранение отредактированных значений из UI.</summary>
+    public void UpdateFromRecords(IEnumerable<SituationTypeRecord> records)
+    {
+      if (records == null) return;
+      foreach (var r in records)
+      {
+        if (r == null || r.Id <= 0) continue;
+        if (_byId.TryGetValue(r.Id, out var existing))
+        {
+          existing.MoodId = r.MoodId;
+          existing.InfluenceId = r.InfluenceId;
+          existing.Description = r.Description ?? "";
+        }
       }
     }
 
@@ -192,6 +283,7 @@ namespace ISIDA.Psychic.Understanding
     {
       try
       {
+        RebuildIndexes();
         EnsureDirectory();
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>
@@ -221,11 +313,11 @@ namespace ISIDA.Psychic.Understanding
     {
       var defaults = new[]
       {
-        (1, 0, 0, "ResponseAction"),
-        (2, 0, 0, "AutomatizmRun"),
-        (3, 0, 0, "NeedThinking"),
-        (4, 0, 0, "Experiment"),
-        (5, 0, 0, "OperatorIgnore")
+        (1, EmptySlotValue, EmptySlotValue, "Ответное действие"),
+        (2, EmptySlotValue, EmptySlotValue, "Запуск автоматизма"),
+        (3, EmptySlotValue, EmptySlotValue, "Нужно осмысление"),
+        (4, EmptySlotValue, EmptySlotValue, "Экспериментировать"),
+        (5, EmptySlotValue, EmptySlotValue, "Игнор оператора")
       };
       foreach (var d in defaults)
       {
