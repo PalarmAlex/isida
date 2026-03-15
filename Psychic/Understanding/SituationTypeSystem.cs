@@ -62,22 +62,28 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>
     /// Досоздаёт записи 6–10 (расширение по умолчанию), 11–20 (слоты MoodId) и 21–40 (слоты InfluenceId), если их нет.
     /// </summary>
+    /// <summary>Досоздаёт записи 7–10, 11–20 (MoodId), 21–40 (InfluenceId) и 41–60 (привязка тем для инфо-функций). Id 6 создаётся в EnsureDefaultTypes.</summary>
     private void EnsureSlots()
     {
-      for (int id = 6; id <= 10; id++)
+      for (int id = 7; id <= 10; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, Description = "" };
       }
       for (int id = 11; id <= 20; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, Description = "" };
       }
       for (int id = 21; id <= 40; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, Description = "" };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, Description = "" };
+      }
+      for (int id = 41; id <= 60; id++)
+      {
+        if (!_byId.ContainsKey(id))
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, Description = "" };
       }
     }
 
@@ -131,6 +137,27 @@ namespace ISIDA.Psychic.Understanding
       return _byId.ContainsKey(id);
     }
 
+    /// <summary>ThemeTypeId по ID типа ситуации (1–10, 41–60). 0 если не задано или запись не найдена.</summary>
+    public int GetThemeTypeIdBySituationTypeId(int situationTypeId)
+    {
+      var rec = GetById(situationTypeId);
+      if (rec == null || rec.ThemeTypeId <= 0) return 0;
+      return rec.ThemeTypeId;
+    }
+
+    /// <summary>ThemeTypeId, используемые в дефолтных слотах (Id 1–10). Не удалять эти темы из справочника типов тем.</summary>
+    public IReadOnlyList<int> GetThemeTypeIdsUsedInDefaultSlots()
+    {
+      var list = new List<int>();
+      for (int id = 1; id <= 10; id++)
+      {
+        var rec = GetById(id);
+        if (rec != null && rec.ThemeTypeId > 0 && !list.Contains(rec.ThemeTypeId))
+          list.Add(rec.ThemeTypeId);
+      }
+      return list;
+    }
+
     /// <summary>Обязательная запись по умолчанию (1–5) — удалять нельзя</summary>
     public static bool IsRequiredDefault(int id)
     {
@@ -170,7 +197,7 @@ namespace ISIDA.Psychic.Understanding
       if (FindByMoodId(moodId) != null) return (0, "Запись с таким MoodId уже есть");
       if (_nextMoodId > 20) return (0, "Превышен лимит ID для настроения (11–20)");
       int id = _nextMoodId++;
-      var rec = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = EmptySlotValue, Description = description ?? "" };
+      var rec = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = EmptySlotValue, ThemeTypeId = -1, Description = description ?? "" };
       _byId[id] = rec;
       _byMoodId[moodId] = id;
       return (id, null);
@@ -182,7 +209,7 @@ namespace ISIDA.Psychic.Understanding
       if (influenceId < 0) return (0, "InfluenceId должен быть >= 0");
       if (FindByInfluenceId(influenceId) != null) return (0, "Запись с таким InfluenceId уже есть");
       int id = _nextInfluenceId++;
-      var rec = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = influenceId, Description = description ?? "" };
+      var rec = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = influenceId, ThemeTypeId = -1, Description = description ?? "" };
       _byId[id] = rec;
       _byInfluenceId[influenceId] = id;
       return (id, null);
@@ -246,8 +273,16 @@ namespace ISIDA.Psychic.Understanding
         if (!int.TryParse(p[0], out int id) || id <= 0) continue;
         if (!int.TryParse(p[1], out int moodId)) moodId = EmptySlotValue;
         if (!int.TryParse(p[2], out int influenceId)) influenceId = EmptySlotValue;
-        var desc = p.Length > 3 ? p[3] : "";
-        _byId[id] = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = influenceId, Description = desc };
+        int themeTypeId = -1;
+        var desc = "";
+        if (p.Length >= 5)
+        {
+          int.TryParse(p[3], out themeTypeId);
+          desc = p[4] ?? "";
+        }
+        else
+          desc = p.Length > 3 ? p[3] : "";
+        _byId[id] = new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = influenceId, ThemeTypeId = themeTypeId, Description = desc };
       }
     }
 
@@ -284,7 +319,22 @@ namespace ISIDA.Psychic.Understanding
       return (true, null);
     }
 
-    /// <summary>Синхронизировать данные из переданных записей в _byId и сохранить. Вызывать перед Save, чтобы гарантировать сохранение отредактированных значений из UI.</summary>
+    /// <summary>Проверка уникальности пары (ID типа ситуации, ThemeTypeId): один ThemeTypeId не может быть привязан к разным ID. Записи с ThemeTypeId&lt;=0 пропускаются.</summary>
+    public (bool Valid, string Error) ValidateThemeTypeIdUniqueness(IEnumerable<SituationTypeRecord> allRecordsWithTheme)
+    {
+      if (allRecordsWithTheme == null) return (true, null);
+      var themeToId = new Dictionary<int, int>();
+      foreach (var r in allRecordsWithTheme)
+      {
+        if (r == null || r.ThemeTypeId <= 0) continue;
+        if (themeToId.TryGetValue(r.ThemeTypeId, out int existingId))
+          return (false, $"Тема с ID {r.ThemeTypeId} уже привязана к типу ситуации ID {existingId}. Выберите другую тему или освободите слот ID {existingId}.");
+        themeToId[r.ThemeTypeId] = r.Id;
+      }
+      return (true, null);
+    }
+
+    /// <summary>Синхронизировать данные из переданных записей в _byId. Вызывать перед Save, чтобы гарантировать сохранение отредактированных значений из UI.</summary>
     public void UpdateFromRecords(IEnumerable<SituationTypeRecord> records)
     {
       if (records == null) return;
@@ -295,6 +345,7 @@ namespace ISIDA.Psychic.Understanding
         {
           existing.MoodId = r.MoodId;
           existing.InfluenceId = r.InfluenceId;
+          existing.ThemeTypeId = r.ThemeTypeId;
           existing.Description = r.Description ?? "";
         }
       }
@@ -314,7 +365,7 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.SituationTypesDesc
         };
         foreach (var r in _byId.Values.OrderBy(x => x.Id))
-          lines.Add($"{r.Id}|{r.MoodId}|{r.InfluenceId}|{r.Description ?? ""}");
+          lines.Add($"{r.Id}|{r.MoodId}|{r.InfluenceId}|{r.ThemeTypeId}|{r.Description ?? ""}");
 
         var result = FileValidator.SafeSaveFile(
             path,
@@ -335,16 +386,17 @@ namespace ISIDA.Psychic.Understanding
     {
       var defaults = new[]
       {
-        (1, EmptySlotValue, EmptySlotValue, "Ответное действие"),
-        (2, EmptySlotValue, EmptySlotValue, "Запуск автоматизма"),
-        (3, EmptySlotValue, EmptySlotValue, "Нужно осмысление"),
-        (4, EmptySlotValue, EmptySlotValue, "Экспериментировать"),
-        (5, EmptySlotValue, EmptySlotValue, "Игнор оператора")
+        (1, EmptySlotValue, EmptySlotValue, -1, "Ответное действие"),
+        (2, EmptySlotValue, EmptySlotValue, -1, "Запуск автоматизма"),
+        (3, EmptySlotValue, EmptySlotValue, -1, "Нужно осмысление"),
+        (4, EmptySlotValue, EmptySlotValue, -1, "Экспериментировать"),
+        (5, EmptySlotValue, EmptySlotValue, -1, "Игнор оператора"),
+        (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта")
       };
       foreach (var d in defaults)
       {
         if (!_byId.ContainsKey(d.Item1))
-          _byId[d.Item1] = new SituationTypeRecord { Id = d.Item1, MoodId = d.Item2, InfluenceId = d.Item3, Description = d.Item4 };
+          _byId[d.Item1] = new SituationTypeRecord { Id = d.Item1, MoodId = d.Item2, InfluenceId = d.Item3, ThemeTypeId = d.Item4, Description = d.Item5 };
       }
     }
 

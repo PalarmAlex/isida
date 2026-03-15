@@ -125,7 +125,8 @@ namespace ISIDA.Psychic.Understanding
         var foundId = FindOrExtendBranch(0, condArr, Tree, ref stepCount);
         DetectedActiveLastUnderstandingNodeId = foundId;
 
-        int themeId = RunNewThemeSimplified(situationImageId);
+        bool hasStimulusFromPult = situationContext != null && (situationContext.MoodId != 0 || (situationContext.ActionIds != null && situationContext.ActionIds.Length > 0));
+        int themeId = RunNewThemeSimplified(situationImageId, hasStimulusFromPult);
         int purposeId = GetMentalPurposeSimplified(baseId, emotionId, situationImageId);
         ProblemTreeInfo = (automatizmTreeNodeId, situationImageId, themeId, purposeId);
 
@@ -162,16 +163,22 @@ namespace ISIDA.Psychic.Understanding
       return newNode?.Id ?? 0;
     }
 
-    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы (тип темы по умолчанию).</summary>
-    private static int RunNewThemeSimplified(int situationImageId)
+    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы. При стимуле с пульта — тема из типа ситуации ID=6, иначе — по умолчанию.</summary>
+    private static int RunNewThemeSimplified(int situationImageId, bool hasStimulusFromPult = false)
     {
       if (situationImageId <= 0) return 0;
       if (!ThemeImageSystem.IsInitialized) return 0;
       try
       {
         var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
-        // type=0 — «не задан», в CreateOrGet подставится DefaultThemeTypeId
-        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, 0, pulsCount);
+        int typeId = 0;
+        if (hasStimulusFromPult && SituationTypeSystem.IsInitialized)
+        {
+          typeId = SituationTypeSystem.Instance.GetThemeTypeIdBySituationTypeId(6);
+          if (typeId <= 0) typeId = ThemeImageSystem.Instance.DefaultThemeTypeId;
+        }
+        // typeId=0 — в CreateOrGet подставится DefaultThemeTypeId
+        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, typeId, pulsCount);
         return id;
       }
       catch

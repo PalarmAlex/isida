@@ -101,6 +101,20 @@ namespace ISIDA.Psychic.Understanding
       return "";
     }
 
+    /// <summary>ID типов тем, привязанных к дефолтным слотам типов ситуаций (1–10). Их нельзя удалять из справочника типов тем.</summary>
+    public static IReadOnlyList<int> GetThemeTypeIdsProtectedFromRemoval()
+    {
+      if (!SituationTypeSystem.IsInitialized) return Array.Empty<int>();
+      return SituationTypeSystem.Instance.GetThemeTypeIdsUsedInDefaultSlots();
+    }
+
+    /// <summary>Можно ли удалить тип темы из справочника (false, если он используется в дефолтных типах ситуаций 1–10).</summary>
+    public static bool CanRemoveThemeType(int themeTypeId)
+    {
+      var protectedIds = GetThemeTypeIdsProtectedFromRemoval();
+      return !protectedIds.Contains(themeTypeId);
+    }
+
     /// <summary>Справочник типов тем: индекс → описание (только типы 1–17 из файла). Для UI без инициализации движка.</summary>
     public static IReadOnlyList<(int Id, string Description)> GetDefaultThemeTypesForSettings()
     {

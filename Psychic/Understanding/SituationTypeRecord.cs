@@ -1,9 +1,8 @@
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Запись справочника типов ситуаций. Связь: Id типа — MoodId (настроение) или InfluenceId (воздействие).
-  /// Id 1–5 — обязательные фиксированные типы. Id 11–20 — настроение (ActionsImagesSystem._moodDictionary).
-  /// Id 21+ — воздействия (InfluenceActionSystem).
+  /// Запись справочника типов ситуаций. Связь: Id типа — MoodId (настроение) или InfluenceId (воздействие) или ThemeTypeId (тема для Id 6–10, 41–60).
+  /// Id 1–5 — обязательные фиксированные типы. Id 6–10 — дефолтные привязки тем (движок). Id 11–20 — настроение. Id 21–40 — воздействия. Id 41–60 — привязки тем для инфо-функций.
   /// </summary>
   public class SituationTypeRecord
   {
@@ -16,7 +15,21 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Код воздействия из InfluenceActionSystem. -1=отсутствие.</summary>
     public int InfluenceId { get; set; }
 
+    /// <summary>ID типа темы (справочник тем). -1=не задано; для Id 6–10 и 41–60 — привязка к теме.</summary>
+    public int ThemeTypeId { get; set; } = -1;
+
     /// <summary>Описание типа</summary>
     public string Description { get; set; }
+
+    /// <summary>Текст для колонки «Привязка» в UI: для Id 1–5 — MoodId/InfluenceId, для 6–10 — название темы или «—».</summary>
+    public string BindingDisplayText =>
+      Id <= 5
+        ? $"MoodId={MoodId}, InfluenceId={InfluenceId}"
+        : (ThemeTypeId > 0 && ThemeImageSystem.IsInitialized
+          ? ThemeImageSystem.Instance.GetThemeTypeDescription(ThemeTypeId)
+          : (ThemeTypeId > 0 ? ThemeTypeId.ToString() : "—"));
+
+    /// <summary>Слот дефолтной привязки темы (Id 6–10): в UI показывается ComboBox выбора темы.</summary>
+    public bool IsDefaultThemeSlot => Id >= 6 && Id <= 10;
   }
 }

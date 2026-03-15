@@ -150,8 +150,8 @@ namespace ISIDA.Common
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
       // Справочник типов ситуаций (связь MoodId/InfluenceId с ID типа)
-      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|Description";
-      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие, 0=Нормальное (mood), 1+=коды. Id 1-5 обязательны.";
+      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|Description";
+      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие. ThemeTypeId: -1=не задано; Id 6-10, 41-60 — привязка к теме. Id 1-5 обязательны.";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";
@@ -1417,7 +1417,7 @@ namespace ISIDA.Common
       }
     }
 
-    /// <summary>Проверяет валидность содержимого файла справочника типов ситуаций</summary>
+    /// <summary>Проверяет валидность содержимого файла справочника типов ситуаций (формат: Id|MoodId|InfluenceId|ThemeTypeId|Description)</summary>
     public static bool IsValidSituationTypeFile(IEnumerable<string> lines)
     {
       if (lines == null) return false;
@@ -1430,9 +1430,14 @@ namespace ISIDA.Common
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
         if (p.Length < 4) return false;
-        if (!int.TryParse(p[0], out int id) || id <= 0) return false;
+        if (!int.TryParse(p[0], out int id) || id <= 0 || id > 60) return false;
         if (!int.TryParse(p[1], out _)) return false;
         if (!int.TryParse(p[2], out _)) return false;
+        if (p.Length >= 5)
+        {
+          if (!int.TryParse(p[3], out int themeId)) return false;
+          if (themeId < -1 || themeId > 17) return false;
+        }
         return true;
       }
       return true;
