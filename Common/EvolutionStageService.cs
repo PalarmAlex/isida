@@ -318,6 +318,17 @@ namespace ISIDA.Common
         }
         else
           Logger.Info("Система дерева проблем не инициализирована, очистка не требуется");
+
+        if (SituationTypeSystem.IsInitialized)
+        {
+          var stsResult = SituationTypeSystem.Instance.ClearExceptDefaults();
+          if (stsResult.Success)
+            Logger.Info("Справочник типов ситуаций очищен (оставлены только дефолтные записи 1–5)");
+          else
+            Logger.Warning($"Не удалось очистить справочник типов ситуаций: {stsResult.Error}");
+        }
+        else
+          Logger.Info("Справочник типов ситуаций не инициализирован, очистка не требуется");
       }
       catch (Exception ex)
       {

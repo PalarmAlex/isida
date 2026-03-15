@@ -116,6 +116,11 @@ namespace ISIDA.Common
     public int DefaultAdaptiveActionId { get; set; } = 0;
 
     /// <summary>
+    /// Идентификатор типа темы по умолчанию (например, 4 — «Стимул с Пульта» / «Базовая тема»)
+    /// </summary>
+    public int DefaultThemeTypeId { get; set; } = 4;
+
+    /// <summary>
     /// Порог распознавания для вербального канала
     /// </summary>
     public int RecognitionThreshold { get; set; } = 3;
@@ -760,6 +765,7 @@ namespace ISIDA.Common
         // Шаг 20: Образы тем и целей (для дерева проблем, 4 уровня)
         initializationStep = 21;
         Psychic.Understanding.ThemeImageSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.ThemeImageSystem.Instance.DefaultThemeTypeId = config.DefaultThemeTypeId;
         Psychic.Understanding.PurposeImageSystem.InitializeInstance(config.PsychicDataFolder);
 
         // Шаг 21: Дерево проблем (для эпизодической памяти)

@@ -15,8 +15,12 @@ namespace ISIDA.Psychic.Understanding
     private readonly string _dataPath;
     private readonly Dictionary<int, ThemeImageRecord> _byId = new Dictionary<int, ThemeImageRecord>();
     private readonly Dictionary<(int Weight, int Type, int PulsCount), int> _unicumKeyToId = new Dictionary<(int, int, int), int>();
+    private Dictionary<int, string> _themeTypeStr = new Dictionary<int, string>();
     private int _lastId;
     private bool _disposed;
+
+    /// <summary>ID типа темы по умолчанию (например, «Базовая тема» = 4). Задаётся из конфигурации.</summary>
+    public int DefaultThemeTypeId { get; set; } = 4;
 
     #region Инициализация
 
@@ -46,17 +50,23 @@ namespace ISIDA.Psychic.Understanding
           : Path.Combine(psychicDataPath, "Understanding");
       EnsureDirectory();
       Load();
+      LoadThemeTypes();
+      if (_themeTypeStr.Count == 0)
+      {
+        CreateDefaultThemeTypesAndSave();
+      }
     }
 
     #endregion
 
     #region Создание и поиск
 
-    /// <summary>Создать или получить образ темы</summary>
+    /// <summary>Создать или получить образ темы. Если type не задан (≤0), используется DefaultThemeTypeId.</summary>
     public (int Id, ThemeImageRecord Record) CreateOrGet(int weight, int type, int pulsCount, bool checkUnicum = true)
     {
       if (weight < 1) weight = 2;
       if (weight > 10) weight = 10;
+      if (type <= 0) type = DefaultThemeTypeId;
 
       var key = (weight, type, pulsCount);
       if (checkUnicum && _unicumKeyToId.TryGetValue(key, out int existingId))
@@ -83,11 +93,47 @@ namespace ISIDA.Psychic.Understanding
       return _byId.TryGetValue(id, out var r) ? r : null;
     }
 
+    /// <summary>Текстовое описание типа темы. При отсутствии в справочнике — пустая строка. Тип 0 всегда «Нет темы».</summary>
+    public string GetThemeTypeDescription(int typeIndex)
+    {
+      if (typeIndex == 0) return "Нет темы";
+      if (_themeTypeStr.TryGetValue(typeIndex, out string desc)) return desc;
+      return "";
+    }
+
+    /// <summary>Справочник типов тем: индекс → описание (только типы 1–17 из файла). Для UI без инициализации движка.</summary>
+    public static IReadOnlyList<(int Id, string Description)> GetDefaultThemeTypesForSettings()
+    {
+      return DefaultThemeTypesList;
+    }
+
+    private static readonly IReadOnlyList<(int Id, string Description)> DefaultThemeTypesList = new List<(int, string)>
+    {
+      (1, "Негативный эффект моторного автоматизма"),
+      (2, "Негативный эффект ментального автоматизма"),
+      (3, "Состояние Плохо"),
+      (4, "Стимул с Пульта"),
+      (5, "Поисковый интерес"),
+      (6, "Обучение с учителем"),
+      (7, "Игнорирование оператором"),
+      (8, "Игра"),
+      (9, "Неудовлетворенность существующим"),
+      (10, "Непонимание"),
+      (11, "Действие оператора"),
+      (12, "Сомнение в штатном автоматизме"),
+      (13, "Защита"),
+      (14, "Страх"),
+      (15, "Агрессия"),
+      (16, "Есть объект высокой значимости"),
+      (17, "Улучшение настроения")
+    };
+
     #endregion
 
     #region Load / Save
 
     private const string FileName = "theme_images.dat";
+    private const string ThemeTypesFileName = "theme_types.dat";
 
     private void EnsureDirectory()
     {
@@ -122,12 +168,71 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Сохранить на диск</summary>
+    private void LoadThemeTypes()
+    {
+      var path = Path.Combine(_dataPath, ThemeTypesFileName);
+      _themeTypeStr = new Dictionary<int, string>();
+      if (!File.Exists(path) || !FileValidator.IsValidThemeTypesFile(path))
+        return;
+      foreach (var line in File.ReadLines(path))
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 2) continue;
+        if (!int.TryParse(p[0], out int id) || id < 1 || id > 17) continue;
+        _themeTypeStr[id] = p[1].Trim();
+      }
+    }
+
+    private void CreateDefaultThemeTypesAndSave()
+    {
+      _themeTypeStr = new Dictionary<int, string>();
+      foreach (var (id, desc) in DefaultThemeTypesList)
+        _themeTypeStr[id] = desc;
+      var (ok, _) = SaveThemeTypes();
+      if (!ok)
+        Logger.Warning("Не удалось сохранить справочник типов тем по умолчанию.");
+    }
+
+    /// <summary>Сохранить справочник типов тем на диск</summary>
+    public (bool Success, string Error) SaveThemeTypes()
+    {
+      try
+      {
+        EnsureDirectory();
+        var path = Path.Combine(_dataPath, ThemeTypesFileName);
+        var lines = new List<string>
+        {
+          FileValidator.FileHeaders.ThemeTypesFormat,
+          FileValidator.FileHeaders.ThemeTypesDesc
+        };
+        foreach (var kv in _themeTypeStr.OrderBy(x => x.Key))
+          if (kv.Key >= 1 && kv.Key <= 17)
+            lines.Add($"{kv.Key}|{kv.Value}");
+        var result = FileValidator.SafeSaveFile(
+            path,
+            lines,
+            p => FileValidator.IsValidThemeTypesFile(p),
+            minLinesCount: 2,
+            fileDescription: "справочник типов тем");
+        return result.Success ? (true, null) : (false, result.ErrorMessage);
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+    }
+
+    /// <summary>Сохранить на диск (образы тем и справочник типов)</summary>
     public (bool Success, string Error) Save()
     {
       try
       {
         EnsureDirectory();
+        var themeTypesResult = SaveThemeTypes();
+        if (!themeTypesResult.Success && !string.IsNullOrEmpty(themeTypesResult.Error))
+          Logger.Warning($"Ошибка сохранения типов тем: {themeTypesResult.Error}");
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>
         {

@@ -137,6 +137,10 @@ namespace ISIDA.Common
       public const string ThemeImagesFormat = "# Формат: ID|Weight|Type|PulsCount";
       public const string ThemeImagesDesc = "# Weight: вес (1-10), Type: тип темы (ThemeTypeStr), PulsCount: время актуализации";
 
+      // Справочник типов тем (ID 1–17 по образцу BOT)
+      public const string ThemeTypesFormat = "# Формат: Id|Description";
+      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–17), Description: текстовое описание";
+
       // Образы целей
       public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";
       public const string PurposeImagesDesc = "# Target: 1=повторение, 2=улучшение; MoodId/EmotionId/SituationId: параметры цели";
@@ -1511,6 +1515,44 @@ namespace ISIDA.Common
         if (!int.TryParse(p[2], out _)) return false;
         if (!int.TryParse(p[3], out _)) return false;
         return true;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidThemeTypesFile
+
+    /// <summary>Проверяет валидность файла справочника типов тем по пути</summary>
+    public static bool IsValidThemeTypesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidThemeTypesFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла справочника типов тем</summary>
+    public static bool IsValidThemeTypesFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 2) return false;
+        if (!int.TryParse(p[0], out int id) || id < 1 || id > 17) return false;
+        if (string.IsNullOrWhiteSpace(p[1])) return false;
       }
       return true;
     }

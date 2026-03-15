@@ -137,6 +137,28 @@ namespace ISIDA.Psychic.Understanding
       return Array.IndexOf(DefaultRequiredIds, id) >= 0;
     }
 
+    /// <summary>
+    /// Очистить справочник, оставив только дефолтные записи (ID 1–5).
+    /// Вызывается при переходе с стадии 4 на 3.
+    /// </summary>
+    /// <returns>(true, null) при успехе; (false, сообщение) при ошибке</returns>
+    public (bool Success, string Error) ClearExceptDefaults()
+    {
+      var toRemove = _byId.Keys.Where(id => !IsRequiredDefault(id)).ToList();
+      foreach (int id in toRemove)
+      {
+        if (_byId.TryGetValue(id, out var rec))
+        {
+          _byId.Remove(id);
+          if (rec.MoodId >= 0) _byMoodId.Remove(rec.MoodId);
+          if (rec.InfluenceId >= 0) _byInfluenceId.Remove(rec.InfluenceId);
+        }
+      }
+      EnsureDefaultTypes();
+      RebuildIndexes();
+      return Save();
+    }
+
     #endregion
 
     #region Создание и удаление

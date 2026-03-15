@@ -129,7 +129,7 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Найти или создать узел по 4 уровням (AutTreeID, SituationTreeID, ThemeID, PurposeID)</summary>
+    /// <summary>Найти или создать узел по 4 уровням (AutTreeID, SituationTreeID, ThemeID, PurposeID). Ветка от нулевого узла не строится.</summary>
     private (int Id, ProblemTreeNode Node) FindOrCreateBy4Levels(int autTreeId, int situationTreeId, int themeId, int purposeId)
     {
       var found = FindBy4Levels(Tree.Children, autTreeId, situationTreeId, themeId, purposeId);

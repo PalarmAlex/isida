@@ -162,7 +162,7 @@ namespace ISIDA.Psychic.Understanding
       return newNode?.Id ?? 0;
     }
 
-    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы.</summary>
+    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы (тип темы по умолчанию).</summary>
     private static int RunNewThemeSimplified(int situationImageId)
     {
       if (situationImageId <= 0) return 0;
@@ -170,7 +170,8 @@ namespace ISIDA.Psychic.Understanding
       try
       {
         var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
-        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, 4, pulsCount);
+        // type=0 — «не задан», в CreateOrGet подставится DefaultThemeTypeId
+        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, 0, pulsCount);
         return id;
       }
       catch
