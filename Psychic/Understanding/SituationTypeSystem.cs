@@ -382,21 +382,35 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
+    /// <summary>Дефолтные записи типов ситуаций (Id, MoodId, InfluenceId, ThemeTypeId, Description). ThemeTypeId &gt; 0 зарезервирован для новой темы.</summary>
+    private static readonly (int Id, int MoodId, int InfluenceId, int ThemeTypeId, string Description)[] DefaultTypeDefinitions =
+    {
+      (1, EmptySlotValue, EmptySlotValue, -1, "Ответное действие"),
+      (2, EmptySlotValue, EmptySlotValue, -1, "Запуск автоматизма"),
+      (3, EmptySlotValue, EmptySlotValue, -1, "Нужно осмысление"),
+      (4, EmptySlotValue, EmptySlotValue, -1, "Экспериментировать"),
+      (5, EmptySlotValue, EmptySlotValue, -1, "Игнор оператора"),
+      (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта")
+    };
+
+    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (EnsureDefaultTypes). Новый ID темы не должен совпадать с ними.</summary>
+    public static IReadOnlyList<int> GetThemeTypeIdsReservedInDefaultTypes()
+    {
+      var list = new List<int>();
+      foreach (var d in DefaultTypeDefinitions)
+      {
+        if (d.ThemeTypeId > 0 && !list.Contains(d.ThemeTypeId))
+          list.Add(d.ThemeTypeId);
+      }
+      return list;
+    }
+
     private void EnsureDefaultTypes()
     {
-      var defaults = new[]
+      foreach (var d in DefaultTypeDefinitions)
       {
-        (1, EmptySlotValue, EmptySlotValue, -1, "Ответное действие"),
-        (2, EmptySlotValue, EmptySlotValue, -1, "Запуск автоматизма"),
-        (3, EmptySlotValue, EmptySlotValue, -1, "Нужно осмысление"),
-        (4, EmptySlotValue, EmptySlotValue, -1, "Экспериментировать"),
-        (5, EmptySlotValue, EmptySlotValue, -1, "Игнор оператора"),
-        (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта")
-      };
-      foreach (var d in defaults)
-      {
-        if (!_byId.ContainsKey(d.Item1))
-          _byId[d.Item1] = new SituationTypeRecord { Id = d.Item1, MoodId = d.Item2, InfluenceId = d.Item3, ThemeTypeId = d.Item4, Description = d.Item5 };
+        if (!_byId.ContainsKey(d.Id))
+          _byId[d.Id] = new SituationTypeRecord { Id = d.Id, MoodId = d.MoodId, InfluenceId = d.InfluenceId, ThemeTypeId = d.ThemeTypeId, Description = d.Description };
       }
     }
 

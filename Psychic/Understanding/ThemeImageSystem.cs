@@ -101,24 +101,68 @@ namespace ISIDA.Psychic.Understanding
       return "";
     }
 
-    /// <summary>ID типов тем, привязанных к дефолтным слотам типов ситуаций (1–10). Их нельзя удалять из справочника типов тем.</summary>
+    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (SituationTypeSystem.EnsureDefaultTypes). Их нельзя удалять; новый ID темы не должен с ними совпадать.</summary>
     public static IReadOnlyList<int> GetThemeTypeIdsProtectedFromRemoval()
     {
-      if (!SituationTypeSystem.IsInitialized) return Array.Empty<int>();
-      return SituationTypeSystem.Instance.GetThemeTypeIdsUsedInDefaultSlots();
+      return SituationTypeSystem.GetThemeTypeIdsReservedInDefaultTypes();
     }
 
-    /// <summary>Можно ли удалить тип темы из справочника (false, если он используется в дефолтных типах ситуаций 1–10).</summary>
+    /// <summary>Можно ли удалить тип темы из справочника (false, если он зарезервирован в дефолтных типах ситуаций).</summary>
     public static bool CanRemoveThemeType(int themeTypeId)
     {
       var protectedIds = GetThemeTypeIdsProtectedFromRemoval();
       return !protectedIds.Contains(themeTypeId);
     }
 
-    /// <summary>Справочник типов тем: индекс → описание (только типы 1–17 из файла). Для UI без инициализации движка.</summary>
+    /// <summary>Справочник типов тем: индекс → описание. При инициализации — из theme_types.dat; иначе — дефолтный список 1–17.</summary>
     public static IReadOnlyList<(int Id, string Description)> GetDefaultThemeTypesForSettings()
     {
+      if (IsInitialized)
+        return Instance.GetThemeTypesForSettings();
       return DefaultThemeTypesList;
+    }
+
+    /// <summary>Все типы тем из загруженного справочника (theme_types.dat) для выбора в привязках слотов 41–60.</summary>
+    public IReadOnlyList<(int Id, string Description)> GetThemeTypesForSettings()
+    {
+      return _themeTypeStr
+        .Where(kv => kv.Key >= 1)
+        .OrderBy(kv => kv.Key)
+        .Select(kv => (kv.Key, kv.Value ?? ""))
+        .ToList();
+    }
+
+    /// <summary>Типы тем, доступные для редактирования в UI: только те, что есть в справочнике, исключая типы, зарезервированные в дефолтных типах ситуаций.</summary>
+    public IReadOnlyList<(int Id, string Description)> GetEditableThemeTypes()
+    {
+      var protectedIds = GetThemeTypeIdsProtectedFromRemoval();
+      return _themeTypeStr
+        .Where(kv => kv.Key >= 1 && !protectedIds.Contains(kv.Key))
+        .OrderBy(kv => kv.Key)
+        .Select(kv => (kv.Key, kv.Value ?? ""))
+        .ToList();
+    }
+
+    /// <summary>Обновить справочник типов тем из переданного списка (Id, Description) и сохранить theme_types.dat. Типы, отсутствующие в списке, удаляются (кроме зарезервированных в дефолтах).</summary>
+    public (bool Success, string Error) UpdateThemeTypesFromEditable(IEnumerable<(int Id, string Description)> records)
+    {
+      if (records == null) return (false, "Нет данных для сохранения");
+      var protectedIds = GetThemeTypeIdsProtectedFromRemoval();
+      var idsInRecords = new HashSet<int>(records.Where(r => r.Id >= 1).Select(r => r.Id));
+
+      foreach (var r in records)
+      {
+        if (r.Id < 1) continue;
+        _themeTypeStr[r.Id] = r.Description ?? "";
+      }
+
+      foreach (var id in _themeTypeStr.Keys.ToList())
+      {
+        if (!idsInRecords.Contains(id) && !protectedIds.Contains(id))
+          _themeTypeStr.Remove(id);
+      }
+
+      return SaveThemeTypes();
     }
 
     private static readonly IReadOnlyList<(int Id, string Description)> DefaultThemeTypesList = new List<(int, string)>
@@ -194,7 +238,7 @@ namespace ISIDA.Psychic.Understanding
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
         if (p.Length < 2) continue;
-        if (!int.TryParse(p[0], out int id) || id < 1 || id > 17) continue;
+        if (!int.TryParse(p[0], out int id) || id < 1) continue;
         _themeTypeStr[id] = p[1].Trim();
       }
     }
@@ -222,7 +266,7 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.ThemeTypesDesc
         };
         foreach (var kv in _themeTypeStr.OrderBy(x => x.Key))
-          if (kv.Key >= 1 && kv.Key <= 17)
+          if (kv.Key >= 1)
             lines.Add($"{kv.Key}|{kv.Value}");
         var result = FileValidator.SafeSaveFile(
             path,

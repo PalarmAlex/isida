@@ -1556,7 +1556,7 @@ namespace ISIDA.Common
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
         if (p.Length < 2) return false;
-        if (!int.TryParse(p[0], out int id) || id < 1 || id > 17) return false;
+        if (!int.TryParse(p[0], out int id) || id < 1) return false;
         if (string.IsNullOrWhiteSpace(p[1])) return false;
       }
       return true;
