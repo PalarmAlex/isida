@@ -24,6 +24,14 @@ namespace ISIDA.Common
     private readonly ConditionedReflexesSystem _conditionedReflexesSystem;
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
 
+    private readonly EpisodicMemorySystem _episodicMemory;
+    private readonly ProblemTreeSystem _problemTree;
+    private readonly SituationTypeSystem _situationTypeSystem;
+    private readonly PurposeImageSystem _purposeImageSystem;
+    private readonly SituationImageSystem _situationImageSystem;
+    private readonly ThemeImageSystem _themeImageSystem;
+    private readonly UnderstandingTreeSystem _understandingTreeSystem;
+
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
 
@@ -43,12 +51,19 @@ namespace ISIDA.Common
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
-    /// Инициализирует глобальный экземпляр системы
+    /// Инициализирует глобальный экземпляр системы (основные зависимости обязательны, системы Understanding — опционально, передаются из движка для избежания перекрёстных ссылок через Instance).
     /// </summary>
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
         ConditionedReflexesSystem conditionedReflexesSystem,
-        AutomatizmTreeSystem automatizmTreeSystem)
+        AutomatizmTreeSystem automatizmTreeSystem,
+        EpisodicMemorySystem episodicMemory = null,
+        ProblemTreeSystem problemTree = null,
+        SituationTypeSystem situationTypeSystem = null,
+        PurposeImageSystem purposeImageSystem = null,
+        SituationImageSystem situationImageSystem = null,
+        ThemeImageSystem themeImageSystem = null,
+        UnderstandingTreeSystem understandingTreeSystem = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("EvolutionStageService уже инициализирован.");
@@ -56,17 +71,38 @@ namespace ISIDA.Common
       _instance = new EvolutionStageService(
         automatizmSystem,
         conditionedReflexesSystem,
-        automatizmTreeSystem);
+        automatizmTreeSystem,
+        episodicMemory,
+        problemTree,
+        situationTypeSystem,
+        purposeImageSystem,
+        situationImageSystem,
+        themeImageSystem,
+        understandingTreeSystem);
     }
 
     private EvolutionStageService(
         AutomatizmSystem automatizmSystem,
         ConditionedReflexesSystem conditionedReflexesSystem,
-        AutomatizmTreeSystem automatizmTreeSystem)
+        AutomatizmTreeSystem automatizmTreeSystem,
+        EpisodicMemorySystem episodicMemory,
+        ProblemTreeSystem problemTree,
+        SituationTypeSystem situationTypeSystem,
+        PurposeImageSystem purposeImageSystem,
+        SituationImageSystem situationImageSystem,
+        ThemeImageSystem themeImageSystem,
+        UnderstandingTreeSystem understandingTreeSystem)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
+      _episodicMemory = episodicMemory;
+      _problemTree = problemTree;
+      _situationTypeSystem = situationTypeSystem;
+      _purposeImageSystem = purposeImageSystem;
+      _situationImageSystem = situationImageSystem;
+      _themeImageSystem = themeImageSystem;
+      _understandingTreeSystem = understandingTreeSystem;
     }
 
     #endregion
@@ -242,7 +278,7 @@ namespace ISIDA.Common
     {
       try
       {
-        if (_conditionedReflexesSystem != null && ConditionedReflexesSystem.IsInitialized)
+        if (_conditionedReflexesSystem != null)
         {
           bool originalRemoveFlag = _conditionedReflexesSystem.removeAllConditionedReflexes;
           _conditionedReflexesSystem.removeAllConditionedReflexes = true;
@@ -273,7 +309,7 @@ namespace ISIDA.Common
       // чистить дерево автоматизмов не надо - там нет ссылок на автоматизмы
       try
       {
-        if (_automatizmSystem != null && AutomatizmSystem.IsInitialized)
+        if (_automatizmSystem != null)
         {
           _automatizmSystem.DeleteAllAutomatizm();
           var result = _automatizmSystem.SaveAutomatizm();
@@ -294,41 +330,85 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Полная очистка данных памяти и дерева проблем (каталоги Psychic\Memory и Psychic\Understanding).
-    /// Вызывается при переходе с стадии 4 на 3.
+    /// Вызывается при переходе с стадии 4 на нижестоящие (в т.ч. purpose_images, situation_images, theme_images, understanding_tree).
     /// </summary>
     private void ClearPsychicMemoryAndUnderstanding()
     {
       try
       {
-        if (EpisodicMemorySystem.IsInitialized)
+        if (_episodicMemory != null)
         {
-          EpisodicMemorySystem.Instance.Clear();
+          _episodicMemory.Clear();
           Logger.Info("Данные эпизодической памяти (Psychic\\Memory) успешно очищены");
         }
         else
-          Logger.Info("Система эпизодической памяти не инициализирована, очистка не требуется");
+          Logger.Info("Ссылка на эпизодическую память не передана, очистка не требуется");
 
-        if (ProblemTreeSystem.IsInitialized)
+        if (_problemTree != null)
         {
-          var result = ProblemTreeSystem.Instance.ClearProblemTree();
+          var result = _problemTree.ClearProblemTree();
           if (result.Success)
             Logger.Info("Данные дерева проблем (Psychic\\Understanding) успешно очищены");
           else
             Logger.Warning($"Не удалось обновить файл дерева проблем после очистки: {result.ErrorMessage}");
         }
         else
-          Logger.Info("Система дерева проблем не инициализирована, очистка не требуется");
+          Logger.Info("Ссылка на дерево проблем не передана, очистка не требуется");
 
-        if (SituationTypeSystem.IsInitialized)
+        if (_situationTypeSystem != null)
         {
-          var stsResult = SituationTypeSystem.Instance.ClearExceptDefaults();
+          var stsResult = _situationTypeSystem.ClearExceptDefaults();
           if (stsResult.Success)
             Logger.Info("Справочник типов ситуаций очищен (оставлены только дефолтные записи 1–5)");
           else
             Logger.Warning($"Не удалось очистить справочник типов ситуаций: {stsResult.Error}");
         }
         else
-          Logger.Info("Справочник типов ситуаций не инициализирован, очистка не требуется");
+          Logger.Info("Ссылка на справочник типов ситуаций не передана, очистка не требуется");
+
+        if (_purposeImageSystem != null)
+        {
+          var result = _purposeImageSystem.Clear();
+          if (result.Success)
+            Logger.Info("Данные образов целей (purpose_images.dat) успешно очищены");
+          else
+            Logger.Warning($"Не удалось очистить образы целей: {result.Error}");
+        }
+        else
+          Logger.Info("Ссылка на систему образов целей не передана, очистка не требуется");
+
+        if (_situationImageSystem != null)
+        {
+          var result = _situationImageSystem.Clear();
+          if (result.Success)
+            Logger.Info("Данные образов ситуаций (situation_images.dat) успешно очищены");
+          else
+            Logger.Warning($"Не удалось очистить образы ситуаций: {result.Error}");
+        }
+        else
+          Logger.Info("Ссылка на систему образов ситуаций не передана, очистка не требуется");
+
+        if (_themeImageSystem != null)
+        {
+          var result = _themeImageSystem.Clear();
+          if (result.Success)
+            Logger.Info("Данные образов тем (theme_images.dat) успешно очищены");
+          else
+            Logger.Warning($"Не удалось очистить образы тем: {result.Error}");
+        }
+        else
+          Logger.Info("Ссылка на систему образов тем не передана, очистка не требуется");
+
+        if (_understandingTreeSystem != null)
+        {
+          var result = _understandingTreeSystem.Clear();
+          if (result.Success)
+            Logger.Info("Данные дерева понимания (understanding_tree.dat) успешно очищены");
+          else
+            Logger.Warning($"Не удалось очистить дерево понимания: {result.Error}");
+        }
+        else
+          Logger.Info("Ссылка на дерево понимания не передана, очистка не требуется");
       }
       catch (Exception ex)
       {

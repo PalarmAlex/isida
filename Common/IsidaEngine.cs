@@ -778,7 +778,11 @@ namespace ISIDA.Common
         initializationStep = 23;
         Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.PsychicDataFolder);
         context.UnderstandingTreeSystem = Psychic.Understanding.UnderstandingTreeSystem.Instance;
-        context.UnderstandingTreeSystem.SetSituationImageSystem(context.SituationImageSystem);
+        context.UnderstandingTreeSystem.SetDependencies(
+          context.SituationImageSystem,
+          context.SituationTypeSystem,
+          Psychic.Understanding.ThemeImageSystem.Instance,
+          Psychic.Understanding.PurposeImageSystem.Instance);
 
         // Шаг 24: Система автоматизмов
         initializationStep = 24;
@@ -919,12 +923,19 @@ namespace ISIDA.Common
           context.ActionsImages,
           context.MirrorAutomatizmService);
 
-        // Шаг 36: Сервис переключения стадий эволюции
+        // Шаг 36: Сервис переключения стадий эволюции (ссылки на системы Understanding передаём явно, без перекрёстных обращений через Instance)
         initializationStep = 36;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes,
-            context.AutomatizmTree);
+            context.AutomatizmTree,
+            context.EpisodicMemory,
+            context.ProblemTree,
+            context.SituationTypeSystem,
+            Psychic.Understanding.PurposeImageSystem.Instance,
+            context.SituationImageSystem,
+            Psychic.Understanding.ThemeImageSystem.Instance,
+            context.UnderstandingTreeSystem);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
 

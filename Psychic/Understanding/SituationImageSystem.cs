@@ -59,7 +59,7 @@ namespace ISIDA.Psychic.Understanding
     #region Создание и поиск
 
     /// <summary>Создать или получить образ ситуации по (automatizmNodeId, situationTypeId)</summary>
-    public (int Id, SituationImageRecord Record) CreateOrGet(int automatizmTreeNodeId, int situationTypeId, bool checkUnicum = true)
+    public (int Id, SituationImageRecord Record) CreateSituationImageOrGet(int automatizmTreeNodeId, int situationTypeId, bool checkUnicum = true)
     {
       if (situationTypeId <= 0)
         return (0, null);
@@ -95,11 +95,6 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>ID текущей ситуации с учётом контекста. Логика по приоритетам.</summary>
-    /// <remarks>
-    /// 1) nodeId==0 → тип 3 (NeedThinking). 2) LastRun&gt;0 и истекло ожидание → тип 5 (OperatorIgnore).
-    /// 3) LastRun&gt;0 и ожидание не истекло → тип 1 (ResponseAction). 4) hasAutomatismInBranch → тип 2 (AutomatizmRun).
-    /// 5) из context: настроение/кнопки (типы 11–17, 21–37 при наличии в справочнике). 6) иначе тип 4 (Experiment).
-    /// </remarks>
     public int GetCurSituationImageId(int automatizmTreeNodeId, SituationImageContext context)
     {
       if (automatizmTreeNodeId < 0) return 0;
@@ -110,7 +105,7 @@ namespace ISIDA.Psychic.Understanding
         typeId = GetDefaultSituationTypeId();
       if (typeId <= 0) return 0;
 
-      var (id, _) = CreateOrGet(automatizmTreeNodeId, typeId, true);
+      var (id, _) = CreateSituationImageOrGet(automatizmTreeNodeId, typeId, true);
       return id;
     }
 
@@ -240,6 +235,15 @@ namespace ISIDA.Psychic.Understanding
         _unicumKeyToId[(nodeId, typeId)] = id;
         if (id > _lastId) _lastId = id;
       }
+    }
+
+    /// <summary>Очистить все образы ситуаций в памяти и в файле (для перехода на младшую стадию).</summary>
+    public (bool Success, string Error) Clear()
+    {
+      _byId.Clear();
+      _unicumKeyToId.Clear();
+      _lastId = 0;
+      return Save();
     }
 
     /// <summary>Сохранить на диск</summary>

@@ -1,5 +1,4 @@
 using ISIDA.Common;
-using static ISIDA.Common.ResearchLogger;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,8 +18,8 @@ namespace ISIDA.Psychic.Understanding
     private int _lastId;
     private bool _disposed;
 
-    /// <summary>ID типа темы по умолчанию (например, «Базовая тема» = 4). Задаётся из конфигурации.</summary>
-    public int DefaultThemeTypeId { get; set; } = 4;
+    /// <summary>ID типа темы по умолчанию. Задаётся из конфигурации.</summary>
+    public int DefaultThemeTypeId { get; set; } = 0;
 
     #region Инициализация
 
@@ -62,7 +61,7 @@ namespace ISIDA.Psychic.Understanding
     #region Создание и поиск
 
     /// <summary>Создать или получить образ темы. Если type не задан (≤0), используется DefaultThemeTypeId.</summary>
-    public (int Id, ThemeImageRecord Record) CreateOrGet(int weight, int type, int pulsCount, bool checkUnicum = true)
+    public (int Id, ThemeImageRecord Record) CreateThemeImageOrGet(int weight, int type, int pulsCount, bool checkUnicum = true)
     {
       if (weight < 1) weight = 2;
       if (weight > 10) weight = 10;
@@ -280,6 +279,15 @@ namespace ISIDA.Psychic.Understanding
       {
         return (false, ex.Message);
       }
+    }
+
+    /// <summary>Очистить все образы тем в памяти и в файле theme_images.dat (для перехода на младшую стадию). Справочник типов тем не трогает.</summary>
+    public (bool Success, string Error) Clear()
+    {
+      _byId.Clear();
+      _unicumKeyToId.Clear();
+      _lastId = 0;
+      return Save();
     }
 
     /// <summary>Сохранить на диск (образы тем и справочник типов)</summary>

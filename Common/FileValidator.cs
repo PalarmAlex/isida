@@ -139,7 +139,7 @@ namespace ISIDA.Common
 
       // Справочник типов тем (ID 1–17 по образцу BOT)
       public const string ThemeTypesFormat = "# Формат: Id|Description";
-      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–17), Description: текстовое описание";
+      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: текстовое описание";
 
       // Образы целей
       public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";

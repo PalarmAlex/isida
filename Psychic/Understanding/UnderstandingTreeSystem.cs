@@ -65,11 +65,21 @@ namespace ISIDA.Psychic.Understanding
     public (int AutTreeId, int SituationTreeId, int ThemeId, int PurposeId) ProblemTreeInfo { get; private set; }
 
     private SituationImageSystem _situationImageSystem;
+    private SituationTypeSystem _situationTypeSystem;
+    private ThemeImageSystem _themeImageSystem;
+    private PurposeImageSystem _purposeImageSystem;
 
-    /// <summary>Установить систему образов ситуаций (вызывается при инициализации движка после создания обеих систем)</summary>
-    public void SetSituationImageSystem(SituationImageSystem situationImageSystem)
+    /// <summary>Установить зависимости для дерева понимания (вызывается при инициализации движка после создания всех систем)</summary>
+    public void SetDependencies(
+      SituationImageSystem situationImageSystem,
+      SituationTypeSystem situationTypeSystem,
+      ThemeImageSystem themeImageSystem,
+      PurposeImageSystem purposeImageSystem)
     {
       _situationImageSystem = situationImageSystem;
+      _situationTypeSystem = situationTypeSystem;
+      _themeImageSystem = themeImageSystem;
+      _purposeImageSystem = purposeImageSystem;
     }
 
     #endregion
@@ -164,21 +174,20 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы. При стимуле с пульта — тема из типа ситуации ID=6, иначе — по умолчанию.</summary>
-    private static int RunNewThemeSimplified(int situationImageId, bool hasStimulusFromPult = false)
+    private int RunNewThemeSimplified(int situationImageId, bool hasStimulusFromPult = false)
     {
       if (situationImageId <= 0) return 0;
-      if (!ThemeImageSystem.IsInitialized) return 0;
+      if (_themeImageSystem == null) return 0;
       try
       {
         var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
         int typeId = 0;
-        if (hasStimulusFromPult && SituationTypeSystem.IsInitialized)
+        if (hasStimulusFromPult && _situationTypeSystem != null)
         {
-          typeId = SituationTypeSystem.Instance.GetThemeTypeIdBySituationTypeId(6);
-          if (typeId <= 0) typeId = ThemeImageSystem.Instance.DefaultThemeTypeId;
+          typeId = _situationTypeSystem.GetThemeTypeIdBySituationTypeId(6);
+          if (typeId <= 0) typeId = _themeImageSystem.DefaultThemeTypeId;
         }
-        // typeId=0 — в CreateOrGet подставится DefaultThemeTypeId
-        var (id, _) = ThemeImageSystem.Instance.CreateOrGet(2, typeId, pulsCount);
+        var (id, _) = _themeImageSystem.CreateThemeImageOrGet(2, typeId, pulsCount);
         return id;
       }
       catch
@@ -188,15 +197,15 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>Упрощённая логика цели: получает или создаёт образ цели по настроению, эмоции и ситуации.</summary>
-    private static int GetMentalPurposeSimplified(int baseId, int emotionId, int situationImageId)
+    private int GetMentalPurposeSimplified(int baseId, int emotionId, int situationImageId)
     {
       if (situationImageId <= 0) return 0;
-      if (!PurposeImageSystem.IsInitialized) return 0;
+      if (_purposeImageSystem == null) return 0;
       try
       {
         var target = 2;
         var moodId = baseId >= -1 && baseId <= 1 ? baseId : 0;
-        var (id, _) = PurposeImageSystem.Instance.CreateOrGet(target, moodId, emotionId, situationImageId);
+        var (id, _) = _purposeImageSystem.CreatePurposeImageOrGet(target, moodId, emotionId, situationImageId);
         return id;
       }
       catch
@@ -311,6 +320,25 @@ namespace ISIDA.Psychic.Understanding
         parent.Children.Add(node);
         _nodesById[id] = node;
         if (id > _lastNodeId) _lastNodeId = id;
+      }
+    }
+
+    /// <summary>Очистить дерево понимания в памяти и в файле, оставить только базовую структуру (для перехода на младшую стадию).</summary>
+    public (bool Success, string Error) Clear()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        Tree.Children.Clear();
+        _nodesById.Clear();
+        _nodesById[0] = Tree;
+        _lastNodeId = 0;
+        CreateBasicUnderstandingTree();
+        return Save();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 

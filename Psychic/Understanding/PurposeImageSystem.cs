@@ -54,7 +54,7 @@ namespace ISIDA.Psychic.Understanding
     #region Создание и поиск
 
     /// <summary>Создать или получить образ цели</summary>
-    public (int Id, PurposeImageRecord Record) CreateOrGet(int target, int moodId, int emotionId, int situationId, bool checkUnicum = true)
+    public (int Id, PurposeImageRecord Record) CreatePurposeImageOrGet(int target, int moodId, int emotionId, int situationId, bool checkUnicum = true)
     {
       if (target < 1) target = 2;
       if (target > 2) target = 2;
@@ -130,6 +130,15 @@ namespace ISIDA.Psychic.Understanding
         _unicumKeyToId[(target, moodId, emotionId, situationId)] = id;
         if (id > _lastId) _lastId = id;
       }
+    }
+
+    /// <summary>Очистить все образы целей в памяти и в файле (для перехода на младшую стадию).</summary>
+    public (bool Success, string Error) Clear()
+    {
+      _byId.Clear();
+      _unicumKeyToId.Clear();
+      _lastId = 0;
+      return Save();
     }
 
     /// <summary>Сохранить на диск</summary>
