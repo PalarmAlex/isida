@@ -882,6 +882,7 @@ namespace ISIDA.Common
           context.ProblemTree);
         if (context.EpisodicMemory != null)
           context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
+        context.OrientationReflex.SetUnderstandingTreeSystem(context.UnderstandingTreeSystem);
         context.Gomeostas.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);

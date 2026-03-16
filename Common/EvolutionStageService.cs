@@ -145,7 +145,7 @@ namespace ISIDA.Common
         if (targetStage < currentStage && !force)
         {
           return EvolutionStageChangeResult.CreateConfirmationRequired(
-              $"Внимание! Возврат на предыдущую стадию ({targetStage}) приведет к очистке данных всех последующих стадий (с {targetStage + 1} по 5). Продолжить?");
+              $"Внимание! Возврат на предыдущую стадию ({targetStage}) приведет к очистке данных стадий с {targetStage + 1} по {currentStage}. Продолжить?");
         }
 
         // Проверка остаемся ли на той же стадии
@@ -163,7 +163,7 @@ namespace ISIDA.Common
         if (!skipDataClearing)
         {
           if (targetStage < currentStage)
-            ClearSubsequentStagesData(targetStage);
+            ClearSubsequentStagesData(targetStage, currentStage);
           else if (targetStage > currentStage && targetStage > currentStage + 1 && force)
             ClearIntermediateStagesData(currentStage + 1, targetStage - 1);
         }
@@ -190,13 +190,15 @@ namespace ISIDA.Common
     #region Методы очистки стадий
 
     /// <summary>
-    /// Очистка данных последующих стадий
+    /// Очистка данных стадий, с которых сходим (от targetStage+1 до currentStage включительно). При переходе 4→3 очищается только стадия 4.
     /// </summary>
-    private void ClearSubsequentStagesData(int currentStage)
+    /// <param name="targetStage">Целевая стадия (на которую переходим)</param>
+    /// <param name="currentStage">Текущая стадия (с которой сходим)</param>
+    private void ClearSubsequentStagesData(int targetStage, int currentStage)
     {
-      Logger.Info($"Очистка данных стадий с {currentStage + 1} по 5");
+      Logger.Info($"Очистка данных стадий с {targetStage + 1} по {currentStage}");
 
-      for (int stage = currentStage + 1; stage <= 5; stage++)
+      for (int stage = targetStage + 1; stage <= currentStage; stage++)
       {
         try
         {
@@ -359,7 +361,7 @@ namespace ISIDA.Common
         {
           var stsResult = _situationTypeSystem.ClearExceptDefaults();
           if (stsResult.Success)
-            Logger.Info("Справочник типов ситуаций очищен (оставлены только дефолтные записи 1–5)");
+            Logger.Info("Справочник типов ситуаций очищен (оставлены только дефолтные записи)");
           else
             Logger.Warning($"Не удалось очистить справочник типов ситуаций: {stsResult.Error}");
         }

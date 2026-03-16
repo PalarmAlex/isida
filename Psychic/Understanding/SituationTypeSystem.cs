@@ -385,12 +385,14 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Дефолтные записи типов ситуаций (Id, MoodId, InfluenceId, ThemeTypeId, Description). ThemeTypeId &gt; 0 зарезервирован для новой темы.</summary>
     private static readonly (int Id, int MoodId, int InfluenceId, int ThemeTypeId, string Description)[] DefaultTypeDefinitions =
     {
-      (1, EmptySlotValue, EmptySlotValue, -1, "Ответное действие"),
-      (2, EmptySlotValue, EmptySlotValue, -1, "Запуск автоматизма"),
-      (3, EmptySlotValue, EmptySlotValue, -1, "Нужно осмысление"),
-      (4, EmptySlotValue, EmptySlotValue, -1, "Экспериментировать"),
-      (5, EmptySlotValue, EmptySlotValue, -1, "Игнор оператора"),
-      (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта")
+      (1, EmptySlotValue, EmptySlotValue, 11, "Ответное действие"),
+      (2, EmptySlotValue, EmptySlotValue, 11, "Запуск автоматизма"),
+      (3, EmptySlotValue, EmptySlotValue, 10, "Нужно осмысление"),
+      (4, EmptySlotValue, EmptySlotValue, 5, "Экспериментировать"),
+      (5, EmptySlotValue, EmptySlotValue, 7, "Игнор оператора"),
+      (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта"),
+      (7, EmptySlotValue, EmptySlotValue, 1, "Негативный эффект моторного автоматизма"),
+      (8, EmptySlotValue, EmptySlotValue, 16, "Есть объект высокой значимости"),
     };
 
     /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (EnsureDefaultTypes). Новый ID темы не должен совпадать с ними.</summary>

@@ -2,6 +2,7 @@ using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Importance;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Understanding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +25,7 @@ namespace ISIDA.Psychic
     private AutomatizmSystem _automatizmSystem;
     private AutomatizmTreeSystem _automatizmTreeSystem;
     private EpisodicMemorySystem _episodicMemorySystem;
+    private UnderstandingTreeSystem _understandingTreeSystem;
 
     #region Инициализация
 
@@ -84,6 +86,15 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
+    /// Установить дерево понимания (для триггера темы «объект высокой значимости» при обновлении значимости; передаётся из IsidaEngine, без перекрёстных ссылок через Instance).
+    /// </summary>
+    /// <param name="understandingTreeSystem">Экземпляр UnderstandingTreeSystem или null.</param>
+    public void SetUnderstandingTreeSystem(UnderstandingTreeSystem understandingTreeSystem)
+    {
+      _understandingTreeSystem = understandingTreeSystem;
+    }
+
+    /// <summary>
     /// Проверка, инициализированы ли зависимости
     /// </summary>
     public bool AreDependenciesSet => _automatizmSystem != null && _automatizmTreeSystem != null;
@@ -140,7 +151,7 @@ namespace ISIDA.Psychic
         Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
         if (_episodicMemorySystem != null)
-          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId);
+          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId, _understandingTreeSystem);
         if (AppGlobalState.EvolutionStage < 3)
           atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
@@ -167,7 +178,7 @@ namespace ISIDA.Psychic
         Automatizm atmz = null;
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
         if (_episodicMemorySystem != null)
-          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId);
+          ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId, _understandingTreeSystem);
         atmz = _purposeGeneticImageSystem.GetBasicAutomatizmByPurpose(automatizmID);
 
         return atmz;

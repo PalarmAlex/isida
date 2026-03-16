@@ -45,10 +45,15 @@ namespace ISIDA.Psychic.Understanding
               Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
               "ISIDA", "Data", "Psychic", "Understanding")
           : Path.Combine(psychicDataPath, "Understanding");
+
       EnsureDirectory();
       Load();
+
       if (Tree.Children.Count == 0)
+      {
         CreateBasicUnderstandingTree();
+        Save();
+      }
     }
 
     #endregion
@@ -135,8 +140,8 @@ namespace ISIDA.Psychic.Understanding
         var foundId = FindOrExtendBranch(0, condArr, Tree, ref stepCount);
         DetectedActiveLastUnderstandingNodeId = foundId;
 
-        bool hasStimulusFromPult = situationContext != null && (situationContext.MoodId != 0 || (situationContext.ActionIds != null && situationContext.ActionIds.Length > 0));
-        int themeId = RunNewThemeSimplified(situationImageId, hasStimulusFromPult);
+        int situationTypeId = _situationImageSystem?.GetById(situationImageId)?.SituationTypeId ?? 0;
+        int themeId = RunNewThemeBySituationTypeId(situationTypeId);
         int purposeId = GetMentalPurposeSimplified(baseId, emotionId, situationImageId);
         ProblemTreeInfo = (automatizmTreeNodeId, situationImageId, themeId, purposeId);
 
@@ -173,21 +178,45 @@ namespace ISIDA.Psychic.Understanding
       return newNode?.Id ?? 0;
     }
 
-    /// <summary>Упрощённая логика темы: при наличии ситуации создаёт/получает образ темы. При стимуле с пульта — тема из типа ситуации ID=6, иначе — по умолчанию.</summary>
-    private int RunNewThemeSimplified(int situationImageId, bool hasStimulusFromPult = false)
+    /// <summary>
+    /// Обновить тему мышления по коду типа ситуации (триггеру 1–10).
+    /// Возвращает ID образа темы; при отсутствии привязки используется тема по умолчанию.
+    /// Вызывается при активации дерева понимания и может вызываться из других модулей (например, при негативном эффекте моторного автоматизма или объекте высокой значимости).
+    /// </summary>
+    /// <param name="situationTypeCode">Код типа ситуации из DefaultTypeDefinitions (1–10).</param>
+    /// <returns>ID образа темы (ThemeImage) или 0 при ошибке.</returns>
+    public int UpdateThemeByTrigger(int situationTypeCode)
     {
-      if (situationImageId <= 0) return 0;
+      return RunNewThemeBySituationTypeId(situationTypeCode);
+    }
+
+    /// <summary>
+    /// Обновить тему по триггеру и перезапустить дерево проблем с новой темой (для вызовов из модулей оценки автоматизмов, значимости и т.п.).
+    /// </summary>
+    /// <param name="situationTypeCode">Код типа ситуации (1–8).</param>
+    /// <param name="problemTree">Дерево проблем для обновления активной ветки.</param>
+    public void UpdateThemeByTriggerAndRefreshProblemTree(int situationTypeCode, ProblemTreeSystem problemTree)
+    {
+      int themeId = UpdateThemeByTrigger(situationTypeCode);
+      if (themeId == 0 || problemTree == null) return;
+      var (autId, sitId, _, purposeId) = ProblemTreeInfo;
+      ProblemTreeInfo = (autId, sitId, themeId, purposeId);
+      problemTree.UpdateActiveBranchFromUnderstandingInfo(autId, sitId, themeId, purposeId);
+    }
+
+    /// <summary>Создать или получить образ темы по коду типа ситуации; при отсутствии привязки — тема по умолчанию.</summary>
+    private int RunNewThemeBySituationTypeId(int situationTypeId)
+    {
       if (_themeImageSystem == null) return 0;
       try
       {
         var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
-        int typeId = 0;
-        if (hasStimulusFromPult && _situationTypeSystem != null)
-        {
-          typeId = _situationTypeSystem.GetThemeTypeIdBySituationTypeId(6);
-          if (typeId <= 0) typeId = _themeImageSystem.DefaultThemeTypeId;
-        }
-        var (id, _) = _themeImageSystem.CreateThemeImageOrGet(2, typeId, pulsCount);
+        int themeTypeId = _situationTypeSystem != null
+          ? _situationTypeSystem.GetThemeTypeIdBySituationTypeId(situationTypeId)
+          : 0;
+        if (themeTypeId <= 0)
+          themeTypeId = _themeImageSystem.DefaultThemeTypeId;
+        var (id, _) = _themeImageSystem.CreateThemeImageOrGet(2, themeTypeId, pulsCount);
         return id;
       }
       catch
@@ -264,7 +293,6 @@ namespace ISIDA.Psychic.Understanding
         Tree.Children.Add(node);
         _nodesById[node.Id] = node;
       }
-      Save();
     }
 
     #endregion
@@ -334,12 +362,12 @@ namespace ISIDA.Psychic.Understanding
         _nodesById[0] = Tree;
         _lastNodeId = 0;
         CreateBasicUnderstandingTree();
-        return Save();
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+      return Save();
     }
 
     /// <summary>Сохранить дерево</summary>

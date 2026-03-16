@@ -1,5 +1,6 @@
 using ISIDA.Common;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Understanding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -119,10 +120,15 @@ namespace ISIDA.Psychic.Importance
     /// Определить текущий объект максимальной значимости для стимула (curActiveActions) и записать в информационную среду.
     /// Вызывать при каждом новом стимуле (после установки ActionsImageID).
     /// </summary>
+    /// <param name="episodic">Система эпизодической памяти.</param>
+    /// <param name="infoEnv">Система информационной среды.</param>
+    /// <param name="actionsImageId">ID образа действий.</param>
+    /// <param name="understandingTreeSystem">Дерево понимания для триггера темы «объект высокой значимости» (8); передаётся вызывающим кодом, без использования Instance.</param>
     public static void UpdateExtremImportanceObject(
       EpisodicMemorySystem episodic,
       InformationEnvironmentSystem infoEnv,
-      int actionsImageId)
+      int actionsImageId,
+      UnderstandingTreeSystem understandingTreeSystem = null)
     {
       if (episodic == null || infoEnv == null || !EpisodicMemorySystem.IsInitialized)
         return;
@@ -147,11 +153,9 @@ namespace ISIDA.Psychic.Importance
       if (obj != null && Math.Abs(obj.ExtremVal) > MinSignificantImportance)
       {
         infoEnv.CurrentInformationEnvironment.ExtremImportanceObjectID = obj.ObjId;
-        // При высокой значимости можно вызывать смену темы и т.п. — при необходимости расширить.
-        if (Math.Abs(obj.ExtremVal) > HighImportanceThreshold && obj.ExtremVal < -HighImportanceThreshold)
-        {
-          // Проблемный объект с отрицательным эффектом — можно сохранить для последующей обработки 
-        }
+        // Триггер 8: есть объект высокой значимости — активировать тему мышления (через переданную ссылку, без Instance)
+        if (Math.Abs(obj.ExtremVal) > HighImportanceThreshold && understandingTreeSystem != null)
+          understandingTreeSystem.UpdateThemeByTrigger(8);
       }
       else
         infoEnv.CurrentInformationEnvironment.ExtremImportanceObjectID = 0;

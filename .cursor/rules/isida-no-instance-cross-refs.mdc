@@ -1,0 +1,29 @@
+---
+description: Не использовать Instance при вызове методов других классов; только внедрённые ссылки; избегать перекрёстных ссылок через IsidaEngine
+globs: "**/*.cs"
+alwaysApply: false
+---
+
+# ISIDA: без Instance и перекрёстных ссылок
+
+При любых изменениях в проекте isida соблюдай следующие правила.
+
+## Вызовы методов других классов
+
+- **Не использовать глобальный синглтон (`*.Instance`)** для вызова методов других систем/сервисов из кода класса. Использовать только **ссылку, переданную в конструктор, через SetDependencies или другой метод вторичной инициализации**.
+- Зависимости задаются в **IsidaEngine**: системы создаются, в контексте сохраняются ссылки (`context.SomeSystem`), затем эти ссылки передаются в другие системы через конструктор или методы вида `SetDependencies(...)`, `SetUnderstandingTreeSystem(...)` и т.п.
+- Если классу нужен другой сервис (например, UnderstandingTreeSystem для триггера темы), он должен **получать его через параметр** (метод установки зависимости), а не обращаться к `UnderstandingTreeSystem.Instance` или к `IsidaEngine`/контексту.
+
+## Перекрёстные ссылки через IsidaEngine
+
+- **Не создавать перекрёстных зависимостей через IsidaEngine/контекст.** Порядок инициализации в IsidaEngine должен оставаться односторонним: контекст владеет системами и передаёт ссылки «вниз», системы не обращаются к контексту или к другим системам через общий «хаб».
+- Если системе A нужна система B, в IsidaEngine после инициализации B вызывается метод A (например, `context.A.SetB(context.B)`), а не наоборот и не через общий контекст изнутри A.
+
+## Примеры
+
+- **Плохо:** внутри `ObjectImportanceService.UpdateExtremImportanceObject` вызывать `UnderstandingTreeSystem.Instance.UpdateThemeByTrigger(8)`.
+- **Хорошо:** добавить параметр `UnderstandingTreeSystem understandingTreeSystem` в `UpdateExtremImportanceObject`, в `OrientationReflexSystem` хранить поле `_understandingTreeSystem`, устанавливать его через `SetUnderstandingTreeSystem(...)` из IsidaEngine и передавать в `UpdateExtremImportanceObject(..., _understandingTreeSystem)`.
+
+## Связь с IsidaEngine
+
+- В **IsidaEngine** допустимо присваивать `context.SomeSystem = SomeSystem.Instance` сразу после инициализации этой системы — контекст является единственным местом, где собираются ссылки. Далее везде в коде использовать только переданные из контекста (или из конструктора/SetDependencies) ссылки, а не обращаться к `*.Instance` из других модулей.
