@@ -204,7 +204,8 @@ namespace ISIDA.Psychic.Understanding
       problemTree.UpdateActiveBranchFromUnderstandingInfo(autId, sitId, themeId, purposeId);
     }
 
-    /// <summary>Создать или получить образ темы по коду типа ситуации; при отсутствии привязки — тема по умолчанию.</summary>
+    /// <summary>Создать или получить образ темы по коду типа ситуации; при отсутствии привязки — тема по умолчанию.
+    /// Конкуренция по весу: если уже есть активная тема с большим весом, она остаётся (новая не перекрывает).</summary>
     private int RunNewThemeBySituationTypeId(int situationTypeId)
     {
       if (_themeImageSystem == null) return 0;
@@ -216,7 +217,18 @@ namespace ISIDA.Psychic.Understanding
           : 0;
         if (themeTypeId <= 0)
           themeTypeId = _themeImageSystem.DefaultThemeTypeId;
-        var (id, _) = _themeImageSystem.CreateThemeImageOrGet(2, themeTypeId, pulsCount);
+        int weight = _themeImageSystem.GetDefaultWeightForThemeType(themeTypeId);
+        var (id, newRecord) = _themeImageSystem.CreateThemeImageOrGet(weight, themeTypeId, pulsCount);
+        if (newRecord == null) return id;
+
+        int currentThemeId = ProblemTreeInfo.ThemeId;
+        if (currentThemeId > 0)
+        {
+          var currentRec = _themeImageSystem.GetById(currentThemeId);
+          if (currentRec != null && currentRec.Weight > newRecord.Weight)
+            return currentThemeId;
+        }
+
         return id;
       }
       catch

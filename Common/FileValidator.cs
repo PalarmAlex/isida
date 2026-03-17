@@ -138,8 +138,8 @@ namespace ISIDA.Common
       public const string ThemeImagesDesc = "# Weight: вес (1-10), Type: тип темы (ThemeTypeStr), PulsCount: время актуализации";
 
       // Справочник типов тем (ID 1–17 по образцу BOT)
-      public const string ThemeTypesFormat = "# Формат: Id|Description";
-      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: текстовое описание";
+      public const string ThemeTypesFormat = "# Формат: Id|Description|DefaultWeight";
+      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: описание, DefaultWeight: вес по умолчанию (обязательно >0)";
 
       // Образы целей
       public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";
@@ -1543,7 +1543,7 @@ namespace ISIDA.Common
       }
     }
 
-    /// <summary>Проверяет валидность содержимого файла справочника типов тем</summary>
+    /// <summary>Проверяет валидность содержимого файла справочника типов тем. Формат: Id|Description|DefaultWeight; вес для каждой темы обязан быть >0.</summary>
     public static bool IsValidThemeTypesFile(IEnumerable<string> lines)
     {
       if (lines == null) return false;
@@ -1555,9 +1555,10 @@ namespace ISIDA.Common
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var p = t.Split('|');
-        if (p.Length < 2) return false;
+        if (p.Length < 3) return false;
         if (!int.TryParse(p[0], out int id) || id < 1) return false;
         if (string.IsNullOrWhiteSpace(p[1])) return false;
+        if (!int.TryParse(p[2], out int defaultWeight) || defaultWeight < 1) return false;
       }
       return true;
     }

@@ -53,6 +53,9 @@ namespace ISIDA.Psychic.Understanding
               "ISIDA", "Data", "Psychic", "Understanding")
           : Path.Combine(psychicDataPath, "Understanding");
       EnsureDirectory();
+      var path = Path.Combine(_dataPath, FileName);
+      if (!File.Exists(path))
+        CreateDefaultSituationTypesFile(path);
       Load();
       EnsureDefaultTypes();
       EnsureSlots();
@@ -382,37 +385,89 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Дефолтные записи типов ситуаций (Id, MoodId, InfluenceId, ThemeTypeId, Description). ThemeTypeId &gt; 0 зарезервирован для новой темы.</summary>
-    private static readonly (int Id, int MoodId, int InfluenceId, int ThemeTypeId, string Description)[] DefaultTypeDefinitions =
+    /// <summary>Содержимое файла по умолчанию при первом запуске (только записи 1–10). Редактирование — в situation_types.dat.</summary>
+    private static readonly string[] DefaultSituationTypesFileLines =
     {
-      (1, EmptySlotValue, EmptySlotValue, 11, "Ответное действие"),
-      (2, EmptySlotValue, EmptySlotValue, 11, "Запуск автоматизма"),
-      (3, EmptySlotValue, EmptySlotValue, 10, "Нужно осмысление"),
-      (4, EmptySlotValue, EmptySlotValue, 5, "Экспериментировать"),
-      (5, EmptySlotValue, EmptySlotValue, 7, "Игнор оператора"),
-      (6, EmptySlotValue, EmptySlotValue, 4, "Стимул с пульта"),
-      (7, EmptySlotValue, EmptySlotValue, 1, "Негативный эффект моторного автоматизма"),
-      (8, EmptySlotValue, EmptySlotValue, 16, "Есть объект высокой значимости"),
+      "1|-1|-1|11|Ответное действие",
+      "2|-1|-1|11|Запуск автоматизма",
+      "3|-1|-1|10|Нужно осмысление",
+      "4|-1|-1|5|Экспериментировать",
+      "5|-1|-1|7|Игнор оператора",
+      "6|-1|-1|4|Стимул с пульта",
+      "7|-1|-1|1|Негативный эффект моторного автоматизма",
+      "8|-1|-1|16|Есть объект высокой значимости",
+      "9|-1|-1|-1|",
+      "10|-1|-1|-1|"
     };
 
-    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (EnsureDefaultTypes). Новый ID темы не должен совпадать с ними.</summary>
+    private void CreateDefaultSituationTypesFile(string path)
+    {
+      try
+      {
+        var lines = new List<string>
+        {
+          FileValidator.FileHeaders.SituationTypesFormat,
+          FileValidator.FileHeaders.SituationTypesDesc
+        };
+        lines.AddRange(DefaultSituationTypesFileLines);
+        File.WriteAllLines(path, lines);
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"Не удалось создать файл типов ситуаций по умолчанию: {ex.Message}");
+      }
+    }
+
+    /// <summary>Читает из situation_types.dat записи с Id в диапазоне 1–10.</summary>
+    private List<SituationTypeRecord> ReadDefaultTypeDefinitionsFromFile()
+    {
+      var path = Path.Combine(_dataPath, FileName);
+      var result = new List<SituationTypeRecord>();
+      if (!File.Exists(path) || !FileValidator.IsValidSituationTypeFile(path))
+        return result;
+      foreach (var line in File.ReadLines(path))
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 4) continue;
+        if (!int.TryParse(p[0], out int id) || id < 1 || id > 10) continue;
+        if (!int.TryParse(p[1], out int moodId)) moodId = EmptySlotValue;
+        if (!int.TryParse(p[2], out int influenceId)) influenceId = EmptySlotValue;
+        int themeTypeId = -1;
+        var desc = "";
+        if (p.Length >= 5)
+        {
+          int.TryParse(p[3], out themeTypeId);
+          desc = p[4] ?? "";
+        }
+        else
+          desc = p.Length > 3 ? p[3] : "";
+        result.Add(new SituationTypeRecord { Id = id, MoodId = moodId, InfluenceId = influenceId, ThemeTypeId = themeTypeId, Description = desc });
+      }
+      return result;
+    }
+
+    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (записи 1–10 из файла). Новый ID темы не должен совпадать с ними.</summary>
     public static IReadOnlyList<int> GetThemeTypeIdsReservedInDefaultTypes()
     {
+      if (_instance == null) return Array.Empty<int>();
       var list = new List<int>();
-      foreach (var d in DefaultTypeDefinitions)
+      for (int id = 1; id <= 10; id++)
       {
-        if (d.ThemeTypeId > 0 && !list.Contains(d.ThemeTypeId))
-          list.Add(d.ThemeTypeId);
+        var rec = _instance.GetById(id);
+        if (rec != null && rec.ThemeTypeId > 0 && !list.Contains(rec.ThemeTypeId))
+          list.Add(rec.ThemeTypeId);
       }
       return list;
     }
 
     private void EnsureDefaultTypes()
     {
-      foreach (var d in DefaultTypeDefinitions)
+      foreach (var rec in ReadDefaultTypeDefinitionsFromFile())
       {
-        if (!_byId.ContainsKey(d.Id))
-          _byId[d.Id] = new SituationTypeRecord { Id = d.Id, MoodId = d.MoodId, InfluenceId = d.InfluenceId, ThemeTypeId = d.ThemeTypeId, Description = d.Description };
+        if (!_byId.ContainsKey(rec.Id))
+          _byId[rec.Id] = rec;
       }
     }
 
