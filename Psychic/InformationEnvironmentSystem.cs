@@ -153,6 +153,26 @@ namespace ISIDA.Psychic
       /// True - текущий стимул навязывает то, что не соответствует текущей Теме и Цели
       /// </summary>
       public bool IsStimulToForce { get; set; }
+
+      /// <summary>
+      /// Проблема не решена на 2 уровне осмысления (подготовка к циклам мышления).
+      /// </summary>
+      public bool UnresolvedAtThinkingLevel2 { get; set; }
+
+      /// <summary>
+      /// ID узла дерева автоматизмов при нерешённой проблеме на 2 уровне.
+      /// </summary>
+      public int UnresolvedNodeId { get; set; }
+
+      /// <summary>
+      /// ID образа действий (стимула) при нерешённой проблеме на 2 уровне.
+      /// </summary>
+      public int UnresolvedActionsImageId { get; set; }
+
+      /// <summary>
+      /// Пульс, на котором зафиксирована нерешённая проблема на 2 уровне.
+      /// </summary>
+      public int UnresolvedPulseCount { get; set; }
     }
 
     #endregion

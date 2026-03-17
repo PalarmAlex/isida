@@ -38,6 +38,7 @@ namespace ISIDA.Psychic
     private EpisodicMemorySystem _episodicMemorySystem;
     private UnderstandingTreeSystem _understandingTreeSystem;
     private ProblemTreeSystem _problemTreeSystem;
+    private InformationEnvironmentSystem _informationEnvironmentSystem;
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
 
     #region Инициализация
@@ -106,7 +107,7 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память, дерево понимания)
+    /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память, дерево понимания, информационная среда)
     /// </summary>
     public void SetPsychicSystemDop(
       AutomatismExecutionService executionService,
@@ -114,7 +115,8 @@ namespace ISIDA.Psychic
       PerceptionImagesSystem perceptionImagesSystem,
       EpisodicMemorySystem episodicMemorySystem = null,
       UnderstandingTreeSystem understandingTreeSystem = null,
-      ProblemTreeSystem problemTreeSystem = null)
+      ProblemTreeSystem problemTreeSystem = null,
+      InformationEnvironmentSystem informationEnvironmentSystem = null)
     {
       _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
       _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
@@ -122,6 +124,7 @@ namespace ISIDA.Psychic
       _episodicMemorySystem = episodicMemorySystem;
       _understandingTreeSystem = understandingTreeSystem;
       _problemTreeSystem = problemTreeSystem;
+      _informationEnvironmentSystem = informationEnvironmentSystem;
     }
 
     /// <summary>
@@ -386,28 +389,29 @@ namespace ISIDA.Psychic
             if (AppGlobalState.IsEvaluationTime())
               _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
             else
-              // Окно оценки истекло — начинаем отзеркаливание с начала: сброс, далее для нового стимула может создаться стартовый эхо-автоматизм.
               ResetAutomatizmWaitingState();
           }
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
-          int preferredActionIdFromEpisodic = 0;
-          if (AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
-          {
-            var rule = _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
-            if (rule != null && rule.ActionId > 0)
-              preferredActionIdFromEpisodic = rule.ActionId;
-          }
-          var foundAutomatizm = GetAutomatizmFromNode(automatizmNodeId, preferredActionIdFromEpisodic);
 
-          // При выполнении существующего автоматизма на стимул с пульта — включаем цикл зеркалирования: триггером для следующей пары должен быть узел ответа агента («как дела»), чтобы получилась пара «как дела — все ок».
-          if (foundAutomatizm != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+          // Обновить информационную среду для уровней осмысления (Danger, VeryActualSituation)
+          if (_informationEnvironmentSystem != null)
+            _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+
+          var (problemSolved, levelAutomatizm) = TryProcessThinkingLevels(automatizmNodeId, actionsImageId, currentEmotionId);
+
+          if (problemSolved && levelAutomatizm != null)
           {
-            int responseNodeId = GetTreeNodeIdForResponseActionsImage(foundAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
-            _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+            if (AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+            {
+              int responseNodeId = GetTreeNodeIdForResponseActionsImage(levelAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+              _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+            }
+            AppGlobalState.CurStimulusImageId = actionsImageId;
+            return ExecuteAutomatizm(levelAutomatizm);
           }
 
-          if (foundAutomatizm == null &&
+          if (!problemSolved &&
               AppGlobalState.EvolutionStage == 3 &&
               !AppGlobalState.WaitingForOperatorEvaluation &&
               activationType >= 2)
@@ -429,40 +433,12 @@ namespace ISIDA.Psychic
             }
           }
 
-          if (foundAutomatizm == null && AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
-          {
-            var chain = _episodicMemorySystem.GetTargetChain(actionsImageId);
-            var rule = (chain != null && chain.Count > 0) ? chain[0] : _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
-            if (rule != null && rule.ActionId > 0)
-            {
-              var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
-                  .FirstOrDefault(a => a.ActionsImageID == rule.ActionId);
-              if (episodicAtmz == null)
-              {
-                var (newId, _) = _automatizmSystem.CreateNewAutomatizm(automatizmNodeId, rule.ActionId, true);
-                episodicAtmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
-              }
-              if (episodicAtmz != null)
-              {
-                AppGlobalState.CurStimulusImageId = actionsImageId;
-                return ExecuteAutomatizm(episodicAtmz);
-              }
-            }
-          }
+          AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
+          AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
+          AppGlobalState.CurrentStimulusToneId = toneId;
+          AppGlobalState.CurrentStimulusMoodId = moodId;
 
-          // Контекст стимула для ОР1 / эхо на 2-й стадии (используется в GetAutomatizmByGeneticPurpose)
-          if (foundAutomatizm == null)
-          {
-            AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
-            AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
-            AppGlobalState.CurrentStimulusToneId = toneId;
-            AppGlobalState.CurrentStimulusMoodId = moodId;
-          }
-
-          atmz = _orientationReflexSystem.OrientationReflex(
-            foundAutomatizm?.ID ?? 0,
-            currentEmotionId,
-            actionsImageId);
+          atmz = _orientationReflexSystem.OrientationReflex(0, currentEmotionId, actionsImageId);
         }
 
         if (atmz != null)
@@ -478,6 +454,117 @@ namespace ISIDA.Psychic
 
       return false; // Не блокировать рефлексы
     }
+
+    #region Уровни мышления 1 и 2
+
+    /// <summary>
+    /// Оркестратор уровней осмысления: уровень 1 (штатный автоматизм) → уровень 2 (правила) → при неуспехе заглушка для циклов.
+    /// </summary>
+    /// <returns>(problemSolved, automatizm для выполнения или null)</returns>
+    private (bool problemSolved, Automatizm toExecute) TryProcessThinkingLevels(
+      int automatizmNodeId,
+      int actionsImageId,
+      int currentEmotionId)
+    {
+      if (_informationEnvironmentSystem == null)
+        return (false, null);
+
+      var infoEnv = _informationEnvironmentSystem.CurrentInformationEnvironment;
+      infoEnv.UnresolvedAtThinkingLevel2 = false;
+      infoEnv.UnresolvedNodeId = 0;
+      infoEnv.UnresolvedActionsImageId = 0;
+      infoEnv.UnresolvedPulseCount = 0;
+
+      var (resolved1, atmz1) = ProcessLevel1(automatizmNodeId, currentEmotionId);
+      if (resolved1 && atmz1 != null)
+        return (true, atmz1);
+
+      var (resolved2, atmz2) = ProcessLevel2(automatizmNodeId, actionsImageId);
+      if (resolved2 && atmz2 != null)
+        return (true, atmz2);
+
+      return (false, null);
+    }
+
+    /// <summary>
+    /// Первый уровень осмысления: решение только за счёт штатного/текущего автоматизма (без правил).
+    /// </summary>
+    private (bool resolved, Automatizm toExecute) ProcessLevel1(int automatizmNodeId, int currentEmotionId)
+    {
+      Automatizm staff = GetAutomatizmFromNode(automatizmNodeId, 0);
+      if (staff == null)
+        return (false, null);
+
+      if (staff.Usefulness < 0)
+      {
+        if (_informationEnvironmentSystem != null)
+          _informationEnvironmentSystem.CurrentInformationEnvironment.NeedThinkingAboutAutomatizm = true;
+        return (false, null);
+      }
+
+      if (_informationEnvironmentSystem == null)
+        return (true, staff);
+
+      var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+      if (env.Danger)
+        return (true, staff);
+
+      if (env.VeryActualSituation && !env.Danger)
+      {
+        // Опционально: в будущем — проверка по правилам/прогнозу (аналог checkAutomatizm). Пока запускаем штатный.
+      }
+
+      return (true, staff);
+    }
+
+    /// <summary>
+    /// Второй уровень осмысления: попытка решить за счёт правил эпизодической памяти (найти/создать автоматизм по правилу).
+    /// </summary>
+    private (bool resolved, Automatizm toExecute) ProcessLevel2(int automatizmNodeId, int actionsImageId)
+    {
+      if (AppGlobalState.EvolutionStage < 4 || _episodicMemorySystem == null)
+        return (false, null);
+
+      var chain = _episodicMemorySystem.GetTargetChain(actionsImageId);
+      var rule = (chain != null && chain.Count > 0) ? chain[0] : _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
+      if (rule == null || rule.ActionId <= 0)
+      {
+        SetUnresolvedAtLevel2Stub(automatizmNodeId, actionsImageId);
+        return (false, null);
+      }
+
+      var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
+        .FirstOrDefault(a => a.ActionsImageID == rule.ActionId);
+      if (episodicAtmz == null)
+      {
+        var (newId, _) = _automatizmSystem.CreateNewAutomatizm(automatizmNodeId, rule.ActionId, true);
+        episodicAtmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
+      }
+      if (episodicAtmz != null && episodicAtmz.Usefulness >= 0)
+        return (true, episodicAtmz);
+
+      SetUnresolvedAtLevel2Stub(automatizmNodeId, actionsImageId);
+      return (false, null);
+    }
+
+    /// <summary>
+    /// Заглушка: проблема не решена на 2 уровне — подготовка к модулям циклов мышления.
+    /// </summary>
+    private void SetUnresolvedAtLevel2Stub(int nodeId, int actionsImageId)
+    {
+      if (_informationEnvironmentSystem == null)
+        return;
+
+      var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+      env.NeedThinkingAboutAutomatizm = true;
+      env.UnresolvedAtThinkingLevel2 = true;
+      env.UnresolvedNodeId = nodeId;
+      env.UnresolvedActionsImageId = actionsImageId;
+      env.UnresolvedPulseCount = PulseCount;
+      Logger.Info($"Отработка уровня 2. Проблема не решена — для циклов мышления. NodeId={nodeId}, ActionsImageId={actionsImageId}");
+    }
+
+    #endregion
 
     /// <summary>
     /// Активация дерева автоматизмов

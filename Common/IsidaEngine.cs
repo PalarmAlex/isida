@@ -879,7 +879,8 @@ namespace ISIDA.Common
           context.PerceptionImages,
           context.EpisodicMemory,
           context.UnderstandingTreeSystem,
-          context.ProblemTree);
+          context.ProblemTree,
+          context.InformationEnvironmentSystem);
         if (context.EpisodicMemory != null)
           context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
         context.OrientationReflex.SetUnderstandingTreeSystem(context.UnderstandingTreeSystem);
