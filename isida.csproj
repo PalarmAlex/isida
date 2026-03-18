@@ -144,6 +144,17 @@
     <Compile Include="Psychic\Importance\ObjectImportanceService.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingCycleContext.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingCycleInfo.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingCyclesSystem.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingExperienceMemory.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingInterruptMemory.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\AskOperatorStrategy.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\EpisodicRuleStrategy.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\ExperienceRecommendationStrategy.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\IThinkingStrategy.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\RandomBranchAutomatizmStrategy.cs" />
+    <Compile Include="Psychic\Thinking\Strategies\ThinkingStrategyContext.cs" />
     <Compile Include="Psychic\PurposeGeneticSystem.cs" />
     <Compile Include="Psychic\VerbalBrocaImagesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />

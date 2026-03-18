@@ -2,6 +2,8 @@ using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Thinking;
+using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
@@ -40,6 +42,7 @@ namespace ISIDA.Psychic
     private ProblemTreeSystem _problemTreeSystem;
     private InformationEnvironmentSystem _informationEnvironmentSystem;
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
+    private ThinkingCyclesSystem _thinkingCyclesSystem;
 
     #region Инициализация
 
@@ -125,6 +128,23 @@ namespace ISIDA.Psychic
       _understandingTreeSystem = understandingTreeSystem;
       _problemTreeSystem = problemTreeSystem;
       _informationEnvironmentSystem = informationEnvironmentSystem;
+
+      // Циклы мышления (3-й уровень) — инициализируются при наличии IE.
+      if (_informationEnvironmentSystem != null)
+      {
+        _thinkingCyclesSystem = new ThinkingCyclesSystem(
+          _informationEnvironmentSystem,
+          _episodicMemorySystem,
+          _understandingTreeSystem,
+          _problemTreeSystem,
+          _automatizmSystem);
+
+        // Базовые стратегии 3-го уровня (минимальный набор).
+        _thinkingCyclesSystem.RegisterStrategy(new ExperienceRecommendationStrategy(_thinkingCyclesSystem.ExperienceMemory));
+        _thinkingCyclesSystem.RegisterStrategy(new EpisodicRuleStrategy());
+        _thinkingCyclesSystem.RegisterStrategy(new RandomBranchAutomatizmStrategy());
+        _thinkingCyclesSystem.RegisterStrategy(new AskOperatorStrategy());
+      }
     }
 
     /// <summary>
@@ -199,6 +219,7 @@ namespace ISIDA.Psychic
       int sleepingType)
     {
       int mirrorAutomatizmToExecute = 0;
+      ThinkingDecision thinkingDecisionToExecute = null;
       _lock.EnterWriteLock();
       try
       {
@@ -278,6 +299,15 @@ namespace ISIDA.Psychic
             }
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
+
+          // Продолжение циклов мышления по пульсу (не исполняем действия под локом)
+          if (_thinkingCyclesSystem != null)
+          {
+            thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(
+              pulseCount,
+              isSleeping: IsSleeping,
+              isSleepingDream: IsSleepingDream);
+          }
         }
         else
           ProcessSleep();
@@ -292,6 +322,48 @@ namespace ISIDA.Psychic
         var mirrorAutomatizm = _automatizmSystem.GetAutomatizmById(mirrorAutomatizmToExecute);
         if (mirrorAutomatizm != null)
           ExecuteAutomatizm(mirrorAutomatizm);
+      }
+
+      if (thinkingDecisionToExecute != null)
+      {
+        ExecuteThinkingDecision(thinkingDecisionToExecute);
+      }
+    }
+
+    private void ExecuteThinkingDecision(ThinkingDecision decision)
+    {
+      if (decision == null) return;
+
+      // 1) Готовый автоматизм
+      if (decision.AutomatizmToExecute != null)
+      {
+        Logger.Info($"ThinkingDecision: execute automatizm id={decision.AutomatizmToExecute.ID} actionImg={decision.AutomatizmToExecute.ActionsImageID}");
+        ExecuteAutomatizm(decision.AutomatizmToExecute);
+        return;
+      }
+
+      // 2) Сформировать автоматизм по ActionsImage и выполнить
+      if (decision.ActionsImageIdToAutomatize > 0 && _informationEnvironmentSystem != null)
+      {
+        Logger.Info($"ThinkingDecision: create+execute by actionImg={decision.ActionsImageIdToAutomatize}");
+        var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+        var nodeId = env?.UnresolvedNodeId ?? 0;
+        if (nodeId > 0)
+        {
+          var (newId, _) = _automatizmSystem.CreateNewAutomatizm(nodeId, decision.ActionsImageIdToAutomatize, true);
+          var atmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
+          if (atmz != null)
+            ExecuteAutomatizm(atmz);
+        }
+        return;
+      }
+
+      // 3) «Попугайство»/запрос у оператора — пока через MirrorAutomatizmService (если есть стимул)
+      if (decision.RequestParrotFromOperator)
+      {
+        Logger.Info("ThinkingDecision: request operator help/parrot");
+        // В isida паррот на стадии 3 уже реализован как TryCreateInitialParrotAutomatizm, а на 4+ будет стратегия.
+        return;
       }
     }
 
@@ -353,6 +425,9 @@ namespace ISIDA.Psychic
         actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId);
         int stimulusActionsImageIdForContext = actionsImageId;
 
+        // Зафиксировать наличие внешнего стимула для пассивного режима (dreaming).
+        _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
+
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
             activationType,
@@ -409,6 +484,43 @@ namespace ISIDA.Psychic
             }
             AppGlobalState.CurStimulusImageId = actionsImageId;
             return ExecuteAutomatizm(levelAutomatizm);
+          }
+
+          // 3-й уровень: циклы мышления (стадия 4+). Быстрый старт после провала уровня 2.
+          if (!problemSolved &&
+              AppGlobalState.EvolutionStage >= 4 &&
+              _thinkingCyclesSystem != null &&
+              _informationEnvironmentSystem != null &&
+              _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2)
+          {
+            var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+            var (autId, sitId, themeId, purposeId) = _understandingTreeSystem != null
+              ? _understandingTreeSystem.ProblemTreeInfo
+              : (0, 0, 0, 0);
+
+            var ctx = new ThinkingCycleContext
+            {
+              PulseCount = PulseCount,
+              BaseId = currentBaseId,
+              EmotionId = currentEmotionId,
+              AutomatizmNodeId = automatizmNodeId,
+              StimulusActionsImageId = actionsImageId,
+              ProblemNodeId = _problemTreeSystem?.DetectedActiveLastProblemNodeId ?? 0,
+              ThemeId = themeId,
+              PurposeId = purposeId,
+              Danger = env.Danger,
+              VeryActualSituation = env.VeryActualSituation,
+              IsWaitingPeriod = env.IsWaitingPeriod
+            };
+
+            _thinkingCyclesSystem.OnUnresolvedProblem(ctx);
+            var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping, isSleepingDream: IsSleepingDream);
+            if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
+            {
+              AppGlobalState.CurStimulusImageId = actionsImageId;
+              ExecuteThinkingDecision(decision);
+              return true; // блокировать рефлексы при удачном запуске
+            }
           }
 
           if (!problemSolved &&
