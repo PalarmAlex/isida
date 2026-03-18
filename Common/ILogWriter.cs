@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace ISIDA.Common
 {
@@ -13,7 +13,8 @@ namespace ISIDA.Common
     void WriteLog(string className, string method, int? pulse, int? baseId,
                  int? baseStyleId, int? triggerStimulusId, int? orientationReflexType,
                  int? geneticReflexId, int? conditionedReflexId, int? automatizmId = null,
-                 string reflexChainInfo = null, string automatizmChainInfo = null);
+                 string reflexChainInfo = null, string automatizmChainInfo = null,
+                 int? thinkingLevel = null, bool? thinkingLevelSuccess = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

@@ -29,6 +29,8 @@ public static class AppGlobalState
   private static int _detectedReflexNodeId = 0;
   private static int _lastOrientationReflexType = 0;
   private static int _lastOrientationReflexPulse = 0;
+  private static int _lastThinkingLevel = 0;       // 0 = не активирован, 1 = УМ1, 2 = УМ2
+  private static bool _lastThinkingLevelSuccess = false;
   private static bool _flgConditionReflexes = false;
   private static bool _isReflexChainActive = false;
   private static List<int> _geneticReflexesActions = new List<int>();
@@ -410,6 +412,35 @@ public static class AppGlobalState
   {
     LastOrientationReflexType = 0;
     LastOrientationReflexPulse = 0;
+  }
+
+  /// <summary>
+  /// Обновить информацию об активации уровня мышления (УМ1 или УМ2)
+  /// </summary>
+  /// <param name="level">Уровень: 1 = УМ1 (штатный автоматизм), 2 = УМ2 (правила эпизодической памяти)</param>
+  /// <param name="success">true — проблема решена на этом уровне, false — не решена</param>
+  public static void UpdateThinkingLevelInfo(int level, bool success)
+  {
+    _lastThinkingLevel = level;
+    _lastThinkingLevelSuccess = success;
+  }
+
+  /// <summary>
+  /// Получить информацию об активации уровня мышления
+  /// </summary>
+  /// <returns>Кортеж (уровень 1/2 или 0, успех)</returns>
+  public static (int Level, bool Success) GetThinkingLevelInfo()
+  {
+    return (_lastThinkingLevel, _lastThinkingLevelSuccess);
+  }
+
+  /// <summary>
+  /// Сбросить информацию об уровне мышления
+  /// </summary>
+  public static void ResetThinkingLevelInfo()
+  {
+    _lastThinkingLevel = 0;
+    _lastThinkingLevelSuccess = false;
   }
 
   /// <summary>

@@ -589,12 +589,19 @@ namespace ISIDA.Psychic
 
       var (resolved1, atmz1) = ProcessLevel1(automatizmNodeId, currentEmotionId);
       if (resolved1 && atmz1 != null)
+      {
+        AppGlobalState.UpdateThinkingLevelInfo(1, true);
         return (true, atmz1);
+      }
 
       var (resolved2, atmz2) = ProcessLevel2(automatizmNodeId, actionsImageId);
       if (resolved2 && atmz2 != null)
+      {
+        AppGlobalState.UpdateThinkingLevelInfo(2, true);
         return (true, atmz2);
+      }
 
+      AppGlobalState.UpdateThinkingLevelInfo(2, false);
       return (false, null);
     }
 

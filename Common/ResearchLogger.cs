@@ -123,6 +123,10 @@ namespace ISIDA.Common
       public int? HasCriticalChanges { get; set; }
       public int? OrientationReflexType { get; set; }
       public int? OrientationReflexPulse { get; set; }
+      /// <summary>Уровень мышления: 1 = УМ1, 2 = УМ2, null = не активирован</summary>
+      public int? ThinkingLevel { get; set; }
+      /// <summary>Успех решения проблемы на активированном уровне мышления</summary>
+      public bool? ThinkingLevelSuccess { get; set; }
       // Поля для логирования цепочек
       public string LastReflexChainInfo { get; set; }  // "ChainId:ActionId"
       public string LastAutomatizmChainInfo { get; set; }  // "ChainId:ActionId"
@@ -551,6 +555,7 @@ namespace ISIDA.Common
         _lastState = new SystemState { Pulse = 0 };
         _lastParametersState = new ParametersState { Pulse = 0 };
         _lastStylesState = new StylesState { Pulse = 0 };
+        AppGlobalState.ResetThinkingLevelInfo();
       }
     }
 
@@ -616,6 +621,8 @@ namespace ISIDA.Common
 
             if (currentState.OrientationReflexType.HasValue && currentState.OrientationReflexType.Value > 0)
               AppGlobalState.ResetOrientationReflexInfo();
+            if (currentState.ThinkingLevel.HasValue && currentState.ThinkingLevel.Value > 0)
+              AppGlobalState.ResetThinkingLevelInfo();
           }
 
           if (!IsDuplicateParametersState(currentParametersState))
@@ -642,6 +649,10 @@ namespace ISIDA.Common
         orTypeString = state.OrientationReflexType.Value == 1 ? "ОР1" :
                       state.OrientationReflexType.Value == 2 ? "ОР2" : "";
       }
+
+      string umString = "";
+      if (state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0)
+        umString = state.ThinkingLevel.Value.ToString();
 
       // Получаем информацию о цепочках для этого пульса
       string reflexChainInfo = string.Empty;
@@ -676,7 +687,9 @@ namespace ISIDA.Common
         ["Автоматизм"] = (state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID != _lastState.CurrentAutomatizmID)
             ? state.CurrentAutomatizmID.ToString() : "",
         ["Цепочка РФ"] = reflexChainInfo,
-        ["Цепочка АВ"] = automatizmChainInfo
+        ["Цепочка АВ"] = automatizmChainInfo,
+        ["УМ"] = umString,
+        ["УМ_успех"] = state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0 ? state.ThinkingLevelSuccess : null
       };
     }
 
@@ -744,6 +757,14 @@ namespace ISIDA.Common
           orType = 2;
       }
 
+      int? thinkingLevel = null;
+      if (logEntry.ContainsKey("УМ") && !string.IsNullOrEmpty(logEntry["УМ"]?.ToString()) &&
+          int.TryParse(logEntry["УМ"].ToString(), out int umLevel) && (umLevel == 1 || umLevel == 2))
+        thinkingLevel = umLevel;
+      bool? thinkingLevelSuccess = logEntry.ContainsKey("УМ_успех") && logEntry["УМ_успех"] is bool successVal
+          ? (bool?)successVal
+          : null;
+
       _memoryLogWriter.WriteLog(
           "ResearchLogger",
           "LogSystemState",
@@ -762,7 +783,9 @@ namespace ISIDA.Common
           logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString()) ?
               int.Parse(logEntry["Автоматизм"].ToString()) : (int?)null,
           reflexChainInfo,
-          automatizmChainInfo
+          automatizmChainInfo,
+          thinkingLevel,
+          thinkingLevelSuccess
       );
     }
 
@@ -882,6 +905,10 @@ namespace ISIDA.Common
         OrientationReflexPulse = orInfo.Pulse != 0 ? (int?)orInfo.Pulse : null
       };
 
+      var (thinkingLevel, thinkingLevelSuccess) = AppGlobalState.GetThinkingLevelInfo();
+      state.ThinkingLevel = thinkingLevel > 0 ? (int?)thinkingLevel : null;
+      state.ThinkingLevelSuccess = thinkingLevel > 0 ? (bool?)thinkingLevelSuccess : null;
+
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
         AppGlobalState.ResetAutomatizmInfo();
@@ -952,7 +979,9 @@ namespace ISIDA.Common
              _lastState.CurrentAutomatizmID != current.CurrentAutomatizmID ||
              _lastState.HasCriticalChanges != current.HasCriticalChanges ||
              _lastState.OrientationReflexType != current.OrientationReflexType ||
-             _lastState.OrientationReflexPulse != current.OrientationReflexPulse;
+             _lastState.OrientationReflexPulse != current.OrientationReflexPulse ||
+             _lastState.ThinkingLevel != current.ThinkingLevel ||
+             _lastState.ThinkingLevelSuccess != current.ThinkingLevelSuccess;
     }
 
     /// <summary>
