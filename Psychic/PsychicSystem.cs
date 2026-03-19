@@ -338,7 +338,18 @@ namespace ISIDA.Psychic
       if (decision.AutomatizmToExecute != null)
       {
         Logger.Info($"Решение цикла мышления: выполнить автоматизм id={decision.AutomatizmToExecute.ID}, образ действий={decision.AutomatizmToExecute.ActionsImageID}");
-        ExecuteAutomatizm(decision.AutomatizmToExecute);
+        var ok = ExecuteAutomatizm(decision.AutomatizmToExecute);
+        if (ok && _informationEnvironmentSystem != null)
+        {
+          // После запуска из thinking-cycles проблема на 2 уровне считается обработанной,
+          // иначе после окончания waiting-for-operator система повторно выбирает то же действие.
+          var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+          env.UnresolvedAtThinkingLevel2 = false;
+          env.NeedThinkingAboutAutomatizm = false;
+          env.UnresolvedNodeId = 0;
+          env.UnresolvedActionsImageId = 0;
+          env.UnresolvedPulseCount = 0;
+        }
         return;
       }
 
@@ -353,7 +364,17 @@ namespace ISIDA.Psychic
           var (newId, _) = _automatizmSystem.CreateNewAutomatizm(nodeId, decision.ActionsImageIdToAutomatize, true);
           var atmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
           if (atmz != null)
-            ExecuteAutomatizm(atmz);
+          {
+            var ok = ExecuteAutomatizm(atmz);
+            if (ok)
+            {
+              env.UnresolvedAtThinkingLevel2 = false;
+              env.NeedThinkingAboutAutomatizm = false;
+              env.UnresolvedNodeId = 0;
+              env.UnresolvedActionsImageId = 0;
+              env.UnresolvedPulseCount = 0;
+            }
+          }
         }
         return;
       }
@@ -1294,6 +1315,24 @@ namespace ISIDA.Psychic
         Logger.Error(ex.Message);
         return 0;
       }
+    }
+
+    #endregion
+
+    #region Диагностика циклов осмысления (3-й уровень)
+
+    /// <summary>Возвращает копию снимка главного цикла мышления (или null).</summary>
+    public ThinkingCycleInfo GetThinkingCyclesMainSnapshot(int maxLogLinesPerCycle = 50)
+    {
+      return _thinkingCyclesSystem?.GetMainCycleSnapshot(maxLogLinesPerCycle);
+    }
+
+    /// <summary>
+    /// Возвращает текстовый отладочный снимок всех циклов мышления (или сообщение при отсутствии данных).
+    /// </summary>
+    public string GetThinkingCyclesDebugSnapshot(int maxLogLinesPerCycle = 5)
+    {
+      return _thinkingCyclesSystem?.GetDebugSnapshot(maxLogLinesPerCycle) ?? "ThinkingCycles: none";
     }
 
     #endregion

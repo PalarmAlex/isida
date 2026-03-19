@@ -95,10 +95,52 @@ namespace ISIDA.Psychic.Thinking
     /// <returns>Главный цикл или null.</returns>
     public ThinkingCycleInfo GetMainCycleSnapshot()
     {
+      return GetMainCycleSnapshot(maxLogLinesPerCycle: 50);
+    }
+
+    /// <summary>
+    /// Возвращает копию снимка текущего главного цикла (или null) с усечением лога.
+    /// </summary>
+    /// <param name="maxLogLinesPerCycle">Максимум последних строк лога для возврата.</param>
+    /// <returns>Копия главного цикла или null.</returns>
+    public ThinkingCycleInfo GetMainCycleSnapshot(int maxLogLinesPerCycle)
+    {
       _lock.EnterReadLock();
       try
       {
-        return _cycles.FirstOrDefault(c => c.IsMainCycle);
+        var src = _cycles.FirstOrDefault(c => c != null && c.IsMainCycle);
+        if (src == null) return null;
+
+        var copy = new ThinkingCycleInfo
+        {
+          Id = src.Id,
+          Order = src.Order,
+          IsMainCycle = src.IsMainCycle,
+          CreatedPulse = src.CreatedPulse,
+          StepCount = src.StepCount,
+          IsIdle = src.IsIdle,
+          IsWaitingPeriod = src.IsWaitingPeriod,
+          Dreaming = src.Dreaming,
+          Weight = src.Weight,
+          UnresolvedNodeId = src.UnresolvedNodeId,
+          UnresolvedActionsImageId = src.UnresolvedActionsImageId,
+          ProblemNodeId = src.ProblemNodeId,
+          ThemeId = src.ThemeId,
+          PurposeId = src.PurposeId,
+          LastStrategyId = src.LastStrategyId,
+          LastUpdatedUtc = src.LastUpdatedUtc
+        };
+
+        var log = src.Log;
+        if (log != null && log.Count > 0)
+        {
+          var max = Math.Max(0, maxLogLinesPerCycle);
+          var skip = max == 0 ? log.Count : Math.Max(0, log.Count - max);
+          foreach (var line in log.Skip(skip))
+            copy.Log.Add(line);
+        }
+
+        return copy;
       }
       finally { _lock.ExitReadLock(); }
     }
@@ -218,6 +260,11 @@ namespace ISIDA.Psychic.Thinking
     public ThinkingDecision DispatchCycles(int pulseCount, bool isSleeping, bool isSleepingDream)
     {
       if (_informationEnvironmentSystem?.CurrentInformationEnvironment == null)
+        return null;
+
+      // Во время ожидания оценки оператора нельзя запускать новые решения из thinking-cycles,
+      // иначе получаем повторные исполнения одного и того же автомата при отсутствии ответа.
+      if (AppGlobalState.WaitingForOperatorEvaluation)
         return null;
 
       _lock.EnterUpgradeableReadLock();
