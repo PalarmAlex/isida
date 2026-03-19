@@ -638,6 +638,26 @@ namespace ISIDA.Common
       }
     }
 
+    /// <summary>Разбор поля «УМ» в файлах/памяти: «УМ1»/«УМ2» или устаревшие «1»/«2».</summary>
+    private static bool TryParseThinkingLevelLogToken(string raw, out int level)
+    {
+      level = 0;
+      if (string.IsNullOrWhiteSpace(raw))
+        return false;
+      raw = raw.Trim();
+      if (raw == "УМ1" || raw == "1")
+      {
+        level = 1;
+        return true;
+      }
+      if (raw == "УМ2" || raw == "2")
+      {
+        level = 2;
+        return true;
+      }
+      return int.TryParse(raw, out int n) && (n == 1 || n == 2) && (level = n) > 0;
+    }
+
     /// <summary>
     /// Создает запись лога из состояния
     /// </summary>
@@ -652,7 +672,7 @@ namespace ISIDA.Common
 
       string umString = "";
       if (state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0)
-        umString = state.ThinkingLevel.Value.ToString();
+        umString = state.ThinkingLevel.Value == 1 ? "УМ1" : state.ThinkingLevel.Value == 2 ? "УМ2" : "";
 
       // Получаем информацию о цепочках для этого пульса
       string reflexChainInfo = string.Empty;
@@ -758,9 +778,8 @@ namespace ISIDA.Common
       }
 
       int? thinkingLevel = null;
-      if (logEntry.ContainsKey("УМ") && !string.IsNullOrEmpty(logEntry["УМ"]?.ToString()) &&
-          int.TryParse(logEntry["УМ"].ToString(), out int umLevel) && (umLevel == 1 || umLevel == 2))
-        thinkingLevel = umLevel;
+      if (logEntry.ContainsKey("УМ") && TryParseThinkingLevelLogToken(logEntry["УМ"]?.ToString(), out int umParsed))
+        thinkingLevel = umParsed;
       bool? thinkingLevelSuccess = logEntry.ContainsKey("УМ_успех") && logEntry["УМ_успех"] is bool successVal
           ? (bool?)successVal
           : null;

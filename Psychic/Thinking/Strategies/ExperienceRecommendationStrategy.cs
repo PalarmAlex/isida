@@ -27,7 +27,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
       if (c.UnresolvedActionsImageId > 0 && rec == c.UnresolvedActionsImageId)
         return ThinkingDecision.None("recommendation_equals_stimulus");
 
-      Logger.Info($"ThinkingExperience: recommend actionImg={rec} for prob={c.ProblemNodeId}, theme={c.ThemeId}, purpose={c.PurposeId}");
+      Logger.Info($"Опыт циклов: рекомендован образ действий={rec}, проблема={c.ProblemNodeId}, тема={c.ThemeId}, цель={c.PurposeId}");
       return new ThinkingDecision
       {
         ActionsImageIdToAutomatize = rec,

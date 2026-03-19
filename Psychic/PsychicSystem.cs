@@ -337,7 +337,7 @@ namespace ISIDA.Psychic
       // 1) Готовый автоматизм
       if (decision.AutomatizmToExecute != null)
       {
-        Logger.Info($"ThinkingDecision: execute automatizm id={decision.AutomatizmToExecute.ID} actionImg={decision.AutomatizmToExecute.ActionsImageID}");
+        Logger.Info($"Решение цикла мышления: выполнить автоматизм id={decision.AutomatizmToExecute.ID}, образ действий={decision.AutomatizmToExecute.ActionsImageID}");
         ExecuteAutomatizm(decision.AutomatizmToExecute);
         return;
       }
@@ -345,7 +345,7 @@ namespace ISIDA.Psychic
       // 2) Сформировать автоматизм по ActionsImage и выполнить
       if (decision.ActionsImageIdToAutomatize > 0 && _informationEnvironmentSystem != null)
       {
-        Logger.Info($"ThinkingDecision: create+execute by actionImg={decision.ActionsImageIdToAutomatize}");
+        Logger.Info($"Решение цикла мышления: создать и выполнить по образу действий id={decision.ActionsImageIdToAutomatize}");
         var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
         var nodeId = env?.UnresolvedNodeId ?? 0;
         if (nodeId > 0)
@@ -361,7 +361,7 @@ namespace ISIDA.Psychic
       // 3) «Попугайство»/запрос у оператора — пока через MirrorAutomatizmService (если есть стимул)
       if (decision.RequestParrotFromOperator)
       {
-        Logger.Info("ThinkingDecision: request operator help/parrot");
+        Logger.Info("Решение цикла мышления: запрос подсказки у оператора (попугайство)");
         // В isida паррот на стадии 3 уже реализован как TryCreateInitialParrotAutomatizm, а на 4+ будет стратегия.
         return;
       }
@@ -469,88 +469,124 @@ namespace ISIDA.Psychic
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
 
-          // Обновить информационную среду для уровней осмысления (Danger, VeryActualSituation)
+          // Обновить информационную среду (Danger, VeryActualSituation) для обоих веток.
           if (_informationEnvironmentSystem != null)
             _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
-          var (problemSolved, levelAutomatizm) = TryProcessThinkingLevels(automatizmNodeId, actionsImageId, currentEmotionId);
-
-          if (problemSolved && levelAutomatizm != null)
+          // Стадия < 4 — только ОР (без уровней 1–2 и без циклов мышления). Стадия >= 4 — уровни мышления и циклы; без ОР.
+          if (AppGlobalState.EvolutionStage < 4)
           {
-            if (AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+            // Только ориентировочный рефлекс (ОР1/ОР2).
+            AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
+            AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
+            AppGlobalState.CurrentStimulusToneId = toneId;
+            AppGlobalState.CurrentStimulusMoodId = moodId;
+
+            int orientationAutomatizmId = 0;
+            var foundForOR = GetAutomatizmFromNode(automatizmNodeId, 0);
+            if (foundForOR != null)
+              orientationAutomatizmId = foundForOR.ID;
+            else
             {
-              int responseNodeId = GetTreeNodeIdForResponseActionsImage(levelAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+              var staffForOR = _automatizmSystem.GetBelief2AutomatizmFromTreeId(automatizmNodeId);
+              if (staffForOR != null)
+                orientationAutomatizmId = staffForOR.ID;
+              else
+              {
+                var branchAutomatizms = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId);
+                var anyInBranch = branchAutomatizms?.FirstOrDefault(a => a != null);
+                if (anyInBranch != null)
+                  orientationAutomatizmId = anyInBranch.ID;
+              }
+            }
+
+            // Стадия 3: перед запуском уже выученного автоматизма включить цикл зеркалирования — иначе RegisterOperatorResponse
+            // не примет следующий стимул оператора (требуется _dialogMirrorActive), цепочка «ответ агента → новый стимул» рвётся.
+            if (foundForOR != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+            {
+              int responseNodeId = GetTreeNodeIdForResponseActionsImage(foundForOR.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
               _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
             }
-            AppGlobalState.CurStimulusImageId = actionsImageId;
-            return ExecuteAutomatizm(levelAutomatizm);
-          }
 
-          // 3-й уровень: циклы мышления (стадия 4+). Быстрый старт после провала уровня 2.
-          if (!problemSolved &&
-              AppGlobalState.EvolutionStage >= 4 &&
-              _thinkingCyclesSystem != null &&
-              _informationEnvironmentSystem != null &&
-              _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2)
-          {
-            var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
-            var (autId, sitId, themeId, purposeId) = _understandingTreeSystem != null
-              ? _understandingTreeSystem.ProblemTreeInfo
-              : (0, 0, 0, 0);
+            atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
 
-            var ctx = new ThinkingCycleContext
+            // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору), как в BOT orientation_1 для стадии 3.
+            if (atmz == null &&
+                AppGlobalState.EvolutionStage == 3 &&
+                !AppGlobalState.WaitingForOperatorEvaluation &&
+                activationType >= 2)
             {
-              PulseCount = PulseCount,
-              BaseId = currentBaseId,
-              EmotionId = currentEmotionId,
-              AutomatizmNodeId = automatizmNodeId,
-              StimulusActionsImageId = actionsImageId,
-              ProblemNodeId = _problemTreeSystem?.DetectedActiveLastProblemNodeId ?? 0,
-              ThemeId = themeId,
-              PurposeId = purposeId,
-              Danger = env.Danger,
-              VeryActualSituation = env.VeryActualSituation,
-              IsWaitingPeriod = env.IsWaitingPeriod
-            };
-
-            _thinkingCyclesSystem.OnUnresolvedProblem(ctx);
-            var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping, isSleepingDream: IsSleepingDream);
-            if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
-            {
-              AppGlobalState.CurStimulusImageId = actionsImageId;
-              ExecuteThinkingDecision(decision);
-              return true; // блокировать рефлексы при удачном запуске
-            }
-          }
-
-          if (!problemSolved &&
-              AppGlobalState.EvolutionStage == 3 &&
-              !AppGlobalState.WaitingForOperatorEvaluation &&
-              activationType >= 2)
-          {
-            int parrotAutomatizmId = _mirrorAutomatizmService.TryCreateInitialParrotAutomatizm(
-              automatizmNodeId,
-              actionsImageId,
-              hasVerbalPart,
-              hasNonVerbalPart);
-
-            if (parrotAutomatizmId > 0)
-            {
-              var parrotAutomatizm = _automatizmSystem.GetAutomatizmById(parrotAutomatizmId);
-              if (parrotAutomatizm != null)
+              int parrotAutomatizmId = _mirrorAutomatizmService.TryCreateInitialParrotAutomatizm(
+                automatizmNodeId,
+                actionsImageId,
+                hasVerbalPart,
+                hasNonVerbalPart);
+              if (parrotAutomatizmId > 0)
+                atmz = _automatizmSystem.GetAutomatizmById(parrotAutomatizmId);
+              if (atmz != null)
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
-                return ExecuteAutomatizm(parrotAutomatizm);
+                return ExecuteAutomatizm(atmz);
               }
             }
           }
+          else
+          {
+            // Стадия >= 4: уровни 1–2, при провале — циклы мышления; ориентировочный рефлекс только на стадиях < 4.
+            var (problemSolved, levelAutomatizm) = TryProcessThinkingLevels(automatizmNodeId, actionsImageId, currentEmotionId);
 
-          AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
-          AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
-          AppGlobalState.CurrentStimulusToneId = toneId;
-          AppGlobalState.CurrentStimulusMoodId = moodId;
+            if (problemSolved && levelAutomatizm != null)
+            {
+              if (activationType >= 2)
+              {
+                int responseNodeId = GetTreeNodeIdForResponseActionsImage(levelAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+                _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+              }
+              AppGlobalState.CurStimulusImageId = actionsImageId;
+              return ExecuteAutomatizm(levelAutomatizm);
+            }
 
-          atmz = _orientationReflexSystem.OrientationReflex(0, currentEmotionId, actionsImageId);
+            // 3-й уровень: циклы мышления (стадия 4+). Быстрый старт после провала уровня 2.
+            if (!problemSolved &&
+                _thinkingCyclesSystem != null &&
+                _informationEnvironmentSystem != null &&
+                _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2)
+            {
+              var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
+              var (autId, sitId, themeId, purposeId) = _understandingTreeSystem != null
+                ? _understandingTreeSystem.ProblemTreeInfo
+                : (0, 0, 0, 0);
+
+              var ctx = new ThinkingCycleContext
+              {
+                PulseCount = PulseCount,
+                BaseId = currentBaseId,
+                EmotionId = currentEmotionId,
+                AutomatizmNodeId = automatizmNodeId,
+                StimulusActionsImageId = actionsImageId,
+                ProblemNodeId = _problemTreeSystem?.DetectedActiveLastProblemNodeId ?? 0,
+                ThemeId = themeId,
+                PurposeId = purposeId,
+                Danger = env.Danger,
+                VeryActualSituation = env.VeryActualSituation,
+                IsWaitingPeriod = env.IsWaitingPeriod
+              };
+
+              _thinkingCyclesSystem.OnUnresolvedProblem(ctx);
+              var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping, isSleepingDream: IsSleepingDream);
+              if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
+              {
+                AppGlobalState.CurStimulusImageId = actionsImageId;
+                ExecuteThinkingDecision(decision);
+                return true; // блокировать рефлексы при удачном запуске
+              }
+            }
+
+            AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
+            AppGlobalState.CurrentStimulusActionIdList = actionIdList?.ToList() ?? new List<int>();
+            AppGlobalState.CurrentStimulusToneId = toneId;
+            AppGlobalState.CurrentStimulusMoodId = moodId;
+          }
         }
 
         if (atmz != null)
