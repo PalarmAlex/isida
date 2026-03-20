@@ -9,10 +9,19 @@ namespace ISIDA.Psychic.Thinking.Strategies
   /// </summary>
   public sealed class EpisodicRuleStrategy : IThinkingStrategy
   {
-    /// <inheritdoc />
-    public string Id => "episodic.best_rule";
+    /// <summary>
+    /// Инфо-функция: поиск следующего действия по эпизодической памяти (правила/цепочки).
+    /// Похоже по роли на GPT-подобный выбор: возвращает лучшее правило под триггер/контекст.
+    /// </summary>
+    public string Id => "infoFunc_14";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Один шаг инфо-функции: берёт UnresolvedActionsImageId как триггер,
+    /// ищет подходящее правило (включая target chain),
+    /// и возвращает решение через ActionsImageIdToAutomatize или существующий Automatizm в ветке.
+    /// </summary>
+    /// <param name="ctx">Контекст текущего шага.</param>
+    /// <returns>ThinkingDecision с выбором ActionsImageIdToAutomatize или AutomatizmToExecute.</returns>
     public ThinkingDecision TryStep(ThinkingStrategyContext ctx)
     {
       if (ctx?.Cycle == null) return ThinkingDecision.None("no_ctx");

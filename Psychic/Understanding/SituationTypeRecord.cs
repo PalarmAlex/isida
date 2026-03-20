@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
@@ -18,8 +20,11 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>ID типа темы (справочник тем). -1=не задано; для Id 6–10 и 41–60 — привязка к теме.</summary>
     public int ThemeTypeId { get; set; } = -1;
 
-    /// <summary>Описание типа</summary>
-    public string Description { get; set; }
+    /// <summary>
+    /// Разрешенные ID инфо-функций/стратегий (int).
+    /// Пустой список = ограничений нет по этой привязке (движок может выбирать из других привязок/дефолтов).
+    /// </summary>
+    public Dictionary<int, int> AllowedInfoFuncIds { get; set; } = new Dictionary<int, int>();
 
     /// <summary>Текст для колонки «Привязка» в UI: для Id 1–5 — MoodId/InfluenceId, для 6–10 — название темы или «—».</summary>
     public string BindingDisplayText =>

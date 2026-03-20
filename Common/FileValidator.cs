@@ -137,7 +137,7 @@ namespace ISIDA.Common
       public const string ThemeImagesFormat = "# Формат: ID|Weight|Type|PulsCount";
       public const string ThemeImagesDesc = "# Weight: вес (1-10), Type: тип темы (ThemeTypeStr), PulsCount: время актуализации";
 
-      // Справочник типов тем (ID 1–17 по образцу BOT)
+      // Справочник типов тем
       public const string ThemeTypesFormat = "# Формат: Id|Description|DefaultWeight";
       public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: описание, DefaultWeight: вес по умолчанию (обязательно >0)";
 
@@ -150,8 +150,8 @@ namespace ISIDA.Common
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
       // Справочник типов ситуаций (связь MoodId/InfluenceId с ID типа)
-      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|Description";
-      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие. ThemeTypeId: -1=не задано; Id 6-10, 41-60 — привязка к теме. Id 1-5 обязательны.";
+      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|AllowedInfoFuncIds";
+      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие. ThemeTypeId: -1=не задано; Id 6-10, 41-60 — привязка к теме. Id 1-5 обязательны. AllowedInfoFuncIds: список Id через запятую (пусто = без ограничений).";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";

@@ -5,16 +5,23 @@ namespace ISIDA.Psychic.Thinking.Strategies
 {
   /// <summary>
   /// Рискованная проба: выбрать случайный допустимый автоматизм в текущей ветке (кроме очевидно плохих).
-  /// Аналог BOT-ветки со случайным выбором инфо-функций/экспериментов.
   /// </summary>
   public sealed class RandomBranchAutomatizmStrategy : IThinkingStrategy
   {
     private readonly Random _rng = new Random();
 
-    /// <inheritdoc />
-    public string Id => "random.branch_automatizm";
+    /// <summary>
+    /// Инфо-функция: случайная проба моторного автоматизма из текущей ветки проблемы.
+    /// Активация: стратегия вызывается диспетчером циклов, но execution ограничивается твоим allowed-list (SituationTypeSystem).
+    /// </summary>
+    public string Id => "infoFunc_25";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Один шаг инфо-функции: выбирает случайный кандидат-автоматизм из списка моторов в UnresolvedNodeId
+    /// и возвращает его как решение для выполнения/создания на уровне движка.
+    /// </summary>
+    /// <param name="ctx">Контекст текущего шага.</param>
+    /// <returns>ThinkingDecision с выбранным AutomatizmToExecute или None.</returns>
     public ThinkingDecision TryStep(ThinkingStrategyContext ctx)
     {
       if (ctx?.Cycle == null || ctx.AutomatizmSystem == null) return ThinkingDecision.None("no_ctx");

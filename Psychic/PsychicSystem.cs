@@ -5,6 +5,7 @@ using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
+using ISIDA.Psychic.Importance;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
@@ -300,7 +301,7 @@ namespace ISIDA.Psychic
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
 
-          // Продолжение циклов мышления по пульсу (не исполняем действия под локом)
+          // Продолжение циклов мышления по пульсу
           if (_thinkingCyclesSystem != null)
           {
             thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(
@@ -531,7 +532,7 @@ namespace ISIDA.Psychic
 
             atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
 
-            // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору), как в BOT orientation_1 для стадии 3.
+            // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору).
             if (atmz == null &&
                 AppGlobalState.EvolutionStage == 3 &&
                 !AppGlobalState.WaitingForOperatorEvaluation &&
@@ -687,7 +688,51 @@ namespace ISIDA.Psychic
 
       if (env.VeryActualSituation && !env.Danger)
       {
-        // Опционально: в будущем — проверка по правилам/прогнозу (аналог checkAutomatizm). Пока запускаем штатный.
+        // 1) если запускаемое действие имеет сильную отрицательную экстремальную значимость,
+        //    то штатный автоматизм блокируем;
+        // 2) если при этом есть позитивный прогноз по правилам (достаточный, чтобы перекрыть вред),
+        //    то штатный автоматизм допускаем.
+        if (_episodicMemorySystem != null && staff.ActionsImageID > 0)
+        {
+          var (baseId, emotionId, nodePid) = _episodicMemorySystem.GetCurrentConditions(false);
+          var (ext, extremVal) = ObjectImportanceService.GetObjectImportanceValue(
+            _episodicMemorySystem.Tree,
+            _episodicMemorySystem.TreeLogic,
+            staff.ActionsImageID,
+            baseId,
+            emotionId,
+            nodePid);
+
+          bool isNegExtremelyImportant = ext != null
+                                           && extremVal < -ObjectImportanceService.HighImportanceThreshold;
+
+          if (isNegExtremelyImportant)
+          {
+            // Попытка "прогноза последствий" для данного ActionsImage:
+            // берем лучший позитивный эпизодический rule и сравниваем его "вес" с величиной вреда.
+            // Если позитивного прогноза недостаточно — уходим на уровень 2 (правила).
+            var nextPositiveRule = _episodicMemorySystem.GetSingleBestRule(3, staff.ActionsImageID);
+            int harmAbs = Math.Abs(extremVal);
+
+            bool offsetByPositive = false;
+            if (nextPositiveRule != null)
+            {
+              int normalizedEffect = nextPositiveRule.Effect == EpisodicMemoryRulesService.TeacherRuleEffect
+                ? 1
+                : nextPositiveRule.Effect;
+              int positiveWpower = EpisodicMemoryRules.GetWpower(normalizedEffect, nextPositiveRule.Count);
+              offsetByPositive = positiveWpower >= harmAbs;
+            }
+
+            if (!offsetByPositive)
+            {
+              Logger.Info(
+                $"Level1 checkAutomatizm: блок штатного автоматизма ID={staff.ID}, actionImg={staff.ActionsImageID}, " +
+                $"extremVal={extremVal}, harmAbs={harmAbs}, offsetByPositive={offsetByPositive}");
+              return (false, null);
+            }
+          }
+        }
       }
 
       return (true, staff);

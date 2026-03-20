@@ -175,7 +175,7 @@ namespace ISIDA.Psychic.Understanding
       return SaveThemeTypes();
     }
 
-    /// <summary>Веса по умолчанию соответствуют типичным вызовам runNewTheme(kind, weight) в BOT.</summary>
+    /// <summary>Дефолтный список тем мышления.</summary>
     private static readonly IReadOnlyList<(int Id, string Description, int DefaultWeight)> DefaultThemeTypesList = new List<(int, string, int)>
     {
       (1, "Негативный эффект моторного автоматизма", 2),

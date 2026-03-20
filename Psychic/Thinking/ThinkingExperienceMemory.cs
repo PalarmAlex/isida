@@ -36,7 +36,6 @@ namespace ISIDA.Psychic.Thinking
 
   /// <summary>
   /// Минимальная «ментальная память опыта» для циклов: запоминаем рекомендованное действие по (проблема, тема, цель).
-  /// Это упрощённый аналог BOT-цепочек ментальных инфо-функций (GPT-step).
   /// </summary>
   internal sealed class ThinkingExperienceMemory
   {

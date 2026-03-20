@@ -13,7 +13,7 @@ namespace ISIDA.Psychic.Thinking
   }
 
   /// <summary>
-  /// Стек прерванных задач (упрощённый аналог BOT InterruptMemory).
+  /// Стек прерванных задач.
   /// Хранит несколько последних прерванных контекстов мышления.
   /// </summary>
   internal sealed class ThinkingInterruptMemory

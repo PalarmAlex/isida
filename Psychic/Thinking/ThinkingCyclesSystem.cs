@@ -401,6 +401,11 @@ namespace ISIDA.Psychic.Thinking
         CurrentStaffAutomatizm = cycle.UnresolvedNodeId > 0 ? _automatizmSystem.GetMotorsAutomatizmListFromTreeId(cycle.UnresolvedNodeId).FirstOrDefault() : null
       };
 
+      // Allowed-list инфо-функций (вариант B: int id -> соответствие по strategy.Id вида infoFunc_{N})
+      // Ограничение включается только если из SituationTypeSystem получилось непустое множество AllowedInfoFuncIds.
+      var allowedInfoFuncIds = GetAllowedInfoFuncIdsForCycle(cycle);
+      var useAllowedFilter = allowedInfoFuncIds.Count > 0;
+
       // Упрощённый порядок стратегий: пока только зарегистрированные
       _lock.EnterReadLock();
       try
@@ -408,6 +413,13 @@ namespace ISIDA.Psychic.Thinking
         foreach (var strategy in _strategies)
         {
           if (strategy == null) continue;
+          if (useAllowedFilter)
+          {
+            if (!TryParseInfoFuncIdFromStrategyId(strategy.Id, out int infoFuncId))
+              continue;
+            if (!allowedInfoFuncIds.Contains(infoFuncId))
+              continue;
+          }
           if (!string.IsNullOrWhiteSpace(cycle.LastStrategyId) && cycle.LastStrategyId == strategy.Id)
             continue;
 
@@ -432,6 +444,84 @@ namespace ISIDA.Psychic.Thinking
       cycle.IsIdle = true;
       cycle.Log.Add($"[p{pulseCount}] NoDecision");
       return ThinkingDecision.None("no_decision");
+    }
+
+    private static bool TryParseInfoFuncIdFromStrategyId(string strategyId, out int infoFuncId)
+    {
+      infoFuncId = 0;
+      if (string.IsNullOrWhiteSpace(strategyId))
+        return false;
+
+      var s = strategyId.Trim();
+
+      // BOT-подобный формат: infoFunc_1 или infoFunc1
+      int lastUnderscore = s.LastIndexOf('_');
+      if (lastUnderscore >= 0 && lastUnderscore < s.Length - 1)
+      {
+        var tail = s.Substring(lastUnderscore + 1).Trim();
+        if (int.TryParse(tail, out infoFuncId))
+          return true;
+      }
+
+      // fallback: брать последние цифры в строке (например "..._12" или "...12")
+      int i = s.Length - 1;
+      while (i >= 0 && char.IsDigit(s[i])) i--;
+      if (i < s.Length - 1)
+      {
+        var tail = s.Substring(i + 1);
+        if (int.TryParse(tail, out infoFuncId))
+          return true;
+      }
+
+      return false;
+    }
+
+    private static HashSet<int> GetAllowedInfoFuncIdsForCycle(ThinkingCycleInfo cycle)
+    {
+      // По умолчанию без ограничений
+      if (cycle == null) return new HashSet<int>();
+      if (!SituationTypeSystem.IsInitialized || !ThemeImageSystem.IsInitialized)
+        return new HashSet<int>();
+
+      // В текущем движке influenceId из психики для thinking-уровня напрямую не доступен,
+      // поэтому пока считаем, что привязки с InfluenceId игнорируются (только InfluenceId < 0 матчится).
+      int influenceId = -1;
+
+      // MoodId берём из контекста последнего стимула оператора (именно он используется при создании ActionsImage).
+      int moodId = AppGlobalState.CurrentStimulusMoodId;
+
+      int themeTypeId = 0;
+      if (cycle.ThemeId > 0)
+      {
+        var themeRec = ThemeImageSystem.Instance.GetById(cycle.ThemeId);
+        themeTypeId = themeRec?.Type ?? 0;
+      }
+
+      var allowed = new HashSet<int>();
+
+      // Идея: SituationTypeSystem — это таблица соответствий многие-ко-многим,
+      // поэтому allowed-union строим по всем записям, которые матчятся текущим mood/theme/influence.
+      foreach (var rec in SituationTypeSystem.Instance.GetAll())
+      {
+        if (rec == null) continue;
+
+        bool moodOk = rec.MoodId < 0 || rec.MoodId == moodId;
+        if (!moodOk) continue;
+
+        bool influenceOk = rec.InfluenceId < 0 || rec.InfluenceId == influenceId;
+        if (!influenceOk) continue;
+
+        bool themeOk = rec.ThemeTypeId <= 0 || rec.ThemeTypeId == themeTypeId;
+        if (!themeOk) continue;
+
+        if (rec.AllowedInfoFuncIds == null || rec.AllowedInfoFuncIds.Count == 0)
+          continue; // пустой allowed-list = "без ограничений", но это не даёт конкретных allowed id
+
+        foreach (var infoFuncId in rec.AllowedInfoFuncIds.Keys)
+          allowed.Add(infoFuncId);
+      }
+
+      return allowed;
     }
 
     private bool ShouldStartDreaming(int pulseCount, InformationEnvironmentSystem.InformationEnvironment env)

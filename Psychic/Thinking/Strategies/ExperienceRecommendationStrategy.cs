@@ -9,13 +9,26 @@ namespace ISIDA.Psychic.Thinking.Strategies
   {
     private readonly ThinkingExperienceMemory _memory;
 
+    /// <summary>
+    /// Создать инфо-функцию "рекомендация по опыту".
+    /// </summary>
+    /// <param name="memory">Память рекомендаций циклов мышления.</param>
     internal ExperienceRecommendationStrategy(ThinkingExperienceMemory memory)
     {
       _memory = memory;
     }
 
-    public string Id => "experience.recommend_action";
+    /// <summary>
+    /// Инфо-функция: рекомендация действия по ранее записанному опыту циклов.
+    /// </summary>
+    public string Id => "infoFunc_17";
 
+    /// <summary>
+    /// Один шаг инфо-функции: по ключу (ProblemNodeId, ThemeId, PurposeId) извлекает
+    /// сохранённое рекомендованное действие и возвращает его как решение для выполнения.
+    /// </summary>
+    /// <param name="ctx">Контекст текущего шага.</param>
+    /// <returns>ThinkingDecision с ActionsImageIdToAutomatize или None.</returns>
     public ThinkingDecision TryStep(ThinkingStrategyContext ctx)
     {
       if (_memory == null || ctx?.Cycle == null) return ThinkingDecision.None("no_memory");
