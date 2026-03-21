@@ -989,9 +989,9 @@ namespace ISIDA.Psychic
           trackingResult.ErrorMessage = result.ErrorMessage;
           _automatismResultTracker.FinishTracking(trackingResult);
 
-          // Триггер 7: негативный эффект моторного автоматизма — обновить тему и дерево проблем
+          // Триггер «Игнор агента»: негативный эффект моторного автоматизма — обновить тему и дерево проблем
           if (_understandingTreeSystem != null && _problemTreeSystem != null)
-            _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(7, _problemTreeSystem);
+            _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 
           Logger.Warning($"Ошибка выполнения автоматизма {automatizm.ID}: {result.ErrorMessage}");
           AppGlobalState.LastRunAutomatizmPulsCount = 0;
@@ -1074,9 +1074,9 @@ namespace ISIDA.Psychic
           responseTime,
           operatorResponseImageId);
 
-      // Триггер 7: негативный эффект моторного автоматизма при отрицательной оценке оператора
+      // Триггер «Игнор агента»: негативный эффект при отрицательной оценке оператора
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)
-        _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(7, _problemTreeSystem);
+        _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 
       int mirrorAutomatizmId = 0;
       if (AppGlobalState.EvolutionStage == 3)

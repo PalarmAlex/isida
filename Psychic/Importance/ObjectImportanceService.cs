@@ -153,9 +153,9 @@ namespace ISIDA.Psychic.Importance
       if (obj != null && Math.Abs(obj.ExtremVal) > MinSignificantImportance)
       {
         infoEnv.CurrentInformationEnvironment.ExtremImportanceObjectID = obj.ObjId;
-        // Триггер 8: есть объект высокой значимости — активировать тему мышления (через переданную ссылку, без Instance)
+        // Триггер «Высокая значимость объекта» — активировать тему мышления (через переданную ссылку, без Instance)
         if (Math.Abs(obj.ExtremVal) > HighImportanceThreshold && understandingTreeSystem != null)
-          understandingTreeSystem.UpdateThemeByTrigger(8);
+          understandingTreeSystem.UpdateThemeByTrigger(AgentEventsCatalog.Codes.HighObjectImportance);
       }
       else
         infoEnv.CurrentInformationEnvironment.ExtremImportanceObjectID = 0;

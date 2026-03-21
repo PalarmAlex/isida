@@ -151,7 +151,7 @@ namespace ISIDA.Common
 
       // Справочник типов ситуаций
       public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|EventAgentCode";
-      public const string SituationTypesDesc = "# Id 1-20: события (ThemeTypeId, EventAgentCode). Id 21-40: настроение (MoodId, ThemeTypeId). Id 41-60: воздействие (InfluenceId, ThemeTypeId). EventAgentCode: -1=нет; для 1-20 — код из AgentEventsCatalog.";
+      public const string SituationTypesDesc = "# Id 1-20: события (ThemeTypeId, EventAgentCode). Id 21-40: настроение (MoodId, ThemeTypeId). Id 41-60: воздействие (InfluenceId, ThemeTypeId). ThemeTypeId: уникален внутри каждого из трёх диапазонов; между диапазонами одна тема может повторяться. EventAgentCode: -1=нет; для 1-20 — код из AgentEventsCatalog.";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";

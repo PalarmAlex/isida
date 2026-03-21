@@ -57,9 +57,12 @@ namespace ISIDA.Psychic.Understanding
       EnsureDirectory();
       Load();
       LoadThemeTypes();
-      if (_themeTypes.Count == 0)
+      var themeTypesPath = Path.Combine(_dataPath, ThemeTypesFileName);
+      if (!File.Exists(themeTypesPath))
       {
-        CreateDefaultThemeTypesAndSave();
+        var (ok, err) = SaveThemeTypes();
+        if (!ok && !string.IsNullOrEmpty(err))
+          Logger.Warning($"Не удалось сохранить справочник типов тем по умолчанию: {err}");
       }
     }
 
@@ -99,11 +102,20 @@ namespace ISIDA.Psychic.Understanding
       return _byId.TryGetValue(id, out var r) ? r : null;
     }
 
-    /// <summary>Текстовое описание типа темы. При отсутствии в справочнике — пустая строка. Тип 0 всегда «Нет темы».</summary>
+    /// <summary>Текстовое описание типа темы. Для канонических Id — из кода (фиксированный список в ThemeImageSystem). Тип 0 всегда «Нет темы».</summary>
     public string GetThemeTypeDescription(int typeIndex)
     {
       if (typeIndex == 0) return "Нет темы";
+      var canon = GetCanonicalThemeTypeDescription(typeIndex);
+      if (!string.IsNullOrEmpty(canon)) return canon;
       if (_themeTypes.TryGetValue(typeIndex, out var rec)) return rec.Description ?? "";
+      return "";
+    }
+
+    private static string GetCanonicalThemeTypeDescription(int id)
+    {
+      foreach (var t in DefaultThemeTypesList)
+        if (t.Id == id) return t.Description ?? "";
       return "";
     }
 
@@ -153,19 +165,94 @@ namespace ISIDA.Psychic.Understanding
       return _themeTypes
         .Where(kv => kv.Key >= 1)
         .OrderBy(kv => kv.Key)
-        .Select(kv => (kv.Key, kv.Value.Description ?? ""))
+        .Select(kv =>
+        {
+          var c = GetCanonicalThemeTypeDescription(kv.Key);
+          return (kv.Key, !string.IsNullOrEmpty(c) ? c : (kv.Value.Description ?? ""));
+        })
         .ToList();
     }
 
-    /// <summary>Типы тем с привязкой инфо-функций для вывода на пульт (Id, Description, DefaultWeight, AllowedInfoFuncIds).</summary>
+    /// <summary>Типы тем с привязкой инфо-функций для вывода на пульт (Id, Description, DefaultWeight, AllowedInfoFuncIds). Описание — из канонического списка в коде.</summary>
     public IReadOnlyList<(int Id, string Description, int DefaultWeight, IReadOnlyList<int> AllowedInfoFuncIds)> GetThemeTypesWithAllowedInfoFuncs()
     {
       return _themeTypes
         .Where(kv => kv.Key >= 1)
         .OrderBy(kv => kv.Key)
-        .Select(kv => (kv.Key, kv.Value.Description ?? "", kv.Value.DefaultWeight > 0 ? kv.Value.DefaultWeight : 2,
-          (IReadOnlyList<int>)(kv.Value.AllowedInfoFuncIds?.OrderBy(x => x).ToList() ?? new List<int>())))
+        .Select(kv =>
+        {
+          var c = GetCanonicalThemeTypeDescription(kv.Key);
+          return (kv.Key, !string.IsNullOrEmpty(c) ? c : (kv.Value.Description ?? ""),
+            kv.Value.DefaultWeight > 0 ? kv.Value.DefaultWeight : 2,
+            (IReadOnlyList<int>)(kv.Value.AllowedInfoFuncIds?.OrderBy(x => x).ToList() ?? new List<int>()));
+        })
         .ToList();
+    }
+
+    /// <summary>
+    /// Фиксированный справочник типов тем из кода: Id и описания не редактируются в UI; вес и инфо-функции — из theme_types.dat.
+    /// </summary>
+    public IReadOnlyList<(int Id, string Description, int DefaultWeight, IReadOnlyList<int> AllowedInfoFuncIds)> GetFixedCatalogThemeTypesForUi()
+    {
+      NormalizeThemeTypesToCanonicalCatalog();
+      var list = new List<(int, string, int, IReadOnlyList<int>)>();
+      foreach (var (id, desc, defW) in DefaultThemeTypesList)
+      {
+        int weight = defW;
+        var allowed = new List<int>();
+        if (_themeTypes.TryGetValue(id, out var rec))
+        {
+          if (rec.DefaultWeight >= 1 && rec.DefaultWeight <= 10) weight = rec.DefaultWeight;
+          if (rec.AllowedInfoFuncIds != null && rec.AllowedInfoFuncIds.Count > 0)
+            allowed = rec.AllowedInfoFuncIds.OrderBy(x => x).ToList();
+        }
+        list.Add((id, desc ?? "", weight, allowed));
+      }
+      return list;
+    }
+
+    /// <summary>Сохранить только вес и списки инфо-функций; описания и набор Id тем — из кода.</summary>
+    public (bool Success, string Error) SaveFixedCatalogThemeTypes(IEnumerable<(int Id, int DefaultWeight, IReadOnlyList<int> AllowedInfoFuncIds)> rows)
+    {
+      if (rows == null) return (false, "Нет данных для сохранения");
+      var byId = rows.ToDictionary(r => r.Id, r => r);
+      var canonicalIds = new HashSet<int>(DefaultThemeTypesList.Select(x => x.Id));
+      foreach (var id in byId.Keys)
+        if (!canonicalIds.Contains(id))
+          return (false, $"Неизвестный Id типа темы: {id}");
+
+      NormalizeThemeTypesToCanonicalCatalog();
+      foreach (var (id, desc, defW) in DefaultThemeTypesList)
+      {
+        int w = defW;
+        var allowed = new HashSet<int>();
+        if (byId.TryGetValue(id, out var row))
+        {
+          w = row.DefaultWeight;
+          if (w < 1) w = 2;
+          if (w > 10) w = 10;
+          if (row.AllowedInfoFuncIds != null)
+            foreach (var x in row.AllowedInfoFuncIds)
+              if (x > 0) allowed.Add(x);
+        }
+        else if (_themeTypes.TryGetValue(id, out var existing))
+        {
+          w = existing.DefaultWeight >= 1 && existing.DefaultWeight <= 10 ? existing.DefaultWeight : defW;
+          if (existing.AllowedInfoFuncIds != null)
+            foreach (var x in existing.AllowedInfoFuncIds)
+              if (x > 0) allowed.Add(x);
+        }
+        _themeTypes[id] = new ThemeTypeData
+        {
+          Description = desc ?? "",
+          DefaultWeight = w,
+          AllowedInfoFuncIds = allowed
+        };
+      }
+      foreach (var key in _themeTypes.Keys.ToList())
+        if (!canonicalIds.Contains(key))
+          _themeTypes.Remove(key);
+      return SaveThemeTypes();
     }
 
     /// <summary>Обновить привязку инфо-функций для типа темы и сохранить.</summary>
@@ -299,34 +386,55 @@ namespace ISIDA.Psychic.Understanding
     {
       var path = Path.Combine(_dataPath, ThemeTypesFileName);
       _themeTypes = new Dictionary<int, ThemeTypeData>();
-      if (!File.Exists(path) || !FileValidator.IsValidThemeTypesFile(path))
-        return;
-      foreach (var line in File.ReadLines(path))
+      if (File.Exists(path) && FileValidator.IsValidThemeTypesFile(path))
       {
-        var t = line?.Trim();
-        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
-        var p = t.Split('|');
-        if (p.Length < 3) continue;
-        if (!int.TryParse(p[0], out int id) || id < 1) continue;
-        if (!int.TryParse(p[2], out int weight) || weight < 1) continue;
-        var allowedRaw = p.Length >= 4 ? (p[3] ?? "") : "";
-        _themeTypes[id] = new ThemeTypeData
+        foreach (var line in File.ReadLines(path))
         {
-          Description = p[1].Trim(),
-          DefaultWeight = weight,
-          AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
-        };
+          var t = line?.Trim();
+          if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+          var p = t.Split('|');
+          if (p.Length < 3) continue;
+          if (!int.TryParse(p[0], out int id) || id < 1) continue;
+          if (!int.TryParse(p[2], out int weight) || weight < 1) continue;
+          var allowedRaw = p.Length >= 4 ? (p[3] ?? "") : "";
+          _themeTypes[id] = new ThemeTypeData
+          {
+            Description = p[1].Trim(),
+            DefaultWeight = weight,
+            AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
+          };
+        }
       }
+      NormalizeThemeTypesToCanonicalCatalog();
     }
 
-    private void CreateDefaultThemeTypesAndSave()
+    /// <summary>
+    /// Оставляет в справочнике только Id из <see cref="DefaultThemeTypesList"/>; описания — из кода; вес и инфо-функции подтягивает из файла или дефолта.
+    /// </summary>
+    private void NormalizeThemeTypesToCanonicalCatalog()
     {
-      _themeTypes = new Dictionary<int, ThemeTypeData>();
-      foreach (var (id, desc, weight) in DefaultThemeTypesList)
-        _themeTypes[id] = new ThemeTypeData { Description = desc, DefaultWeight = weight, AllowedInfoFuncIds = new HashSet<int>() };
-      var (ok, _) = SaveThemeTypes();
-      if (!ok)
-        Logger.Warning("Не удалось сохранить справочник типов тем по умолчанию.");
+      var canonicalIds = new HashSet<int>(DefaultThemeTypesList.Select(x => x.Id));
+      foreach (var key in _themeTypes.Keys.ToList())
+      {
+        if (!canonicalIds.Contains(key))
+          _themeTypes.Remove(key);
+      }
+      foreach (var (id, desc, defW) in DefaultThemeTypesList)
+      {
+        if (!_themeTypes.TryGetValue(id, out var existing))
+        {
+          _themeTypes[id] = new ThemeTypeData { Description = desc, DefaultWeight = defW, AllowedInfoFuncIds = new HashSet<int>() };
+        }
+        else
+        {
+          existing.Description = desc;
+          if (existing.DefaultWeight < 1 || existing.DefaultWeight > 10)
+            existing.DefaultWeight = defW;
+          if (existing.AllowedInfoFuncIds == null)
+            existing.AllowedInfoFuncIds = new HashSet<int>();
+          _themeTypes[id] = existing;
+        }
+      }
     }
 
     /// <summary>Сохранить справочник типов тем на диск</summary>

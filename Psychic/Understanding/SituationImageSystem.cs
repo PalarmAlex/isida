@@ -127,14 +127,8 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>Определить тип ситуации по приоритетам.</summary>
     private int ResolveSituationTypeId(int automatizmTreeNodeId, SituationImageContext context)
     {
-      const int NeedThinking = 3;
-      const int Experiment = 4;
-      const int OperatorIgnore = 5;
-      const int ResponseAction = 1;
-      const int AutomatizmRun = 2;
-
       if (automatizmTreeNodeId == 0)
-        return NeedThinking;
+        return AgentEventsCatalog.Codes.NeedThinking;
 
       int lastRun = AppGlobalState.LastRunAutomatizmPulsCount;
       int waitingPeriod = AppGlobalState.WaitingPeriodForActionsVal;
@@ -143,18 +137,18 @@ namespace ISIDA.Psychic.Understanding
       if (lastRun > 0)
       {
         if ((lastRun + waitingPeriod) < currentPulse)
-          return OperatorIgnore;
-        return ResponseAction;
+          return AgentEventsCatalog.Codes.OperatorIgnore;
+        return AgentEventsCatalog.Codes.ResponseAction;
       }
 
       if (context?.HasAutomatismInBranch == true)
-        return AutomatizmRun;
+        return AgentEventsCatalog.Codes.AutomatizmInBranch;
 
       int sitId = ResolvePultMoodOrActionType(context);
       if (sitId > 0 && _situationTypeSystem.Exists(sitId))
         return sitId;
 
-      return Experiment;
+      return AgentEventsCatalog.Codes.Experiment;
     }
 
     private int ResolvePultMoodOrActionType(SituationImageContext context)
@@ -206,7 +200,8 @@ namespace ISIDA.Psychic.Understanding
 
     private int GetDefaultSituationTypeId()
     {
-      return _situationTypeSystem?.GetById(4)?.Id ?? 4;
+      int d = AgentEventsCatalog.Codes.Experiment;
+      return _situationTypeSystem?.GetById(d)?.Id ?? d;
     }
 
     #endregion

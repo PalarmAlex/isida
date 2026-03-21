@@ -179,11 +179,11 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>
-    /// Обновить тему мышления по коду типа ситуации (триггеру 1–10).
+    /// Обновить тему мышления по коду события агента (<see cref="AgentEventsCatalog.Codes"/>).
     /// Возвращает ID образа темы; при отсутствии привязки используется тема по умолчанию.
-    /// Вызывается при активации дерева понимания и может вызываться из других модулей (например, при негативном эффекте моторного автоматизма или объекте высокой значимости).
+    /// Вызывается при активации дерева понимания и из модулей (например, <see cref="AgentEventsCatalog.Codes.AgentIgnore"/>, <see cref="AgentEventsCatalog.Codes.HighObjectImportance"/>).
     /// </summary>
-    /// <param name="situationTypeCode">Код типа ситуации из DefaultTypeDefinitions (1–10).</param>
+    /// <param name="situationTypeCode">Код из <see cref="AgentEventsCatalog"/>.</param>
     /// <returns>ID образа темы (ThemeImage) или 0 при ошибке.</returns>
     public int UpdateThemeByTrigger(int situationTypeCode)
     {
@@ -193,7 +193,7 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>
     /// Обновить тему по триггеру и перезапустить дерево проблем с новой темой (для вызовов из модулей оценки автоматизмов, значимости и т.п.).
     /// </summary>
-    /// <param name="situationTypeCode">Код типа ситуации (1–8).</param>
+    /// <param name="situationTypeCode">Код из <see cref="AgentEventsCatalog"/>.</param>
     /// <param name="problemTree">Дерево проблем для обновления активной ветки.</param>
     public void UpdateThemeByTriggerAndRefreshProblemTree(int situationTypeCode, ProblemTreeSystem problemTree)
     {

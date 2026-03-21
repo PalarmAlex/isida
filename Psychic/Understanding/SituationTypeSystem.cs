@@ -336,18 +336,35 @@ namespace ISIDA.Psychic.Understanding
       return (true, null);
     }
 
-    /// <summary>Проверка уникальности пары (ID слота 1–60, ThemeTypeId): один ThemeTypeId не может быть привязан к разным слотам. Записи с ThemeTypeId&lt;=0 пропускаются.</summary>
+    /// <summary>
+    /// Уникальность <see cref="SituationTypeRecord.ThemeTypeId"/> внутри каждого диапазона слотов отдельно: 1–20 (события), 21–40 (настроение), 41–60 (воздействие).
+    /// Одна и та же тема может повторяться в разных диапазонах. Записи с ThemeTypeId ≤ 0 не учитываются.
+    /// </summary>
     public (bool Valid, string Error) ValidateThemeTypeIdUniqueness(IEnumerable<SituationTypeRecord> allRecordsWithTheme)
     {
       if (allRecordsWithTheme == null) return (true, null);
-      var themeToId = new Dictionary<int, int>();
-      foreach (var r in allRecordsWithTheme)
+      var list = allRecordsWithTheme as IList<SituationTypeRecord> ?? allRecordsWithTheme.ToList();
+
+      var ranges = new (int Min, int Max, string Label)[]
       {
-        if (r == null || r.ThemeTypeId <= 0) continue;
-        if (themeToId.TryGetValue(r.ThemeTypeId, out int existingId))
-          return (false, $"Тема с ID {r.ThemeTypeId} уже привязана к типу ситуации ID {existingId}. Выберите другую тему или освободите слот ID {existingId}.");
-        themeToId[r.ThemeTypeId] = r.Id;
+        (1, 20, "события (1–20)"),
+        (21, 40, "настроение (21–40)"),
+        (41, 60, "воздействия (41–60)")
+      };
+
+      foreach (var rng in ranges)
+      {
+        var themeToSlotId = new Dictionary<int, int>();
+        foreach (var r in list)
+        {
+          if (r == null || r.ThemeTypeId <= 0) continue;
+          if (r.Id < rng.Min || r.Id > rng.Max) continue;
+          if (themeToSlotId.TryGetValue(r.ThemeTypeId, out int existingSlot))
+            return (false, $"В диапазоне «{rng.Label}» тема с ID {r.ThemeTypeId} уже привязана к слоту {existingSlot}. Выберите другую тему или освободите слот {existingSlot}.");
+          themeToSlotId[r.ThemeTypeId] = r.Id;
+        }
       }
+
       return (true, null);
     }
 
