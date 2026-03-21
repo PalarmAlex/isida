@@ -8,22 +8,19 @@ namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
   /// Справочник типов ситуаций: связь ID с MoodId (настроение) и InfluenceId (воздействие).
-  /// Обязательные значения 1–5 нельзя удалять. Редактируется на пульте.
+  /// Привязка тем к событиям — через справочник. Редактируется на пульте.
   /// </summary>
   public sealed class SituationTypeSystem : IDisposable
   {
     /// <summary>Код «отсутствие значения» для слотов. 0 — Нормальное (настроение).</summary>
     public const int EmptySlotValue = -1;
 
-    /// <summary>ID обязательных записей по умолчанию (нельзя удалять)</summary>
-    public static readonly int[] DefaultRequiredIds = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
-
     private readonly string _dataPath;
     private readonly Dictionary<int, SituationTypeRecord> _byId = new Dictionary<int, SituationTypeRecord>();
     private readonly Dictionary<int, int> _byMoodId = new Dictionary<int, int>();
     private readonly Dictionary<int, int> _byInfluenceId = new Dictionary<int, int>();
-    private int _nextMoodId = 11;
-    private int _nextInfluenceId = 21;
+    private int _nextMoodId = 21;
+    private int _nextInfluenceId = 41;
     private bool _disposed;
 
     #region Инициализация
@@ -57,36 +54,29 @@ namespace ISIDA.Psychic.Understanding
       if (!File.Exists(path))
         CreateDefaultSituationTypesFile(path);
       Load();
-      EnsureDefaultTypes();
       EnsureSlots();
       RebuildIndexes();
     }
 
     /// <summary>
-    /// Досоздаёт записи 6–10 (расширение по умолчанию), 11–20 (слоты MoodId) и 21–40 (слоты InfluenceId), если их нет.
+    /// Досоздаёт слоты: 1–20 (события), 21–40 (настроение), 41–60 (воздействие). Без записей по умолчанию.
     /// </summary>
-    /// <summary>Досоздаёт записи 7–10, 11–20 (MoodId), 21–40 (InfluenceId) и 41–60 (привязка тем для инфо-функций). Id 6 создаётся в EnsureDefaultTypes.</summary>
     private void EnsureSlots()
     {
-      for (int id = 7; id <= 10; id++)
+      for (int id = 1; id <= 20; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1 };
-      }
-      for (int id = 11; id <= 20; id++)
-      {
-        if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1 };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, EventAgentCode = -1 };
       }
       for (int id = 21; id <= 40; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1 };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, EventAgentCode = -1 };
       }
       for (int id = 41; id <= 60; id++)
       {
         if (!_byId.ContainsKey(id))
-          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1 };
+          _byId[id] = new SituationTypeRecord { Id = id, MoodId = EmptySlotValue, InfluenceId = EmptySlotValue, ThemeTypeId = -1, EventAgentCode = -1 };
       }
     }
 
@@ -140,7 +130,7 @@ namespace ISIDA.Psychic.Understanding
       return _byId.ContainsKey(id);
     }
 
-    /// <summary>ThemeTypeId по ID типа ситуации (1–10, 41–60). 0 если не задано или запись не найдена.</summary>
+    /// <summary>ThemeTypeId по ID типа ситуации. 0 если не задано или запись не найдена.</summary>
     public int GetThemeTypeIdBySituationTypeId(int situationTypeId)
     {
       var rec = GetById(situationTypeId);
@@ -148,33 +138,41 @@ namespace ISIDA.Psychic.Understanding
       return rec.ThemeTypeId;
     }
 
-    /// <summary>ThemeTypeId, используемые в дефолтных слотах (Id 1–10). Не удалять эти темы из справочника типов тем.</summary>
-    public IReadOnlyList<int> GetThemeTypeIdsUsedInDefaultSlots()
+    /// <summary>ThemeTypeId по коду события агента (слоты 1–20: EventAgentCode или совпадение Id с кодом для совместимости).</summary>
+    public int GetThemeTypeIdByAgentEventCode(int eventCode)
+    {
+      if (eventCode <= 0) return 0;
+      foreach (var r in _byId.Values)
+      {
+        if (r == null || r.Id < 1 || r.Id > 20) continue;
+        if (r.EventAgentCode > 0)
+        {
+          if (r.EventAgentCode == eventCode && r.ThemeTypeId > 0) return r.ThemeTypeId;
+        }
+        else if (r.Id == eventCode && r.ThemeTypeId > 0)
+          return r.ThemeTypeId;
+      }
+      return 0;
+    }
+
+    /// <summary>ID типов тем, используемые в любых слотах справочника. Не удалять эти темы — есть ссылки в situation_types.</summary>
+    public IReadOnlyList<int> GetThemeTypeIdsInUse()
     {
       var list = new List<int>();
-      for (int id = 1; id <= 10; id++)
+      foreach (var rec in _byId.Values)
       {
-        var rec = GetById(id);
         if (rec != null && rec.ThemeTypeId > 0 && !list.Contains(rec.ThemeTypeId))
           list.Add(rec.ThemeTypeId);
       }
       return list;
     }
 
-    /// <summary>Обязательная запись по умолчанию удалять нельзя</summary>
-    public static bool IsRequiredDefault(int id)
-    {
-      return Array.IndexOf(DefaultRequiredIds, id) >= 0;
-    }
-
     /// <summary>
-    /// Очистить справочник, оставив только дефолтные записи
-    /// Вызывается при переходе с стадии 4 на 3.
+    /// Очистить справочник, оставив только слоты ID 1–10 (при переходе со стадии 4 на 3).
     /// </summary>
-    /// <returns>(true, null) при успехе; (false, сообщение) при ошибке</returns>
     public (bool Success, string Error) ClearExceptDefaults()
     {
-      var toRemove = _byId.Keys.Where(id => !IsRequiredDefault(id)).ToList();
+      var toRemove = _byId.Keys.Where(id => id < 1 || id > 10).ToList();
       foreach (int id in toRemove)
       {
         if (_byId.TryGetValue(id, out var rec))
@@ -184,7 +182,7 @@ namespace ISIDA.Psychic.Understanding
           if (rec.InfluenceId >= 0) _byInfluenceId.Remove(rec.InfluenceId);
         }
       }
-      EnsureDefaultTypes();
+      EnsureSlots();
       RebuildIndexes();
       return Save();
     }
@@ -193,12 +191,12 @@ namespace ISIDA.Psychic.Understanding
 
     #region Создание и удаление
 
-    /// <summary>Создать запись по MoodId (ID 11–20). Дубликаты не создаются. 0 = Нормальное.</summary>
-    public (int Id, string Error) AddByMoodId(int moodId, string description)
+    /// <summary>Создать запись по MoodId (ID 21–40). Дубликаты не создаются. 0 = Нормальное.</summary>
+    public (int Id, string Error) AddByMoodId(int moodId)
     {
       if (moodId < 0) return (0, "MoodId должен быть >= 0 (0=Нормальное)");
       if (FindByMoodId(moodId) != null) return (0, "Запись с таким MoodId уже есть");
-      if (_nextMoodId > 20) return (0, "Превышен лимит ID для настроения (11–20)");
+      if (_nextMoodId > 40) return (0, "Превышен лимит ID для настроения (21–40)");
       int id = _nextMoodId++;
       var rec = new SituationTypeRecord
       {
@@ -206,18 +204,19 @@ namespace ISIDA.Psychic.Understanding
         MoodId = moodId,
         InfluenceId = EmptySlotValue,
         ThemeTypeId = -1,
-        AllowedInfoFuncIds = ParseAllowedInfoFuncIds(description)
+        EventAgentCode = -1
       };
       _byId[id] = rec;
       _byMoodId[moodId] = id;
       return (id, null);
     }
 
-    /// <summary>Создать запись по InfluenceId (ID 21+). Дубликаты не создаются.</summary>
-    public (int Id, string Error) AddByInfluenceId(int influenceId, string description)
+    /// <summary>Создать запись по InfluenceId (ID 41–60). Дубликаты не создаются.</summary>
+    public (int Id, string Error) AddByInfluenceId(int influenceId)
     {
       if (influenceId < 0) return (0, "InfluenceId должен быть >= 0");
       if (FindByInfluenceId(influenceId) != null) return (0, "Запись с таким InfluenceId уже есть");
+      if (_nextInfluenceId > 60) return (0, "Превышен лимит ID для воздействия (41–60)");
       int id = _nextInfluenceId++;
       var rec = new SituationTypeRecord
       {
@@ -225,17 +224,16 @@ namespace ISIDA.Psychic.Understanding
         MoodId = EmptySlotValue,
         InfluenceId = influenceId,
         ThemeTypeId = -1,
-        AllowedInfoFuncIds = ParseAllowedInfoFuncIds(description)
+        EventAgentCode = -1
       };
       _byId[id] = rec;
       _byInfluenceId[influenceId] = id;
       return (id, null);
     }
 
-    /// <summary>Удалить запись. Для ID 1–5 возвращает ошибку.</summary>
+    /// <summary>Удалить запись.</summary>
     public (bool Success, string Error) Remove(int id)
     {
-      if (IsRequiredDefault(id)) return (false, $"Запись ID={id} обязательна, удаление запрещено");
       if (!_byId.TryGetValue(id, out var rec)) return (false, "Запись не найдена");
       _byId.Remove(id);
       if (rec.MoodId >= 0) _byMoodId.Remove(rec.MoodId);
@@ -258,8 +256,8 @@ namespace ISIDA.Psychic.Understanding
         if (r.MoodId >= 0) _byMoodId[r.MoodId] = r.Id;
         if (r.InfluenceId >= 0) _byInfluenceId[r.InfluenceId] = r.Id;
       }
-      _nextMoodId = _byId.Keys.Where(k => k >= 11 && k <= 20).DefaultIfEmpty(10).Max() + 1;
-      _nextInfluenceId = _byId.Keys.Where(k => k >= 21).DefaultIfEmpty(20).Max() + 1;
+      _nextMoodId = _byId.Keys.Where(k => k >= 21 && k <= 40).DefaultIfEmpty(20).Max() + 1;
+      _nextInfluenceId = _byId.Keys.Where(k => k >= 41 && k <= 60).DefaultIfEmpty(40).Max() + 1;
     }
 
     #endregion
@@ -267,28 +265,6 @@ namespace ISIDA.Psychic.Understanding
     #region Load / Save
 
     private const string FileName = "situation_types.dat";
-
-    /// <summary>
-    /// Parse 5-го поля: список Id через запятую (например: "2,5,31").
-    /// Empty/unknown token -> игнорируется.
-    /// </summary>
-    private static Dictionary<int, int> ParseAllowedInfoFuncIds(string raw)
-    {
-      var dict = new Dictionary<int, int>();
-      if (string.IsNullOrWhiteSpace(raw)) return dict;
-      foreach (var token in raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
-      {
-        if (int.TryParse(token.Trim(), out int id) && id > 0)
-          dict[id] = 1;
-      }
-      return dict;
-    }
-
-    private static string SerializeAllowedInfoFuncIds(Dictionary<int, int> ids)
-    {
-      if (ids == null || ids.Count == 0) return "";
-      return string.Join(",", ids.Keys.OrderBy(x => x));
-    }
 
     private void EnsureDirectory()
     {
@@ -314,19 +290,20 @@ namespace ISIDA.Psychic.Understanding
         if (!int.TryParse(p[2], out int influenceId)) influenceId = EmptySlotValue;
         int themeTypeId = -1;
         int.TryParse(p[3], out themeTypeId);
-        var allowedRaw = p.Length >= 5 ? (p[4] ?? "") : "";
+        int eventAgentCode = -1;
+        if (p.Length >= 5) int.TryParse(p[4], out eventAgentCode);
         _byId[id] = new SituationTypeRecord
         {
           Id = id,
           MoodId = moodId,
           InfluenceId = influenceId,
           ThemeTypeId = themeTypeId,
-          AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
+          EventAgentCode = eventAgentCode
         };
       }
     }
 
-    /// <summary>Проверка на дубликаты MoodId в слотах 11–20 и InfluenceId в слотах 21–40. Пустые слоты (0 и ниже) не считаются.</summary>
+    /// <summary>Проверка на дубликаты MoodId в слотах 21–40 и InfluenceId в слотах 41–60. Пустые слоты (0 и ниже) не считаются.</summary>
     /// <returns>(true, null) если валидно; (false, "сообщение") при дублях</returns>
     public (bool Valid, string Error) ValidateRecordsNoDuplicates(
         IEnumerable<SituationTypeRecord> moodRecords,
@@ -337,10 +314,10 @@ namespace ISIDA.Psychic.Understanding
         var usedMood = new HashSet<int>();
         foreach (var r in moodRecords)
         {
-          if (r == null || r.Id < 11 || r.Id > 20) continue;
+          if (r == null || r.Id < 21 || r.Id > 40) continue;
           if (r.MoodId < 0) continue;
           if (usedMood.Contains(r.MoodId))
-            return (false, $"Дубликат настроения: «{r.MoodId}» встречается в нескольких слотах (11–20). Укажите уникальные значения.");
+            return (false, $"Дубликат настроения: «{r.MoodId}» встречается в нескольких слотах (21–40). Укажите уникальные значения.");
           usedMood.Add(r.MoodId);
         }
       }
@@ -349,17 +326,17 @@ namespace ISIDA.Psychic.Understanding
         var usedInfluence = new HashSet<int>();
         foreach (var r in influenceRecords)
         {
-          if (r == null || r.Id < 21 || r.Id > 40) continue;
+          if (r == null || r.Id < 41 || r.Id > 60) continue;
           if (r.InfluenceId < 0) continue;
           if (usedInfluence.Contains(r.InfluenceId))
-            return (false, $"Дубликат воздействия: «{r.InfluenceId}» встречается в нескольких слотах (21–40). Укажите уникальные значения.");
+            return (false, $"Дубликат воздействия: «{r.InfluenceId}» встречается в нескольких слотах (41–60). Укажите уникальные значения.");
           usedInfluence.Add(r.InfluenceId);
         }
       }
       return (true, null);
     }
 
-    /// <summary>Проверка уникальности пары (ID типа ситуации, ThemeTypeId): один ThemeTypeId не может быть привязан к разным ID. Записи с ThemeTypeId&lt;=0 пропускаются.</summary>
+    /// <summary>Проверка уникальности пары (ID слота 1–60, ThemeTypeId): один ThemeTypeId не может быть привязан к разным слотам. Записи с ThemeTypeId&lt;=0 пропускаются.</summary>
     public (bool Valid, string Error) ValidateThemeTypeIdUniqueness(IEnumerable<SituationTypeRecord> allRecordsWithTheme)
     {
       if (allRecordsWithTheme == null) return (true, null);
@@ -386,9 +363,7 @@ namespace ISIDA.Psychic.Understanding
           existing.MoodId = r.MoodId;
           existing.InfluenceId = r.InfluenceId;
           existing.ThemeTypeId = r.ThemeTypeId;
-          existing.AllowedInfoFuncIds = r.AllowedInfoFuncIds != null
-            ? new Dictionary<int, int>(r.AllowedInfoFuncIds)
-            : new Dictionary<int, int>();
+          existing.EventAgentCode = r.EventAgentCode;
         }
       }
     }
@@ -407,7 +382,7 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.SituationTypesDesc
         };
         foreach (var r in _byId.Values.OrderBy(x => x.Id))
-          lines.Add($"{r.Id}|{r.MoodId}|{r.InfluenceId}|{r.ThemeTypeId}|{SerializeAllowedInfoFuncIds(r.AllowedInfoFuncIds)}");
+          lines.Add($"{r.Id}|{r.MoodId}|{r.InfluenceId}|{r.ThemeTypeId}|{r.EventAgentCode}");
 
         var result = FileValidator.SafeSaveFile(
             path,
@@ -424,22 +399,6 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Содержимое файла по умолчанию при первом запуске (только записи 1–10). Редактирование — в situation_types.dat.</summary>
-    private static readonly string[] DefaultSituationTypesFileLines =
-    {
-      // 5-е поле: AllowedInfoFuncIds (список через запятую). Пусто = без ограничений.
-      "1|-1|-1|11|",
-      "2|-1|-1|11|",
-      "3|-1|-1|10|",
-      "4|-1|-1|5|",
-      "5|-1|-1|7|",
-      "6|-1|-1|4|",
-      "7|-1|-1|1|",
-      "8|-1|-1|16|",
-      "9|-1|-1|-1|",
-      "10|-1|-1|-1|"
-    };
-
     private void CreateDefaultSituationTypesFile(string path)
     {
       try
@@ -449,66 +408,11 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.SituationTypesFormat,
           FileValidator.FileHeaders.SituationTypesDesc
         };
-        lines.AddRange(DefaultSituationTypesFileLines);
         File.WriteAllLines(path, lines);
       }
       catch (Exception ex)
       {
         Logger.Warning($"Не удалось создать файл типов ситуаций по умолчанию: {ex.Message}");
-      }
-    }
-
-    /// <summary>Читает из situation_types.dat записи с Id в диапазоне 1–10.</summary>
-    private List<SituationTypeRecord> ReadDefaultTypeDefinitionsFromFile()
-    {
-      var path = Path.Combine(_dataPath, FileName);
-      var result = new List<SituationTypeRecord>();
-      if (!File.Exists(path) || !FileValidator.IsValidSituationTypeFile(path))
-        return result;
-      foreach (var line in File.ReadLines(path))
-      {
-        var t = line?.Trim();
-        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
-        var p = t.Split('|');
-        if (p.Length < 4) continue;
-        if (!int.TryParse(p[0], out int id) || id < 1 || id > 10) continue;
-        if (!int.TryParse(p[1], out int moodId)) moodId = EmptySlotValue;
-        if (!int.TryParse(p[2], out int influenceId)) influenceId = EmptySlotValue;
-        int themeTypeId = -1;
-        int.TryParse(p[3], out themeTypeId);
-        var allowedRaw = p.Length >= 5 ? (p[4] ?? "") : "";
-        result.Add(new SituationTypeRecord
-        {
-          Id = id,
-          MoodId = moodId,
-          InfluenceId = influenceId,
-          ThemeTypeId = themeTypeId,
-          AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
-        });
-      }
-      return result;
-    }
-
-    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (записи 1–10 из файла). Новый ID темы не должен совпадать с ними.</summary>
-    public static IReadOnlyList<int> GetThemeTypeIdsReservedInDefaultTypes()
-    {
-      if (_instance == null) return Array.Empty<int>();
-      var list = new List<int>();
-      for (int id = 1; id <= 10; id++)
-      {
-        var rec = _instance.GetById(id);
-        if (rec != null && rec.ThemeTypeId > 0 && !list.Contains(rec.ThemeTypeId))
-          list.Add(rec.ThemeTypeId);
-      }
-      return list;
-    }
-
-    private void EnsureDefaultTypes()
-    {
-      foreach (var rec in ReadDefaultTypeDefinitionsFromFile())
-      {
-        if (!_byId.ContainsKey(rec.Id))
-          _byId[rec.Id] = rec;
       }
     }
 

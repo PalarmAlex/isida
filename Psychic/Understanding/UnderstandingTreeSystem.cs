@@ -141,7 +141,7 @@ namespace ISIDA.Psychic.Understanding
         DetectedActiveLastUnderstandingNodeId = foundId;
 
         int situationTypeId = _situationImageSystem?.GetById(situationImageId)?.SituationTypeId ?? 0;
-        int themeId = RunNewThemeBySituationTypeId(situationTypeId);
+        int themeId = RunNewThemeBySituationTypeId(situationTypeId, preferPulseResolvedTheme: true);
         int purposeId = GetMentalPurposeSimplified(baseId, emotionId, situationImageId);
         ProblemTreeInfo = (automatizmTreeNodeId, situationImageId, themeId, purposeId);
 
@@ -187,7 +187,7 @@ namespace ISIDA.Psychic.Understanding
     /// <returns>ID образа темы (ThemeImage) или 0 при ошибке.</returns>
     public int UpdateThemeByTrigger(int situationTypeCode)
     {
-      return RunNewThemeBySituationTypeId(situationTypeCode);
+      return RunNewThemeBySituationTypeId(situationTypeCode, preferPulseResolvedTheme: false);
     }
 
     /// <summary>
@@ -206,15 +206,25 @@ namespace ISIDA.Psychic.Understanding
 
     /// <summary>Создать или получить образ темы по коду типа ситуации; при отсутствии привязки — тема по умолчанию.
     /// Конкуренция по весу: если уже есть активная тема с большим весом, она остаётся (новая не перекрывает).</summary>
-    private int RunNewThemeBySituationTypeId(int situationTypeId)
+    private int RunNewThemeBySituationTypeId(int situationTypeId, bool preferPulseResolvedTheme)
     {
       if (_themeImageSystem == null) return 0;
       try
       {
         var pulsCount = Math.Max(1, AppGlobalState.Lifetime);
-        int themeTypeId = _situationTypeSystem != null
-          ? _situationTypeSystem.GetThemeTypeIdBySituationTypeId(situationTypeId)
-          : 0;
+        int themeTypeId = 0;
+        if (preferPulseResolvedTheme)
+        {
+          themeTypeId = AppGlobalState.ResolvedThinkingThemeTypeId;
+          if (themeTypeId <= 0 && _situationTypeSystem != null)
+            themeTypeId = _situationTypeSystem.GetThemeTypeIdBySituationTypeId(situationTypeId);
+        }
+        else if (_situationTypeSystem != null)
+        {
+          themeTypeId = _situationTypeSystem.GetThemeTypeIdByAgentEventCode(situationTypeId);
+          if (themeTypeId <= 0)
+            themeTypeId = _situationTypeSystem.GetThemeTypeIdBySituationTypeId(situationTypeId);
+        }
         if (themeTypeId <= 0)
           themeTypeId = _themeImageSystem.DefaultThemeTypeId;
         int weight = _themeImageSystem.GetDefaultWeightForThemeType(themeTypeId);

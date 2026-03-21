@@ -401,36 +401,33 @@ namespace ISIDA.Psychic.Thinking
         CurrentStaffAutomatizm = cycle.UnresolvedNodeId > 0 ? _automatizmSystem.GetMotorsAutomatizmListFromTreeId(cycle.UnresolvedNodeId).FirstOrDefault() : null
       };
 
-      // Allowed-list инфо-функций (вариант B: int id -> соответствие по strategy.Id вида infoFunc_{N})
-      // Ограничение включается только если из SituationTypeSystem получилось непустое множество AllowedInfoFuncIds.
+      // Allowed-list инфо-функций из справочника тем мышления (ThemeImageSystem)
       var allowedInfoFuncIds = GetAllowedInfoFuncIdsForCycle(cycle);
-      var useAllowedFilter = allowedInfoFuncIds.Count > 0;
+      var idsToTry = allowedInfoFuncIds.Count > 0
+        ? allowedInfoFuncIds.ToList()
+        : InfoFunctionsCatalog.GetAllIds();
 
-      // Упрощённый порядок стратегий: пока только зарегистрированные
       _lock.EnterReadLock();
       try
       {
-        foreach (var strategy in _strategies)
+        foreach (var infoFuncId in idsToTry)
         {
-          if (strategy == null) continue;
-          if (useAllowedFilter)
-          {
-            if (!TryParseInfoFuncIdFromStrategyId(strategy.Id, out int infoFuncId))
-              continue;
-            if (!allowedInfoFuncIds.Contains(infoFuncId))
-              continue;
-          }
-          if (!string.IsNullOrWhiteSpace(cycle.LastStrategyId) && cycle.LastStrategyId == strategy.Id)
+          if (!InfoFunctionsCatalog.Exists(infoFuncId)) continue;
+          var lastIdStr = cycle.LastStrategyId;
+          if (!string.IsNullOrWhiteSpace(lastIdStr) && lastIdStr == $"infoFunc_{infoFuncId}")
             continue;
 
+          ctx.OptionalInfoFuncId = infoFuncId;
+          var strategy = _strategies.OfType<InfoFunctionsStrategy>().FirstOrDefault();
+          if (strategy == null) continue;
+
           var decision = strategy.TryStep(ctx);
-          cycle.LastStrategyId = strategy.Id;
+          cycle.LastStrategyId = $"infoFunc_{infoFuncId}";
           if (decision != null)
           {
-            cycle.Log.Add($"[p{pulseCount}] Strategy={strategy.Id} => {decision.DebugNote}");
+            cycle.Log.Add($"[p{pulseCount}] InfoFunc={infoFuncId} => {decision.DebugNote}");
             if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
             {
-              // фиксируем «опыт»: что в этом контексте предлагалось как действие
               var actionImg = decision.AutomatizmToExecute?.ActionsImageID ?? decision.ActionsImageIdToAutomatize;
               _experienceMemory.RecordRecommendation(cycle.ProblemNodeId, cycle.ThemeId, cycle.PurposeId, actionImg);
               cycle.IsIdle = false;
@@ -446,49 +443,11 @@ namespace ISIDA.Psychic.Thinking
       return ThinkingDecision.None("no_decision");
     }
 
-    private static bool TryParseInfoFuncIdFromStrategyId(string strategyId, out int infoFuncId)
-    {
-      infoFuncId = 0;
-      if (string.IsNullOrWhiteSpace(strategyId))
-        return false;
-
-      var s = strategyId.Trim();
-
-      // BOT-подобный формат: infoFunc_1 или infoFunc1
-      int lastUnderscore = s.LastIndexOf('_');
-      if (lastUnderscore >= 0 && lastUnderscore < s.Length - 1)
-      {
-        var tail = s.Substring(lastUnderscore + 1).Trim();
-        if (int.TryParse(tail, out infoFuncId))
-          return true;
-      }
-
-      // fallback: брать последние цифры в строке (например "..._12" или "...12")
-      int i = s.Length - 1;
-      while (i >= 0 && char.IsDigit(s[i])) i--;
-      if (i < s.Length - 1)
-      {
-        var tail = s.Substring(i + 1);
-        if (int.TryParse(tail, out infoFuncId))
-          return true;
-      }
-
-      return false;
-    }
-
+    /// <summary>Получить разрешённые Id инфо-функций по теме мышления из справочника тем (ThemeImageSystem).</summary>
     private static HashSet<int> GetAllowedInfoFuncIdsForCycle(ThinkingCycleInfo cycle)
     {
-      // По умолчанию без ограничений
       if (cycle == null) return new HashSet<int>();
-      if (!SituationTypeSystem.IsInitialized || !ThemeImageSystem.IsInitialized)
-        return new HashSet<int>();
-
-      // В текущем движке influenceId из психики для thinking-уровня напрямую не доступен,
-      // поэтому пока считаем, что привязки с InfluenceId игнорируются (только InfluenceId < 0 матчится).
-      int influenceId = -1;
-
-      // MoodId берём из контекста последнего стимула оператора (именно он используется при создании ActionsImage).
-      int moodId = AppGlobalState.CurrentStimulusMoodId;
+      if (!ThemeImageSystem.IsInitialized) return new HashSet<int>();
 
       int themeTypeId = 0;
       if (cycle.ThemeId > 0)
@@ -496,32 +455,9 @@ namespace ISIDA.Psychic.Thinking
         var themeRec = ThemeImageSystem.Instance.GetById(cycle.ThemeId);
         themeTypeId = themeRec?.Type ?? 0;
       }
+      if (themeTypeId <= 0) return new HashSet<int>();
 
-      var allowed = new HashSet<int>();
-
-      // Идея: SituationTypeSystem — это таблица соответствий многие-ко-многим,
-      // поэтому allowed-union строим по всем записям, которые матчятся текущим mood/theme/influence.
-      foreach (var rec in SituationTypeSystem.Instance.GetAll())
-      {
-        if (rec == null) continue;
-
-        bool moodOk = rec.MoodId < 0 || rec.MoodId == moodId;
-        if (!moodOk) continue;
-
-        bool influenceOk = rec.InfluenceId < 0 || rec.InfluenceId == influenceId;
-        if (!influenceOk) continue;
-
-        bool themeOk = rec.ThemeTypeId <= 0 || rec.ThemeTypeId == themeTypeId;
-        if (!themeOk) continue;
-
-        if (rec.AllowedInfoFuncIds == null || rec.AllowedInfoFuncIds.Count == 0)
-          continue; // пустой allowed-list = "без ограничений", но это не даёт конкретных allowed id
-
-        foreach (var infoFuncId in rec.AllowedInfoFuncIds.Keys)
-          allowed.Add(infoFuncId);
-      }
-
-      return allowed;
+      return ThemeImageSystem.Instance.GetAllowedInfoFuncIdsForThemeType(themeTypeId);
     }
 
     private bool ShouldStartDreaming(int pulseCount, InformationEnvironmentSystem.InformationEnvironment env)

@@ -548,6 +548,17 @@ namespace ISIDA.Actions
       return new ReadOnlyCollection<GomeostasisInfluenceAction>(_influenceActiveActions.ToList());
     }
 
+    /// <summary>Сумма модулей величин воздействия по параметрам гомеостаза (сравнение «значимости» воздействия).</summary>
+    public int GetInfluenceMagnitudeSum(int actionId)
+    {
+      if (!_influenceActions.TryGetValue(actionId, out var a) || a?.Influences == null || a.Influences.Count == 0)
+        return 0;
+      int s = 0;
+      foreach (var v in a.Influences.Values)
+        s += Math.Abs(v);
+      return s;
+    }
+
     #endregion
 
     #region Валидация и коррекция антагонистов

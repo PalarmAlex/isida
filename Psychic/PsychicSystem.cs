@@ -140,11 +140,8 @@ namespace ISIDA.Psychic
           _problemTreeSystem,
           _automatizmSystem);
 
-        // Базовые стратегии 3-го уровня (минимальный набор).
-        _thinkingCyclesSystem.RegisterStrategy(new ExperienceRecommendationStrategy(_thinkingCyclesSystem.ExperienceMemory));
-        _thinkingCyclesSystem.RegisterStrategy(new EpisodicRuleStrategy());
-        _thinkingCyclesSystem.RegisterStrategy(new RandomBranchAutomatizmStrategy());
-        _thinkingCyclesSystem.RegisterStrategy(new AskOperatorStrategy());
+        // Инфо-функции 3-го уровня (один класс с switch по Id)
+        _thinkingCyclesSystem.RegisterStrategy(new InfoFunctionsStrategy(_thinkingCyclesSystem.ExperienceMemory));
       }
     }
 
@@ -422,6 +419,9 @@ namespace ISIDA.Psychic
       {
         if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
           _isAnswer = true;
+
+        if (actionIdList != null && actionIdList.Count > 0)
+          AppGlobalState.RecordStimulusInfluenceActions(actionIdList);
 
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);

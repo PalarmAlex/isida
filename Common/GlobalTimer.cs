@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using ISIDA.Psychic;
+using ISIDA.Psychic.Understanding;
 using System.Linq;
 
 namespace ISIDA.Common
@@ -500,6 +501,15 @@ namespace ISIDA.Common
         }
         try
         {
+          try
+          {
+            ThinkingThemePulseResolver.ResolveAtPulseStart(GlobalPulsCount);
+          }
+          catch (Exception themeEx)
+          {
+            Logger.Warning($"ThinkingThemePulseResolver: {themeEx.Message}");
+          }
+
           _gomeostas.UpdateStateOnly();
         }
         catch (Exception gomeostasEx)

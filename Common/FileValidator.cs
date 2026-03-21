@@ -138,8 +138,8 @@ namespace ISIDA.Common
       public const string ThemeImagesDesc = "# Weight: вес (1-10), Type: тип темы (ThemeTypeStr), PulsCount: время актуализации";
 
       // Справочник типов тем
-      public const string ThemeTypesFormat = "# Формат: Id|Description|DefaultWeight";
-      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: описание, DefaultWeight: вес по умолчанию (обязательно >0)";
+      public const string ThemeTypesFormat = "# Формат: Id|Description|DefaultWeight|AllowedInfoFuncIds";
+      public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: описание, DefaultWeight: вес по умолчанию (обязательно >0), AllowedInfoFuncIds: список Id через запятую (пусто = без ограничений)";
 
       // Образы целей
       public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";
@@ -149,9 +149,9 @@ namespace ISIDA.Common
       public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
-      // Справочник типов ситуаций (связь MoodId/InfluenceId с ID типа)
-      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|AllowedInfoFuncIds";
-      public const string SituationTypesDesc = "# MoodId/InfluenceId: -1=отсутствие. ThemeTypeId: -1=не задано; Id 6-10, 41-60 — привязка к теме. Id 1-5 обязательны. AllowedInfoFuncIds: список Id через запятую (пусто = без ограничений).";
+      // Справочник типов ситуаций
+      public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|EventAgentCode";
+      public const string SituationTypesDesc = "# Id 1-20: события (ThemeTypeId, EventAgentCode). Id 21-40: настроение (MoodId, ThemeTypeId). Id 41-60: воздействие (InfluenceId, ThemeTypeId). EventAgentCode: -1=нет; для 1-20 — код из AgentEventsCatalog.";
 
       // Образы ситуаций
       public const string SituationImagesFormat = "# Id|AutomatizmTreeNodeId|SituationTypeId";
@@ -1417,7 +1417,7 @@ namespace ISIDA.Common
       }
     }
 
-    /// <summary>Проверяет валидность содержимого файла справочника типов ситуаций (формат: Id|MoodId|InfluenceId|ThemeTypeId|Description)</summary>
+    /// <summary>Проверяет валидность содержимого файла справочника типов ситуаций (формат: Id|MoodId|InfluenceId|ThemeTypeId|EventAgentCode; 5-й столбец опционален для старых файлов)</summary>
     public static bool IsValidSituationTypeFile(IEnumerable<string> lines)
     {
       if (lines == null) return false;
@@ -1433,12 +1433,8 @@ namespace ISIDA.Common
         if (!int.TryParse(p[0], out int id) || id <= 0 || id > 60) return false;
         if (!int.TryParse(p[1], out _)) return false;
         if (!int.TryParse(p[2], out _)) return false;
-        if (p.Length >= 5)
-        {
-          if (!int.TryParse(p[3], out int themeId)) return false;
-          if (themeId < -1 || themeId > 17) return false;
-        }
-        return true;
+        if (!int.TryParse(p[3], out int themeTypeId) || themeTypeId < -1 || themeTypeId > 100) return false;
+        if (p.Length >= 5 && (!int.TryParse(p[4], out int evCode) || evCode < -1 || evCode > 100)) return false;
       }
       return true;
     }
@@ -1543,7 +1539,7 @@ namespace ISIDA.Common
       }
     }
 
-    /// <summary>Проверяет валидность содержимого файла справочника типов тем. Формат: Id|Description|DefaultWeight; вес для каждой темы обязан быть >0.</summary>
+    /// <summary>Проверяет валидность содержимого файла справочника типов тем. Формат: Id|Description|DefaultWeight|AllowedInfoFuncIds (4-е поле опционально).</summary>
     public static bool IsValidThemeTypesFile(IEnumerable<string> lines)
     {
       if (lines == null) return false;

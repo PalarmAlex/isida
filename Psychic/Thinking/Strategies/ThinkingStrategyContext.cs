@@ -30,6 +30,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
 
     /// <summary>Текущий штатный автоматизм в ветке (если есть).</summary>
     public Automatizm CurrentStaffAutomatizm { get; set; }
+
+    /// <summary>Id инфо-функции для вызова (если диспетчер передаёт конкретный id).</summary>
+    public int? OptionalInfoFuncId { get; set; }
   }
 }
 

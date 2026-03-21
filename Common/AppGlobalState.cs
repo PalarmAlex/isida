@@ -1,6 +1,7 @@
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -833,6 +834,92 @@ public static class AppGlobalState
 
   /// <summary>Настроение текущего стимула с пульта</summary>
   public static int CurrentStimulusMoodId { get => _currentStimulusMoodId; set => _currentStimulusMoodId = value; }
+
+  #endregion
+
+  #region Буферы стимулов для темы мышления (пульс)
+
+  private static int _stimulusAgentEventPulse;
+  private static int _stimulusAgentEventCode;
+  private static int _stimulusInfluencePulse;
+  private static readonly List<int> _stimulusInfluenceActionIds = new List<int>();
+  private static int _resolvedThinkingThemeTypeId;
+
+  /// <summary>Тип темы, выбранный в начале текущего пульса (по стимулам предыдущего пульса).</summary>
+  public static int ResolvedThinkingThemeTypeId
+  {
+    get { _lock.EnterReadLock(); try { return _resolvedThinkingThemeTypeId; } finally { _lock.ExitReadLock(); } }
+    set { _lock.EnterWriteLock(); try { _resolvedThinkingThemeTypeId = value; } finally { _lock.ExitWriteLock(); } }
+  }
+
+  /// <summary>Зафиксировать код события агента на текущем глобальном пульсе (последнее значение перезаписывает предыдущее).</summary>
+  public static void RecordStimulusAgentEvent(int eventCode)
+  {
+    if (eventCode <= 0) return;
+    _lock.EnterWriteLock();
+    try
+    {
+      _stimulusAgentEventPulse = GlobalTimer.GlobalPulsCount;
+      _stimulusAgentEventCode = eventCode;
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Зафиксировать воздействия с пульта на текущем пульсе (список накапливается без дубликатов).</summary>
+  public static void RecordStimulusInfluenceActions(IEnumerable<int> actionIds)
+  {
+    if (actionIds == null) return;
+    int pulse = GlobalTimer.GlobalPulsCount;
+    _lock.EnterWriteLock();
+    try
+    {
+      if (_stimulusInfluencePulse != pulse)
+      {
+        _stimulusInfluencePulse = pulse;
+        _stimulusInfluenceActionIds.Clear();
+      }
+      foreach (int id in actionIds)
+      {
+        if (id > 0 && !_stimulusInfluenceActionIds.Contains(id))
+          _stimulusInfluenceActionIds.Add(id);
+      }
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Снимок буферов стимулов для резолва темы в начале пульса.</summary>
+  public static void TakeStimulusSnapshotForThemeResolution(
+      out int eventPulse,
+      out int eventCode,
+      out int influencePulse,
+      out IReadOnlyList<int> influenceIds)
+  {
+    _lock.EnterReadLock();
+    try
+    {
+      eventPulse = _stimulusAgentEventPulse;
+      eventCode = _stimulusAgentEventCode;
+      influencePulse = _stimulusInfluencePulse;
+      influenceIds = _stimulusInfluenceActionIds.Count > 0
+        ? (IReadOnlyList<int>)_stimulusInfluenceActionIds.ToArray()
+        : Array.Empty<int>();
+    }
+    finally { _lock.ExitReadLock(); }
+  }
+
+  /// <summary>Сброс буферов события/воздействий после выбора темы в начале пульса.</summary>
+  public static void ClearStimulusBuffersAfterThemeResolution()
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      _stimulusAgentEventPulse = 0;
+      _stimulusAgentEventCode = 0;
+      _stimulusInfluencePulse = 0;
+      _stimulusInfluenceActionIds.Clear();
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
 
   #endregion
 }

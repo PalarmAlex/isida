@@ -101,12 +101,27 @@ namespace ISIDA.Psychic.Understanding
       if (_situationTypeSystem == null) return 0;
 
       int typeId = ResolveSituationTypeId(automatizmTreeNodeId, context);
+      RecordStimulusFromSituationResolution(typeId, context);
       if (typeId <= 0 || !_situationTypeSystem.Exists(typeId))
         typeId = GetDefaultSituationTypeId();
       if (typeId <= 0) return 0;
 
       var (id, _) = CreateSituationImageOrGet(automatizmTreeNodeId, typeId, true);
       return id;
+    }
+
+    /// <summary>Фиксирует стимулы для резолва темы на следующем пульсе (по данным предыдущего пульса).</summary>
+    private static void RecordStimulusFromSituationResolution(int typeId, SituationImageContext context)
+    {
+      if (typeId <= 0) return;
+      if (typeId >= 21 && typeId <= 60)
+      {
+        if (context?.ActionIds != null && context.ActionIds.Length > 0)
+          AppGlobalState.RecordStimulusInfluenceActions(context.ActionIds);
+        return;
+      }
+      if (typeId >= 1 && typeId <= 20)
+        AppGlobalState.RecordStimulusAgentEvent(typeId);
     }
 
     /// <summary>Определить тип ситуации по приоритетам.</summary>
@@ -171,22 +186,22 @@ namespace ISIDA.Psychic.Understanding
       return sitId;
     }
 
-    /// <summary>Приоритет настроения с пульта по данным SituationTypeSystem (ID 11–20). Меньший ID слота = выше приоритет.</summary>
+    /// <summary>Приоритет настроения с пульта по данным SituationTypeSystem (ID 21–40). Меньший ID слота = выше приоритет.</summary>
     private int GetPrioritetOfPultMoodActions(int moodId)
     {
       if (_situationTypeSystem == null) return 0;
       int typeId = _situationTypeSystem.GetIdByMoodId(moodId);
-      if (typeId < 11 || typeId > 20) return 0;
-      return 21 - typeId;
+      if (typeId < 21 || typeId > 40) return 0;
+      return 41 - typeId;
     }
 
-    /// <summary>Приоритет кнопки действия с пульта по данным SituationTypeSystem (ID 21–40). Меньший ID слота = выше приоритет.</summary>
+    /// <summary>Приоритет кнопки действия с пульта по данным SituationTypeSystem (ID 41–60). Меньший ID слота = выше приоритет.</summary>
     private int GetPrioritetOfPultButtonActions(int actionId)
     {
       if (_situationTypeSystem == null) return 0;
       int typeId = _situationTypeSystem.GetIdByInfluenceId(actionId);
-      if (typeId < 21 || typeId > 40) return 0;
-      return 41 - typeId;
+      if (typeId < 41 || typeId > 60) return 0;
+      return 61 - typeId;
     }
 
     private int GetDefaultSituationTypeId()

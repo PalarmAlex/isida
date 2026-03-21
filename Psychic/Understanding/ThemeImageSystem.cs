@@ -14,7 +14,14 @@ namespace ISIDA.Psychic.Understanding
     private readonly string _dataPath;
     private readonly Dictionary<int, ThemeImageRecord> _byId = new Dictionary<int, ThemeImageRecord>();
     private readonly Dictionary<(int Weight, int Type, int PulsCount), int> _unicumKeyToId = new Dictionary<(int, int, int), int>();
-    private Dictionary<int, (string Description, int DefaultWeight)> _themeTypes = new Dictionary<int, (string, int)>();
+    private Dictionary<int, ThemeTypeData> _themeTypes = new Dictionary<int, ThemeTypeData>();
+
+    private struct ThemeTypeData
+    {
+      public string Description;
+      public int DefaultWeight;
+      public HashSet<int> AllowedInfoFuncIds;
+    }
     private int _lastId;
     private bool _disposed;
 
@@ -108,10 +115,21 @@ namespace ISIDA.Psychic.Understanding
       return 2;
     }
 
-    /// <summary>ID типов тем, зарезервированные в дефолтных типах ситуаций (SituationTypeSystem.EnsureDefaultTypes). Их нельзя удалять; новый ID темы не должен с ними совпадать.</summary>
+    /// <summary>Разрешённые Id инфо-функций для типа темы. Пустой набор = без ограничений.</summary>
+    public HashSet<int> GetAllowedInfoFuncIdsForThemeType(int themeTypeId)
+    {
+      var result = new HashSet<int>();
+      if (themeTypeId <= 0) return result;
+      if (!_themeTypes.TryGetValue(themeTypeId, out var rec) || rec.AllowedInfoFuncIds == null) return result;
+      foreach (var id in rec.AllowedInfoFuncIds) result.Add(id);
+      return result;
+    }
+
+    /// <summary>ID типов тем, используемые в справочнике типов ситуаций. Их нельзя удалять — есть ссылки.</summary>
     public static IReadOnlyList<int> GetThemeTypeIdsProtectedFromRemoval()
     {
-      return SituationTypeSystem.GetThemeTypeIdsReservedInDefaultTypes();
+      if (!SituationTypeSystem.IsInitialized) return Array.Empty<int>();
+      return SituationTypeSystem.Instance.GetThemeTypeIdsInUse();
     }
 
     /// <summary>Можно ли удалить тип темы из справочника (false, если он зарезервирован в дефолтных типах ситуаций).</summary>
@@ -139,7 +157,29 @@ namespace ISIDA.Psychic.Understanding
         .ToList();
     }
 
-    /// <summary>Типы тем, доступные для редактирования в UI: только те, что есть в справочнике, исключая типы, зарезервированные в дефолтных типах ситуаций. Возвращает Id, описание и вес по умолчанию.</summary>
+    /// <summary>Типы тем с привязкой инфо-функций для вывода на пульт (Id, Description, DefaultWeight, AllowedInfoFuncIds).</summary>
+    public IReadOnlyList<(int Id, string Description, int DefaultWeight, IReadOnlyList<int> AllowedInfoFuncIds)> GetThemeTypesWithAllowedInfoFuncs()
+    {
+      return _themeTypes
+        .Where(kv => kv.Key >= 1)
+        .OrderBy(kv => kv.Key)
+        .Select(kv => (kv.Key, kv.Value.Description ?? "", kv.Value.DefaultWeight > 0 ? kv.Value.DefaultWeight : 2,
+          (IReadOnlyList<int>)(kv.Value.AllowedInfoFuncIds?.OrderBy(x => x).ToList() ?? new List<int>())))
+        .ToList();
+    }
+
+    /// <summary>Обновить привязку инфо-функций для типа темы и сохранить.</summary>
+    public (bool Success, string Error) SetAllowedInfoFuncIdsForThemeType(int themeTypeId, IEnumerable<int> ids)
+    {
+      if (themeTypeId < 1) return (false, "Некорректный Id типа темы");
+      if (!_themeTypes.TryGetValue(themeTypeId, out var rec))
+        return (false, "Тип темы не найден");
+      rec.AllowedInfoFuncIds = ids != null ? new HashSet<int>(ids.Where(x => x > 0)) : new HashSet<int>();
+      _themeTypes[themeTypeId] = rec;
+      return SaveThemeTypes();
+    }
+
+    /// <summary>Типы тем, доступные для редактирования в UI: только те, что есть в справочнике, исключая типы, используемые в справочнике типов ситуаций. Возвращает Id, описание и вес по умолчанию.</summary>
     public IReadOnlyList<(int Id, string Description, int DefaultWeight)> GetEditableThemeTypes()
     {
       var protectedIds = GetThemeTypeIdsProtectedFromRemoval();
@@ -163,7 +203,14 @@ namespace ISIDA.Psychic.Understanding
         int weight = r.DefaultWeight;
         if (weight < 1) weight = 2;
         if (weight > 10) weight = 10;
-        _themeTypes[r.Id] = (r.Description ?? "", weight);
+        if (!_themeTypes.TryGetValue(r.Id, out var existing))
+          existing = new ThemeTypeData { AllowedInfoFuncIds = new HashSet<int>() };
+        _themeTypes[r.Id] = new ThemeTypeData
+        {
+          Description = r.Description ?? "",
+          DefaultWeight = weight,
+          AllowedInfoFuncIds = existing.AllowedInfoFuncIds ?? new HashSet<int>()
+        };
       }
 
       foreach (var id in _themeTypes.Keys.ToList())
@@ -237,10 +284,21 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
+    private static HashSet<int> ParseAllowedInfoFuncIds(string raw)
+    {
+      var set = new HashSet<int>();
+      if (string.IsNullOrWhiteSpace(raw)) return set;
+      foreach (var token in raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+      {
+        if (int.TryParse(token.Trim(), out int id) && id > 0) set.Add(id);
+      }
+      return set;
+    }
+
     private void LoadThemeTypes()
     {
       var path = Path.Combine(_dataPath, ThemeTypesFileName);
-      _themeTypes = new Dictionary<int, (string, int)>();
+      _themeTypes = new Dictionary<int, ThemeTypeData>();
       if (!File.Exists(path) || !FileValidator.IsValidThemeTypesFile(path))
         return;
       foreach (var line in File.ReadLines(path))
@@ -251,15 +309,21 @@ namespace ISIDA.Psychic.Understanding
         if (p.Length < 3) continue;
         if (!int.TryParse(p[0], out int id) || id < 1) continue;
         if (!int.TryParse(p[2], out int weight) || weight < 1) continue;
-        _themeTypes[id] = (p[1].Trim(), weight);
+        var allowedRaw = p.Length >= 4 ? (p[3] ?? "") : "";
+        _themeTypes[id] = new ThemeTypeData
+        {
+          Description = p[1].Trim(),
+          DefaultWeight = weight,
+          AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
+        };
       }
     }
 
     private void CreateDefaultThemeTypesAndSave()
     {
-      _themeTypes = new Dictionary<int, (string, int)>();
+      _themeTypes = new Dictionary<int, ThemeTypeData>();
       foreach (var (id, desc, weight) in DefaultThemeTypesList)
-        _themeTypes[id] = (desc, weight);
+        _themeTypes[id] = new ThemeTypeData { Description = desc, DefaultWeight = weight, AllowedInfoFuncIds = new HashSet<int>() };
       var (ok, _) = SaveThemeTypes();
       if (!ok)
         Logger.Warning("Не удалось сохранить справочник типов тем по умолчанию.");
@@ -278,8 +342,15 @@ namespace ISIDA.Psychic.Understanding
           FileValidator.FileHeaders.ThemeTypesDesc
         };
         foreach (var kv in _themeTypes.OrderBy(x => x.Key))
+        {
           if (kv.Key >= 1)
-            lines.Add($"{kv.Key}|{kv.Value.Description}|{kv.Value.DefaultWeight}");
+          {
+            var allowedStr = kv.Value.AllowedInfoFuncIds != null && kv.Value.AllowedInfoFuncIds.Count > 0
+              ? string.Join(",", kv.Value.AllowedInfoFuncIds.OrderBy(x => x))
+              : "";
+            lines.Add($"{kv.Key}|{kv.Value.Description}|{kv.Value.DefaultWeight}|{allowedStr}");
+          }
+        }
         var result = FileValidator.SafeSaveFile(
             path,
             lines,
