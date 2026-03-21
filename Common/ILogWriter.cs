@@ -14,7 +14,8 @@ namespace ISIDA.Common
                  int? baseStyleId, int? triggerStimulusId, int? orientationReflexType,
                  int? geneticReflexId, int? conditionedReflexId, int? automatizmId = null,
                  string reflexChainInfo = null, string automatizmChainInfo = null,
-                 int? thinkingLevel = null, bool? thinkingLevelSuccess = null);
+                 int? thinkingLevel = null, bool? thinkingLevelSuccess = null,
+                 int? thinkingThemeTypeId = null, string thinkingThemeTooltip = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

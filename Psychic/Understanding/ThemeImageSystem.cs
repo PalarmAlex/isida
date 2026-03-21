@@ -151,7 +151,7 @@ namespace ISIDA.Psychic.Understanding
       return !protectedIds.Contains(themeTypeId);
     }
 
-    /// <summary>Справочник типов тем: индекс → описание. При инициализации — из theme_types.dat; иначе — дефолтный список 1–17.</summary>
+    /// <summary>Справочник типов тем: индекс → описание. При инициализации — из theme_types.dat; иначе — дефолтный список из <see cref="DefaultThemeTypesList"/>.</summary>
     public static IReadOnlyList<(int Id, string Description)> GetDefaultThemeTypesForSettings()
     {
       if (IsInitialized)
@@ -318,8 +318,8 @@ namespace ISIDA.Psychic.Understanding
       (4, "Стимул с Пульта", 2),
       (5, "Поисковый интерес", 5),
       (6, "Обучение с учителем", 2),
-      (7, "Игнорирование оператором", 2),
-      (8, "Игра", 2),
+      (7, "Игнорирование оператором", 1),
+      (8, "Игра", 3),
       (9, "Неудовлетворенность существующим", 2),
       (10, "Непонимание", 2),
       (11, "Действие оператора", 1),
@@ -328,7 +328,10 @@ namespace ISIDA.Psychic.Understanding
       (14, "Страх", 5),
       (15, "Агрессия", 3),
       (16, "Есть объект высокой значимости", 2),
-      (17, "Улучшение настроения", 2)
+      (17, "Улучшение настроения", 2),
+      (18, "Истощение сил и ресурсов", 5),
+      (19, "Восстановление и исцеление", 5),
+      (20, "Альтруизм", 3)
     };
 
     #endregion

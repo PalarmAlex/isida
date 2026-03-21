@@ -8,6 +8,10 @@ alwaysApply: false
 
 Apply these rules for every new class in `isida`.
 
+## Язык C#
+
+- Проект `isida` зафиксирован на **C# 7.3** (`<LangVersion>7.3</LangVersion>` в `isida.csproj`). Не использовать синтаксис C# 8+ / 9+ (`is not`, `record`, `init`, switch expressions, `with` и т.д.) без явного повышения версии языка в проекте.
+
 ## XML-документация (обязательно, без исключений)
 
 **При создании или изменении любого публичного API в isida сразу добавляй полную XML-документацию.** Иначе сборка выдаёт CS1591 (DocumentationFile включён в проекте).

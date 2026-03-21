@@ -933,7 +933,6 @@ namespace ISIDA.Common
             context.AutomatizmTree,
             context.EpisodicMemory,
             context.ProblemTree,
-            context.SituationTypeSystem,
             Psychic.Understanding.PurposeImageSystem.Instance,
             context.SituationImageSystem,
             Psychic.Understanding.ThemeImageSystem.Instance,

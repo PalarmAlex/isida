@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
@@ -127,6 +128,8 @@ namespace ISIDA.Common
       public int? ThinkingLevel { get; set; }
       /// <summary>Успех решения проблемы на активированном уровне мышления</summary>
       public bool? ThinkingLevelSuccess { get; set; }
+      /// <summary>Тип темы мышления (<see cref="AppGlobalState.ResolvedThinkingThemeTypeId"/> после резолвера на пульсе)</summary>
+      public int ThinkingThemeTypeId { get; set; }
       // Поля для логирования цепочек
       public string LastReflexChainInfo { get; set; }  // "ChainId:ActionId"
       public string LastAutomatizmChainInfo { get; set; }  // "ChainId:ActionId"
@@ -709,7 +712,8 @@ namespace ISIDA.Common
         ["Цепочка РФ"] = reflexChainInfo,
         ["Цепочка АВ"] = automatizmChainInfo,
         ["УМ"] = umString,
-        ["УМ_успех"] = state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0 ? state.ThinkingLevelSuccess : null
+        ["УМ_успех"] = state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0 ? state.ThinkingLevelSuccess : null,
+        ["Тема"] = state.ThinkingThemeTypeId > 0 ? state.ThinkingThemeTypeId.ToString() : ""
       };
     }
 
@@ -784,6 +788,15 @@ namespace ISIDA.Common
           ? (bool?)successVal
           : null;
 
+      int? thinkingThemeTypeId = null;
+      if (logEntry.TryGetValue("Тема", out var themeObj) && themeObj != null &&
+          !string.IsNullOrWhiteSpace(themeObj.ToString()) &&
+          int.TryParse(themeObj.ToString(), out int themeId) && themeId > 0)
+        thinkingThemeTypeId = themeId;
+      string thinkingThemeTooltip = thinkingThemeTypeId.HasValue
+          ? BuildThinkingThemeTooltip(thinkingThemeTypeId.Value)
+          : null;
+
       _memoryLogWriter.WriteLog(
           "ResearchLogger",
           "LogSystemState",
@@ -804,8 +817,20 @@ namespace ISIDA.Common
           reflexChainInfo,
           automatizmChainInfo,
           thinkingLevel,
-          thinkingLevelSuccess
+          thinkingLevelSuccess,
+          thinkingThemeTypeId,
+          thinkingThemeTooltip
       );
+    }
+
+    /// <summary>Подсказка для UI: имя типа темы и вес по справочнику.</summary>
+    private static string BuildThinkingThemeTooltip(int themeTypeId)
+    {
+      if (themeTypeId <= 0 || !ThemeImageSystem.IsInitialized)
+        return null;
+      var name = ThemeImageSystem.Instance.GetThemeTypeDescription(themeTypeId) ?? "";
+      int w = ThemeImageSystem.Instance.GetDefaultWeightForThemeType(themeTypeId);
+      return string.IsNullOrEmpty(name) ? $"({w})" : $"{name} ({w})";
     }
 
     /// <summary>
@@ -927,6 +952,7 @@ namespace ISIDA.Common
       var (thinkingLevel, thinkingLevelSuccess) = AppGlobalState.GetThinkingLevelInfo();
       state.ThinkingLevel = thinkingLevel > 0 ? (int?)thinkingLevel : null;
       state.ThinkingLevelSuccess = thinkingLevel > 0 ? (bool?)thinkingLevelSuccess : null;
+      state.ThinkingThemeTypeId = AppGlobalState.ResolvedThinkingThemeTypeId;
 
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
@@ -1000,7 +1026,8 @@ namespace ISIDA.Common
              _lastState.OrientationReflexType != current.OrientationReflexType ||
              _lastState.OrientationReflexPulse != current.OrientationReflexPulse ||
              _lastState.ThinkingLevel != current.ThinkingLevel ||
-             _lastState.ThinkingLevelSuccess != current.ThinkingLevelSuccess;
+             _lastState.ThinkingLevelSuccess != current.ThinkingLevelSuccess ||
+             _lastState.ThinkingThemeTypeId != current.ThinkingThemeTypeId;
     }
 
     /// <summary>

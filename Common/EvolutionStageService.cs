@@ -26,7 +26,6 @@ namespace ISIDA.Common
 
     private readonly EpisodicMemorySystem _episodicMemory;
     private readonly ProblemTreeSystem _problemTree;
-    private readonly SituationTypeSystem _situationTypeSystem;
     private readonly PurposeImageSystem _purposeImageSystem;
     private readonly SituationImageSystem _situationImageSystem;
     private readonly ThemeImageSystem _themeImageSystem;
@@ -52,6 +51,7 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Инициализирует глобальный экземпляр системы (основные зависимости обязательны, системы Understanding — опционально, передаются из движка для избежания перекрёстных ссылок через Instance).
+    /// Справочник типов ситуаций в сервис не передаётся: при смене стадии он не очищается.
     /// </summary>
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
@@ -59,7 +59,6 @@ namespace ISIDA.Common
         AutomatizmTreeSystem automatizmTreeSystem,
         EpisodicMemorySystem episodicMemory = null,
         ProblemTreeSystem problemTree = null,
-        SituationTypeSystem situationTypeSystem = null,
         PurposeImageSystem purposeImageSystem = null,
         SituationImageSystem situationImageSystem = null,
         ThemeImageSystem themeImageSystem = null,
@@ -74,7 +73,6 @@ namespace ISIDA.Common
         automatizmTreeSystem,
         episodicMemory,
         problemTree,
-        situationTypeSystem,
         purposeImageSystem,
         situationImageSystem,
         themeImageSystem,
@@ -87,7 +85,6 @@ namespace ISIDA.Common
         AutomatizmTreeSystem automatizmTreeSystem,
         EpisodicMemorySystem episodicMemory,
         ProblemTreeSystem problemTree,
-        SituationTypeSystem situationTypeSystem,
         PurposeImageSystem purposeImageSystem,
         SituationImageSystem situationImageSystem,
         ThemeImageSystem themeImageSystem,
@@ -98,7 +95,6 @@ namespace ISIDA.Common
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
       _episodicMemory = episodicMemory;
       _problemTree = problemTree;
-      _situationTypeSystem = situationTypeSystem;
       _purposeImageSystem = purposeImageSystem;
       _situationImageSystem = situationImageSystem;
       _themeImageSystem = themeImageSystem;
@@ -333,6 +329,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Полная очистка данных памяти и дерева проблем (каталоги Psychic\Memory и Psychic\Understanding).
     /// Вызывается при переходе с стадии 4 на нижестоящие (в т.ч. purpose_images, situation_images, theme_images, understanding_tree).
+    /// Справочники типов ситуаций и типов тем при смене стадии не очищаются.
     /// </summary>
     private void ClearPsychicMemoryAndUnderstanding()
     {
@@ -356,17 +353,6 @@ namespace ISIDA.Common
         }
         else
           Logger.Info("Ссылка на дерево проблем не передана, очистка не требуется");
-
-        if (_situationTypeSystem != null)
-        {
-          var stsResult = _situationTypeSystem.ClearExceptDefaults();
-          if (stsResult.Success)
-            Logger.Info("Справочник типов ситуаций очищен (оставлены только дефолтные записи)");
-          else
-            Logger.Warning($"Не удалось очистить справочник типов ситуаций: {stsResult.Error}");
-        }
-        else
-          Logger.Info("Ссылка на справочник типов ситуаций не передана, очистка не требуется");
 
         if (_purposeImageSystem != null)
         {

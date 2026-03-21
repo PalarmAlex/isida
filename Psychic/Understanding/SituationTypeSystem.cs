@@ -368,6 +368,34 @@ namespace ISIDA.Psychic.Understanding
       return (true, null);
     }
 
+    /// <summary>
+    /// Если выбрана тема (ThemeTypeId &gt; 0), в слоте должна быть задана связь: код события (1–20), настроение (21–40) или воздействие (41–60). Иначе сохранение недопустимо.
+    /// </summary>
+    public (bool Valid, string Error) ValidateThemeRequiresLinkField(IEnumerable<SituationTypeRecord> records)
+    {
+      if (records == null) return (true, null);
+      foreach (var r in records)
+      {
+        if (r == null || r.ThemeTypeId <= 0) continue;
+        if (r.Id >= 1 && r.Id <= 20)
+        {
+          if (r.EventAgentCode <= 0)
+            return (false, $"Слот события {r.Id}: выбрана тема (ThemeTypeId={r.ThemeTypeId}), но не задан код события агента. Укажите событие или сбросьте тему (—).");
+        }
+        else if (r.Id >= 21 && r.Id <= 40)
+        {
+          if (r.MoodId < 0)
+            return (false, $"Слот настроения {r.Id}: выбрана тема (ThemeTypeId={r.ThemeTypeId}), но настроение не задано (MoodId=-1). Укажите настроение или сбросьте тему (—).");
+        }
+        else if (r.Id >= 41 && r.Id <= 60)
+        {
+          if (r.InfluenceId < 0)
+            return (false, $"Слот воздействия {r.Id}: выбрана тема (ThemeTypeId={r.ThemeTypeId}), но воздействие не задано (InfluenceId=-1). Укажите воздействие или сбросьте тему (—).");
+        }
+      }
+      return (true, null);
+    }
+
     /// <summary>Синхронизировать данные из переданных записей в _byId. Вызывать перед Save, чтобы гарантировать сохранение отредактированных значений из UI.</summary>
     public void UpdateFromRecords(IEnumerable<SituationTypeRecord> records)
     {
@@ -391,6 +419,9 @@ namespace ISIDA.Psychic.Understanding
       try
       {
         RebuildIndexes();
+        var (linkOk, linkErr) = ValidateThemeRequiresLinkField(_byId.Values);
+        if (!linkOk)
+          return (false, linkErr);
         EnsureDirectory();
         var path = Path.Combine(_dataPath, FileName);
         var lines = new List<string>

@@ -782,7 +782,13 @@ namespace ISIDA.Psychic
       env.UnresolvedNodeId = nodeId;
       env.UnresolvedActionsImageId = actionsImageId;
       env.UnresolvedPulseCount = PulseCount;
-      Logger.Info($"Отработка уровня 2. Проблема не решена — для циклов мышления. NodeId={nodeId}, ActionsImageId={actionsImageId}");
+      env.IsWaitingPeriod = false;
+
+      // Моторный автоматизм на стимул не найден — передаём проблему циклам мышления; глобальное ожидание оценки иначе блокирует DispatchCycles
+      if (AppGlobalState.WaitingForOperatorEvaluation)
+        AppGlobalState.ForceStopWaitingForOperatorEvaluation();
+
+      Logger.Info($"Уровень 2 не решён — проблема для циклов мышления. NodeId={nodeId}, ActionsImageId={actionsImageId}");
     }
 
     #endregion
@@ -976,18 +982,20 @@ namespace ISIDA.Psychic
         {
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
-          // Включить ожидание оценки оператора только начиная с 4 стадии
-          if (AppGlobalState.EvolutionStage >= 4)
-            AppGlobalState.WaitingForOperatorEvaluation = true;
-          AppGlobalState.LastRunAutomatizmPulsCount = PulseCount;
+          // Период ожидания оценки оператора: только после фактической активации автоматизма (сброс таймера при каждом успешном запуске)
+          if (AppGlobalState.EvolutionStage >= 3)
+            AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
           _currentAutomatizmId = automatizm.ID;
         }
         else
         {
           // Завершить отслеживание с ошибкой
-          trackingResult.Result = AutomatismResultTracker.ExecutionResult.Error;
-          trackingResult.ErrorMessage = result.ErrorMessage;
-          _automatismResultTracker.FinishTracking(trackingResult);
+          if (trackingResult != null)
+          {
+            trackingResult.Result = AutomatismResultTracker.ExecutionResult.Error;
+            trackingResult.ErrorMessage = result.ErrorMessage;
+            _automatismResultTracker.FinishTracking(trackingResult);
+          }
 
           // Триггер «Игнор агента»: негативный эффект моторного автоматизма — обновить тему и дерево проблем
           if (_understandingTreeSystem != null && _problemTreeSystem != null)
