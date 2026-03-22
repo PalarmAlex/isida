@@ -130,6 +130,15 @@ namespace ISIDA.Common
     /// </summary>
     public int WaitingPeriodForActionsVal { get; set; } = 30;
 
+    /// <summary>Делитель возраста A: loss = B + (age / A) для фоновых циклов мышления.</summary>
+    public int ThinkingCycleDecayAgeDivisor { get; set; } = 100;
+
+    /// <summary>Базовое снятие веса B за пульс (фоновые циклы).</summary>
+    public int ThinkingCycleDecayBase { get; set; } = 1;
+
+    /// <summary>Максимальный возраст главного цикла в пульсах до принудительного снятия.</summary>
+    public int ThinkingCycleMainMaxAgePulses { get; set; } = 1000;
+
     /// <summary>
     /// Реализация интерфейса ILogWriter для записи логов в память
     /// </summary>
@@ -889,6 +898,10 @@ namespace ISIDA.Common
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
+        context.PsychicSystem.ApplyThinkingCyclesConfig(
+            config.ThinkingCycleDecayAgeDivisor,
+            config.ThinkingCycleDecayBase,
+            config.ThinkingCycleMainMaxAgePulses);
 
         // Шаг 35: Сервис конвертирования условных рефлексов в автоматизмы
         initializationStep = 35;

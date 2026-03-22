@@ -145,6 +145,12 @@ namespace ISIDA.Psychic
       }
     }
 
+    /// <summary>Параметры затухания и срока жизни главного цикла мышления (из конфигурации движка).</summary>
+    public void ApplyThinkingCyclesConfig(int decayAgeDivisor, int decayBase, int mainMaxAgePulses)
+    {
+      _thinkingCyclesSystem?.ApplyDecayParameters(decayAgeDivisor, decayBase, mainMaxAgePulses);
+    }
+
     /// <summary>
     /// Инициализирует базовое дерево автоматизмов
     /// </summary>

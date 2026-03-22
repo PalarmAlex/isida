@@ -39,6 +39,23 @@ namespace ISIDA.Psychic.Thinking
     private const int InsightCompare = 5;
     private readonly ThinkingInterruptMemory _interruptMemory = new ThinkingInterruptMemory();
 
+    private int _decayAgeDivisor = 100;
+    private int _decayBase = 1;
+    private int _mainMaxAgePulses = 1000;
+
+    /// <summary>Задать параметры затухания веса фоновых циклов и срока жизни главного (из настроек).</summary>
+    public void ApplyDecayParameters(int decayAgeDivisor, int decayBase, int mainMaxAgePulses)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _decayAgeDivisor = decayAgeDivisor <= 0 ? 100 : decayAgeDivisor;
+        _decayBase = decayBase < 0 ? 0 : decayBase;
+        _mainMaxAgePulses = mainMaxAgePulses <= 0 ? 1000 : mainMaxAgePulses;
+      }
+      finally { _lock.ExitWriteLock(); }
+    }
+
     /// <summary>Уведомить систему о новом стимуле (для отложенного запуска dreaming).</summary>
     /// <param name="pulseCount">Номер пульса, на котором произошёл стимул.</param>
     public void NotifyStimulus(int pulseCount)
@@ -128,7 +145,9 @@ namespace ISIDA.Psychic.Thinking
           ThemeId = src.ThemeId,
           PurposeId = src.PurposeId,
           LastStrategyId = src.LastStrategyId,
-          LastUpdatedUtc = src.LastUpdatedUtc
+          LastUpdatedUtc = src.LastUpdatedUtc,
+          PendingSolutionAutomatizmId = src.PendingSolutionAutomatizmId,
+          PendingSolutionBindPulse = src.PendingSolutionBindPulse
         };
 
         var log = src.Log;
@@ -182,38 +201,30 @@ namespace ISIDA.Psychic.Thinking
       _lock.EnterWriteLock();
       try
       {
-        var main = _cycles.FirstOrDefault(c => c.IsMainCycle);
-        if (main == null)
+        var previousMain = _cycles.FirstOrDefault(c => c.IsMainCycle);
+        if (previousMain != null && (ctx.Danger || ctx.VeryActualSituation))
         {
-          main = new ThinkingCycleInfo
+          _interruptMemory.Push(new ThinkingInterruptImage
           {
-            Id = _nextId++,
-            Order = _nextOrder++,
-            IsMainCycle = true
-          };
-          _cycles.Add(main);
+            UnresolvedNodeId = previousMain.UnresolvedNodeId,
+            UnresolvedActionsImageId = previousMain.UnresolvedActionsImageId,
+            ProblemNodeId = previousMain.ProblemNodeId,
+            ThemeId = previousMain.ThemeId,
+            PurposeId = previousMain.PurposeId,
+            SavedPulse = ctx.PulseCount
+          });
         }
-        else
-        {
-          // Прерывание: если пришёл новый нерешённый стимул в важной ситуации — запомнить предыдущий контекст
-          if (ctx.Danger || ctx.VeryActualSituation)
-          {
-            _interruptMemory.Push(new ThinkingInterruptImage
-            {
-              UnresolvedNodeId = main.UnresolvedNodeId,
-              UnresolvedActionsImageId = main.UnresolvedActionsImageId,
-              ProblemNodeId = main.ProblemNodeId,
-              ThemeId = main.ThemeId,
-              PurposeId = main.PurposeId,
-              SavedPulse = ctx.PulseCount
-            });
-          }
 
-          // новый стимул делает этот цикл главным и сбрасывает шаги
-          foreach (var c in _cycles) c.IsMainCycle = false;
-          main.IsMainCycle = true;
-          ResetCycle(main);
-        }
+        foreach (var c in _cycles)
+          c.IsMainCycle = false;
+
+        var main = new ThinkingCycleInfo
+        {
+          Id = _nextId++,
+          Order = _nextOrder++,
+          IsMainCycle = true
+        };
+        _cycles.Add(main);
 
         main.CreatedPulse = ctx.PulseCount;
         main.UnresolvedNodeId = ctx.AutomatizmNodeId;
@@ -267,64 +278,145 @@ namespace ISIDA.Psychic.Thinking
       if (AppGlobalState.WaitingForOperatorEvaluation)
         return null;
 
-      _lock.EnterUpgradeableReadLock();
+      _lock.EnterWriteLock();
       try
       {
         if (_cycles.Count == 0) return null;
+
+        ApplyLifecyclePhase(pulseCount);
 
         // Обновить ожидание для главного цикла
         var main = _cycles.FirstOrDefault(c => c.IsMainCycle);
         if (main != null)
           main.IsWaitingPeriod = _informationEnvironmentSystem.CurrentInformationEnvironment.IsWaitingPeriod;
 
-        // Удаление слишком старых/лишних циклов (упрощённо)
-        if (pulseCount % 30 == 0)
-          ReduceCycles(pulseCount);
-
-        // Главный цикл всегда первый
-        var ordered = _cycles
+        // Главный цикл всегда первый (обход по снимку Id — список может сокращаться при закрытии цикла).
+        var orderedIds = _cycles
           .Where(c => c != null)
           .OrderByDescending(c => c.IsMainCycle)
           .ThenByDescending(c => c.Weight)
           .ThenBy(c => c.Order)
+          .Select(c => c.Id)
           .ToList();
 
-        foreach (var cycle in ordered)
+        foreach (var cycleId in orderedIds)
         {
+          var cycle = _cycles.FirstOrDefault(c => c != null && c.Id == cycleId);
+          if (cycle == null) continue;
+
           if (!cycle.IsMainCycle && cycle.IsIdle && (pulseCount % 5 != 0))
             continue;
 
           var decision = RunCycleStep(pulseCount, cycle, isSleeping, isSleepingDream);
-          if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator))
-            return decision;
+          if (decision != null)
+          {
+            if (decision.CloseCycleImmediately)
+              RemoveCycleById(cycle.Id);
+
+            if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
+              return decision;
+          }
         }
 
         return null;
       }
-      finally { _lock.ExitUpgradeableReadLock(); }
+      finally { _lock.ExitWriteLock(); }
     }
 
-    private void ReduceCycles(int pulseCount)
+    /// <summary>Фаза жизни: подтверждение решения по весу автоматизма, срок главного, затухание фоновых, устаревшие.</summary>
+    /// <remarks>Вызывается под <see cref="ReaderWriterLockSlim"/> в режиме записи.</remarks>
+    private void ApplyLifecyclePhase(int pulseCount)
     {
-      _lock.EnterWriteLock();
       try
       {
-        // удалить циклы старше часа (3600 пульсов), кроме главного
-        _cycles.RemoveAll(c => c != null && !c.IsMainCycle && (pulseCount - c.CreatedPulse) > 3600);
+        ResolvePendingSolutionAutomatizm(pulseCount);
+        EnforceMainCycleMaxAge(pulseCount);
+        ApplyBackgroundWeightDecay(pulseCount);
 
-        // оставить максимум 10 циклов: главный + наиболее весомые
-        if (_cycles.Count <= 10) return;
-        var main = _cycles.FirstOrDefault(c => c.IsMainCycle);
-        var rest = _cycles.Where(c => !c.IsMainCycle).OrderByDescending(c => c.Weight).ThenByDescending(c => c.CreatedPulse).Take(9).ToList();
-        _cycles.Clear();
-        if (main != null) _cycles.Add(main);
-        _cycles.AddRange(rest);
+        if (pulseCount % 30 == 0)
+          _cycles.RemoveAll(c => c != null && !c.IsMainCycle && (pulseCount - c.CreatedPulse) > 3600);
       }
       catch (Exception ex)
       {
-        Logger.Error($"ThinkingCycles.ReduceCycles failed: {ex.Message}");
+        Logger.Error($"ThinkingCycles.ApplyLifecyclePhase failed: {ex.Message}");
       }
-      finally { _lock.ExitWriteLock(); }
+    }
+
+    private void ResolvePendingSolutionAutomatizm(int pulseCount)
+    {
+      var toRemove = new List<int>();
+      foreach (var c in _cycles)
+      {
+        if (c == null || c.PendingSolutionAutomatizmId <= 0) continue;
+        if (pulseCount <= c.PendingSolutionBindPulse) continue;
+
+        var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
+        if (atmz != null && atmz.Usefulness >= 1)
+        {
+          c.Log.Add($"[p{pulseCount}] SolutionConfirmed atmz={c.PendingSolutionAutomatizmId} usefulness={atmz.Usefulness}");
+          toRemove.Add(c.Id);
+        }
+      }
+      foreach (var id in toRemove)
+        RemoveCycleById(id);
+    }
+
+    private void EnforceMainCycleMaxAge(int pulseCount)
+    {
+      var main = _cycles.FirstOrDefault(c => c != null && c.IsMainCycle);
+      if (main == null) return;
+      if (pulseCount - main.CreatedPulse < _mainMaxAgePulses) return;
+
+      main.Log.Add($"[p{pulseCount}] MainCycleMaxAge exceeded ({_mainMaxAgePulses}), removed");
+      RemoveCycleById(main.Id);
+      PromoteBestBackgroundToMain();
+    }
+
+    private void ApplyBackgroundWeightDecay(int pulseCount)
+    {
+      int div = _decayAgeDivisor <= 0 ? 100 : _decayAgeDivisor;
+      var toRemove = new List<int>();
+      foreach (var c in _cycles)
+      {
+        if (c == null || c.IsMainCycle) continue;
+
+        int age = Math.Max(0, pulseCount - c.CreatedPulse);
+        int loss = _decayBase + age / div;
+        c.Weight -= loss;
+        if (c.Weight <= 0)
+        {
+          c.Log.Add($"[p{pulseCount}] Weight decay to 0 (loss={loss}, age={age})");
+          toRemove.Add(c.Id);
+        }
+      }
+      foreach (var id in toRemove)
+        RemoveCycleById(id);
+    }
+
+    private void RemoveCycleById(int cycleId)
+    {
+      var idx = _cycles.FindIndex(c => c != null && c.Id == cycleId);
+      if (idx < 0) return;
+      var wasMain = _cycles[idx].IsMainCycle;
+      _cycles.RemoveAt(idx);
+      if (wasMain)
+        PromoteBestBackgroundToMain();
+    }
+
+    private void PromoteBestBackgroundToMain()
+    {
+      if (_cycles.Any(c => c != null && c.IsMainCycle)) return;
+      var best = _cycles
+        .Where(c => c != null)
+        .OrderByDescending(c => c.Weight)
+        .ThenByDescending(c => c.CreatedPulse)
+        .FirstOrDefault();
+      if (best != null)
+      {
+        foreach (var c in _cycles)
+          if (c != null) c.IsMainCycle = false;
+        best.IsMainCycle = true;
+      }
     }
 
     private ThinkingDecision RunCycleStep(int pulseCount, ThinkingCycleInfo cycle, bool isSleeping, bool isSleepingDream)
@@ -407,36 +499,36 @@ namespace ISIDA.Psychic.Thinking
         ? allowedInfoFuncIds.ToList()
         : InfoFunctionsCatalog.GetAllIds();
 
-      _lock.EnterReadLock();
-      try
+      foreach (var infoFuncId in idsToTry)
       {
-        foreach (var infoFuncId in idsToTry)
+        if (!InfoFunctionsCatalog.Exists(infoFuncId)) continue;
+        var lastIdStr = cycle.LastStrategyId;
+        if (!string.IsNullOrWhiteSpace(lastIdStr) && lastIdStr == $"infoFunc_{infoFuncId}")
+          continue;
+
+        ctx.OptionalInfoFuncId = infoFuncId;
+        var strategy = _strategies.OfType<InfoFunctionsStrategy>().FirstOrDefault();
+        if (strategy == null) continue;
+
+        var decision = strategy.TryStep(ctx);
+        cycle.LastStrategyId = $"infoFunc_{infoFuncId}";
+        if (decision != null)
         {
-          if (!InfoFunctionsCatalog.Exists(infoFuncId)) continue;
-          var lastIdStr = cycle.LastStrategyId;
-          if (!string.IsNullOrWhiteSpace(lastIdStr) && lastIdStr == $"infoFunc_{infoFuncId}")
-            continue;
-
-          ctx.OptionalInfoFuncId = infoFuncId;
-          var strategy = _strategies.OfType<InfoFunctionsStrategy>().FirstOrDefault();
-          if (strategy == null) continue;
-
-          var decision = strategy.TryStep(ctx);
-          cycle.LastStrategyId = $"infoFunc_{infoFuncId}";
-          if (decision != null)
+          cycle.Log.Add($"[p{pulseCount}] InfoFunc={infoFuncId} => {decision.DebugNote}");
+          if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
           {
-            cycle.Log.Add($"[p{pulseCount}] InfoFunc={infoFuncId} => {decision.DebugNote}");
-            if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
+            var actionImg = decision.AutomatizmToExecute?.ActionsImageID ?? decision.ActionsImageIdToAutomatize;
+            _experienceMemory.RecordRecommendation(cycle.ProblemNodeId, cycle.ThemeId, cycle.PurposeId, actionImg);
+            cycle.IsIdle = false;
+            if (decision.AutomatizmToExecute != null && decision.AutomatizmToExecute.ID > 0)
             {
-              var actionImg = decision.AutomatizmToExecute?.ActionsImageID ?? decision.ActionsImageIdToAutomatize;
-              _experienceMemory.RecordRecommendation(cycle.ProblemNodeId, cycle.ThemeId, cycle.PurposeId, actionImg);
-              cycle.IsIdle = false;
-              return decision;
+              cycle.PendingSolutionAutomatizmId = decision.AutomatizmToExecute.ID;
+              cycle.PendingSolutionBindPulse = pulseCount;
             }
+            return decision;
           }
         }
       }
-      finally { _lock.ExitReadLock(); }
 
       cycle.IsIdle = true;
       cycle.Log.Add($"[p{pulseCount}] NoDecision");

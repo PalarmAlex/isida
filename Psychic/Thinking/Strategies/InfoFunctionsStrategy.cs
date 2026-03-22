@@ -73,6 +73,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
           return new ThinkingDecision
           {
             AutomatizmToExecute = existing,
+            CloseCycleImmediately = existing.Usefulness >= 1,
             DebugNote = $"existing_atmz_by_rule actionImg={rule.ActionId}"
           };
         }

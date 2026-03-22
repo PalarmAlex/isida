@@ -17,6 +17,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// <summary>Отладочная заметка о решении.</summary>
     public string DebugNote { get; set; }
 
+    /// <summary>Если true — после шага цикл удаляется из диспетчера (решение найдено).</summary>
+    public bool CloseCycleImmediately { get; set; }
+
     /// <summary>Создаёт решение «ничего не делать» с опциональной заметкой.</summary>
     /// <param name="note">Отладочная заметка (может быть null).</param>
     /// <returns>Решение без действия.</returns>

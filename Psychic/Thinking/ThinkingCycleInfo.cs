@@ -58,6 +58,12 @@ namespace ISIDA.Psychic.Thinking
 
     /// <summary>Время последнего обновления цикла (UTC).</summary>
     public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>ID автоматизма-решения для отслеживания роста Usefulness (0 — не отслеживаем).</summary>
+    public int PendingSolutionAutomatizmId { get; set; }
+
+    /// <summary>Пульс привязки <see cref="PendingSolutionAutomatizmId"/>; сравнение Usefulness со следующего пульса.</summary>
+    public int PendingSolutionBindPulse { get; set; }
   }
 }
 
