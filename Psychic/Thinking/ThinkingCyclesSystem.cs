@@ -3,6 +3,7 @@ using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
+using AgentCodes = ISIDA.Psychic.Understanding.AgentEventsCatalog.Codes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -637,6 +638,7 @@ namespace ISIDA.Psychic.Thinking
         cycle.Dreaming = true;
         cycle.IsIdle = false;
         cycle.Log.Add($"[p{pulseCount}] Запущен пассивный режим (dreaming).");
+        AppGlobalState.RecordStimulusAgentEvent(AgentCodes.PassiveReprocessing);
       }
       if (cycle.IsMainCycle && cycle.Dreaming)
       {

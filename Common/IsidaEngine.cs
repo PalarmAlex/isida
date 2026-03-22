@@ -139,6 +139,11 @@ namespace ISIDA.Common
     /// <summary>Максимальный возраст главного цикла в пульсах до принудительного снятия.</summary>
     public int ThinkingCycleMainMaxAgePulses { get; set; } = 1000;
 
+    /// <summary>
+    /// Порог тишины (пульсов без стимула с пульта) для события «долго без оператора» и привязки темы по коду агента.
+    /// </summary>
+    public int NoOperatorStimulusSilencePulses { get; set; } = 30;
+
     /// <summary>Целевой горизонт (пульсы), за который фоновый цикл с типичным весом (~100 после демоута главного) «естественно» разряжается до нуля.</summary>
     public int ThinkingCycleBackgroundFadeTargetPulses { get; set; } = 1000;
 
@@ -901,6 +906,7 @@ namespace ISIDA.Common
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
+        AppGlobalState.NoOperatorStimulusSilencePulses = config.NoOperatorStimulusSilencePulses;
         context.PsychicSystem.ApplyThinkingCyclesConfig(
             config.ThinkingCycleDecayAgeDivisor,
             config.ThinkingCycleDecayBase,

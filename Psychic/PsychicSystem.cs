@@ -461,8 +461,9 @@ namespace ISIDA.Psychic
         actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId);
         int stimulusActionsImageIdForContext = actionsImageId;
 
-        // Зафиксировать наличие внешнего стимула для пассивного режима (dreaming).
+        // Зафиксировать наличие внешнего стимула для пассивного режима (dreaming) и для события «долго без оператора».
         _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
+        AppGlobalState.UpdateLastPultStimulusPulse(PulseCount);
 
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(

@@ -13,6 +13,22 @@ namespace ISIDA.Psychic.Understanding
   /// </summary>
   public static class ThinkingThemePulseResolver
   {
+    private static int _noOperatorEventEmittedForLastPultPulse;
+
+    /// <summary>Конец пульса: зафиксировать события агента, которые должны попасть в буфер с номером текущего пульса (чтобы резолвер следующего пульса их увидел).</summary>
+    public static void RecordEndOfPulseAgentEvents()
+    {
+      if (AppGlobalState.EvolutionStage < 4) return;
+      int p = GlobalTimer.GlobalPulsCount;
+      int lastPult = AppGlobalState.LastPultStimulusGlobalPulse;
+      if (lastPult <= 0) return;
+      int silenceThreshold = AppGlobalState.NoOperatorStimulusSilencePulses;
+      if (p - lastPult < silenceThreshold) return;
+      if (_noOperatorEventEmittedForLastPultPulse == lastPult) return;
+      if (AppGlobalState.TryRecordStimulusAgentEvent(AgentEventsCatalog.Codes.NoOperatorStimulusLong))
+        _noOperatorEventEmittedForLastPultPulse = lastPult;
+    }
+
     /// <summary>Вызывать в начале обработки пульса (до изменения состояния агента), с текущим GlobalPulsCount.</summary>
     public static void ResolveAtPulseStart(int currentPulse)
     {

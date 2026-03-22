@@ -576,6 +576,18 @@ namespace ISIDA.Common
           }
         }
 
+        if (!AppGlobalState.IsDead)
+        {
+          try
+          {
+            ThinkingThemePulseResolver.RecordEndOfPulseAgentEvents();
+          }
+          catch (Exception endPulseEx)
+          {
+            Logger.Warning($"ThinkingThemePulseResolver.RecordEndOfPulse: {endPulseEx.Message}");
+          }
+        }
+
         if ((_researchLogger != null && !_researchLogger.IsDisposed) && !AppGlobalState.IsDead)
           OnPulseCompleted?.Invoke(GlobalPulsCount);
       }

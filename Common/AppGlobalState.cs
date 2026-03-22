@@ -82,6 +82,7 @@ public static class AppGlobalState
   private static bool _waitingForOperatorEvaluation = false;
   private static int _lastAutomatizmEvaluationTime = 0;
   private static int _waitingPeriodForActionsVal = 0;
+  private static int _noOperatorStimulusSilencePulses = 30;
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
 
   #endregion
@@ -761,6 +762,15 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Порог тишины (пульсов без стимула с пульта) для события агента «долго без оператора» (резолвер типа темы мышления).
+  /// </summary>
+  public static int NoOperatorStimulusSilencePulses
+  {
+    get => _noOperatorStimulusSilencePulses;
+    set => _noOperatorStimulusSilencePulses = value < 1 ? 1 : value;
+  }
+
+  /// <summary>
   /// Начать период ожидания оценки оператора
   /// </summary>
   public static void StartWaitingForOperatorEvaluation(int automatizmId)
@@ -882,6 +892,9 @@ public static class AppGlobalState
   private static readonly List<int> _stimulusInfluenceActionIds = new List<int>();
   private static int _resolvedThinkingThemeTypeId;
 
+  /// <summary>Пульс последнего стимула с пульта (NotifyStimulus / SensorActivation). Для события «долго без оператора».</summary>
+  private static int _lastPultStimulusGlobalPulse;
+
   /// <summary>Тип темы, выбранный в начале текущего пульса (по стимулам предыдущего пульса).</summary>
   public static int ResolvedThinkingThemeTypeId
   {
@@ -899,6 +912,38 @@ public static class AppGlobalState
       _stimulusAgentEventPulse = GlobalTimer.GlobalPulsCount;
       _stimulusAgentEventCode = eventCode;
     }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Записать событие агента, если на этом пульсе ещё не зафиксировано другое (не перезаписывает).</summary>
+  public static bool TryRecordStimulusAgentEvent(int eventCode)
+  {
+    if (eventCode <= 0) return false;
+    _lock.EnterWriteLock();
+    try
+    {
+      int p = GlobalTimer.GlobalPulsCount;
+      if (_stimulusAgentEventPulse == p && _stimulusAgentEventCode > 0)
+        return false;
+      _stimulusAgentEventPulse = p;
+      _stimulusAgentEventCode = eventCode;
+      return true;
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Глобальный пульс последнего стимула с пульта (0 — ещё не было).</summary>
+  public static int LastPultStimulusGlobalPulse
+  {
+    get { _lock.EnterReadLock(); try { return _lastPultStimulusGlobalPulse; } finally { _lock.ExitReadLock(); } }
+  }
+
+  /// <summary>Обновить отметку последнего стимула с пульта (вызывать при реальном воздействии оператора).</summary>
+  public static void UpdateLastPultStimulusPulse(int pulse)
+  {
+    if (pulse <= 0) return;
+    _lock.EnterWriteLock();
+    try { _lastPultStimulusGlobalPulse = pulse; }
     finally { _lock.ExitWriteLock(); }
   }
 
