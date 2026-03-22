@@ -14,7 +14,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// Инфо-функция: случайная проба моторного автоматизма из текущей ветки проблемы.
     /// Активация: стратегия вызывается диспетчером циклов, но execution ограничивается твоим allowed-list (SituationTypeSystem).
     /// </summary>
-    public string Id => "infoFunc_25";
+    public string Id => "infoFunc_30";
 
     /// <summary>
     /// Один шаг инфо-функции: выбирает случайный кандидат-автоматизм из списка моторов в UnresolvedNodeId

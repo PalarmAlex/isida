@@ -15,6 +15,8 @@ namespace ISIDA.Psychic.Understanding
     private readonly Dictionary<int, ThemeImageRecord> _byId = new Dictionary<int, ThemeImageRecord>();
     private readonly Dictionary<(int Weight, int Type, int PulsCount), int> _unicumKeyToId = new Dictionary<(int, int, int), int>();
     private Dictionary<int, ThemeTypeData> _themeTypes = new Dictionary<int, ThemeTypeData>();
+    /// <summary>Переопределения из theme_types.dat при загрузке: только вес и список инфо-функций (столбцы 3–4). Описание из файла не используется.</summary>
+    private Dictionary<int, (int Weight, HashSet<int> Allowed)> _themeTypeLoadOverrides = new Dictionary<int, (int, HashSet<int>)>();
 
     private struct ThemeTypeData
     {
@@ -141,7 +143,7 @@ namespace ISIDA.Psychic.Understanding
       return 2;
     }
 
-    /// <summary>Разрешённые Id инфо-функций для типа темы. Пустой набор = без ограничений.</summary>
+    /// <summary>Разрешённые Id инфо-функций для типа темы. Пустой набор — ни одна инфо-функция не разрешена (цикл мышления по ИФ не перебирает стратегии).</summary>
     public HashSet<int> GetAllowedInfoFuncIdsForThemeType(int themeTypeId)
     {
       var result = new HashSet<int>();
@@ -345,7 +347,9 @@ namespace ISIDA.Psychic.Understanding
       (17, "Улучшение настроения", 2),
       (18, "Истощение сил и ресурсов", 5),
       (19, "Восстановление и исцеление", 5),
-      (20, "Альтруизм", 3)
+      (20, "Альтруизм", 3),
+      (21, "Длительное отсутствие стимула оператора", 2),
+      (22, "Пассивная переобработка", 2)
     };
 
     #endregion
@@ -401,6 +405,7 @@ namespace ISIDA.Psychic.Understanding
 
     private void LoadThemeTypes()
     {
+      _themeTypeLoadOverrides = new Dictionary<int, (int, HashSet<int>)>();
       var path = Path.Combine(_dataPath, ThemeTypesFileName);
       _themeTypes = new Dictionary<int, ThemeTypeData>();
       if (File.Exists(path) && FileValidator.IsValidThemeTypesFile(path))
@@ -414,19 +419,16 @@ namespace ISIDA.Psychic.Understanding
           if (!int.TryParse(p[0], out int id) || id < 1) continue;
           if (!int.TryParse(p[2], out int weight) || weight < 1) continue;
           var allowedRaw = p.Length >= 4 ? (p[3] ?? "") : "";
-          _themeTypes[id] = new ThemeTypeData
-          {
-            Description = p[1].Trim(),
-            DefaultWeight = weight,
-            AllowedInfoFuncIds = ParseAllowedInfoFuncIds(allowedRaw)
-          };
+          _themeTypeLoadOverrides[id] = (weight, ParseAllowedInfoFuncIds(allowedRaw));
         }
       }
       NormalizeThemeTypesToCanonicalCatalog();
     }
 
     /// <summary>
-    /// Оставляет в справочнике только Id из <see cref="DefaultThemeTypesList"/>; описания — из кода; вес и инфо-функции подтягивает из файла или дефолта.
+    /// Канонические типы тем из <see cref="DefaultThemeTypesList"/>; описание всегда из кода.
+    /// При первом заполнении записи вес и список инфо-функций берутся из <see cref="_themeTypeLoadOverrides"/> (файл).
+    /// Если запись уже есть в памяти — сохраняются вес и allowed из памяти, описание обновляется из кода.
     /// </summary>
     private void NormalizeThemeTypesToCanonicalCatalog()
     {
@@ -438,19 +440,32 @@ namespace ISIDA.Psychic.Understanding
       }
       foreach (var (id, desc, defW) in DefaultThemeTypesList)
       {
-        if (!_themeTypes.TryGetValue(id, out var existing))
+        if (_themeTypes.TryGetValue(id, out var existing))
         {
-          _themeTypes[id] = new ThemeTypeData { Description = desc, DefaultWeight = defW, AllowedInfoFuncIds = new HashSet<int>() };
-        }
-        else
-        {
-          existing.Description = desc;
+          existing.Description = desc ?? "";
           if (existing.DefaultWeight < 1 || existing.DefaultWeight > 10)
             existing.DefaultWeight = defW;
           if (existing.AllowedInfoFuncIds == null)
             existing.AllowedInfoFuncIds = new HashSet<int>();
           _themeTypes[id] = existing;
+          continue;
         }
+
+        int w = defW;
+        var allowed = new HashSet<int>();
+        if (_themeTypeLoadOverrides != null && _themeTypeLoadOverrides.TryGetValue(id, out var ov))
+        {
+          if (ov.Weight >= 1 && ov.Weight <= 10) w = ov.Weight;
+          if (ov.Allowed != null)
+            foreach (var x in ov.Allowed)
+              if (x > 0) allowed.Add(x);
+        }
+        _themeTypes[id] = new ThemeTypeData
+        {
+          Description = desc ?? "",
+          DefaultWeight = w,
+          AllowedInfoFuncIds = allowed
+        };
       }
     }
 
@@ -473,7 +488,9 @@ namespace ISIDA.Psychic.Understanding
             var allowedStr = kv.Value.AllowedInfoFuncIds != null && kv.Value.AllowedInfoFuncIds.Count > 0
               ? string.Join(",", kv.Value.AllowedInfoFuncIds.OrderBy(x => x))
               : "";
-            lines.Add($"{kv.Key}|{kv.Value.Description}|{kv.Value.DefaultWeight}|{allowedStr}");
+            var descOut = GetCanonicalThemeTypeDescription(kv.Key);
+            if (string.IsNullOrEmpty(descOut)) descOut = kv.Value.Description ?? "";
+            lines.Add($"{kv.Key}|{descOut}|{kv.Value.DefaultWeight}|{allowedStr}");
           }
         }
         var result = FileValidator.SafeSaveFile(

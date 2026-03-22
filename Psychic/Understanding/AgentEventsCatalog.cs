@@ -30,6 +30,10 @@ namespace ISIDA.Psychic.Understanding
       public const int AgentIgnore = 7;
       /// <summary>Высокая значимость объекта</summary>
       public const int HighObjectImportance = 8;
+      /// <summary>Длительное отсутствие стимула оператора (резерв под таймер/логику ожидания)</summary>
+      public const int NoOperatorStimulusLong = 9;
+      /// <summary>Пассивная переобработка / фоновый режим</summary>
+      public const int PassiveReprocessing = 10;
     }
 
     /// <summary>Запись справочника событий</summary>
@@ -59,8 +63,8 @@ namespace ISIDA.Psychic.Understanding
       new Entry(Codes.PultStimulus, "Стимул с пульта"),
       new Entry(Codes.AgentIgnore, "Игнор агента"),
       new Entry(Codes.HighObjectImportance, "Высокая значимость объекта"),
-      new Entry(9, ""),
-      new Entry(10, "")
+      new Entry(Codes.NoOperatorStimulusLong, "Длительное отсутствие стимула оператора"),
+      new Entry(Codes.PassiveReprocessing, "Пассивная переобработка")
     };
 
     /// <summary>События для вывода на пульт (Id, Name). Записи с пустым Name — резерв, не показываются.</summary>
@@ -100,7 +104,9 @@ namespace ISIDA.Psychic.Understanding
       (Codes.OperatorIgnore, 7),
       (Codes.PultStimulus, 4),
       (Codes.AgentIgnore, 1),
-      (Codes.HighObjectImportance, 16)
+      (Codes.HighObjectImportance, 16),
+      (Codes.NoOperatorStimulusLong, 21),
+      (Codes.PassiveReprocessing, 22)
     };
 
     /// <summary>
@@ -125,7 +131,7 @@ namespace ISIDA.Psychic.Understanding
 
     /// <summary>
     /// Подставить рекомендуемые привязки в слоты событий (1–20) и настроения (21–40) в переданных коллекциях.
-    /// События: слоты 1–8 — код события и тема из <see cref="GetDefaultEventCodeThemeBindings"/>; 9–20 — очистка (EventAgentCode и ThemeTypeId «пустые»).
+    /// События: слоты 1–10 — код события и тема из <see cref="GetDefaultEventCodeThemeBindings"/>; 11–20 — очистка (EventAgentCode и ThemeTypeId «пустые»).
     /// Настроение: слоты 21–28 — MoodId 0..7 и темы из <see cref="GetDefaultMoodThemeBindings"/>; 29–40 — очистка.
     /// Воздействия (41–60) не трогает. Не записывает файл — только поля объектов <see cref="SituationTypeRecord"/>.
     /// </summary>
@@ -142,7 +148,7 @@ namespace ISIDA.Psychic.Understanding
           if (r == null || r.Id < 1 || r.Id > 20) continue;
           r.MoodId = empty;
           r.InfluenceId = empty;
-          if (r.Id <= 8)
+          if (r.Id <= DefaultEventCodeThemePairs.Length)
           {
             var p = DefaultEventCodeThemePairs[r.Id - 1];
             r.EventAgentCode = p.EventAgentCode;

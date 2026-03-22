@@ -692,11 +692,17 @@ namespace ISIDA.Psychic.Thinking
         CurrentStaffAutomatizm = cycle.UnresolvedNodeId > 0 ? _automatizmSystem.GetMotorsAutomatizmListFromTreeId(cycle.UnresolvedNodeId).FirstOrDefault() : null
       };
 
-      // Allowed-list инфо-функций из справочника тем мышления (ThemeImageSystem)
+      // Allowed-list инфо-функций из справочника тем мышления (ThemeImageSystem). Пустой список — мышление по ИФ не выполняется.
       var allowedInfoFuncIds = GetAllowedInfoFuncIdsForCycle(cycle);
-      var idsToTry = allowedInfoFuncIds.Count > 0
-        ? allowedInfoFuncIds.ToList()
-        : InfoFunctionsCatalog.GetAllIds();
+      if (allowedInfoFuncIds.Count == 0)
+      {
+        cycle.IsIdle = true;
+        AppendCondensedCycleLog(cycle, pulseCount, "no_allowed_infoFuncs",
+          "Для типа темы не заданы инфо-функции — перебор не выполняется.");
+        return ThinkingDecision.None("no_allowed_infoFuncs");
+      }
+
+      var idsToTry = allowedInfoFuncIds.ToList();
 
       var batchAttempts = new List<(int FuncId, string DebugNote)>();
       foreach (var infoFuncId in idsToTry)

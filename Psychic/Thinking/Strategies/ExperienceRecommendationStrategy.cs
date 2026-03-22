@@ -21,7 +21,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// <summary>
     /// Инфо-функция: рекомендация действия по ранее записанному опыту циклов.
     /// </summary>
-    public string Id => "infoFunc_17";
+    public string Id => "infoFunc_29";
 
     /// <summary>
     /// Один шаг инфо-функции: по ключу (ProblemNodeId, ThemeId, PurposeId) извлекает

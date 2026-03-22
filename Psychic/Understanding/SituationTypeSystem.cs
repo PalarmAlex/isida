@@ -419,6 +419,9 @@ namespace ISIDA.Psychic.Understanding
       try
       {
         RebuildIndexes();
+        var (themeUniqueOk, themeUniqueErr) = ValidateThemeTypeIdUniqueness(_byId.Values);
+        if (!themeUniqueOk)
+          return (false, themeUniqueErr);
         var (linkOk, linkErr) = ValidateThemeRequiresLinkField(_byId.Values);
         if (!linkOk)
           return (false, linkErr);

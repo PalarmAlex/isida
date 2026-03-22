@@ -13,7 +13,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// Инфо-функция: поиск следующего действия по эпизодической памяти (правила/цепочки).
     /// Похоже по роли на GPT-подобный выбор: возвращает лучшее правило под триггер/контекст.
     /// </summary>
-    public string Id => "infoFunc_14";
+    public string Id => "infoFunc_28";
 
     /// <summary>
     /// Один шаг инфо-функции: берёт UnresolvedActionsImageId как триггер,

@@ -37,6 +37,8 @@ namespace ISIDA.Psychic.Thinking
         case "return_to_interrupted": return "восстановление прерванного цикла";
         case "no_need": return "мышление не требуется";
         case "no_decision": return "решение не найдено";
+        case "not_implemented": return "инфо-функция ещё не реализована";
+        case "no_allowed_infoFuncs": return "для типа темы не задан список инфо-функций";
         case "dream_no_episodic": return "dreaming: нет эпизодической памяти";
         case "dream_no_history": return "dreaming: нет истории";
         case "dream_no_best": return "dreaming: не найден опорный кадр";
