@@ -130,14 +130,17 @@ namespace ISIDA.Common
     /// </summary>
     public int WaitingPeriodForActionsVal { get; set; } = 30;
 
-    /// <summary>Делитель возраста A: loss = B + (age / A) для фоновых циклов мышления.</summary>
+    /// <summary>Устарело: раньше делитель A в формуле loss = B + (age/A); формула фонового затухания заменена на горизонт <see cref="ThinkingCycleBackgroundFadeTargetPulses"/>.</summary>
     public int ThinkingCycleDecayAgeDivisor { get; set; } = 100;
 
-    /// <summary>Базовое снятие веса B за пульс (фоновые циклы).</summary>
+    /// <summary>Устарело: раньше базовое снятие B за пульс; не используется в текущей формуле затухания фона.</summary>
     public int ThinkingCycleDecayBase { get; set; } = 1;
 
     /// <summary>Максимальный возраст главного цикла в пульсах до принудительного снятия.</summary>
     public int ThinkingCycleMainMaxAgePulses { get; set; } = 1000;
+
+    /// <summary>Целевой горизонт (пульсы), за который фоновый цикл с типичным весом (~100 после демоута главного) «естественно» разряжается до нуля.</summary>
+    public int ThinkingCycleBackgroundFadeTargetPulses { get; set; } = 1000;
 
     /// <summary>
     /// Реализация интерфейса ILogWriter для записи логов в память
@@ -901,7 +904,8 @@ namespace ISIDA.Common
         context.PsychicSystem.ApplyThinkingCyclesConfig(
             config.ThinkingCycleDecayAgeDivisor,
             config.ThinkingCycleDecayBase,
-            config.ThinkingCycleMainMaxAgePulses);
+            config.ThinkingCycleMainMaxAgePulses,
+            config.ThinkingCycleBackgroundFadeTargetPulses);
 
         // Шаг 35: Сервис конвертирования условных рефлексов в автоматизмы
         initializationStep = 35;

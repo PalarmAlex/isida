@@ -20,6 +20,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// <summary>Если true — после шага цикл удаляется из диспетчера (решение найдено).</summary>
     public bool CloseCycleImmediately { get; set; }
 
+    /// <summary>Идентификатор цикла мышления, выдавшего решение (для привязки исполнения и оценки).</summary>
+    public int CycleId { get; set; }
+
     /// <summary>Создаёт решение «ничего не делать» с опциональной заметкой.</summary>
     /// <param name="note">Отладочная заметка (может быть null).</param>
     /// <returns>Решение без действия.</returns>

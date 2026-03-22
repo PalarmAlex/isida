@@ -64,6 +64,9 @@ namespace ISIDA.Psychic.Thinking
 
     /// <summary>Пульс привязки <see cref="PendingSolutionAutomatizmId"/>; сравнение Usefulness со следующего пульса.</summary>
     public int PendingSolutionBindPulse { get; set; }
+
+    /// <summary>Решение уже отправлено на исполнение; ожидается оценка (полезность и т.д.), повторный перебор инфо-функций не выполняется.</summary>
+    public bool AwaitingEvaluation { get; set; }
   }
 }
 

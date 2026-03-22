@@ -146,9 +146,13 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>Параметры затухания и срока жизни главного цикла мышления (из конфигурации движка).</summary>
-    public void ApplyThinkingCyclesConfig(int decayAgeDivisor, int decayBase, int mainMaxAgePulses)
+    /// <param name="decayAgeDivisor">Устарело, передаётся для совместимости конфигов.</param>
+    /// <param name="decayBase">Устарело, передаётся для совместимости конфигов.</param>
+    /// <param name="mainMaxAgePulses">Максимальный возраст главного цикла в пульсах до принудительного снятия.</param>
+    /// <param name="backgroundFadeTargetPulses">Целевой горизонт (пульсы) затухания веса фонового цикла.</param>
+    public void ApplyThinkingCyclesConfig(int decayAgeDivisor, int decayBase, int mainMaxAgePulses, int backgroundFadeTargetPulses = 1000)
     {
-      _thinkingCyclesSystem?.ApplyDecayParameters(decayAgeDivisor, decayBase, mainMaxAgePulses);
+      _thinkingCyclesSystem?.ApplyDecayParameters(decayAgeDivisor, decayBase, mainMaxAgePulses, backgroundFadeTargetPulses);
     }
 
     /// <summary>
@@ -258,7 +262,7 @@ namespace ISIDA.Psychic
             WakeUpping(activetStyleIds);
 
             // Первый запуск дерева автоматизмов и активация Understanding
-            int wakeNodeId = AutomatizmTreeActivation(1, 0, 0, 0, 0, 0, 0);
+            int wakeNodeId = AutomatizmTreeActivation(0, 0, 0, 0, 0, 0);
             if (_understandingTreeSystem != null && _problemTreeSystem != null && wakeNodeId > 0)
             {
               int baseId = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad ? -1
@@ -309,8 +313,7 @@ namespace ISIDA.Psychic
           {
             thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(
               pulseCount,
-              isSleeping: IsSleeping,
-              isSleepingDream: IsSleepingDream);
+              isSleeping: IsSleeping);
             PublishMainThinkingCycleToAppGlobalState();
           }
         }
@@ -344,6 +347,8 @@ namespace ISIDA.Psychic
       {
         Logger.Info($"Решение цикла мышления: выполнить автоматизм id={decision.AutomatizmToExecute.ID}, образ действий={decision.AutomatizmToExecute.ActionsImageID}");
         var ok = ExecuteAutomatizm(decision.AutomatizmToExecute);
+        if (ok && decision.CycleId > 0 && _thinkingCyclesSystem != null && decision.AutomatizmToExecute.ID > 0)
+          _thinkingCyclesSystem.NotifySolutionExecutedAfterDispatch(decision.CycleId, decision.AutomatizmToExecute.ID, PulseCount);
         if (ok && _informationEnvironmentSystem != null)
         {
           // После запуска из thinking-cycles проблема на 2 уровне считается обработанной,
@@ -371,6 +376,8 @@ namespace ISIDA.Psychic
           if (atmz != null)
           {
             var ok = ExecuteAutomatizm(atmz);
+            if (ok && decision.CycleId > 0 && newId > 0 && _thinkingCyclesSystem != null)
+              _thinkingCyclesSystem.NotifySolutionExecutedAfterDispatch(decision.CycleId, newId, PulseCount);
             if (ok)
             {
               env.UnresolvedAtThinkingLevel2 = false;
@@ -419,7 +426,7 @@ namespace ISIDA.Psychic
         return false;
       }
 
-      if ((actionIdList == null || actionIdList.Count == 0) && (phraseIdList == null || phraseIdList.Count == 0))
+      if ((actionIdList?.Count ?? 0) == 0 && (phraseIdList?.Count ?? 0) == 0)
         return false;
 
       try
@@ -443,7 +450,7 @@ namespace ISIDA.Psychic
         if (phraseIdList?.Any() == true)
         {
           (verbId, verbIdForTree, firstSimbol, phraseIdListForStimulus) = PrepareVerbalStimulusForStage2(
-              phraseIdList, actionIdList, toneId, moodId);
+              phraseIdList, toneId, moodId);
           AppGlobalState.CurActiveVerbalId = verbId;
           var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdListForStimulus);
           AppGlobalState.LastTriggerStimulusID = perceptionImageId;
@@ -459,7 +466,6 @@ namespace ISIDA.Psychic
 
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
-            activationType,
             currentBaseId,
             currentEmotionId,
             currentActivityId,
@@ -562,17 +568,17 @@ namespace ISIDA.Psychic
           else
           {
             // Стадия >= 4: уровни 1–2, при провале — циклы мышления; ориентировочный рефлекс только на стадиях < 4.
-            var (problemSolved, levelAutomatizm) = TryProcessThinkingLevels(automatizmNodeId, actionsImageId, currentEmotionId);
+            (bool problemSolved, Automatizm toExecute) = TryProcessThinkingLevels(automatizmNodeId, actionsImageId);
 
-            if (problemSolved && levelAutomatizm != null)
+            if (problemSolved && toExecute != null)
             {
               if (activationType >= 2)
               {
-                int responseNodeId = GetTreeNodeIdForResponseActionsImage(levelAutomatizm.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+                int responseNodeId = GetTreeNodeIdForResponseActionsImage(toExecute.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
                 _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
               }
               AppGlobalState.CurStimulusImageId = actionsImageId;
-              return ExecuteAutomatizm(levelAutomatizm);
+              return ExecuteAutomatizm(toExecute);
             }
 
             // 3-й уровень: циклы мышления (стадия 4+). Быстрый старт после провала уровня 2.
@@ -582,9 +588,9 @@ namespace ISIDA.Psychic
                 _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2)
             {
               var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
-              var (autId, sitId, themeId, purposeId) = _understandingTreeSystem != null
+              var problemTreeInfo = _understandingTreeSystem != null
                 ? _understandingTreeSystem.ProblemTreeInfo
-                : (0, 0, 0, 0);
+                : (AutTreeId: 0, SituationTreeId: 0, ThemeId: 0, PurposeId: 0);
 
               var ctx = new ThinkingCycleContext
               {
@@ -594,15 +600,15 @@ namespace ISIDA.Psychic
                 AutomatizmNodeId = automatizmNodeId,
                 StimulusActionsImageId = actionsImageId,
                 ProblemNodeId = _problemTreeSystem?.DetectedActiveLastProblemNodeId ?? 0,
-                ThemeId = themeId,
-                PurposeId = purposeId,
+                ThemeId = problemTreeInfo.ThemeId,
+                PurposeId = problemTreeInfo.PurposeId,
                 Danger = env.Danger,
                 VeryActualSituation = env.VeryActualSituation,
                 IsWaitingPeriod = env.IsWaitingPeriod
               };
 
               _thinkingCyclesSystem.OnUnresolvedProblem(ctx);
-              var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping, isSleepingDream: IsSleepingDream);
+              var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping);
               PublishMainThinkingCycleToAppGlobalState();
               if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
               {
@@ -610,6 +616,13 @@ namespace ISIDA.Psychic
                 ExecuteThinkingDecision(decision);
                 return true; // блокировать рефлексы при удачном запуске
               }
+            }
+            else if (!problemSolved &&
+                     AppGlobalState.EvolutionStage >= 4 &&
+                     _thinkingCyclesSystem != null &&
+                     _informationEnvironmentSystem != null)
+            {
+              bool unresL2 = _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2;
             }
 
             AppGlobalState.CurrentStimulusActionsImageId = stimulusActionsImageIdForContext;
@@ -641,8 +654,7 @@ namespace ISIDA.Psychic
     /// <returns>(problemSolved, automatizm для выполнения или null)</returns>
     private (bool problemSolved, Automatizm toExecute) TryProcessThinkingLevels(
       int automatizmNodeId,
-      int actionsImageId,
-      int currentEmotionId)
+      int actionsImageId)
     {
       if (_informationEnvironmentSystem == null)
         return (false, null);
@@ -653,18 +665,18 @@ namespace ISIDA.Psychic
       infoEnv.UnresolvedActionsImageId = 0;
       infoEnv.UnresolvedPulseCount = 0;
 
-      var (resolved1, atmz1) = ProcessLevel1(automatizmNodeId, currentEmotionId);
-      if (resolved1 && atmz1 != null)
+      (bool resolved, Automatizm toExecute) = ProcessLevel1(automatizmNodeId);
+      if (resolved && toExecute != null)
       {
         AppGlobalState.UpdateThinkingLevelInfo(1, true);
-        return (true, atmz1);
+        return (true, toExecute);
       }
 
-      var (resolved2, atmz2) = ProcessLevel2(automatizmNodeId, actionsImageId);
-      if (resolved2 && atmz2 != null)
+      (bool resolved2, Automatizm toExecute2) = ProcessLevel2(automatizmNodeId, actionsImageId);
+      if (resolved2 && toExecute2 != null)
       {
         AppGlobalState.UpdateThinkingLevelInfo(2, true);
-        return (true, atmz2);
+        return (true, toExecute2);
       }
 
       AppGlobalState.UpdateThinkingLevelInfo(2, false);
@@ -674,7 +686,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Первый уровень осмысления: решение только за счёт штатного/текущего автоматизма (без правил).
     /// </summary>
-    private (bool resolved, Automatizm toExecute) ProcessLevel1(int automatizmNodeId, int currentEmotionId)
+    private (bool resolved, Automatizm toExecute) ProcessLevel1(int automatizmNodeId)
     {
       Automatizm staff = GetAutomatizmFromNode(automatizmNodeId, 0);
       if (staff == null)
@@ -702,14 +714,14 @@ namespace ISIDA.Psychic
         //    то штатный автоматизм допускаем.
         if (_episodicMemorySystem != null && staff.ActionsImageID > 0)
         {
-          var (baseId, emotionId, nodePid) = _episodicMemorySystem.GetCurrentConditions(false);
+          var conditions = _episodicMemorySystem.GetCurrentConditions(false);
           var (ext, extremVal) = ObjectImportanceService.GetObjectImportanceValue(
             _episodicMemorySystem.Tree,
             _episodicMemorySystem.TreeLogic,
             staff.ActionsImageID,
-            baseId,
-            emotionId,
-            nodePid);
+            conditions.BaseId,
+            conditions.EmotionId,
+            conditions.NodePid);
 
           bool isNegExtremelyImportant = ext != null
                                            && extremVal < -ObjectImportanceService.HighImportanceThreshold;
@@ -733,12 +745,7 @@ namespace ISIDA.Psychic
             }
 
             if (!offsetByPositive)
-            {
-              Logger.Info(
-                $"Level1 checkAutomatizm: блок штатного автоматизма ID={staff.ID}, actionImg={staff.ActionsImageID}, " +
-                $"extremVal={extremVal}, harmAbs={harmAbs}, offsetByPositive={offsetByPositive}");
               return (false, null);
-            }
           }
         }
       }
@@ -805,7 +812,6 @@ namespace ISIDA.Psychic
     /// Активация дерева автоматизмов
     /// </summary>
     internal int AutomatizmTreeActivation(
-        int activationType,
         int baseId,
         int emotionId,
         int activityId,
@@ -839,7 +845,6 @@ namespace ISIDA.Psychic
     /// <returns>(verbId для CurActiveVerbalId, verbId для дерева, firstSymbol, phraseIdList для образа стимула)</returns>
     private (int verbIdForCurActive, int verbIdForTree, int firstSimbol, List<int> phraseIdListForStimulus) PrepareVerbalStimulusForStage2(
         List<int> phraseIdList,
-        List<int> actionIdList,
         int toneId,
         int moodId)
     {
@@ -946,10 +951,10 @@ namespace ISIDA.Psychic
       int toneId = img.ToneId;
       int moodId = img.MoodId;
 
-      var (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(phraseIdList, actionIdList, toneId, moodId);
+      var (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(phraseIdList, toneId, moodId);
       int toneMood = GetToneMoodID(toneId, moodId);
 
-      return AutomatizmTreeActivation(2, currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree);
+      return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree);
     }
 
     /// <summary>
@@ -1399,14 +1404,67 @@ namespace ISIDA.Psychic
     #region Диагностика циклов осмысления (3-й уровень)
 
     /// <summary>Возвращает копию снимка главного цикла мышления (или null).</summary>
+    /// <param name="maxLogLinesPerCycle">Максимум строк лога.</param>
+    /// <returns>Снимок или null.</returns>
     public ThinkingCycleInfo GetThinkingCyclesMainSnapshot(int maxLogLinesPerCycle = 50)
     {
       return _thinkingCyclesSystem?.GetMainCycleSnapshot(maxLogLinesPerCycle);
     }
 
+    /// <summary>Краткий список всех циклов мышления без логов (для матрицы UI).</summary>
+    /// <returns>Список элементов.</returns>
+    public IReadOnlyList<ThinkingCycleListItem> GetThinkingCyclesListSnapshot()
+    {
+      return _thinkingCyclesSystem?.GetAllCyclesLightweightSnapshot() ?? new List<ThinkingCycleListItem>();
+    }
+
+    /// <summary>Полный снимок одного цикла по идентификатору (с логом).</summary>
+    /// <param name="cycleId">Идентификатор цикла.</param>
+    /// <param name="maxLogLinesPerCycle">Максимум последних строк лога.</param>
+    /// <returns>Снимок или null.</returns>
+    public ThinkingCycleInfo GetThinkingCycleSnapshotById(int cycleId, int maxLogLinesPerCycle = 50)
+    {
+      return _thinkingCyclesSystem?.GetCycleSnapshotById(cycleId, maxLogLinesPerCycle);
+    }
+
+    /// <summary>Текущая инфо-картина (информационная среда) для диагностического UI.</summary>
+    /// <returns>Снимок или null.</returns>
+    public InformationEnvironmentViewSnapshot GetInformationEnvironmentViewSnapshot()
+    {
+      var ieSys = _informationEnvironmentSystem;
+      if (ieSys?.CurrentInformationEnvironment == null)
+        return null;
+      var e = ieSys.CurrentInformationEnvironment;
+      var targets = e.CurTargetArrID;
+      var targetsText = (targets != null && targets.Count > 0) ? string.Join(",", targets) : string.Empty;
+      return new InformationEnvironmentViewSnapshot
+      {
+        LifeTime = e.LifeTime,
+        Danger = e.Danger,
+        VeryActualSituation = e.VeryActualSituation,
+        Mood = e.Mood,
+        PsyMood = e.PsyMood,
+        PsyEmotionId = e.PsyEmotionId,
+        ActionsImageId = e.ActionsImageID,
+        ActualEpisodicMemoryId = e.ActualEpisodicMemoryID,
+        DominantaId = e.DominantaID,
+        NeedThinkingAboutAutomatizm = e.NeedThinkingAboutAutomatizm,
+        IsWaitingPeriod = e.IsWaitingPeriod,
+        UnresolvedAtThinkingLevel2 = e.UnresolvedAtThinkingLevel2,
+        UnresolvedNodeId = e.UnresolvedNodeId,
+        UnresolvedActionsImageId = e.UnresolvedActionsImageId,
+        UnresolvedPulseCount = e.UnresolvedPulseCount,
+        IsSleep = e.IsSleep,
+        IsStimulToForce = e.IsStimulToForce,
+        CurTargetArrIdText = targetsText
+      };
+    }
+
     /// <summary>
     /// Возвращает текстовый отладочный снимок всех циклов мышления (или сообщение при отсутствии данных).
     /// </summary>
+    /// <param name="maxLogLinesPerCycle">Максимум строк лога на цикл.</param>
+    /// <returns>Текст снимка.</returns>
     public string GetThinkingCyclesDebugSnapshot(int maxLogLinesPerCycle = 5)
     {
       return _thinkingCyclesSystem?.GetDebugSnapshot(maxLogLinesPerCycle) ?? "ThinkingCycles: none";

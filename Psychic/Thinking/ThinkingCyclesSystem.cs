@@ -39,12 +39,26 @@ namespace ISIDA.Psychic.Thinking
     private const int InsightCompare = 5;
     private readonly ThinkingInterruptMemory _interruptMemory = new ThinkingInterruptMemory();
 
+    /// <summary>Сигнатура последней «типовой» строки лога по циклу — не дублировать при неизменном исходе.</summary>
+    private readonly Dictionary<int, string> _lastCondensedLogDigestByCycleId = new Dictionary<int, string>();
+
+    /// <summary>Базовый вес главного цикла при создании (фоновый наследует его после демоута).</summary>
+    private const int MainCycleWeightBase = 100;
+
+    /// <summary>Устаревшие поля конфига: раньше loss = B + age/A. Сохраняем для совместимости сериализации настроек.</summary>
     private int _decayAgeDivisor = 100;
     private int _decayBase = 1;
     private int _mainMaxAgePulses = 1000;
 
+    /// <summary>Целевой горизонт затухания фонового веса (пульсы): при весе ~MainCycleWeightBase цикл «естественно» сходит на нет за ~столько же тактов.</summary>
+    private int _backgroundFadeTargetPulses = 1000;
+
     /// <summary>Задать параметры затухания веса фоновых циклов и срока жизни главного (из настроек).</summary>
-    public void ApplyDecayParameters(int decayAgeDivisor, int decayBase, int mainMaxAgePulses)
+    /// <param name="decayAgeDivisor">Устарело (не используется в формуле затухания).</param>
+    /// <param name="decayBase">Устарело (не используется в формуле затухания).</param>
+    /// <param name="mainMaxAgePulses">Максимальный возраст главного цикла в пульсах до принудительного снятия.</param>
+    /// <param name="backgroundFadeTargetPulses">Целевой горизонт (пульсы) затухания веса фонового цикла.</param>
+    public void ApplyDecayParameters(int decayAgeDivisor, int decayBase, int mainMaxAgePulses, int backgroundFadeTargetPulses = 1000)
     {
       _lock.EnterWriteLock();
       try
@@ -52,6 +66,7 @@ namespace ISIDA.Psychic.Thinking
         _decayAgeDivisor = decayAgeDivisor <= 0 ? 100 : decayAgeDivisor;
         _decayBase = decayBase < 0 ? 0 : decayBase;
         _mainMaxAgePulses = mainMaxAgePulses <= 0 ? 1000 : mainMaxAgePulses;
+        _backgroundFadeTargetPulses = backgroundFadeTargetPulses <= 0 ? 1000 : backgroundFadeTargetPulses;
       }
       finally { _lock.ExitWriteLock(); }
     }
@@ -127,41 +142,115 @@ namespace ISIDA.Psychic.Thinking
       {
         var src = _cycles.FirstOrDefault(c => c != null && c.IsMainCycle);
         if (src == null) return null;
-
-        var copy = new ThinkingCycleInfo
-        {
-          Id = src.Id,
-          Order = src.Order,
-          IsMainCycle = src.IsMainCycle,
-          CreatedPulse = src.CreatedPulse,
-          StepCount = src.StepCount,
-          IsIdle = src.IsIdle,
-          IsWaitingPeriod = src.IsWaitingPeriod,
-          Dreaming = src.Dreaming,
-          Weight = src.Weight,
-          UnresolvedNodeId = src.UnresolvedNodeId,
-          UnresolvedActionsImageId = src.UnresolvedActionsImageId,
-          ProblemNodeId = src.ProblemNodeId,
-          ThemeId = src.ThemeId,
-          PurposeId = src.PurposeId,
-          LastStrategyId = src.LastStrategyId,
-          LastUpdatedUtc = src.LastUpdatedUtc,
-          PendingSolutionAutomatizmId = src.PendingSolutionAutomatizmId,
-          PendingSolutionBindPulse = src.PendingSolutionBindPulse
-        };
-
-        var log = src.Log;
-        if (log != null && log.Count > 0)
-        {
-          var max = Math.Max(0, maxLogLinesPerCycle);
-          var skip = max == 0 ? log.Count : Math.Max(0, log.Count - max);
-          foreach (var line in log.Skip(skip))
-            copy.Log.Add(line);
-        }
-
-        return copy;
+        return CopyCycleForSnapshot(src, maxLogLinesPerCycle);
       }
       finally { _lock.ExitReadLock(); }
+    }
+
+    /// <summary>
+    /// Возвращает копию снимка цикла по идентификатору (или null).
+    /// </summary>
+    /// <param name="cycleId">Идентификатор цикла.</param>
+    /// <param name="maxLogLinesPerCycle">Максимум последних строк лога для возврата.</param>
+    /// <returns>Копия цикла или null.</returns>
+    public ThinkingCycleInfo GetCycleSnapshotById(int cycleId, int maxLogLinesPerCycle)
+    {
+      if (cycleId <= 0) return null;
+      _lock.EnterReadLock();
+      try
+      {
+        var src = _cycles.FirstOrDefault(c => c != null && c.Id == cycleId);
+        if (src == null) return null;
+        return CopyCycleForSnapshot(src, maxLogLinesPerCycle);
+      }
+      finally { _lock.ExitReadLock(); }
+    }
+
+    /// <summary>
+    /// Краткий снимок всех циклов без логов (для матрицы на UI).
+    /// </summary>
+    /// <returns>Список элементов.</returns>
+    public IReadOnlyList<ThinkingCycleListItem> GetAllCyclesLightweightSnapshot()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        var list = new List<ThinkingCycleListItem>();
+        foreach (var c in _cycles.Where(x => x != null))
+        {
+          GetUiBorderFlags(c, out var awaiting, out var noSol);
+          list.Add(new ThinkingCycleListItem
+          {
+            Id = c.Id,
+            Order = c.Order,
+            Weight = c.Weight,
+            IsMainCycle = c.IsMainCycle,
+            IsIdle = c.IsIdle,
+            Dreaming = c.Dreaming,
+            AwaitingEvaluation = c.AwaitingEvaluation,
+            PendingSolutionAutomatizmId = c.PendingSolutionAutomatizmId,
+            StepCount = c.StepCount,
+            ShowAwaitingEvaluationBorder = awaiting,
+            ShowNoSolutionBorder = noSol
+          });
+        }
+        return list;
+      }
+      finally { _lock.ExitReadLock(); }
+    }
+
+    private static ThinkingCycleInfo CopyCycleForSnapshot(ThinkingCycleInfo src, int maxLogLinesPerCycle)
+    {
+      var copy = new ThinkingCycleInfo
+      {
+        Id = src.Id,
+        Order = src.Order,
+        IsMainCycle = src.IsMainCycle,
+        CreatedPulse = src.CreatedPulse,
+        StepCount = src.StepCount,
+        IsIdle = src.IsIdle,
+        IsWaitingPeriod = src.IsWaitingPeriod,
+        Dreaming = src.Dreaming,
+        Weight = src.Weight,
+        UnresolvedNodeId = src.UnresolvedNodeId,
+        UnresolvedActionsImageId = src.UnresolvedActionsImageId,
+        ProblemNodeId = src.ProblemNodeId,
+        ThemeId = src.ThemeId,
+        PurposeId = src.PurposeId,
+        LastStrategyId = src.LastStrategyId,
+        LastUpdatedUtc = src.LastUpdatedUtc,
+        PendingSolutionAutomatizmId = src.PendingSolutionAutomatizmId,
+        PendingSolutionBindPulse = src.PendingSolutionBindPulse,
+        AwaitingEvaluation = src.AwaitingEvaluation
+      };
+
+      var log = src.Log;
+      if (log != null && log.Count > 0)
+      {
+        var max = Math.Max(0, maxLogLinesPerCycle);
+        var skip = max == 0 ? log.Count : Math.Max(0, log.Count - max);
+        foreach (var line in log.Skip(skip))
+          copy.Log.Add(line);
+      }
+
+      return copy;
+    }
+
+    /// <summary>
+    /// Правила обводок плашек UI: сначала ожидание оценки, иначе «нет решения».
+    /// </summary>
+    /// <param name="c">Цикл.</param>
+    /// <param name="awaitingEvaluationBorder">Тёмно-зелёная обводка.</param>
+    /// <param name="noSolutionBorder">Красная обводка.</param>
+    private static void GetUiBorderFlags(ThinkingCycleInfo c, out bool awaitingEvaluationBorder, out bool noSolutionBorder)
+    {
+      awaitingEvaluationBorder = c.AwaitingEvaluation;
+      if (awaitingEvaluationBorder)
+      {
+        noSolutionBorder = false;
+        return;
+      }
+      noSolutionBorder = c.PendingSolutionAutomatizmId <= 0;
     }
 
     /// <summary>Формирует отладочный снимок всех циклов и их логов.</summary>
@@ -177,7 +266,7 @@ namespace ISIDA.Psychic.Thinking
         foreach (var c in _cycles.OrderByDescending(x => x.IsMainCycle).ThenBy(x => x.Order))
         {
           if (c == null) continue;
-          var head = $"Cycle#{c.Order} id={c.Id} main={c.IsMainCycle} idle={c.IsIdle} dreaming={c.Dreaming} w={c.Weight} steps={c.StepCount} node={c.UnresolvedNodeId} stimImg={c.UnresolvedActionsImageId} prob={c.ProblemNodeId} theme={c.ThemeId} purpose={c.PurposeId}";
+          var head = $"Cycle#{c.Order} id={c.Id} main={c.IsMainCycle} idle={c.IsIdle} awaitingEval={c.AwaitingEvaluation} dreaming={c.Dreaming} w={c.Weight} steps={c.StepCount} node={c.UnresolvedNodeId} stimImg={c.UnresolvedActionsImageId} prob={c.ProblemNodeId} theme={c.ThemeId} purpose={c.PurposeId}";
           lines.Add(head);
           var take = Math.Min(maxLogLinesPerCycle, c.Log.Count);
           if (take > 0)
@@ -202,6 +291,7 @@ namespace ISIDA.Psychic.Thinking
       try
       {
         var previousMain = _cycles.FirstOrDefault(c => c.IsMainCycle);
+
         if (previousMain != null && (ctx.Danger || ctx.VeryActualSituation))
         {
           _interruptMemory.Push(new ThinkingInterruptImage
@@ -217,6 +307,15 @@ namespace ISIDA.Psychic.Thinking
 
         foreach (var c in _cycles)
           c.IsMainCycle = false;
+
+        // Бывший главный остаётся в списке как фоновый: иначе его CreatedPulse от старого главного
+        // даёт большой age, и ApplyBackgroundWeightDecay в том же пульсе сжигает вес до 0 и удаляет цикл.
+        foreach (var c in _cycles.Where(x => x != null))
+        {
+          c.CreatedPulse = ctx.PulseCount;
+          if (c.Weight < 1)
+            c.Weight = 1;
+        }
 
         var main = new ThinkingCycleInfo
         {
@@ -238,15 +337,23 @@ namespace ISIDA.Psychic.Thinking
         main.Weight = ComputeInitialWeight(ctx);
         main.LastUpdatedUtc = DateTime.UtcNow;
 
-        main.Log.Add($"[p{ctx.PulseCount}] Unresolved@L2: node={ctx.AutomatizmNodeId}, stimImg={ctx.StimulusActionsImageId}, prob={ctx.ProblemNodeId}, theme={ctx.ThemeId}, purpose={ctx.PurposeId}");
+        main.Log.Add($"[p{ctx.PulseCount}] Нерешённый уровень 2: узел={ctx.AutomatizmNodeId}, стимул={ctx.StimulusActionsImageId}, проблема={ctx.ProblemNodeId}, тема={ctx.ThemeId}, цель={ctx.PurposeId}");
         return main;
       }
       finally { _lock.ExitWriteLock(); }
     }
 
+    /// <summary>Краткое описание списка циклов для логов (только под lock).</summary>
+    private string FormatCyclesSnapshotLocked()
+    {
+      if (_cycles.Count == 0) return "empty";
+      return string.Join(" | ", _cycles.Where(c => c != null).Select(c =>
+        $"id={c.Id},o={c.Order},main={c.IsMainCycle},w={c.Weight}"));
+    }
+
     private static int ComputeInitialWeight(ThinkingCycleContext ctx)
     {
-      var w = 1;
+      var w = MainCycleWeightBase;
       if (ctx.Danger) w += 5;
       if (ctx.VeryActualSituation) w += 2;
       return w;
@@ -260,15 +367,38 @@ namespace ISIDA.Psychic.Thinking
       c.Dreaming = false;
       c.Weight = 0;
       c.LastStrategyId = null;
+      c.AwaitingEvaluation = false;
+      c.PendingSolutionAutomatizmId = 0;
+      c.PendingSolutionBindPulse = 0;
       c.Log.Clear();
       c.LastUpdatedUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// После успешного исполнения решения цикла: привязка автоматизма к ожиданию оценки (полезность и т.д.).
+    /// Вызывается из PsychicSystem после исполнения решения (вне lock диспетчера циклов).
+    /// </summary>
+    internal void NotifySolutionExecutedAfterDispatch(int cycleId, int automatizmId, int bindPulse)
+    {
+      if (cycleId <= 0 || automatizmId <= 0) return;
+      _lock.EnterWriteLock();
+      try
+      {
+        var c = _cycles.FirstOrDefault(x => x != null && x.Id == cycleId);
+        if (c == null) return;
+        c.PendingSolutionAutomatizmId = automatizmId;
+        c.PendingSolutionBindPulse = bindPulse;
+        c.AwaitingEvaluation = true;
+        c.Log.Add($"[p{bindPulse}] Ожидание оценки: привязан автоматизм id={automatizmId}");
+      }
+      finally { _lock.ExitWriteLock(); }
     }
 
     /// <summary>
     /// Пройти диспетчеризацию циклов на текущем пульсе.
     /// Возвращает первое найденное решение, которое надо выполнить (обычно от главного цикла).
     /// </summary>
-    public ThinkingDecision DispatchCycles(int pulseCount, bool isSleeping, bool isSleepingDream)
+    public ThinkingDecision DispatchCycles(int pulseCount, bool isSleeping)
     {
       if (_informationEnvironmentSystem?.CurrentInformationEnvironment == null)
         return null;
@@ -307,11 +437,11 @@ namespace ISIDA.Psychic.Thinking
           if (!cycle.IsMainCycle && cycle.IsIdle && (pulseCount % 5 != 0))
             continue;
 
-          var decision = RunCycleStep(pulseCount, cycle, isSleeping, isSleepingDream);
+          var decision = RunCycleStep(pulseCount, cycle, isSleeping);
           if (decision != null)
           {
             if (decision.CloseCycleImmediately)
-              RemoveCycleById(cycle.Id);
+              RemoveCycleById(cycle.Id, "RunCycleStep CloseCycleImmediately", pulseCount);
 
             if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
               return decision;
@@ -323,26 +453,30 @@ namespace ISIDA.Psychic.Thinking
       finally { _lock.ExitWriteLock(); }
     }
 
-    /// <summary>Фаза жизни: подтверждение решения по весу автоматизма, срок главного, затухание фоновых, устаревшие.</summary>
+    /// <summary>
+    /// Фаза жизни: оценка ранее предложенных решений, срок главного цикла, затухание веса фоновых.
+    /// Вызывается в начале <see cref="DispatchCycles"/> (до поиска новых решений на этом пульсе).
+    /// </summary>
     /// <remarks>Вызывается под <see cref="ReaderWriterLockSlim"/> в режиме записи.</remarks>
     private void ApplyLifecyclePhase(int pulseCount)
     {
       try
       {
-        ResolvePendingSolutionAutomatizm(pulseCount);
+        EvaluatePendingCycleSolutions(pulseCount);
         EnforceMainCycleMaxAge(pulseCount);
         ApplyBackgroundWeightDecay(pulseCount);
-
-        if (pulseCount % 30 == 0)
-          _cycles.RemoveAll(c => c != null && !c.IsMainCycle && (pulseCount - c.CreatedPulse) > 3600);
       }
       catch (Exception ex)
       {
-        Logger.Error($"ThinkingCycles.ApplyLifecyclePhase failed: {ex.Message}");
+        Logger.Error(ex.Message);
       }
     }
 
-    private void ResolvePendingSolutionAutomatizm(int pulseCount)
+    /// <summary>
+    /// Единая точка оценки решений циклов за пульс: подтверждение по полезности автоматизма и снятие цикла.
+    /// Дополнять сюда же новые критерии успешного/неуспешного завершения.
+    /// </summary>
+    private void EvaluatePendingCycleSolutions(int pulseCount)
     {
       var toRemove = new List<int>();
       foreach (var c in _cycles)
@@ -353,12 +487,12 @@ namespace ISIDA.Psychic.Thinking
         var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
         if (atmz != null && atmz.Usefulness >= 1)
         {
-          c.Log.Add($"[p{pulseCount}] SolutionConfirmed atmz={c.PendingSolutionAutomatizmId} usefulness={atmz.Usefulness}");
+          c.Log.Add($"[p{pulseCount}] Решение подтверждено: автоматизм id={c.PendingSolutionAutomatizmId}, полезность={atmz.Usefulness}");
           toRemove.Add(c.Id);
         }
       }
       foreach (var id in toRemove)
-        RemoveCycleById(id);
+        RemoveCycleById(id, "EvaluatePendingCycleSolutions usefulness>=1", pulseCount);
     }
 
     private void EnforceMainCycleMaxAge(int pulseCount)
@@ -367,45 +501,92 @@ namespace ISIDA.Psychic.Thinking
       if (main == null) return;
       if (pulseCount - main.CreatedPulse < _mainMaxAgePulses) return;
 
-      main.Log.Add($"[p{pulseCount}] MainCycleMaxAge exceeded ({_mainMaxAgePulses}), removed");
-      RemoveCycleById(main.Id);
-      PromoteBestBackgroundToMain();
+      main.Log.Add($"[p{pulseCount}] Срок главного цикла истёк ({_mainMaxAgePulses} пульсов), цикл снят");
+      RemoveCycleById(main.Id, "EnforceMainCycleMaxAge", pulseCount);
     }
 
+    /// <summary>
+    /// Затухание фона: целевой горизонт <see cref="_backgroundFadeTargetPulses"/>.
+    /// При весе ≤ горизонта — не чаще 1 пункта за ceil(горизонт/вес) «пульсов возраста» (порядка горизонта пульсов на полный разряд).
+    /// При весе &gt; горизонта — снятие ceil(вес/горизонт) за пульс, чтобы очень тяжёлые циклы тоже укладывались примерно в горизонт.
+    /// </summary>
     private void ApplyBackgroundWeightDecay(int pulseCount)
     {
-      int div = _decayAgeDivisor <= 0 ? 100 : _decayAgeDivisor;
+      int fadeTarget = _backgroundFadeTargetPulses <= 0 ? 1000 : _backgroundFadeTargetPulses;
       var toRemove = new List<int>();
       foreach (var c in _cycles)
       {
         if (c == null || c.IsMainCycle) continue;
 
         int age = Math.Max(0, pulseCount - c.CreatedPulse);
-        int loss = _decayBase + age / div;
+        // В пульс перевода в фон CreatedPulse уже сброшен — не затухать в том же такте.
+        if (age == 0) continue;
+
+        int w = c.Weight;
+        if (w <= 0)
+        {
+          toRemove.Add(c.Id);
+          continue;
+        }
+
+        int loss;
+        if (w > fadeTarget)
+          loss = Math.Max(1, w / fadeTarget);
+        else
+        {
+          int period = (fadeTarget + w - 1) / w;
+          if (period < 1) period = 1;
+          if (age % period != 0) continue;
+          loss = 1;
+        }
+
         c.Weight -= loss;
         if (c.Weight <= 0)
         {
-          c.Log.Add($"[p{pulseCount}] Weight decay to 0 (loss={loss}, age={age})");
+          c.Log.Add($"[p{pulseCount}] Вес фонового цикла обнулён затуханием (снятие за пульс={loss}, возраст={age})");
           toRemove.Add(c.Id);
         }
       }
       foreach (var id in toRemove)
-        RemoveCycleById(id);
+        RemoveCycleById(id, "ApplyBackgroundWeightDecay weight<=0", pulseCount);
     }
 
-    private void RemoveCycleById(int cycleId)
+    private void RemoveCycleById(int cycleId, string reason, int pulseCount = 0)
     {
       var idx = _cycles.FindIndex(c => c != null && c.Id == cycleId);
-      if (idx < 0) return;
-      var wasMain = _cycles[idx].IsMainCycle;
+      if (idx < 0)
+        return;
+
+      var removed = _cycles[idx];
+      var wasMain = removed.IsMainCycle;
+
       _cycles.RemoveAt(idx);
+      ForgetCondensedLogDigest(cycleId);
       if (wasMain)
-        PromoteBestBackgroundToMain();
+        PromoteBestBackgroundToMain(pulseCount);
     }
 
-    private void PromoteBestBackgroundToMain()
+    private void ForgetCondensedLogDigest(int cycleId)
     {
-      if (_cycles.Any(c => c != null && c.IsMainCycle)) return;
+      if (cycleId <= 0) return;
+      _lastCondensedLogDigestByCycleId.Remove(cycleId);
+    }
+
+    /// <summary>Добавляет строку в лог цикла только если сигнатура <paramref name="digest"/> изменилась с прошлого раза.</summary>
+    private void AppendCondensedCycleLog(ThinkingCycleInfo cycle, int pulseCount, string digest, string messageRu)
+    {
+      if (cycle == null || string.IsNullOrEmpty(digest)) return;
+      if (_lastCondensedLogDigestByCycleId.TryGetValue(cycle.Id, out var prev) && prev == digest)
+        return;
+      _lastCondensedLogDigestByCycleId[cycle.Id] = digest;
+      cycle.Log.Add($"[p{pulseCount}] {messageRu}");
+    }
+
+    private void PromoteBestBackgroundToMain(int pulseCount)
+    {
+      if (_cycles.Any(c => c != null && c.IsMainCycle))
+        return;
+
       var best = _cycles
         .Where(c => c != null)
         .OrderByDescending(c => c.Weight)
@@ -416,10 +597,16 @@ namespace ISIDA.Psychic.Thinking
         foreach (var c in _cycles)
           if (c != null) c.IsMainCycle = false;
         best.IsMainCycle = true;
+        if (pulseCount > 0)
+        {
+          best.CreatedPulse = pulseCount;
+          if (best.Weight < MainCycleWeightBase)
+            best.Weight = MainCycleWeightBase;
+        }
       }
     }
 
-    private ThinkingDecision RunCycleStep(int pulseCount, ThinkingCycleInfo cycle, bool isSleeping, bool isSleepingDream)
+    private ThinkingDecision RunCycleStep(int pulseCount, ThinkingCycleInfo cycle, bool isSleeping)
     {
       if (cycle == null) return null;
       if (isSleeping) return null; // пока не реализован сон/сновидения
@@ -431,8 +618,16 @@ namespace ISIDA.Psychic.Thinking
       if (cycle.IsWaitingPeriod)
       {
         cycle.IsIdle = true;
-        cycle.Log.Add($"[p{pulseCount}] WaitingPeriod");
+        AppendCondensedCycleLog(cycle, pulseCount, "digest:waiting_period",
+          "Ожидание оценки с пульта — перебор мышления не выполняется.");
         return ThinkingDecision.None("waiting");
+      }
+
+      if (cycle.AwaitingEvaluation)
+      {
+        AppendCondensedCycleLog(cycle, pulseCount, "digest:await_eval:" + cycle.PendingSolutionAutomatizmId,
+          $"Ожидание оценки полезности автоматизма (id={cycle.PendingSolutionAutomatizmId}).");
+        return ThinkingDecision.None("awaiting_evaluation");
       }
 
       // Пассивный режим (dreaming): когда нет внешних стимулов и нет острой задачи
@@ -441,15 +636,17 @@ namespace ISIDA.Psychic.Thinking
       {
         cycle.Dreaming = true;
         cycle.IsIdle = false;
-        cycle.Log.Add($"[p{pulseCount}] DreamingStart");
+        cycle.Log.Add($"[p{pulseCount}] Запущен пассивный режим (dreaming).");
       }
       if (cycle.IsMainCycle && cycle.Dreaming)
       {
         var dreamDecision = RunDreamingStep(pulseCount, cycle);
         if (dreamDecision != null && (dreamDecision.AutomatizmToExecute != null || dreamDecision.ActionsImageIdToAutomatize > 0))
         {
-          cycle.Log.Add($"[p{pulseCount}] DreamingDecision => {dreamDecision.DebugNote}");
+          ForgetCondensedLogDigest(cycle.Id);
+          cycle.Log.Add($"[p{pulseCount}] {ThinkingCycleLogMessages.FormatDreamingDecisionRu(dreamDecision)}");
           cycle.Dreaming = false; // после найденного решения выходим из пассивного режима
+          dreamDecision.CycleId = cycle.Id;
           return dreamDecision;
         }
       }
@@ -470,13 +667,15 @@ namespace ISIDA.Psychic.Thinking
             cycle.PurposeId = img.PurposeId;
             env.NeedThinkingAboutAutomatizm = true;
             cycle.IsIdle = false;
-            cycle.Log.Add($"[p{pulseCount}] ReturnToInterrupted: node={img.UnresolvedNodeId}, stimImg={img.UnresolvedActionsImageId}, prob={img.ProblemNodeId}");
+            ForgetCondensedLogDigest(cycle.Id);
+            cycle.Log.Add($"[p{pulseCount}] Восстановление прерванного цикла: узел={img.UnresolvedNodeId}, стимул={img.UnresolvedActionsImageId}, проблема={img.ProblemNodeId}");
             return ThinkingDecision.None("return_to_interrupted");
           }
         }
 
         cycle.IsIdle = true;
-        cycle.Log.Add($"[p{pulseCount}] NoNeedThinking");
+        AppendCondensedCycleLog(cycle, pulseCount, "digest:no_need_thinking",
+          "В инфо-среде нет нерешённой задачи на уровне 2 — мышление не требуется.");
         return ThinkingDecision.None("no_need");
       }
 
@@ -499,6 +698,7 @@ namespace ISIDA.Psychic.Thinking
         ? allowedInfoFuncIds.ToList()
         : InfoFunctionsCatalog.GetAllIds();
 
+      var batchAttempts = new List<(int FuncId, string DebugNote)>();
       foreach (var infoFuncId in idsToTry)
       {
         if (!InfoFunctionsCatalog.Exists(infoFuncId)) continue;
@@ -514,24 +714,23 @@ namespace ISIDA.Psychic.Thinking
         cycle.LastStrategyId = $"infoFunc_{infoFuncId}";
         if (decision != null)
         {
-          cycle.Log.Add($"[p{pulseCount}] InfoFunc={infoFuncId} => {decision.DebugNote}");
+          batchAttempts.Add((infoFuncId, decision.DebugNote));
           if (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0 || decision.RequestParrotFromOperator)
           {
+            ForgetCondensedLogDigest(cycle.Id);
+            cycle.Log.Add($"[p{pulseCount}] {ThinkingCycleLogMessages.FormatInfoFuncSuccessRu(infoFuncId, decision)}");
             var actionImg = decision.AutomatizmToExecute?.ActionsImageID ?? decision.ActionsImageIdToAutomatize;
             _experienceMemory.RecordRecommendation(cycle.ProblemNodeId, cycle.ThemeId, cycle.PurposeId, actionImg);
             cycle.IsIdle = false;
-            if (decision.AutomatizmToExecute != null && decision.AutomatizmToExecute.ID > 0)
-            {
-              cycle.PendingSolutionAutomatizmId = decision.AutomatizmToExecute.ID;
-              cycle.PendingSolutionBindPulse = pulseCount;
-            }
+            decision.CycleId = cycle.Id;
             return decision;
           }
         }
       }
 
       cycle.IsIdle = true;
-      cycle.Log.Add($"[p{pulseCount}] NoDecision");
+      var digest = ThinkingCycleLogMessages.BuildInfoFuncBatchDigest(batchAttempts);
+      AppendCondensedCycleLog(cycle, pulseCount, digest, ThinkingCycleLogMessages.BuildInfoFuncBatchNoDecisionRu(batchAttempts));
       return ThinkingDecision.None("no_decision");
     }
 
@@ -600,9 +799,11 @@ namespace ISIDA.Psychic.Thinking
       // Insight: если кадр очень значим — попробовать действие из него
       if (bestAbs > InsightCompare && bestNode.ActionId > 0)
       {
-        cycle.Log.Add($"[p{pulseCount}] InsightFromEpisode id={bestNode.ID} stimEff={bestNode.Params.StimulsEffect} actionImg={bestNode.ActionId}");
+        ForgetCondensedLogDigest(cycle.Id);
+        cycle.Log.Add($"[p{pulseCount}] Инсайт из эпизода: узел id={bestNode.ID}, |эффект стимула|={bestNode.Params.StimulsEffect}, образ действий={bestNode.ActionId}");
         return new ThinkingDecision
         {
+          CycleId = cycle.Id,
           ActionsImageIdToAutomatize = bestNode.ActionId,
           DebugNote = $"insight_actionImg={bestNode.ActionId}"
         };

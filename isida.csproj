@@ -149,7 +149,10 @@
     <Compile Include="Psychic\PsychicSystem.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCycleContext.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCycleInfo.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingCycleListItem.cs" />
+    <Compile Include="Psychic\Thinking\ThinkingCycleLogMessages.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCyclesSystem.cs" />
+    <Compile Include="Psychic\InformationEnvironmentViewSnapshot.cs" />
     <Compile Include="Psychic\Thinking\ThinkingExperienceMemory.cs" />
     <Compile Include="Psychic\Thinking\ThinkingInterruptMemory.cs" />
     <Compile Include="Psychic\Thinking\InfoFunctionsCatalog.cs" />
