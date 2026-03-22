@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
@@ -133,6 +134,13 @@ namespace ISIDA.Common
       // Поля для логирования цепочек
       public string LastReflexChainInfo { get; set; }  // "ChainId:ActionId"
       public string LastAutomatizmChainInfo { get; set; }  // "ChainId:ActionId"
+      /// <summary>Номер текущего главного цикла мышления (ThinkingCycleInfo.Id).</summary>
+      public int? MainThinkingCycleId { get; set; }
+      public int MainThinkingCycleWeight { get; set; }
+      public int MainThinkingCycleProblemNodeId { get; set; }
+      public int MainThinkingCycleThemeId { get; set; }
+      public int MainThinkingCyclePurposeId { get; set; }
+      public string MainThinkingCycleLastStrategyId { get; set; }
     }
 
     /// <summary>
@@ -713,7 +721,19 @@ namespace ISIDA.Common
         ["Цепочка АВ"] = automatizmChainInfo,
         ["УМ"] = umString,
         ["УМ_успех"] = state.ThinkingLevel.HasValue && state.ThinkingLevel.Value > 0 ? state.ThinkingLevelSuccess : null,
-        ["Тема"] = state.ThinkingThemeTypeId > 0 ? state.ThinkingThemeTypeId.ToString() : ""
+        ["Тема"] = state.ThinkingThemeTypeId > 0 ? state.ThinkingThemeTypeId.ToString() : "",
+        ["Цикл М"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? state.MainThinkingCycleId.Value.ToString() : "",
+        ["ЦиклМ_вес"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? state.MainThinkingCycleWeight.ToString() : "",
+        ["ЦиклМ_тема"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? state.MainThinkingCycleThemeId.ToString() : "",
+        ["ЦиклМ_цель"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? state.MainThinkingCyclePurposeId.ToString() : "",
+        ["ЦиклМ_проблема"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? state.MainThinkingCycleProblemNodeId.ToString() : "",
+        ["ЦиклМ_стратегия"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? (state.MainThinkingCycleLastStrategyId ?? "") : ""
       };
     }
 
@@ -797,6 +817,29 @@ namespace ISIDA.Common
           ? BuildThinkingThemeTooltip(thinkingThemeTypeId.Value)
           : null;
 
+      int? mainThinkingCycleId = null;
+      if (logEntry.TryGetValue("Цикл М", out var mcObj) && mcObj != null &&
+          !string.IsNullOrWhiteSpace(mcObj.ToString()) &&
+          int.TryParse(mcObj.ToString(), out int mcId) && mcId > 0)
+        mainThinkingCycleId = mcId;
+
+      int mcWeight = 0, mcThemeId = 0, mcPurposeId = 0, mcProblem = 0;
+      string mcLastStrat = null;
+      if (logEntry.TryGetValue("ЦиклМ_вес", out var wObj) && wObj != null && int.TryParse(wObj.ToString(), out int w))
+        mcWeight = w;
+      if (logEntry.TryGetValue("ЦиклМ_тема", out var tObj) && tObj != null && int.TryParse(tObj.ToString(), out int tid))
+        mcThemeId = tid;
+      if (logEntry.TryGetValue("ЦиклМ_цель", out var pObj) && pObj != null && int.TryParse(pObj.ToString(), out int pid))
+        mcPurposeId = pid;
+      if (logEntry.TryGetValue("ЦиклМ_проблема", out var prObj) && prObj != null && int.TryParse(prObj.ToString(), out int prid))
+        mcProblem = prid;
+      if (logEntry.TryGetValue("ЦиклМ_стратегия", out var sObj) && sObj != null)
+        mcLastStrat = sObj.ToString();
+
+      string mainThinkingCycleTooltip = mainThinkingCycleId.HasValue
+          ? BuildMainThinkingCycleTooltip(mcWeight, mcThemeId, mcPurposeId, mcProblem, mcLastStrat)
+          : null;
+
       _memoryLogWriter.WriteLog(
           "ResearchLogger",
           "LogSystemState",
@@ -819,7 +862,9 @@ namespace ISIDA.Common
           thinkingLevel,
           thinkingLevelSuccess,
           thinkingThemeTypeId,
-          thinkingThemeTooltip
+          thinkingThemeTooltip,
+          mainThinkingCycleId,
+          mainThinkingCycleTooltip
       );
     }
 
@@ -831,6 +876,36 @@ namespace ISIDA.Common
       var name = ThemeImageSystem.Instance.GetThemeTypeDescription(themeTypeId) ?? "";
       int w = ThemeImageSystem.Instance.GetDefaultWeightForThemeType(themeTypeId);
       return string.IsNullOrEmpty(name) ? $"({w})" : $"{name} ({w})";
+    }
+
+    /// <summary>Подсказка для колонки «Цикл М»: инфо-функция, вес, образ темы, образ цели, узел проблемы.</summary>
+    private static string BuildMainThinkingCycleTooltip(
+        int weight, int themeId, int purposeId, int problemNodeId, string lastStrategyId)
+    {
+      int infoFuncId = 0;
+      if (!string.IsNullOrEmpty(lastStrategyId) &&
+          lastStrategyId.StartsWith("infoFunc_", StringComparison.Ordinal))
+      {
+        int.TryParse(lastStrategyId.Substring("infoFunc_".Length), out infoFuncId);
+      }
+      string infoName = infoFuncId > 0 ? InfoFunctionsStrategy.GetInfoFunctionDisplayName(infoFuncId) : "";
+      if (string.IsNullOrEmpty(infoName)) infoName = "—";
+
+      var sb = new StringBuilder();
+      sb.AppendLine($"Инфо-функция: {infoFuncId}, {infoName}");
+      sb.AppendLine($"Вес: {weight}");
+
+      string themePart = "—";
+      if (themeId > 0 && ThemeImageSystem.IsInitialized)
+        themePart = ThemeImageSystem.Instance.FormatThemeImageForLogTooltip(themeId);
+      else if (themeId > 0)
+        themePart = themeId.ToString();
+      sb.AppendLine($"Образ темы: {themePart}");
+
+      sb.AppendLine(purposeId > 0 ? $"Образ цели: {purposeId}" : "Образ цели: —");
+
+      sb.Append($"Узел дерева проблем: {problemNodeId}");
+      return sb.ToString();
     }
 
     /// <summary>
@@ -954,6 +1029,14 @@ namespace ISIDA.Common
       state.ThinkingLevelSuccess = thinkingLevel > 0 ? (bool?)thinkingLevelSuccess : null;
       state.ThinkingThemeTypeId = AppGlobalState.ResolvedThinkingThemeTypeId;
 
+      var mc = AppGlobalState.GetMainThinkingCycleSnapshot();
+      state.MainThinkingCycleId = mc.CycleId > 0 ? (int?)mc.CycleId : null;
+      state.MainThinkingCycleWeight = mc.Weight;
+      state.MainThinkingCycleProblemNodeId = mc.ProblemNodeId;
+      state.MainThinkingCycleThemeId = mc.ThemeId;
+      state.MainThinkingCyclePurposeId = mc.PurposeId;
+      state.MainThinkingCycleLastStrategyId = mc.LastStrategyId;
+
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
         AppGlobalState.ResetAutomatizmInfo();
@@ -1009,8 +1092,14 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Проверяет, является ли состояние дубликатом предыдущего
+    /// Есть ли отличие от последней записанной строки (true = нужна новая запись).
     /// </summary>
+    /// <remarks>
+    /// <see cref="SystemState.MainThinkingCycleLastStrategyId"/> не участвует: на шаге цикла мышления
+    /// диспетчер перебирает инфо-функции и поле меняется каждый пульс (infoFunc_14 / infoFunc_17 / …),
+    /// из-за чего иначе лог дублируется на каждом пульсе. Актуальная стратегия всё равно попадает в
+    /// запись и подсказку при любом другом изменении или при сбросе буфера.
+    /// </remarks>
     private bool IsDuplicateState(SystemState current)
     {
       return _lastState.CurrentBaseID != current.CurrentBaseID ||
@@ -1027,7 +1116,12 @@ namespace ISIDA.Common
              _lastState.OrientationReflexPulse != current.OrientationReflexPulse ||
              _lastState.ThinkingLevel != current.ThinkingLevel ||
              _lastState.ThinkingLevelSuccess != current.ThinkingLevelSuccess ||
-             _lastState.ThinkingThemeTypeId != current.ThinkingThemeTypeId;
+             _lastState.ThinkingThemeTypeId != current.ThinkingThemeTypeId ||
+             _lastState.MainThinkingCycleId != current.MainThinkingCycleId ||
+             _lastState.MainThinkingCycleWeight != current.MainThinkingCycleWeight ||
+             _lastState.MainThinkingCycleProblemNodeId != current.MainThinkingCycleProblemNodeId ||
+             _lastState.MainThinkingCycleThemeId != current.MainThinkingCycleThemeId ||
+             _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId;
     }
 
     /// <summary>

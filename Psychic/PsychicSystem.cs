@@ -305,6 +305,7 @@ namespace ISIDA.Psychic
               pulseCount,
               isSleeping: IsSleeping,
               isSleepingDream: IsSleepingDream);
+            PublishMainThinkingCycleToAppGlobalState();
           }
         }
         else
@@ -596,6 +597,7 @@ namespace ISIDA.Psychic
 
               _thinkingCyclesSystem.OnUnresolvedProblem(ctx);
               var decision = _thinkingCyclesSystem.DispatchCycles(PulseCount, isSleeping: IsSleeping, isSleepingDream: IsSleepingDream);
+              PublishMainThinkingCycleToAppGlobalState();
               if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
@@ -1371,6 +1373,22 @@ namespace ISIDA.Psychic
     }
 
     #endregion
+
+    /// <summary>Публикует снимок главного цикла в <see cref="AppGlobalState"/> для ResearchLogger и UI.</summary>
+    private void PublishMainThinkingCycleToAppGlobalState()
+    {
+      if (_thinkingCyclesSystem == null)
+      {
+        AppGlobalState.ClearMainThinkingCycleSnapshot();
+        return;
+      }
+      var snap = _thinkingCyclesSystem.GetMainCycleSnapshot(maxLogLinesPerCycle: 0);
+      if (snap == null)
+        AppGlobalState.ClearMainThinkingCycleSnapshot();
+      else
+        AppGlobalState.UpdateMainThinkingCycleSnapshot(
+          snap.Id, snap.Weight, snap.ProblemNodeId, snap.ThemeId, snap.PurposeId, snap.LastStrategyId);
+    }
 
     #region Диагностика циклов осмысления (3-й уровень)
 

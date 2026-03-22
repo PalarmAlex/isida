@@ -102,6 +102,20 @@ namespace ISIDA.Psychic.Understanding
       return _byId.TryGetValue(id, out var r) ? r : null;
     }
 
+    /// <summary>
+    /// Подпись конкретного образа темы для подсказок логов: Id, тип и вес
+    /// (различает экземпляры с одинаковым типом, в отличие от одного только <see cref="GetThemeTypeDescription"/>).
+    /// </summary>
+    public string FormatThemeImageForLogTooltip(int themeImageId)
+    {
+      if (themeImageId <= 0) return "—";
+      var r = GetById(themeImageId);
+      if (r == null) return $"{themeImageId}, образ не найден";
+      string typeName = GetThemeTypeDescription(r.Type) ?? "";
+      if (string.IsNullOrEmpty(typeName)) typeName = $"тип {r.Type}";
+      return $"{themeImageId}, «{typeName}», вес {r.Weight}";
+    }
+
     /// <summary>Текстовое описание типа темы. Для канонических Id — из кода (фиксированный список в ThemeImageSystem). Тип 0 всегда «Нет темы».</summary>
     public string GetThemeTypeDescription(int typeIndex)
     {

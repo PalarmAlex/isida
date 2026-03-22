@@ -32,6 +32,15 @@ public static class AppGlobalState
   private static int _lastOrientationReflexPulse = 0;
   private static int _lastThinkingLevel = 0;       // 0 = не активирован, 1 = УМ1, 2 = УМ2
   private static bool _lastThinkingLevelSuccess = false;
+
+  /// <summary>Снимок главного цикла мышления (для ResearchLogger / UI).</summary>
+  private static int _mainThinkingCycleId = 0;
+  private static int _mainThinkingCycleWeight = 0;
+  private static int _mainThinkingCycleProblemNodeId = 0;
+  private static int _mainThinkingCycleThemeId = 0;
+  private static int _mainThinkingCyclePurposeId = 0;
+  private static string _mainThinkingCycleLastStrategyId = null;
+
   private static bool _flgConditionReflexes = false;
   private static bool _isReflexChainActive = false;
   private static List<int> _geneticReflexesActions = new List<int>();
@@ -442,6 +451,34 @@ public static class AppGlobalState
   {
     _lastThinkingLevel = 0;
     _lastThinkingLevelSuccess = false;
+  }
+
+  /// <summary>Обновить снимок главного цикла мышления (вызывается из PsychicSystem после шага диспетчера).</summary>
+  public static void UpdateMainThinkingCycleSnapshot(int cycleId, int weight, int problemNodeId, int themeId, int purposeId, string lastStrategyId)
+  {
+    _mainThinkingCycleId = cycleId;
+    _mainThinkingCycleWeight = weight;
+    _mainThinkingCycleProblemNodeId = problemNodeId;
+    _mainThinkingCycleThemeId = themeId;
+    _mainThinkingCyclePurposeId = purposeId;
+    _mainThinkingCycleLastStrategyId = lastStrategyId;
+  }
+
+  /// <summary>Сбросить снимок главного цикла (нет активного главного цикла).</summary>
+  public static void ClearMainThinkingCycleSnapshot()
+  {
+    _mainThinkingCycleId = 0;
+    _mainThinkingCycleWeight = 0;
+    _mainThinkingCycleProblemNodeId = 0;
+    _mainThinkingCycleThemeId = 0;
+    _mainThinkingCyclePurposeId = 0;
+    _mainThinkingCycleLastStrategyId = null;
+  }
+
+  /// <summary>Текущий снимок главного цикла мышления для логирования.</summary>
+  public static (int CycleId, int Weight, int ProblemNodeId, int ThemeId, int PurposeId, string LastStrategyId) GetMainThinkingCycleSnapshot()
+  {
+    return (_mainThinkingCycleId, _mainThinkingCycleWeight, _mainThinkingCycleProblemNodeId, _mainThinkingCycleThemeId, _mainThinkingCyclePurposeId, _mainThinkingCycleLastStrategyId);
   }
 
   /// <summary>

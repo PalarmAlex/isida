@@ -1,5 +1,6 @@
 using ISIDA.Common;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Thinking;
 using System;
 using System.Linq;
 
@@ -19,6 +20,14 @@ namespace ISIDA.Psychic.Thinking.Strategies
     public InfoFunctionsStrategy(ThinkingExperienceMemory experienceMemory)
     {
       _experienceMemory = experienceMemory ?? throw new ArgumentNullException(nameof(experienceMemory));
+    }
+
+    /// <summary>Название инфо-функции по Id из фиксированного справочника (канон — <see cref="InfoFunctionsCatalog"/>).</summary>
+    internal static string GetInfoFunctionDisplayName(int id)
+    {
+      if (id <= 0) return "";
+      var e = InfoFunctionsCatalog.GetById(id);
+      return e?.Name ?? "";
     }
 
     /// <summary>Выполнить инфо-функцию по Id. Возвращает решение или None.</summary>
