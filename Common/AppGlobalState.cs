@@ -40,6 +40,8 @@ public static class AppGlobalState
   private static int _mainThinkingCycleThemeId = 0;
   private static int _mainThinkingCyclePurposeId = 0;
   private static string _mainThinkingCycleLastStrategyId = null;
+  private static bool _mainThinkingCycleAwaitingEvaluation = false;
+  private static int _mainThinkingCyclePendingSolutionAutomatizmId = 0;
 
   private static bool _flgConditionReflexes = false;
   private static bool _isReflexChainActive = false;
@@ -455,7 +457,8 @@ public static class AppGlobalState
   }
 
   /// <summary>Обновить снимок главного цикла мышления (вызывается из PsychicSystem после шага диспетчера).</summary>
-  public static void UpdateMainThinkingCycleSnapshot(int cycleId, int weight, int problemNodeId, int themeId, int purposeId, string lastStrategyId)
+  public static void UpdateMainThinkingCycleSnapshot(int cycleId, int weight, int problemNodeId, int themeId, int purposeId, string lastStrategyId,
+      bool awaitingEvaluation = false, int pendingSolutionAutomatizmId = 0)
   {
     _mainThinkingCycleId = cycleId;
     _mainThinkingCycleWeight = weight;
@@ -463,6 +466,8 @@ public static class AppGlobalState
     _mainThinkingCycleThemeId = themeId;
     _mainThinkingCyclePurposeId = purposeId;
     _mainThinkingCycleLastStrategyId = lastStrategyId;
+    _mainThinkingCycleAwaitingEvaluation = awaitingEvaluation;
+    _mainThinkingCyclePendingSolutionAutomatizmId = pendingSolutionAutomatizmId;
   }
 
   /// <summary>Сбросить снимок главного цикла (нет активного главного цикла).</summary>
@@ -474,12 +479,14 @@ public static class AppGlobalState
     _mainThinkingCycleThemeId = 0;
     _mainThinkingCyclePurposeId = 0;
     _mainThinkingCycleLastStrategyId = null;
+    _mainThinkingCycleAwaitingEvaluation = false;
+    _mainThinkingCyclePendingSolutionAutomatizmId = 0;
   }
 
   /// <summary>Текущий снимок главного цикла мышления для логирования.</summary>
-  public static (int CycleId, int Weight, int ProblemNodeId, int ThemeId, int PurposeId, string LastStrategyId) GetMainThinkingCycleSnapshot()
+  public static (int CycleId, int Weight, int ProblemNodeId, int ThemeId, int PurposeId, string LastStrategyId, bool AwaitingEvaluation, int PendingSolutionAutomatizmId) GetMainThinkingCycleSnapshot()
   {
-    return (_mainThinkingCycleId, _mainThinkingCycleWeight, _mainThinkingCycleProblemNodeId, _mainThinkingCycleThemeId, _mainThinkingCyclePurposeId, _mainThinkingCycleLastStrategyId);
+    return (_mainThinkingCycleId, _mainThinkingCycleWeight, _mainThinkingCycleProblemNodeId, _mainThinkingCycleThemeId, _mainThinkingCyclePurposeId, _mainThinkingCycleLastStrategyId, _mainThinkingCycleAwaitingEvaluation, _mainThinkingCyclePendingSolutionAutomatizmId);
   }
 
   /// <summary>

@@ -16,7 +16,8 @@ namespace ISIDA.Common
                  string reflexChainInfo = null, string automatizmChainInfo = null,
                  int? thinkingLevel = null, bool? thinkingLevelSuccess = null,
                  int? thinkingThemeTypeId = null, string thinkingThemeTooltip = null,
-                 int? mainThinkingCycleId = null, string mainThinkingCycleTooltip = null);
+                 int? mainThinkingCycleId = null, string mainThinkingCycleTooltip = null,
+                 string mainThinkingCycleTaskStatus = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

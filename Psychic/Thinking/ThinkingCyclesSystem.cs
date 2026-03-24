@@ -404,10 +404,7 @@ namespace ISIDA.Psychic.Thinking
       if (_informationEnvironmentSystem?.CurrentInformationEnvironment == null)
         return null;
 
-      // Во время ожидания оценки оператора нельзя запускать новые решения из thinking-cycles,
-      // иначе получаем повторные исполнения одного и того же автомата при отсутствии ответа.
-      if (AppGlobalState.WaitingForOperatorEvaluation)
-        return null;
+      bool blockNewThinkingSteps = AppGlobalState.WaitingForOperatorEvaluation;
 
       _lock.EnterWriteLock();
       try
@@ -420,6 +417,13 @@ namespace ISIDA.Psychic.Thinking
         var main = _cycles.FirstOrDefault(c => c.IsMainCycle);
         if (main != null)
           main.IsWaitingPeriod = _informationEnvironmentSystem.CurrentInformationEnvironment.IsWaitingPeriod;
+
+        // Во время ожидания оценки оператора нельзя запускать новые решения из thinking-cycles,
+        // иначе получаем повторные исполнения одного и того же автомата при отсутствии ответа.
+        // Фазу жизни (в т.ч. EvaluatePendingCycleSolutions по полезности) при этом выполнять нужно —
+        // иначе цикл «ожидающий оценки» никогда не снимется, пока глобальный флаг ожидания блокирует вход в диспетчер.
+        if (blockNewThinkingSteps)
+          return null;
 
         // Главный цикл всегда первый (обход по снимку Id — список может сокращаться при закрытии цикла).
         var orderedIds = _cycles

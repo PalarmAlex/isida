@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
@@ -141,6 +142,8 @@ namespace ISIDA.Common
       public int MainThinkingCycleThemeId { get; set; }
       public int MainThinkingCyclePurposeId { get; set; }
       public string MainThinkingCycleLastStrategyId { get; set; }
+      /// <summary>Статус задачи главного цикла для UI: Awaiting / NoSolution / Solved (как обводки матрицы циклов).</summary>
+      public string MainThinkingCycleTaskStatus { get; set; }
     }
 
     /// <summary>
@@ -733,7 +736,9 @@ namespace ISIDA.Common
         ["ЦиклМ_проблема"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
             ? state.MainThinkingCycleProblemNodeId.ToString() : "",
         ["ЦиклМ_стратегия"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
-            ? (state.MainThinkingCycleLastStrategyId ?? "") : ""
+            ? (state.MainThinkingCycleLastStrategyId ?? "") : "",
+        ["ЦиклМ_задача"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
+            ? (state.MainThinkingCycleTaskStatus ?? "") : ""
       };
     }
 
@@ -836,8 +841,16 @@ namespace ISIDA.Common
       if (logEntry.TryGetValue("ЦиклМ_стратегия", out var sObj) && sObj != null)
         mcLastStrat = sObj.ToString();
 
+      string mainThinkingCycleTaskStatus = null;
+      if (logEntry.TryGetValue("ЦиклМ_задача", out var taskObj) && taskObj != null)
+      {
+        var t = taskObj.ToString();
+        if (!string.IsNullOrEmpty(t))
+          mainThinkingCycleTaskStatus = t;
+      }
+
       string mainThinkingCycleTooltip = mainThinkingCycleId.HasValue
-          ? BuildMainThinkingCycleTooltip(mcWeight, mcThemeId, mcPurposeId, mcProblem, mcLastStrat)
+          ? BuildMainThinkingCycleTooltip(mcWeight, mcThemeId, mcPurposeId, mcProblem, mcLastStrat, mainThinkingCycleTaskStatus, mainThinkingCycleId)
           : null;
 
       _memoryLogWriter.WriteLog(
@@ -864,7 +877,8 @@ namespace ISIDA.Common
           thinkingThemeTypeId,
           thinkingThemeTooltip,
           mainThinkingCycleId,
-          mainThinkingCycleTooltip
+          mainThinkingCycleTooltip,
+          mainThinkingCycleTaskStatus
       );
     }
 
@@ -878,21 +892,27 @@ namespace ISIDA.Common
       return string.IsNullOrEmpty(name) ? $"({w})" : $"{name} ({w})";
     }
 
-    /// <summary>Подсказка для колонки «Цикл М»: инфо-функция, вес, образ темы, образ цели, узел проблемы.</summary>
+    /// <summary>Подсказка для колонки «Цикл М»: Id экземпляра цикла, инфо-функция (справочник), вес, образ темы, …</summary>
     private static string BuildMainThinkingCycleTooltip(
-        int weight, int themeId, int purposeId, int problemNodeId, string lastStrategyId)
+        int weight, int themeId, int purposeId, int problemNodeId, string lastStrategyId, string taskStatus = null,
+        int? cycleInstanceId = null)
     {
-      int infoFuncId = 0;
-      if (!string.IsNullOrEmpty(lastStrategyId) &&
-          lastStrategyId.StartsWith("infoFunc_", StringComparison.Ordinal))
+      TryParseInfoFuncIdFromLastStrategy(lastStrategyId, out int infoFuncId);
+      string infoName = "";
+      if (infoFuncId > 0)
       {
-        int.TryParse(lastStrategyId.Substring("infoFunc_".Length), out infoFuncId);
+        var entry = InfoFunctionsCatalog.GetById(infoFuncId);
+        infoName = entry?.Name ?? "";
+        if (string.IsNullOrEmpty(infoName))
+          infoName = $"нет в справочнике инфо-функций (проверьте id={infoFuncId})";
       }
-      string infoName = infoFuncId > 0 ? InfoFunctionsStrategy.GetInfoFunctionDisplayName(infoFuncId) : "";
-      if (string.IsNullOrEmpty(infoName)) infoName = "—";
+      else
+        infoName = "—";
 
       var sb = new StringBuilder();
-      sb.AppendLine($"Инфо-функция: {infoFuncId}, {infoName}");
+      if (cycleInstanceId.HasValue && cycleInstanceId.Value > 0)
+        sb.AppendLine($"Экземпляр цикла: id={cycleInstanceId.Value}");
+      sb.AppendLine($"Инфо-функция: №{infoFuncId} — «{infoName}»");
       sb.AppendLine($"Вес: {weight}");
 
       string themePart = "—";
@@ -905,7 +925,30 @@ namespace ISIDA.Common
       sb.AppendLine(purposeId > 0 ? $"Образ цели: {purposeId}" : "Образ цели: —");
 
       sb.Append($"Узел дерева проблем: {problemNodeId}");
+      if (!string.IsNullOrEmpty(taskStatus))
+      {
+        string taskLine = taskStatus == "Awaiting" ? "Задача: ожидается оценка решения"
+            : taskStatus == "NoSolution" ? "Задача: решение не найдено"
+            : taskStatus == "Solved" ? "Задача: найден автоматизм решения (ожидается оценка полезности)"
+            : taskStatus;
+        sb.AppendLine();
+        sb.Append(taskLine);
+      }
       return sb.ToString();
+    }
+
+    /// <summary>Извлекает номер инфо-функции из <see cref="ThinkingCycleInfo.LastStrategyId"/>:
+    /// <c>infoFunc_28</c>, <c>infoFunc28</c> (без подчёркивания).</summary>
+    private static bool TryParseInfoFuncIdFromLastStrategy(string lastStrategyId, out int infoFuncId)
+    {
+      infoFuncId = 0;
+      if (string.IsNullOrWhiteSpace(lastStrategyId)) return false;
+      var s = lastStrategyId.Trim();
+      const string prefix = "infoFunc";
+      if (!s.StartsWith(prefix, StringComparison.Ordinal)) return false;
+      var tail = s.Length > prefix.Length ? s.Substring(prefix.Length) : "";
+      if (tail.StartsWith("_", StringComparison.Ordinal)) tail = tail.Substring(1);
+      return int.TryParse(tail, out infoFuncId) && infoFuncId > 0;
     }
 
     /// <summary>
@@ -1036,6 +1079,9 @@ namespace ISIDA.Common
       state.MainThinkingCycleThemeId = mc.ThemeId;
       state.MainThinkingCyclePurposeId = mc.PurposeId;
       state.MainThinkingCycleLastStrategyId = mc.LastStrategyId;
+      state.MainThinkingCycleTaskStatus = mc.CycleId > 0
+          ? ComputeMainThinkingCycleTaskStatus(mc.AwaitingEvaluation, mc.PendingSolutionAutomatizmId)
+          : null;
 
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
@@ -1121,7 +1167,18 @@ namespace ISIDA.Common
              _lastState.MainThinkingCycleWeight != current.MainThinkingCycleWeight ||
              _lastState.MainThinkingCycleProblemNodeId != current.MainThinkingCycleProblemNodeId ||
              _lastState.MainThinkingCycleThemeId != current.MainThinkingCycleThemeId ||
-             _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId;
+             _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId ||
+             _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus;
+    }
+
+    /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>
+    private static string ComputeMainThinkingCycleTaskStatus(bool awaitingEvaluation, int pendingSolutionAutomatizmId)
+    {
+      if (awaitingEvaluation)
+        return "Awaiting";
+      if (pendingSolutionAutomatizmId <= 0)
+        return "NoSolution";
+      return "Solved";
     }
 
     /// <summary>

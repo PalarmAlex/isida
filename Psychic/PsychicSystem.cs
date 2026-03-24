@@ -1399,7 +1399,8 @@ namespace ISIDA.Psychic
         AppGlobalState.ClearMainThinkingCycleSnapshot();
       else
         AppGlobalState.UpdateMainThinkingCycleSnapshot(
-          snap.Id, snap.Weight, snap.ProblemNodeId, snap.ThemeId, snap.PurposeId, snap.LastStrategyId);
+          snap.Id, snap.Weight, snap.ProblemNodeId, snap.ThemeId, snap.PurposeId, snap.LastStrategyId,
+          snap.AwaitingEvaluation, snap.PendingSolutionAutomatizmId);
     }
 
     #region Диагностика циклов осмысления (3-й уровень)
