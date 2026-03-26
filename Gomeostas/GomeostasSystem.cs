@@ -1910,6 +1910,153 @@ namespace ISIDA.Gomeostas
       }
     }
 
+    /// <summary>
+    /// Копия списка параметров без захвата блокировки. Вызывать только при уже удерживаемой блокировке записи <c>_lock</c>
+    /// (иначе возможна гонка данных).
+    /// </summary>
+    internal List<ParameterData> GetAllParametersNoLock()
+    {
+      return new List<ParameterData>(_agentState.Parameters);
+    }
+
+    /// <summary>
+    /// Безопасное значение по умолчанию для старта сценария: дефицит — у верхней границы диапазона, избыток — у нижней (чуть внутри критических пределов).
+    /// </summary>
+    public static float GetDefaultInitialValueForScenarioParameter(ParameterData p)
+    {
+      if (p == null)
+        return 50f;
+      const float eps = 0.5f;
+      if (p.Speed < 0)
+        return Math.Max(p.CriticalMinValue, Math.Min(p.CriticalMaxValue, 100f) - eps);
+      return Math.Min(p.CriticalMaxValue, Math.Max(p.CriticalMinValue, 0f) + eps);
+    }
+
+    private static float ClampValueToParameterRange(ParameterData p, float v)
+    {
+      float lo = Math.Max(0f, p.CriticalMinValue);
+      float hi = Math.Min(100f, p.CriticalMaxValue);
+      if (v < lo) return lo;
+      if (v > hi) return hi;
+      return v;
+    }
+
+    private static ParameterData CloneParameterForPreview(ParameterData p, float valueForClone)
+    {
+      float v = ClampValueToParameterRange(p, valueForClone);
+      var c = new ParameterData(p.Id, p.Name, p.Description, v, p.Weight, p.NormaWell, p.Speed, p.IsVital, p.CriticalMinValue, p.CriticalMaxValue, ParameterState.Normal);
+      c.StyleActivations.Clear();
+      foreach (var kv in p.StyleActivations)
+        c.StyleActivations[kv.Key] = kv.Value.ToList();
+      return c;
+    }
+
+    private List<BehaviorStyle> BuildBaseActiveStylesForPreview(ParameterData dominantParam, int dominantZone)
+    {
+      var activeStyles = new List<BehaviorStyle>();
+      var styleIds = new List<int>();
+      if (dominantParam != null && dominantParam.StyleActivations.TryGetValue(dominantZone, out var ids))
+        styleIds = ids;
+      if (styleIds.Any())
+        ApplyActivationRule(styleIds, activeStyles);
+      if (dominantParam == null || !styleIds.Any())
+      {
+        if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var defaultStyle))
+          activeStyles.Add(defaultStyle);
+      }
+      return activeStyles;
+    }
+
+    private static string FormatOverallStatePreview(HomeostasisOverallState s)
+    {
+      switch (s)
+      {
+        case HomeostasisOverallState.Bad: return "Плохо";
+        case HomeostasisOverallState.Well: return "Хорошо";
+        default: return "Норма";
+      }
+    }
+
+    /// <summary>
+    /// Предпросмотр общего состояния и активных стилей при заданных значениях параметров (те же расчёты, что и в рабочем режиме).
+    /// Не изменяет живые параметры агента; временно восстанавливает <see cref="AppGlobalState.CurrentOverallState"/> и <see cref="AppGlobalState.DominantParam"/> после расчёта.
+    /// </summary>
+    public (string OverallStateText, string ActiveStylesText) PreviewScenarioHomeostasisForEditor(IReadOnlyDictionary<int, float> valueByParamId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        // Превью не требует «активной» пульсации (IsFirstPulse): считаем по клонам параметров.
+        if (!TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.NotSleeping, silent: true))
+          return ("—", "—");
+
+        var parameters = new List<ParameterData>();
+        foreach (var p in _agentState.Parameters)
+        {
+          float v = valueByParamId != null && valueByParamId.TryGetValue(p.Id, out var v0)
+              ? v0
+              : GetDefaultInitialValueForScenarioParameter(p);
+          parameters.Add(CloneParameterForPreview(p, v));
+        }
+
+        int? lastWell = null;
+        var prevOverall = AppGlobalState.CurrentOverallState;
+        var prevDom = AppGlobalState.DominantParam;
+        try
+        {
+          var homeo = _calculator.CalculateAgentState(parameters, _dynamicTime, _difSensorPar, ref lastWell, _compareLevel);
+          var (dominant_param, dominantZone, _) = _calculator.FindDominantParameter(parameters, _dynamicTime, _difSensorPar);
+          var baseStyles = BuildBaseActiveStylesForPreview(dominant_param, dominantZone);
+          var (finalStylesWithWeights, _, _, _) = _calculator.GetFinalActiveStyles(baseStyles, parameters, _dynamicTime, _difSensorPar);
+          var finalStyles = finalStylesWithWeights.Select(sw => sw.Style).ToList();
+          if (finalStyles == null || finalStyles.Count == 0)
+          {
+            if (_agentState.BehaviorStyles.TryGetValue(_defaultStileId, out var stuporStyle))
+              finalStyles = new List<BehaviorStyle> { stuporStyle };
+          }
+
+          var names = finalStyles.Where(s => s != null).Select(s => s.Name).Where(n => !string.IsNullOrEmpty(n)).ToList();
+          string stylesText = names.Count > 0 ? string.Join(", ", names) : "—";
+          return (FormatOverallStatePreview(homeo.OverallState), stylesText);
+        }
+        finally
+        {
+          AppGlobalState.CurrentOverallState = prevOverall;
+          AppGlobalState.DominantParam = prevDom;
+        }
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Устанавливает значения параметров гомеостаза перед стартом сценария по явным числам (см. <see cref="ISIDA.Scenarios.ScenarioHomeostasisValuesFormat"/>).
+    /// Для отсутствующих в словаре id подставляется <see cref="GetDefaultInitialValueForScenarioParameter"/>.
+    /// </summary>
+    public void ApplyScenarioInitialHomeostasisValues(IReadOnlyDictionary<int, float> valueByParamId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
+          return;
+        foreach (var p in _agentState.Parameters)
+        {
+          float v = valueByParamId != null && valueByParamId.TryGetValue(p.Id, out var v0)
+              ? v0
+              : GetDefaultInitialValueForScenarioParameter(p);
+          p.Value = ClampValueToParameterRange(p, v);
+        }
+        OnExternalInfluenceApplied(false);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #endregion
 
     #region Управление состоянием агента

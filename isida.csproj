@@ -107,6 +107,12 @@
     <Compile Include="Gomeostas\StyleCombinationsManager.cs" />
     <Compile Include="Gomeostas\ValidationService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Scenarios\IOperatorScenarioPult.cs" />
+    <Compile Include="Scenarios\OperatorScenarioEngine.cs" />
+    <Compile Include="Scenarios\OperatorScenarioModels.cs" />
+    <Compile Include="Scenarios\OperatorScenarioRunner.cs" />
+    <Compile Include="Scenarios\OperatorScenarioValidator.cs" />
+    <Compile Include="Scenarios\ScenarioPulseSchedule.cs" />
     <Compile Include="Psychic\Automatism\ActionsImagesSystem.cs" />
     <Compile Include="Psychic\Automatism\AutomatismExecutionService.cs" />
     <Compile Include="Psychic\Automatism\AutomatismResultTracker.cs" />
