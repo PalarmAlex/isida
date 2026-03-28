@@ -82,10 +82,21 @@ public static class AppGlobalState
 
   private static int _waitingPeriodCountdown = 0;
   private static bool _waitingForOperatorEvaluation = false;
+  /// <summary>ID автоматизма, запущенного перед окном ожидания (для отложенной оценки, если поля психики обнулились).</summary>
+  private static int _automatizmIdWaitingForOperatorEvaluation = 0;
   private static int _lastAutomatizmEvaluationTime = 0;
   private static int _waitingPeriodForActionsVal = 0;
   private static int _noOperatorStimulusSilencePulses = 30;
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
+
+  /// <summary>
+  /// До применения конфига движком период ожидания в пульсах может быть 0 — тогда окно ответа считалось закрытым,
+  /// TryScheduleDeferredOperatorEvaluationOnStimulus сбрасывал зеркало и сдвиги не создавались. Дефолт 30 пульсов, как у IsidaEngine.
+  /// </summary>
+  private static int GetEffectiveWaitingPeriodForActionsVal()
+  {
+    return _waitingPeriodForActionsVal > 0 ? _waitingPeriodForActionsVal : 30;
+  }
 
   #endregion
 
@@ -741,6 +752,9 @@ public static class AppGlobalState
     set => _waitingForOperatorEvaluation = value;
   }
 
+  /// <summary>Автоматизм, по которому ждём ответ оператора (снимок из <see cref="StartWaitingForOperatorEvaluation"/>).</summary>
+  public static int AutomatizmIdWaitingForOperatorEvaluation => _automatizmIdWaitingForOperatorEvaluation;
+
   /// <summary>
   /// Состояние агента перед воздействием оператора (для оценки)
   /// </summary>
@@ -783,11 +797,12 @@ public static class AppGlobalState
   public static void StartWaitingForOperatorEvaluation(int automatizmId)
   {
     WaitingForOperatorEvaluation = true;
+    _automatizmIdWaitingForOperatorEvaluation = automatizmId > 0 ? automatizmId : 0;
     LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
-    WaitingPeriodCountdown = WaitingPeriodForActionsVal;
+    WaitingPeriodCountdown = GetEffectiveWaitingPeriodForActionsVal();
 
     Logger.Info($"Начат период ожидания оценки оператора для автоматизма ID={automatizmId}, " +
-                $"длительность={WaitingPeriodForActionsVal} пульсов");
+                $"длительность={WaitingPeriodCountdown} пульсов");
   }
 
   /// <summary>
@@ -835,6 +850,7 @@ public static class AppGlobalState
     WaitingForOperatorEvaluation = false;
     WaitingPeriodCountdown = 0;
     LastRunAutomatizmPulsCount = 0;
+    _automatizmIdWaitingForOperatorEvaluation = 0;
   }
 
   /// <summary>
@@ -842,17 +858,31 @@ public static class AppGlobalState
   /// </summary>
   public static bool IsEvaluationTime()
   {
-    if (!_waitingForOperatorEvaluation ||
-        LastRunAutomatizmPulsCount <= 0 ||
-        WaitingPeriodForActionsVal <= 0)
+    if (!_waitingForOperatorEvaluation || LastRunAutomatizmPulsCount <= 0)
       return false;
 
+    int period = GetEffectiveWaitingPeriodForActionsVal();
     int currentPulse = GlobalTimer.GlobalPulsCount;
     int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
 
     // Только если мы активно ждем и время в пределах ожидания
-    return timeSinceAutomatizm <= WaitingPeriodForActionsVal &&
+    return timeSinceAutomatizm <= period &&
            timeSinceAutomatizm > 0;
+  }
+
+  /// <summary>
+  /// Окно для ответа оператора с пульта при активном ожидании оценки: те же границы пульсов, что и у
+  /// <see cref="IsEvaluationTime"/>, но допускается <c>timeSince == 0</c> (второй стимул в том же глобальном
+  /// пульсе после эхо — сценарий до <see cref="ISIDA.Psychic.PsychicSystem.ProcessPsychicPulse"/>).
+  /// </summary>
+  public static bool IsOperatorResponseWithinWaitingWindow()
+  {
+    if (!_waitingForOperatorEvaluation || LastRunAutomatizmPulsCount <= 0)
+      return false;
+
+    int period = GetEffectiveWaitingPeriodForActionsVal();
+    int timeSince = GlobalTimer.GlobalPulsCount - LastRunAutomatizmPulsCount;
+    return timeSince >= 0 && timeSince <= period;
   }
 
   #endregion

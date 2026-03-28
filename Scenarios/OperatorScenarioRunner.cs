@@ -1,6 +1,5 @@
 using ISIDA.Common;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace ISIDA.Scenarios
@@ -20,6 +19,9 @@ namespace ISIDA.Scenarios
     public string ErrorMessage { get; set; }
     /// <summary>Сценарий, по которому шёл прогон.</summary>
     public ScenarioDocument Document { get; set; }
+
+    /// <summary>Глобальный номер пульса на момент старта сценария (для сопоставления с логами).</summary>
+    public int AnchorGlobalPulse { get; set; }
   }
 
   /// <summary>Выполнение сценария оператора по событиям пульса.</summary>
@@ -27,7 +29,6 @@ namespace ISIDA.Scenarios
   {
     private ScenarioDocument _doc;
     private int _anchorPulse;
-    private Dictionary<int, ScenarioLineRow> _byPulse;
     private int _maxPulse;
     private Func<IOperatorScenarioPult> _getPult;
     private Action _cancelWaitingPeriod;
@@ -57,11 +58,21 @@ namespace ISIDA.Scenarios
       _getPult = getPult ?? throw new ArgumentNullException(nameof(getPult));
       _cancelWaitingPeriod = cancelWaitingPeriod;
 
-      _byPulse = _doc.Lines.ToDictionary(r => r.PulseWithinScenario, r => r);
-      _maxPulse = _byPulse.Count == 0 ? 0 : _byPulse.Keys.Max();
+      _maxPulse = _doc.Lines.Count == 0 ? 0 : _doc.Lines.Max(r => r.PulseWithinScenario);
+      // Якорь — глобальный номер пульса в момент Start (последний завершённый на момент вызова).
+      // Срабатывание шага: глобальный пульс == якорь + PulseWithinScenario (без пересчёта расписания).
       _anchorPulse = GlobalTimer.GlobalPulsCount;
       _lastExecutedStepPulse = 0;
       _running = true;
+      // До первого шага сбросить «висящее» ожидание оценки/зеркало с ручной сессии — иначе первый стимул не получает ОР+эхо (блок по WaitingForOperatorEvaluation).
+      _cancelWaitingPeriod?.Invoke();
+      {
+        var id = _doc.Header?.Id ?? 0;
+        var schedule = string.Join(", ", _doc.Lines.Select(l =>
+            $"s{l.StepIndex}:внутрПульс={l.PulseWithinScenario}->глоб={_anchorPulse + l.PulseWithinScenario}"));
+        ScenarioRunnerDiagnostics.Write(
+            $"[Start] scenarioId={id} anchorGlobal={_anchorPulse} (глобальный счётчик в момент Start) schedule=[{schedule}] maxВнутрПульс={_maxPulse}");
+      }
       RunningStateChanged?.Invoke();
     }
 
@@ -93,18 +104,35 @@ namespace ISIDA.Scenarios
       });
     }
 
-    /// <summary>Вызывается хостом после завершения очередного глобального пульса.</summary>
+    /// <summary>Вызывается хостом на глобальном пульсе после <c>UpdateStateOnly</c>, до <c>ProcessPsychicPulse</c>
+    /// (стимул после дрейфа гомеостаза на этом пульсе, до психики — см. <c>GlobalTimer.OnPulseAfterGomeostasisBeforePsychic</c>).</summary>
     /// <param name="globalPulseCount">Текущее значение глобального счётчика пульсов.</param>
-    public void OnPulseCompleted(int globalPulseCount)
+    public void OnGlobalPulseBeforeProcessing(int globalPulseCount)
     {
       if (!_running)
         return;
 
-      int stepPulse = globalPulseCount - _anchorPulse;
-      if (stepPulse < 1)
+      if (globalPulseCount < _anchorPulse + 1)
         return;
 
-      if (!_byPulse.TryGetValue(stepPulse, out var line))
+      ScenarioLineRow line = null;
+      foreach (var row in _doc.Lines)
+      {
+        if (globalPulseCount == _anchorPulse + row.PulseWithinScenario)
+        {
+          line = row;
+          break;
+        }
+      }
+
+      {
+        int d = globalPulseCount - _anchorPulse;
+        string hit = line == null ? "-" : $"step{line.StepIndex},внутр={line.PulseWithinScenario}";
+        ScenarioRunnerDiagnostics.Write(
+            $"[Pulse] global={globalPulseCount} anchor={_anchorPulse} дельтаОтСтарта={d} совпадение={hit}");
+      }
+
+      if (line == null)
         return;
 
       try
@@ -112,6 +140,7 @@ namespace ISIDA.Scenarios
         if (line.Kind == ScenarioLineKind.WaitClick)
         {
           _cancelWaitingPeriod?.Invoke();
+          ScenarioRunnerDiagnostics.Write($"[WaitClick] step={line.StepIndex} global={globalPulseCount}");
         }
         else
         {
@@ -133,18 +162,22 @@ namespace ISIDA.Scenarios
               line.MoodId);
           if (err != null)
           {
+            ScenarioRunnerDiagnostics.Write($"[Apply FAIL] step={line.StepIndex} global={globalPulseCount} err={err}");
             Fail(err);
             return;
           }
+          ScenarioRunnerDiagnostics.Write(
+              $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0}");
         }
 
-        _lastExecutedStepPulse = stepPulse;
-        if (stepPulse >= _maxPulse)
+        int delta = line.PulseWithinScenario;
+        _lastExecutedStepPulse = delta;
+        if (delta >= _maxPulse)
         {
           Complete(new OperatorScenarioCompletedEventArgs
           {
             Success = true,
-            LastExecutedPulseWithinScenario = stepPulse,
+            LastExecutedPulseWithinScenario = delta,
             Document = _doc
           });
         }
@@ -170,9 +203,11 @@ namespace ISIDA.Scenarios
     {
       if (!_running)
         return;
+      ScenarioRunnerDiagnostics.Write(
+          $"[Finish] success={e.Success} userAbort={e.AbortedByUser} pulsStop={e.AbortedByPulsationStop} lastВнутрПульс={e.LastExecutedPulseWithinScenario} anchor={_anchorPulse} err={e.ErrorMessage ?? ""}");
       e.Document = _doc;
+      e.AnchorGlobalPulse = _anchorPulse;
       _running = false;
-      _byPulse = null;
       _doc = null;
       RunningStateChanged?.Invoke();
       Finished?.Invoke(this, e);

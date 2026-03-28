@@ -110,7 +110,9 @@
     <Compile Include="Scenarios\IOperatorScenarioPult.cs" />
     <Compile Include="Scenarios\OperatorScenarioEngine.cs" />
     <Compile Include="Scenarios\OperatorScenarioModels.cs" />
+    <Compile Include="Scenarios\ScenarioLogExpectationModels.cs" />
     <Compile Include="Scenarios\OperatorScenarioRunner.cs" />
+    <Compile Include="Scenarios\ScenarioRunnerDiagnostics.cs" />
     <Compile Include="Scenarios\OperatorScenarioValidator.cs" />
     <Compile Include="Scenarios\ScenarioPulseSchedule.cs" />
     <Compile Include="Psychic\Automatism\ActionsImagesSystem.cs" />

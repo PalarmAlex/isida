@@ -64,9 +64,12 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        // При !waiting — чистый старт попугая; при waiting ответ мог уже записать RegisterOperatorResponse (TrySchedule) — не трогать pending.
+        if (!AppGlobalState.WaitingForOperatorEvaluation)
+          ClearPendingOperatorResponse();
+
         _dialogMirrorActive = true;
         _dialogTriggerNodeId = detectedNodeId;
-        _pendingResponseActionsImageId = 0;
 
         var (id, created) = _automatizmSystem.CreateNewAutomatizm(detectedNodeId, responseActionsImageId, true);
         if (created == null)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 
 namespace ISIDA.Scenarios
@@ -32,6 +33,22 @@ namespace ISIDA.Scenarios
           oc.Add(row);
         return;
       }
+      if (lines is BindingList<ScenarioLineRow> bl)
+      {
+        bl.RaiseListChangedEvents = false;
+        try
+        {
+          bl.Clear();
+          foreach (var row in sorted)
+            bl.Add(row);
+        }
+        finally
+        {
+          bl.RaiseListChangedEvents = true;
+          bl.ResetBindings();
+        }
+        return;
+      }
       for (int i = lines.Count - 1; i >= 0; i--)
         lines.RemoveAt(i);
       foreach (var row in sorted)
@@ -58,6 +75,18 @@ namespace ISIDA.Scenarios
         sorted[i].PulseWithinScenario = pulse;
         pulse = pulse + delay + 1;
       }
+    }
+
+    /// <summary>
+    /// Нумерует шаги 1…n в порядке строк списка, не меняя <see cref="ScenarioLineRow.PulseWithinScenario"/>.
+    /// Используется при загрузке/редактировании, чтобы не затирать заданные номера пульсов.
+    /// </summary>
+    public static void EnsureSequentialStepIndices(IList<ScenarioLineRow> lines)
+    {
+      if (lines == null || lines.Count == 0)
+        return;
+      for (int i = 0; i < lines.Count; i++)
+        lines[i].StepIndex = i + 1;
     }
   }
 }

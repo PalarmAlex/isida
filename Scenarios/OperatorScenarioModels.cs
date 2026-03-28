@@ -207,13 +207,20 @@ namespace ISIDA.Scenarios
     /// <summary>Версия заголовка реестра сценариев.</summary>
     public const int FormatVersion = 1;
 
-    /// <summary>Версия файла строк сценария (шаг + пульс + …).</summary>
-    public const int LinesFileFormatVersion = 3;
+    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи).</summary>
+    public const int LinesFileFormatVersion = 4;
 
     /// <summary>Метаданные сценария (id, название, дата).</summary>
     public ScenarioHeader Header { get; set; } = new ScenarioHeader();
     /// <summary>Строки шагов в порядке выполнения.</summary>
     public List<ScenarioLineRow> Lines { get; set; } = new List<ScenarioLineRow>();
+
+    /// <summary>Галки «не проверять столбец» для таблицы ожидаемых логов.</summary>
+    public ScenarioLogExpectationColumnSkips LogExpectationColumnSkips { get; set; } =
+        new ScenarioLogExpectationColumnSkips();
+
+    /// <summary>Ожидаемые значения колонок лога по шагам (по одной строке на шаг сценария).</summary>
+    public List<ScenarioLogExpectationRow> LogExpectations { get; set; } = new List<ScenarioLogExpectationRow>();
 
     /// <summary>Копия документа со всеми строками.</summary>
     public ScenarioDocument Clone()
@@ -221,7 +228,9 @@ namespace ISIDA.Scenarios
       return new ScenarioDocument
       {
         Header = Header?.Clone() ?? new ScenarioHeader(),
-        Lines = Lines?.Select(l => l.Clone()).ToList() ?? new List<ScenarioLineRow>()
+        Lines = Lines?.Select(l => l.Clone()).ToList() ?? new List<ScenarioLineRow>(),
+        LogExpectationColumnSkips = LogExpectationColumnSkips?.Clone() ?? new ScenarioLogExpectationColumnSkips(),
+        LogExpectations = LogExpectations?.Select(e => e.Clone()).ToList() ?? new List<ScenarioLogExpectationRow>()
       };
     }
   }

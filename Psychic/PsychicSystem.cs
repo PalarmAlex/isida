@@ -211,8 +211,16 @@ namespace ISIDA.Psychic
     private int _currentAutomatizmId = 0;
     private int _previousAutomatizmId = 0;
 
-    // оператор отреагировал
-    private bool _isAnswer = false;
+    /// <summary>
+    /// Очередь на оценку: стимул пришёл в SensorActivation; сама оценка выполняется только в начале следующего <see cref="ProcessPsychicPulse"/> (после <c>UpdateStateOnly</c>).
+    /// Не переносить вызов <see cref="EvaluatePreviousAutomatizm"/> в SensorActivation — иначе снова не видно изменений гомеостаза после воздействия пульта.
+    /// </summary>
+    private int _deferredOperatorEvaluationAutomatizmId = 0;
+
+    /// <summary>
+    /// Снимок LastRunAutomatizmPulsCount на момент стимула-ответа (до StartWaiting нового автоматизма на том же пульсе).
+    /// </summary>
+    private int _deferredOperatorEvaluationLastRunPulseForResponse = 0;
 
     #endregion
 
@@ -278,32 +286,30 @@ namespace ISIDA.Psychic
             WakeUppingActivation = false;
           }
 
-          if (AppGlobalState.WaitingForOperatorEvaluation)
+          // Оценка автоматизма по ответу оператора: только здесь, на пульсе после стимула (не в SensorActivation).
+          if (_deferredOperatorEvaluationAutomatizmId > 0)
           {
-            // Время ожидания оценки автоматизма истекло
-            if (!AppGlobalState.IsEvaluationTime())
+            int idToEval = _deferredOperatorEvaluationAutomatizmId;
+            int lastRunSnap = _deferredOperatorEvaluationLastRunPulseForResponse;
+            _deferredOperatorEvaluationAutomatizmId = 0;
+            _deferredOperatorEvaluationLastRunPulseForResponse = 0;
+
+            mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(idToEval, lastRunSnap);
+
+            if (_currentAutomatizmId == idToEval && AppGlobalState.WaitingForOperatorEvaluation)
+              EndOperatorEvaluationWait();
+          }
+
+          // Истечение окна ожидания без нового стимула с пульта (отложенная оценка не пересекается — она снимает ожидание только при совпадении id, см. выше).
+          // IsEvaluationTime() ложен и на том же пульсе, что и LastRunAutomatizmPulsCount (timeSince==0) — это не истечение, а «ещё тот же пульс после стимула».
+          // Не сбрасывать ожидание на этом пульсе: иначе сценарий/стимул в фазе до ProcessPsychicPulse уничтожает зеркало до ответа оператора на следующем пульсе.
+          if (AppGlobalState.WaitingForOperatorEvaluation && !AppGlobalState.IsEvaluationTime())
+          {
+            int timeSinceAutomatizm = GlobalTimer.GlobalPulsCount - AppGlobalState.LastRunAutomatizmPulsCount;
+            if (timeSinceAutomatizm > 0)
             {
-              // Если оператор успел прислать ответ в окне, но следующий пульс пришёл уже после его закрытия — всё равно создаём зеркальные автоматизмы
-              if (_isAnswer)
-              {
-                int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
-                if (automatizmToEvaluate > 0)
-                {
-                  mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(automatizmToEvaluate);
-                  _isAnswer = false;
-                }
-              }
               ResetAutomatizmWaitingState();
               Logger.Info($"Время ожидания оценки истекло для автоматизма ID={_currentAutomatizmId}");
-            }
-            else
-            {
-              int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
-              if (automatizmToEvaluate > 0 && _isAnswer)
-              {
-                mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(automatizmToEvaluate);
-                _isAnswer = false;
-              }
             }
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
@@ -431,9 +437,6 @@ namespace ISIDA.Psychic
 
       try
       {
-        if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2 && AppGlobalState.IsEvaluationTime())
-          _isAnswer = true;
-
         if (actionIdList != null && actionIdList.Count > 0)
           AppGlobalState.RecordStimulusInfluenceActions(actionIdList);
 
@@ -495,19 +498,16 @@ namespace ISIDA.Psychic
         {
           bool hasVerbalPart = phraseIdList?.Any() == true;
           bool hasNonVerbalPart = actionIdList?.Any() == true;
-          if (AppGlobalState.WaitingForOperatorEvaluation && activationType >= 2)
-          {
-            if (AppGlobalState.IsEvaluationTime())
-              _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
-            else
-              ResetAutomatizmWaitingState();
-          }
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
 
           // Обновить информационную среду (Danger, VeryActualSituation) для обоих веток.
           if (_informationEnvironmentSystem != null)
             _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
+
+          // Стадия 3–4+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId).
+          TryScheduleDeferredOperatorEvaluationOnStimulus(
+              activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
           // Стадия < 4 — только ОР (без уровней 1–2 и без циклов мышления). Стадия >= 4 — уровни мышления и циклы; без ОР.
           if (AppGlobalState.EvolutionStage < 4)
@@ -546,7 +546,8 @@ namespace ISIDA.Psychic
 
             atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
 
-            // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору).
+            // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору). Только при отсутствии ожидания оценки:
+            // иначе на стимуле-ответе оператора (TrySchedule уже вызвал RegisterOperatorResponse) попугай создавал бы второе эхо и ломал зеркало.
             if (atmz == null &&
                 AppGlobalState.EvolutionStage == 3 &&
                 !AppGlobalState.WaitingForOperatorEvaluation &&
@@ -800,9 +801,7 @@ namespace ISIDA.Psychic
       env.UnresolvedPulseCount = PulseCount;
       env.IsWaitingPeriod = false;
 
-      // Моторный автоматизм на стимул не найден — передаём проблему циклам мышления; глобальное ожидание оценки иначе блокирует DispatchCycles
-      if (AppGlobalState.WaitingForOperatorEvaluation)
-        AppGlobalState.ForceStopWaitingForOperatorEvaluation();
+      // Ожидание оценки снимается после отложенной оценки в ProcessPsychicPulse / при отсутствии ID (TryScheduleDeferredOperatorEvaluationOnStimulus), до сюда не дублировать ForceStop.
 
       Logger.Info($"Уровень 2 не решён — проблема для циклов мышления. NodeId={nodeId}, ActionsImageId={actionsImageId}");
     }
@@ -1062,20 +1061,77 @@ namespace ISIDA.Psychic
       AppGlobalState.WaitingForOperatorEvaluation = false;
       _currentAutomatizmId = 0;
       _mirrorAutomatizmService.ResetDialogMirror();
+      _deferredOperatorEvaluationAutomatizmId = 0;
+      _deferredOperatorEvaluationLastRunPulseForResponse = 0;
     }
 
     /// <summary>
-    /// Оценить предыдущий автоматизм на основе СТИМУЛА оператора
+    /// Сброс ожидания оценки после разбора отложенной оценки, если новый автоматизм на стимул не перезаписал ожидание
+    /// (иначе гонка с <see cref="ThinkingCyclesSystem.DispatchCycles"/>).
     /// </summary>
-    private int EvaluatePreviousAutomatizm(int automatizmIdToEvaluate)
+    private static void EndOperatorEvaluationWait()
+    {
+      AppGlobalState.ResetWaitingForOperatorEvaluation();
+    }
+
+    /// <summary>
+    /// Стимул с пульта в окне ожидания: зарегистрировать ответ оператора и поставить оценку в очередь на следующий <see cref="ProcessPsychicPulse"/>.
+    /// Не вызывать отсюда <see cref="EvaluatePreviousAutomatizm"/> — только после <c>UpdateStateOnly</c> на следующем пульсе, иначе оценка не увидит изменений гомеостаза.
+    /// </summary>
+    private void TryScheduleDeferredOperatorEvaluationOnStimulus(
+      int activationType,
+      int actionsImageId,
+      int automatizmNodeId,
+      bool hasVerbalPart,
+      bool hasNonVerbalPart)
+    {
+      if (!AppGlobalState.WaitingForOperatorEvaluation || activationType < 2)
+        return;
+
+      // IsEvaluationTime() требует timeSince>0; при стимуле сценария на том же пульсе, что и LastRun (второй вызов
+      // SensorActivation после эхо) timeSince==0 — ответ оператора всё равно валиден, иначе сбрасывается зеркало и не создаётся сдвиг.
+      if (!AppGlobalState.IsOperatorResponseWithinWaitingWindow())
+      {
+        ResetAutomatizmWaitingState();
+        return;
+      }
+
+      _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
+
+      // Сначала ID из StartWaiting (последний запущенный, по нему открыто окно), затем текущий — иначе при цепочке эхо
+      // _previous указывает на более ранний автоматизм и подменяет оценку/сдвиг (подсовывается «предыдущий» вместо эха).
+      int automatizmToEvaluate = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+      if (automatizmToEvaluate <= 0)
+        automatizmToEvaluate = _currentAutomatizmId > 0 ? _currentAutomatizmId : _previousAutomatizmId;
+      if (automatizmToEvaluate <= 0)
+      {
+        EndOperatorEvaluationWait();
+        return;
+      }
+
+      _deferredOperatorEvaluationAutomatizmId = automatizmToEvaluate;
+      _deferredOperatorEvaluationLastRunPulseForResponse = AppGlobalState.LastRunAutomatizmPulsCount;
+    }
+
+    /// <summary>
+    /// Оценить предыдущий автоматизм по стимулу оператора. Вызывать только из <see cref="ProcessPsychicPulse"/> на пульсе после стимула (не из SensorActivation).
+    /// </summary>
+    /// <param name="automatizmIdToEvaluate">ID автоматизма агента, на который отвечает оператор.</param>
+    /// <param name="lastRunPulseForResponseTime">
+    /// Пульс, с которого считать время реакции оператора (снимок до StartWaiting нового автоматизма на пульсе стимула); 0 — взять из AppGlobalState.
+    /// </param>
+    private int EvaluatePreviousAutomatizm(int automatizmIdToEvaluate, int lastRunPulseForResponseTime = 0)
     {
       if (automatizmIdToEvaluate <= 0)
         return 0;
 
+      if (lastRunPulseForResponseTime <= 0)
+        lastRunPulseForResponseTime = AppGlobalState.LastRunAutomatizmPulsCount;
+
       // Получаем состояние до автоматизма
       var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
 
-      // Текущее состояние после стимула оператора
+      // Текущее состояние после стимула оператора (пересчитано в UpdateStateOnly в начале этого пульса)
       var stateAfter = AppGlobalState.CurrentOverallState;
 
       // Вычисляем оценку
@@ -1085,8 +1141,7 @@ namespace ISIDA.Psychic
       else if (stateAfter < stateBefore)
         assessment = -1; // Ухудшение
 
-      // Время реакции оператора
-      int responseTime = PulseCount - AppGlobalState.LastRunAutomatizmPulsCount;
+      int responseTime = PulseCount - lastRunPulseForResponseTime;
 
       int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
       _automatismResultTracker.MarkOperatorRecognition(

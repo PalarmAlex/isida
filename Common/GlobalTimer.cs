@@ -45,6 +45,13 @@ namespace ISIDA.Common
     public static event Action<int> OnPulseCompleted;
 
     /// <summary>
+    /// После <see cref="Gomeostas.GomeostasSystem.UpdateStateOnly"/> на пульсе, до <see cref="Psychic.PsychicSystem.ProcessPsychicPulse"/> —
+    /// для сценария оператора: стимул на том же глобальном пульсе, но после дрейфа гомеостаза (как при клике в паузе между фазами),
+    /// чтобы не накладываться на отложенную оценку ОР/зеркало до обновления параметров.
+    /// </summary>
+    public static event Action<int> OnPulseAfterGomeostasisBeforePsychic;
+
+    /// <summary>
     /// Событие ошибки пульсации
     /// </summary>
     public static event Action<string> OnPulseError;
@@ -227,6 +234,7 @@ namespace ISIDA.Common
 
         // Очищаем подписки на события
         OnPulseCompleted = null;
+        OnPulseAfterGomeostasisBeforePsychic = null;
         OnPulseError = null;
         OnPulseStateChanged = null;
         OnPulseBrightnessChanged = null;
@@ -469,6 +477,7 @@ namespace ISIDA.Common
         {
           // ОЧИСТКА ПОДПИСОК НА СОБЫТИЯ
           OnPulseCompleted = null;
+          OnPulseAfterGomeostasisBeforePsychic = null;
           OnPulseError = null;
           OnPulseStateChanged = null;
           OnPulseBrightnessChanged = null;
@@ -526,14 +535,28 @@ namespace ISIDA.Common
           SafeStopWithAgentDeath();
           return;
         }
-        else
+
+        try
         {
-          // флаг сна получмть когда класс сна будет
-          int sleepingType = 0;
-          var currentStyles = AppGlobalState.ActiveStyles;
-          var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
-          _psychicSystem.ProcessPsychicPulse(activetStyleIds, GlobalPulsCount, sleepingType);
+          OnPulseAfterGomeostasisBeforePsychic?.Invoke(GlobalPulsCount);
         }
+        catch (Exception ex)
+        {
+          Logger.Warning($"OnPulseAfterGomeostasisBeforePsychic: {ex.Message}");
+        }
+
+        if (AppGlobalState.IsDead)
+        {
+          Logger.Warning($"Агент мертв на пульсе {GlobalPulsCount}");
+          SafeStopWithAgentDeath();
+          return;
+        }
+
+        // флаг сна получмть когда класс сна будет
+        int sleepingType = 0;
+        var currentStyles = AppGlobalState.ActiveStyles;
+        var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
+        _psychicSystem.ProcessPsychicPulse(activetStyleIds, GlobalPulsCount, sleepingType);
 
         // Увеличение времени жизни в пульсах для условных рефлексов
         if (!AppGlobalState.IsDead && HasConditionedReflexesSystem)
@@ -588,7 +611,8 @@ namespace ISIDA.Common
           }
         }
 
-        if ((_researchLogger != null && !_researchLogger.IsDisposed) && !AppGlobalState.IsDead)
+        // Сценарий оператора, UI и др. подписчики должны получать пульс независимо от наличия ResearchLogger.
+        if (!AppGlobalState.IsDead)
           OnPulseCompleted?.Invoke(GlobalPulsCount);
       }
       catch (Exception ex)

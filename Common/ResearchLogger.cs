@@ -97,7 +97,10 @@ namespace ISIDA.Common
     private static ILogWriter _memoryLogWriter;
 
     private Dictionary<string, object> _currentPulseLogEntry = null;
+    /// <summary>Номер пульса в колонке «Пульс» (может отличаться от глобального на +1, см. correctPulse).</summary>
     private int _bufferedPulse = -1;
+    /// <summary>Глобальный номер пульса при постановке в буфер — только для условия сброса буфера (не смешивать с correctPulse).</summary>
+    private int _bufferedRawPulse = -1;
 
     // Логирование цепочек
     private readonly Dictionary<int, ActiveChainSession> _activeChains = new Dictionary<int, ActiveChainSession>();
@@ -566,6 +569,7 @@ namespace ISIDA.Common
         // Сбрасываем буфер и состояние
         _currentPulseLogEntry = null;
         _bufferedPulse = -1;
+        _bufferedRawPulse = -1;
         _lastState = new SystemState { Pulse = 0 };
         _lastParametersState = new ParametersState { Pulse = 0 };
         _lastStylesState = new StylesState { Pulse = 0 };
@@ -608,29 +612,24 @@ namespace ISIDA.Common
           if (_lastState.CurrentBaseID == -1 || _lastState.CurrentBaseID == 2)
             correctPulse++;
 
-          // Буферизация: записать предыдущий пульс при переходе к следующему (одна запись на пульс)
-          if (_bufferedPulse >= 0 && currentPulse > _bufferedPulse)
+          // Буферизация: сброс по глобальному номеру пульса (currentPulse), не по correctPulse —
+          // иначе при correctPulse++ условие currentPulse > correctPulse «застывает» и строки CSV сдвигаются.
+          if (_bufferedRawPulse >= 0 && currentPulse > _bufferedRawPulse)
           {
             WriteBufferedLogEntry();
             _currentPulseLogEntry = null;
             _bufferedPulse = -1;
+            _bufferedRawPulse = -1;
           }
 
           if (hasStateChanges || hasChainInfoForPulse)
           {
             var logEntry = CreateLogEntry(currentState, correctPulse);
 
-            string reflexChainInfo = string.Empty;
-            string automatizmChainInfo = string.Empty;
-            if (_chainInfoByPulse.TryGetValue(correctPulse, out var chainInfo))
-            {
-              reflexChainInfo = chainInfo.ReflexChain;
-              automatizmChainInfo = chainInfo.AutomatizmChain;
-            }
-
             // Буфер для текущего пульса — в файл и в UI пишем один раз при сбросе буфера (след. пульс или Flush)
             _currentPulseLogEntry = logEntry;
             _bufferedPulse = correctPulse;
+            _bufferedRawPulse = currentPulse;
             _lastState = currentState;
 
             if (currentState.OrientationReflexType.HasValue && currentState.OrientationReflexType.Value > 0)
@@ -692,7 +691,8 @@ namespace ISIDA.Common
       string reflexChainInfo = string.Empty;
       string automatizmChainInfo = string.Empty;
 
-      if (_chainInfoByPulse.TryGetValue(correctPulse, out var chainInfo))
+      // Цепочки регистрируются по глобальному пульсу (ReflexesActivator); correctPulse может быть +1 к отображению.
+      if (_chainInfoByPulse.TryGetValue(state.Pulse, out var chainInfo))
       {
         reflexChainInfo = chainInfo.ReflexChain;
         automatizmChainInfo = chainInfo.AutomatizmChain;
@@ -755,6 +755,21 @@ namespace ISIDA.Common
 
       try
       {
+        string reflexChainInfo = string.Empty;
+        string automatizmChainInfo = string.Empty;
+        // Ключ в словаре — глобальный пульс при LogChainLink…; колонка «Пульс» в строке может быть correctPulse (+1).
+        (string ReflexChain, string AutomatizmChain) chainInfo = default;
+        bool haveChain = _bufferedRawPulse >= 0 && _chainInfoByPulse.TryGetValue(_bufferedRawPulse, out chainInfo);
+        if (!haveChain && _bufferedPulse >= 0)
+          haveChain = _chainInfoByPulse.TryGetValue(_bufferedPulse, out chainInfo);
+        if (haveChain)
+        {
+          reflexChainInfo = chainInfo.ReflexChain;
+          automatizmChainInfo = chainInfo.AutomatizmChain;
+          _currentPulseLogEntry["Цепочка РФ"] = reflexChainInfo;
+          _currentPulseLogEntry["Цепочка АВ"] = automatizmChainInfo;
+        }
+
         if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
         {
           var jsonLine = JsonConvert.SerializeObject(_currentPulseLogEntry, new JsonSerializerSettings
@@ -768,16 +783,6 @@ namespace ISIDA.Common
         if (_currentFormat.HasFlag(LogFormat.Csv) && _csvWriter != null)
         {
           WriteCsvLine(_currentPulseLogEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
-        }
-
-        string reflexChainInfo = string.Empty;
-        string automatizmChainInfo = string.Empty;
-        if (_chainInfoByPulse.TryGetValue(_bufferedPulse, out var chainInfo))
-        {
-          reflexChainInfo = chainInfo.ReflexChain;
-          automatizmChainInfo = chainInfo.AutomatizmChain;
-          _currentPulseLogEntry["Цепочка РФ"] = reflexChainInfo;
-          _currentPulseLogEntry["Цепочка АВ"] = automatizmChainInfo;
         }
 
         WriteToMemoryLog(_currentPulseLogEntry, _bufferedPulse, reflexChainInfo, automatizmChainInfo);
@@ -963,6 +968,7 @@ namespace ISIDA.Common
         WriteBufferedLogEntry();
         _currentPulseLogEntry = null;
         _bufferedPulse = -1;
+        _bufferedRawPulse = -1;
         _chainInfoByPulse.Clear();
       }
     }
@@ -1796,12 +1802,13 @@ namespace ISIDA.Common
             var evalStr = finalEvaluation == null ? "нет" : (finalEvaluation.Value ? "успех" : "неудача");
             Logger.Info($"[CHAIN_COMPLETE|{session.ChainType}|{chainId}] Цепочка {session.ChainName} завершена: звеньев={totalLinksExecuted}, итог={evalStr}");
 
-            // Принудительно записываем буфер при завершении цепочки
-            if (_bufferedPulse == pulse)
+            // Принудительно записываем буфер при завершении цепочки (pulse — глобальный счётчик)
+            if (_bufferedRawPulse == pulse)
             {
               WriteBufferedLogEntry();
               _currentPulseLogEntry = null;
               _bufferedPulse = -1;
+              _bufferedRawPulse = -1;
             }
 
             _activeChains.Remove(chainId);

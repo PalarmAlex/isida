@@ -905,7 +905,9 @@ namespace ISIDA.Common
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
-        AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal;
+        AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal > 0
+            ? config.WaitingPeriodForActionsVal
+            : 30;
         AppGlobalState.NoOperatorStimulusSilencePulses = config.NoOperatorStimulusSilencePulses;
         context.PsychicSystem.ApplyThinkingCyclesConfig(
             config.ThinkingCycleDecayAgeDivisor,

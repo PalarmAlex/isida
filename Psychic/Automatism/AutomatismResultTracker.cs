@@ -616,6 +616,32 @@ namespace ISIDA.Psychic
 
     private void AnalyzeResult(AutomatizmResult result)
     {
+      // Оценка оператора уже задана в MarkOperatorRecognition (EvaluatePreviousAutomatizm в психике).
+      // Не подменять её сравнением PreviousState/CurrentState за окно выполнения — иначе в логе всегда Skipped при совпадении уровней, даже при положительной оценке.
+      if (result.RecognizedByOperator)
+      {
+        if (result.OperatorAssessment > 0)
+        {
+          result.UsefulnessDelta = 1;
+          result.Result = ExecutionResult.Success;
+        }
+        else if (result.OperatorAssessment < 0)
+        {
+          result.UsefulnessDelta = -1;
+          result.Result = ExecutionResult.Error;
+        }
+        else
+        {
+          result.UsefulnessDelta = 0;
+          var executionTimeOp = result.EndPulse - result.StartPulse;
+          if (executionTimeOp > AppGlobalState.WaitingPeriodForActionsVal)
+            result.Result = ExecutionResult.WaitingForResponse;
+          else
+            result.Result = ExecutionResult.Skipped;
+        }
+        return;
+      }
+
       // Анализ изменения состояния гомеостаза
       if (result.PreviousState != result.CurrentState)
       {
