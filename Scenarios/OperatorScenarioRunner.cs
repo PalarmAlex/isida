@@ -43,6 +43,14 @@ namespace ISIDA.Scenarios
     /// <summary>Вызывается при смене состояния «идёт / не идёт» (для обновления UI).</summary>
     public event Action RunningStateChanged;
 
+    /// <summary>Текущий прогон (пока <see cref="IsRunning"/>).</summary>
+    public bool TryGetActiveRun(out ScenarioDocument document, out int anchorPulse)
+    {
+      document = _doc;
+      anchorPulse = _anchorPulse;
+      return _running && _doc != null;
+    }
+
     /// <summary>Начинает выполнение: привязка к глобальному счётчику пульсов и шагам по <see cref="ScenarioLineRow.PulseWithinScenario"/>.</summary>
     /// <param name="doc">Документ сценария.</param>
     /// <param name="getPult">Фабрика пульта; может вернуть null, если UI недоступен.</param>

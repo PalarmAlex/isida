@@ -162,6 +162,10 @@ namespace ISIDA.Common
             ClearSubsequentStagesData(targetStage, currentStage);
           else if (targetStage > currentStage && targetStage > currentStage + 1 && force)
             ClearIntermediateStagesData(currentStage + 1, targetStage - 1);
+
+          // Стадия 0 — только безусловные рефлексы; каталог образов действий им не нужен (данные из .dat не используются).
+          if (targetStage == 0)
+            ClearActionsImagesData();
         }
         AppGlobalState.EvolutionStage = targetStage;
 
@@ -267,6 +271,33 @@ namespace ISIDA.Common
       }
 
       Logger.DebugLog($"Данные стадии {stage} очищены");
+    }
+
+    /// <summary>
+    /// Очищает сохранённые образы действий (action_images.dat). На стадии 0 не используются рефлексами.
+    /// </summary>
+    private void ClearActionsImagesData()
+    {
+      try
+      {
+        if (!ActionsImagesSystem.IsInitialized)
+        {
+          Logger.Info("ActionsImagesSystem не инициализирована, очистка action_images не требуется");
+          return;
+        }
+
+        ActionsImagesSystem.Instance.ClearAllActionsImages();
+        var result = ActionsImagesSystem.Instance.SaveActionsImages();
+        if (!result.Success)
+          Logger.Warning($"Не удалось сохранить файл action_images после очистки: {result.ErrorMessage}");
+        else
+          Logger.Info("Образы действий (action_images.dat) очищены и сохранены");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        throw;
+      }
     }
 
     /// <summary>

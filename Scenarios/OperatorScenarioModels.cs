@@ -187,6 +187,18 @@ namespace ISIDA.Scenarios
     /// <summary>Начальные значения параметров гомеостаза: «id=value» через «;» (см. <see cref="ScenarioHomeostasisValuesFormat"/>).</summary>
     public string InitialHomeostasisValues { get; set; } = "";
 
+    /// <summary>Номер группы (для сортировки и фильтра в реестре).</summary>
+    public int GroupNumber { get; set; }
+
+    /// <summary>Порядок сценария внутри группы.</summary>
+    public int SortOrderInGroup { get; set; }
+
+    /// <summary>Стадия для перехода перед запуском (0–5); −1 — не менять стадию.</summary>
+    public int PreRunTargetStage { get; set; } = -1;
+
+    /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах агента).</summary>
+    public bool PreRunClearAgentData { get; set; }
+
     /// <summary>Копия записи реестра.</summary>
     public ScenarioHeader Clone()
     {
@@ -196,7 +208,11 @@ namespace ISIDA.Scenarios
         Title = Title,
         Description = Description,
         DateText = DateText,
-        InitialHomeostasisValues = InitialHomeostasisValues ?? ""
+        InitialHomeostasisValues = InitialHomeostasisValues ?? "",
+        GroupNumber = GroupNumber,
+        SortOrderInGroup = SortOrderInGroup,
+        PreRunTargetStage = PreRunTargetStage,
+        PreRunClearAgentData = PreRunClearAgentData
       };
     }
   }

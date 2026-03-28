@@ -1098,11 +1098,10 @@ namespace ISIDA.Psychic
 
       _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
-      // Сначала ID из StartWaiting (последний запущенный, по нему открыто окно), затем текущий — иначе при цепочке эхо
-      // _previous указывает на более ранний автоматизм и подменяет оценку/сдвиг (подсовывается «предыдущий» вместо эха).
-      int automatizmToEvaluate = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+      // Как в Programms_28: сначала цепочка эхо (_previous → _current), затем снимок StartWaiting — иначе зеркало/сдвиг ломаются.
+      int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
       if (automatizmToEvaluate <= 0)
-        automatizmToEvaluate = _currentAutomatizmId > 0 ? _currentAutomatizmId : _previousAutomatizmId;
+        automatizmToEvaluate = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
       if (automatizmToEvaluate <= 0)
       {
         EndOperatorEvaluationWait();

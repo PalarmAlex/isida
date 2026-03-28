@@ -102,6 +102,9 @@ namespace ISIDA.Common
     /// <summary>Глобальный номер пульса при постановке в буфер — только для условия сброса буфера (не смешивать с correctPulse).</summary>
     private int _bufferedRawPulse = -1;
 
+    /// <summary>Отпечаток последней записанной строки агент-лога (без Время/Пульс), чтобы не писать подряд дубли с тем же содержимым колонок.</summary>
+    private string _lastWrittenAgentLogFingerprint;
+
     // Логирование цепочек
     private readonly Dictionary<int, ActiveChainSession> _activeChains = new Dictionary<int, ActiveChainSession>();
     private readonly HashSet<string> _chainsLoggedInCycle = new HashSet<string>();
@@ -573,6 +576,7 @@ namespace ISIDA.Common
         _lastState = new SystemState { Pulse = 0 };
         _lastParametersState = new ParametersState { Pulse = 0 };
         _lastStylesState = new StylesState { Pulse = 0 };
+        _lastWrittenAgentLogFingerprint = null;
         AppGlobalState.ResetThinkingLevelInfo();
       }
     }
@@ -743,6 +747,30 @@ namespace ISIDA.Common
     }
 
     /// <summary>
+    /// Стабильный отпечаток содержимого строки лога без «меняющихся каждый раз» колонок (время и номер пульса),
+    /// чтобы отсечь подряд идущие дубли, когда <see cref="IsDuplicateState"/> сработал из-за полей,
+    /// не попадающих в CSV (например <see cref="SystemState.HasCriticalChanges"/>), а визуально строка совпадает.
+    /// </summary>
+    private static string ComputeAgentLogEntryFingerprint(Dictionary<string, object> entry)
+    {
+      var sb = new StringBuilder(256);
+      foreach (var k in entry.Keys.OrderBy(x => x, StringComparer.Ordinal))
+      {
+        if (k == "Время" || k == "Пульс")
+          continue;
+        sb.Append(k).Append('\u001F');
+        if (!entry.TryGetValue(k, out var v) || v == null)
+          sb.Append('\0');
+        else if (v is bool b)
+          sb.Append(b ? '1' : '0');
+        else
+          sb.Append(v.ToString());
+        sb.Append('\u001E');
+      }
+      return sb.ToString();
+    }
+
+    /// <summary>
     /// Записывает буферизованную запись лога
     /// </summary>
     private void WriteBufferedLogEntry()
@@ -769,6 +797,11 @@ namespace ISIDA.Common
           _currentPulseLogEntry["Цепочка РФ"] = reflexChainInfo;
           _currentPulseLogEntry["Цепочка АВ"] = automatizmChainInfo;
         }
+
+        var fingerprint = ComputeAgentLogEntryFingerprint(_currentPulseLogEntry);
+        if (fingerprint == _lastWrittenAgentLogFingerprint)
+          return;
+        _lastWrittenAgentLogFingerprint = fingerprint;
 
         if (_currentFormat.HasFlag(LogFormat.JsonL) && _jsonlWriter != null)
         {
@@ -1151,6 +1184,8 @@ namespace ISIDA.Common
     /// диспетчер перебирает инфо-функции и поле меняется каждый пульс (infoFunc_28 / infoFunc_29 / …),
     /// из-за чего иначе лог дублируется на каждом пульсе. Актуальная стратегия всё равно попадает в
     /// запись и подсказку при любом другом изменении или при сбросе буфера.
+    /// Колонка «Тема» в файле соответствует <see cref="SystemState.ThinkingThemeTypeId"/> — оно участвует в сравнении.
+    /// Подряд идущие строки с одинаковым набором колонок отсекаются в <see cref="WriteBufferedLogEntry"/> по отпечатку.
     /// </remarks>
     private bool IsDuplicateState(SystemState current)
     {

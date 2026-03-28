@@ -76,8 +76,12 @@ namespace ISIDA.Psychic.Automatism
           return 0;
 
         created.Count = 0;
-        // Не ставим Belief=2, если для этой ветки уже есть штатный автоматизм (сдвиг): иначе эхо перезапишет его при повторных прогонах.
-        if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
+        // Штатный на ветке один (Belief=2). Раньше: только если нет штатного — иначе новое эхо с другим ответом оставалось без Belief=2,
+        // а GetAutomatizmFromNode продолжал брать старое эхо/сдвиг → «то новое, то предыдущее».
+        // Новое эхо на тот же узел с новым образом ответа должно стать штатным; SetAutomatizmBelief снимает Belief=2 с предыдущего на ветке.
+        // Если штатный уже тот же (branch, образ) — unicum вернул тот же автоматизм, повторный SetBelief не нужен.
+        var staff = _automatizmSystem.GetBelief2AutomatizmFromTreeId(detectedNodeId);
+        if (staff == null || staff.ActionsImageID != responseActionsImageId)
           _automatizmSystem.SetAutomatizmBelief(created, 2);
 
         Logger.Info($"MirrorAutomatizm: стартовый автоматизм ID={id}, TriggerNode={detectedNodeId}, ActionsImage={responseActionsImageId}");
@@ -340,9 +344,9 @@ namespace ISIDA.Psychic.Automatism
         teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 1);
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
-        // 2) Прямой автоматизм для нового шага: новый триггер -> его же ответ.
-        // Создается как "провокатор" следующей пары (эхо). Belief=2 НЕ ставим: иначе эхо перезапишет
-        // уже выученный сдвиговый автоматизм для этой ветки при повторных запусках цепочки.
+        // 2) Эхо на узле текущего стимула: новый триггер -> тот же ответ (эхо «хай-хай»).
+        // Если узел эхо совпадает с узлом сдвига (тот же BranchID), Belief=2 не ставим — иначе эхо сотрёт сдвиг на той же ветке.
+        // Если узлы разные (привет → хай): сдвиг на ветке «привет», эхо на ветке «хай» — эхо должно быть штатным (Belief=2).
         bool continueCycle = _pendingResponseHasVerbalPart ||
             (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
         if (continueCycle)
@@ -351,7 +355,8 @@ namespace ISIDA.Psychic.Automatism
           if (nextParrotAutomatizm != null)
           {
             nextParrotAutomatizm.Count = 0;
-            // Не вызываем SetAutomatizmBelief(..., 2): штатным остаётся сдвиг (учительский), эхо — только запасной.
+            if (nextParrotAutomatizm.BranchID != teacherAutomatizm.BranchID)
+              _automatizmSystem.SetAutomatizmBelief(nextParrotAutomatizm, 2);
           }
         }
 

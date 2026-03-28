@@ -10,6 +10,7 @@ namespace ISIDA.Psychic.Understanding
   /// Один раз на пульс: по стимулам предыдущего пульса (событие агента, воздействия с пульта) и текущему настроению
   /// выбирает тип темы мышления: сначала максимальный вес темы, при равенстве — воздействие, затем событие, затем настроение.
   /// После выбора сбрасывает буферы стимулов в <see cref="AppGlobalState"/>.
+  /// Тема мышления задаётся только со <see cref="AppGlobalState.EvolutionStage"/> ≥ 4 (как циклы мышления); на стадиях 1–3 резолвер не активен.
   /// </summary>
   public static class ThinkingThemePulseResolver
   {
@@ -33,6 +34,14 @@ namespace ISIDA.Psychic.Understanding
     public static void ResolveAtPulseStart(int currentPulse)
     {
       if (currentPulse <= 0) return;
+
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        AppGlobalState.ResolvedThinkingThemeTypeId = 0;
+        AppGlobalState.ClearStimulusBuffersAfterThemeResolution();
+        return;
+      }
+
       if (!ThemeImageSystem.IsInitialized || !SituationTypeSystem.IsInitialized) return;
 
       int prevPulse = currentPulse - 1;
