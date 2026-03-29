@@ -586,6 +586,17 @@ namespace ISIDA.Common
           }
         }
 
+        // Строка агента за пульс буферизуется в ResearchLogger и обычно уходит в UI только на следующем пульсе.
+        // Иначе HTML-отчёт сценария (построенный сразу после последнего шага) не видит ОР/автоматизм за этот пульс.
+        try
+        {
+          _researchLogger?.FlushBufferedAgentRowToMemoryNow();
+        }
+        catch (Exception flushEx)
+        {
+          Logger.Warning($"FlushBufferedAgentRowToMemoryNow: {flushEx.Message}");
+        }
+
         if (!AppGlobalState.IsDead)
         {
           try

@@ -818,7 +818,9 @@ namespace ISIDA.Common
           WriteCsvLine(_currentPulseLogEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
         }
 
-        WriteToMemoryLog(_currentPulseLogEntry, _bufferedPulse, reflexChainInfo, automatizmChainInfo);
+        // В память UI — глобальный пульс (_bufferedRawPulse), как у сценария (якорь + № пульса).
+        // Колонка «Пульс» в logEntry — correctPulse, может быть +1 к глобальному; иначе отчёт сценария не находит строку.
+        WriteToMemoryLog(_currentPulseLogEntry, _bufferedRawPulse, reflexChainInfo, automatizmChainInfo);
       }
       catch (Exception ex)
       {
@@ -827,12 +829,17 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Записывает в память (UI)
+    /// Записывает в память (UI). <paramref name="globalPulseForMemory"/> — глобальный номер пульса (как в GlobalTimer);
+    /// не путать с колонкой «Пульс» в <paramref name="logEntry"/> (correctPulse, иногда +1).
     /// </summary>
-    private void WriteToMemoryLog(Dictionary<string, object> logEntry, int currentPulse,
+    private void WriteToMemoryLog(Dictionary<string, object> logEntry, int globalPulseForMemory,
                                   string reflexChainInfo = "", string automatizmChainInfo = "")
     {
       if (_memoryLogWriter == null || _disposed) return;
+
+      int pulseForWriter = globalPulseForMemory >= 0
+          ? globalPulseForMemory
+          : (int.TryParse(logEntry["Пульс"]?.ToString(), out int p) ? p : 0);
 
       int? orType = null;
       if (logEntry.ContainsKey("ОР") && !string.IsNullOrEmpty(logEntry["ОР"].ToString()))
@@ -894,7 +901,7 @@ namespace ISIDA.Common
       _memoryLogWriter.WriteLog(
           "ResearchLogger",
           "LogSystemState",
-          int.Parse(logEntry["Пульс"].ToString()),
+          pulseForWriter,
           logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString()) ?
               int.Parse(logEntry["Состояние"].ToString()) : (int?)null,
           logEntry.ContainsKey("Стили") && !string.IsNullOrEmpty(logEntry["Стили"].ToString()) ?
@@ -987,6 +994,24 @@ namespace ISIDA.Common
       var tail = s.Length > prefix.Length ? s.Substring(prefix.Length) : "";
       if (tail.StartsWith("_", StringComparison.Ordinal)) tail = tail.Substring(1);
       return int.TryParse(tail, out infoFuncId) && infoFuncId > 0;
+    }
+
+    /// <summary>
+    /// Сбрасывает буфер текущего пульса в CSV/JSONL и в память (UI) сразу, без ожидания следующего пульса.
+    /// Нужен для отчётов сценария: иначе последняя строка агента оказывается в буфере до начала следующего пульса.
+    /// Не очищает <see cref="_chainInfoByPulse"/> (в отличие от <see cref="Flush"/>).
+    /// </summary>
+    public void FlushBufferedAgentRowToMemoryNow()
+    {
+      lock (_lock)
+      {
+        if (_disposed || _currentPulseLogEntry == null)
+          return;
+        WriteBufferedLogEntry();
+        _currentPulseLogEntry = null;
+        _bufferedPulse = -1;
+        _bufferedRawPulse = -1;
+      }
     }
 
     /// <summary>

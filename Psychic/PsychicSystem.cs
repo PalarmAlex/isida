@@ -24,6 +24,12 @@ namespace ISIDA.Psychic
   /// </summary>
   public sealed class PsychicSystem : IDisposable
   {
+    /// <summary>
+    /// Минимальный глобальный номер пульса, начиная с которого <see cref="AutomatizmTreeActivation"/> активирует дерево
+    /// (при меньшем значении возвращается 0). Сценарии оператора сдвигают якорь, чтобы первый стимул не попадал на более ранний пульс.
+    /// </summary>
+    public const int MinGlobalPulseForAutomatizmTreeActivation = 4;
+
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
 
@@ -820,7 +826,7 @@ namespace ISIDA.Psychic
         int verbId,
         bool isUnrecognizedPhrase = false)
     {
-      if (PulseCount < 4)
+      if (PulseCount < MinGlobalPulseForAutomatizmTreeActivation)
         return 0;
 
       if (IsSleeping)
@@ -888,6 +894,9 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Получить автоматизм из узла дерева. При preferredActionId > 0 предпочитается автоматизм с данным ActionsImageID (из эпизодической памяти).
     /// </summary>
+    /// <remarks>
+    /// Сначала штатный (Belief=2): в системе не более одного на ветку — см. <see cref="AutomatizmSystem.SetAutomatizmBelief"/>.
+    /// </remarks>
     /// <param name="nodeId">ID узла дерева автоматизмов</param>
     /// <param name="preferredActionId">ID образа действий из эпизодического правила (0 — не учитывать)</param>
     internal Automatizm GetAutomatizmFromNode(int nodeId, int preferredActionId = 0)

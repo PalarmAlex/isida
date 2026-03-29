@@ -44,8 +44,14 @@ namespace ISIDA.Psychic.Automatism
     public int Energy { get; set; } = 5;
 
     /// <summary>
-    /// Уверенность: 0 - предположение, 1 - чужие сведения, 2 - проверенное собственное знание
+    /// Уверенность: 0 — предположение, 1 — чужие сведения, 2 — проверенное собственное знание (штатный автоматизм на ветке).
     /// </summary>
+    /// <remarks>
+    /// ИНВАРИАНТ (обязателен для логики дерева и зеркала на ст.3): на один <see cref="BranchID"/> может приходиться
+    /// не более одного автоматизма с Belief=2. Значение 2 для штатного задавать только через
+    /// <see cref="AutomatizmSystem.SetAutomatizmBelief"/> — прямое присвоение свойству ломает инвариант и кэш
+    /// <c>_automatizmBelief2FromTreeNodeId</c>.
+    /// </remarks>
     public int Belief { get; set; }
 
     /// <summary>
@@ -60,8 +66,15 @@ namespace ISIDA.Psychic.Automatism
   }
 
   /// <summary>
-  /// Система управления автоматизмами
+  /// Система управления автоматизмами.
   /// </summary>
+  /// <remarks>
+  /// <b>Инвариант Belief=2 (штатный автоматизм на ветке):</b> среди автоматизмов с одинаковым
+  /// <see cref="Automatizm.BranchID"/> ровно ноль или один может иметь <see cref="Automatizm.Belief"/> == 2.
+  /// Назначение «штатного» только через <see cref="SetAutomatizmBelief(Automatizm, int)"/> с belief==2 — метод
+  /// обнуляет Belief у остальных на той же ветке и обновляет кэш. Не предлагать и не вводить код с двумя Belief=2
+  /// на одной ветке и не присваивать Belief=2 полю напрямую.
+  /// </remarks>
   public sealed class AutomatizmSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -141,7 +154,8 @@ namespace ISIDA.Psychic.Automatism
     private readonly Dictionary<int, Automatizm> _automatizmsById = new Dictionary<int, Automatizm>();
 
     /// <summary>
-    /// Штатные автоматизмы, прикрепленные к ID узла Дерева с Belief == 2
+    /// Кэш: узел дерева (BranchID) → единственный штатный автоматизм (Belief=2) на этой ветке.
+    /// Соответствует инварианту «не более одного Belief=2 на BranchID».
     /// </summary>
     private readonly Dictionary<int, Automatizm> _automatizmBelief2FromTreeNodeId = new Dictionary<int, Automatizm>();
 
@@ -345,8 +359,13 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Устанавливает уверенность (Belief) для автоматизма
+    /// Устанавливает уверенность (Belief) для автоматизма.
     /// </summary>
+    /// <remarks>
+    /// При <paramref name="belief"/> == 2 гарантируется инвариант: у всех прочих автоматизмов с тем же
+    /// <see cref="Automatizm.BranchID"/> Belief сбрасывается в 0. Это единственный поддерживаемый способ
+    /// назначить штатный автоматизм на ветке.
+    /// </remarks>
     public void SetAutomatizmBelief(Automatizm automatizm, int belief)
     {
       if (AppGlobalState.EvolutionStage < 2)
@@ -359,7 +378,7 @@ namespace ISIDA.Psychic.Automatism
       {
         if (belief == 2)
         {
-          // Если устанавливаем Belief=2, сбрасываем другие автоматизмы с Belief=2 для этого BranchID
+          // Инвариант: на BranchID только один Belief=2 — снимаем 2 с остальных на этой ветке.
           foreach (var kvp in _automatizmsById)
           {
             if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2 && kvp.Value.ID != automatizm.ID)
@@ -395,7 +414,25 @@ namespace ISIDA.Psychic.Automatism
 
         _automatizmsById.Remove(id);
         _automatizmSuccessFromId.Remove(id);
-        _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
+        _unicumBranchActionsToId.Remove((automatizm.BranchID, automatizm.ActionsImageID));
+
+        // Нельзя снимать штатный Belief=2 с ветки при удалении «запасного» автоматизма — иначе
+        // GetBelief2AutomatizmFromTreeId даёт null и GetAutomatizmFromNode выбирает не тот автоматизм
+        // (ничья по Usefulness на ст.3), ломая зеркало/сдвиг.
+        if (_automatizmBelief2FromTreeNodeId.TryGetValue(automatizm.BranchID, out var belief2Cached) &&
+            belief2Cached != null && belief2Cached.ID == automatizm.ID)
+        {
+          _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
+          // При корректных данных на ветке не более одного Belief=2; при дублях в файле/памяти — первый найденный.
+          foreach (var kvp in _automatizmsById)
+          {
+            if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2)
+            {
+              _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = kvp.Value;
+              break;
+            }
+          }
+        }
 
         if (automatizm.BranchID > 1000000 && automatizm.BranchID < 2000000)
         {
@@ -455,6 +492,7 @@ namespace ISIDA.Psychic.Automatism
           _lastAutomatizmId = 0;
           _automatizmSuccessFromId.Clear();
           _automatizmBelief2FromTreeNodeId.Clear();
+          _unicumBranchActionsToId.Clear();
           _automatizmFromActionId.Clear();
           _automatizmFromPhraseId.Clear();
 
@@ -521,7 +559,7 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Получает штатный автоматизм для узла дерева
+    /// Получает штатный автоматизм для узла дерева (Belief=2), при инварианте «один штатный на ветку».
     /// </summary>
     public Automatizm GetBelief2AutomatizmFromTreeId(int nodeId)
     {

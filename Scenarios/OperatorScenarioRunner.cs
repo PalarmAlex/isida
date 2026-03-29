@@ -1,9 +1,17 @@
 using ISIDA.Common;
+using ISIDA.Psychic;
 using System;
 using System.Linq;
 
 namespace ISIDA.Scenarios
 {
+  /// <summary>Сообщение о выполняемом шаге сценария (для индикатора прогресса в UI).</summary>
+  public sealed class OperatorScenarioStepProgressEventArgs : EventArgs
+  {
+    /// <summary>Номер шага по таблице сценария (как в редакторе).</summary>
+    public int StepIndex { get; set; }
+  }
+
   /// <summary>Результат завершения прогона сценария (успех, отмена, ошибка).</summary>
   public sealed class OperatorScenarioCompletedEventArgs : EventArgs
   {
@@ -34,12 +42,15 @@ namespace ISIDA.Scenarios
     private Action _cancelWaitingPeriod;
     private bool _running;
     private int _lastExecutedStepPulse;
+    private bool _pendingSuccessCompletion;
 
     /// <summary>Истина, пока сценарий ожидает пульсы.</summary>
     public bool IsRunning => _running;
 
     /// <summary>Завершение прогона (любой исход).</summary>
     public event EventHandler<OperatorScenarioCompletedEventArgs> Finished;
+    /// <summary>Перед обработкой очередного шага (после сопоставления с пульсом).</summary>
+    public event EventHandler<OperatorScenarioStepProgressEventArgs> StepProgress;
     /// <summary>Вызывается при смене состояния «идёт / не идёт» (для обновления UI).</summary>
     public event Action RunningStateChanged;
 
@@ -67,10 +78,25 @@ namespace ISIDA.Scenarios
       _cancelWaitingPeriod = cancelWaitingPeriod;
 
       _maxPulse = _doc.Lines.Count == 0 ? 0 : _doc.Lines.Max(r => r.PulseWithinScenario);
-      // Якорь — глобальный номер пульса в момент Start (последний завершённый на момент вызова).
-      // Срабатывание шага: глобальный пульс == якорь + PulseWithinScenario (без пересчёта расписания).
+      // Якорь — глобальный номер пульса в момент Start. Шаг: global == якорь + PulseWithinScenario.
       _anchorPulse = GlobalTimer.GlobalPulsCount;
+      // Пока глобальный пульс < Min… дерево автоматизмов не активируется (PsychicSystem.AutomatizmTreeActivation → 0) —
+      // стимул «вхолостую». Сдвигаем якорь назад так, чтобы самый ранний шаг пришёлся не раньше этого порога.
+      if (_doc.Lines.Count > 0)
+      {
+        int minPulseInDoc = _doc.Lines.Min(r => r.PulseWithinScenario);
+        int firstStepGlobal = _anchorPulse + minPulseInDoc;
+        int minTree = PsychicSystem.MinGlobalPulseForAutomatizmTreeActivation;
+        if (firstStepGlobal < minTree)
+        {
+          int adjusted = minTree - minPulseInDoc;
+          ScenarioRunnerDiagnostics.Write(
+              $"[Start] сдвиг якоря: было anchor={_anchorPulse}, первый глоб.пульс шага={firstStepGlobal} < {minTree} → anchor={adjusted}");
+          _anchorPulse = adjusted;
+        }
+      }
       _lastExecutedStepPulse = 0;
+      _pendingSuccessCompletion = false;
       _running = true;
       // До первого шага сбросить «висящее» ожидание оценки/зеркало с ручной сессии — иначе первый стимул не получает ОР+эхо (блок по WaitingForOperatorEvaluation).
       _cancelWaitingPeriod?.Invoke();
@@ -143,6 +169,8 @@ namespace ISIDA.Scenarios
       if (line == null)
         return;
 
+      StepProgress?.Invoke(this, new OperatorScenarioStepProgressEventArgs { StepIndex = line.StepIndex });
+
       try
       {
         if (line.Kind == ScenarioLineKind.WaitClick)
@@ -182,18 +210,34 @@ namespace ISIDA.Scenarios
         _lastExecutedStepPulse = delta;
         if (delta >= _maxPulse)
         {
-          Complete(new OperatorScenarioCompletedEventArgs
-          {
-            Success = true,
-            LastExecutedPulseWithinScenario = delta,
-            Document = _doc
-          });
+          _pendingSuccessCompletion = true;
+          ScenarioRunnerDiagnostics.Write(
+              $"[PendingComplete] step={line.StepIndex} global={globalPulseCount} — завершение отложено до OnPulseCompleted (LogSystemState + Flush)");
         }
       }
       catch (Exception ex)
       {
         Fail(ex.Message);
       }
+    }
+
+    /// <summary>Вызывается хостом после <see cref="OnGlobalPulseBeforeProcessing"/> и полной обработки пульса
+    /// (включая ProcessPsychicPulse, FlushBufferedAgentRowToMemoryNow, LogSystemState).
+    /// Если на этом пульсе был последний шаг сценария, завершает прогон.
+    /// Это гарантирует, что MemoryLogManager содержит записи за последний пульс до построения отчёта.</summary>
+    public void TryFinishAfterPulseCompleted()
+    {
+      if (!_running || !_pendingSuccessCompletion)
+        return;
+      _pendingSuccessCompletion = false;
+      ScenarioRunnerDiagnostics.Write(
+          $"[TryFinishAfterPulseCompleted] завершаем сценарий, lastВнутрПульс={_lastExecutedStepPulse}");
+      Complete(new OperatorScenarioCompletedEventArgs
+      {
+        Success = true,
+        LastExecutedPulseWithinScenario = _lastExecutedStepPulse,
+        Document = _doc
+      });
     }
 
     private void Fail(string message)

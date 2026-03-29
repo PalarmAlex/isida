@@ -9,9 +9,15 @@ namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Сервис отзеркаливания автоматизмов для 3-й стадии.
-  /// Создает автоматизмы вида: триггер стимула с пульта -> ответ оператора.
+  /// Создает автоматизмы вида: триггер стимула с пульта → ответ оператора.
   /// В обычном режиме учитываются только вербальные стимулы; в режиме наблюдения — вербальные, невербальные (флажки воздействий) и смешанные.
   /// </summary>
+  /// <remarks>
+  /// Штатный автоматизм на ветке (<see cref="Automatizm.Belief"/> = 2) в системе ровно один на
+  /// <see cref="Automatizm.BranchID"/>; назначение только через <see cref="AutomatizmSystem.SetAutomatizmBelief"/>.
+  /// Сдвиг и эхо на разных узлах — два разных BranchID, у каждого свой единственный Belief=2.
+  /// Если эхо и сдвиг совпали бы по BranchID, второму нельзя ставить Belief=2 (иначе нарушится инвариант).
+  /// </remarks>
   public sealed class MirrorAutomatizmService : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -344,9 +350,9 @@ namespace ISIDA.Psychic.Automatism
         teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 1);
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
-        // 2) Эхо на узле текущего стимула: новый триггер -> тот же ответ (эхо «хай-хай»).
-        // Если узел эхо совпадает с узлом сдвига (тот же BranchID), Belief=2 не ставим — иначе эхо сотрёт сдвиг на той же ветке.
-        // Если узлы разные (привет → хай): сдвиг на ветке «привет», эхо на ветке «хай» — эхо должно быть штатным (Belief=2).
+        // 2) Эхо на узле текущего стимула: новый триггер → тот же ответ (эхо «хай-хай»).
+        // Инвариант: на одном BranchID только один Belief=2. Если узел эхо = узел сдвига, эхо не получает Belief=2
+        // (иначе SetAutomatizmBelief снял бы 2 с сдвига на той же ветке). При разных узлах — у каждой ветки свой штатный.
         bool continueCycle = _pendingResponseHasVerbalPart ||
             (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
         if (continueCycle)

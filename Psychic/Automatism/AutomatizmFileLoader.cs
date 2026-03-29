@@ -11,8 +11,12 @@ using System.Text;
 namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
-  /// Класс для загрузки автоматизмов из файла
+  /// Класс для загрузки автоматизмов из файла.
   /// </summary>
+  /// <remarks>
+  /// Поле Belief из файла применяется через <see cref="AutomatizmSystem.SetAutomatizmBelief"/> — при Belief=2 на ветке
+  /// остаётся один штатный автоматизм (см. инвариант в <see cref="AutomatizmSystem"/>).
+  /// </remarks>
   public sealed class AutomatizmFileLoader : IDisposable
   {
     private const string AutomatizmChainsFileName = "automatizm_chains_list.txt";
