@@ -38,6 +38,7 @@ namespace ISIDA.Scenarios
     private ScenarioDocument _doc;
     private int _anchorPulse;
     private int _maxPulse;
+    private int _firstStepGlobalPulse;
     private Func<IOperatorScenarioPult> _getPult;
     private Action _cancelWaitingPeriod;
     private bool _running;
@@ -53,6 +54,9 @@ namespace ISIDA.Scenarios
     public event EventHandler<OperatorScenarioStepProgressEventArgs> StepProgress;
     /// <summary>Вызывается при смене состояния «идёт / не идёт» (для обновления UI).</summary>
     public event Action RunningStateChanged;
+    /// <summary>Вызывается на каждом пульсе, пока сценарий ждёт активации психики (до первого шага).
+    /// Параметры: (текущий глобальный пульс, глобальный пульс первого шага).</summary>
+    public event Action<int, int> WaitingForActivation;
 
     /// <summary>Текущий прогон (пока <see cref="IsRunning"/>).</summary>
     public bool TryGetActiveRun(out ScenarioDocument document, out int anchorPulse)
@@ -80,21 +84,25 @@ namespace ISIDA.Scenarios
       _maxPulse = _doc.Lines.Count == 0 ? 0 : _doc.Lines.Max(r => r.PulseWithinScenario);
       // Якорь — глобальный номер пульса в момент Start. Шаг: global == якорь + PulseWithinScenario.
       _anchorPulse = GlobalTimer.GlobalPulsCount;
-      // Пока глобальный пульс < Min… дерево автоматизмов не активируется (PsychicSystem.AutomatizmTreeActivation → 0) —
-      // стимул «вхолостую». Сдвигаем якорь назад так, чтобы самый ранний шаг пришёлся не раньше этого порога.
+      // Дерево автоматизмов активируется с пульса MinGlobalPulseForAutomatizmTreeActivation (включительно).
+      // Первый стимул сценария должен попасть как минимум на СЛЕДУЮЩИЙ пульс (+1), чтобы дерево успело
+      // обработать хотя бы один «холостой» пульс и построить внутреннее состояние.
       if (_doc.Lines.Count > 0)
       {
         int minPulseInDoc = _doc.Lines.Min(r => r.PulseWithinScenario);
         int firstStepGlobal = _anchorPulse + minPulseInDoc;
-        int minTree = PsychicSystem.MinGlobalPulseForAutomatizmTreeActivation;
-        if (firstStepGlobal < minTree)
+        int minActivation = PsychicSystem.MinGlobalPulseForAutomatizmTreeActivation + 1;
+        if (firstStepGlobal < minActivation)
         {
-          int adjusted = minTree - minPulseInDoc;
+          int adjusted = minActivation - minPulseInDoc;
           ScenarioRunnerDiagnostics.Write(
-              $"[Start] сдвиг якоря: было anchor={_anchorPulse}, первый глоб.пульс шага={firstStepGlobal} < {minTree} → anchor={adjusted}");
+              $"[Start] сдвиг якоря: было anchor={_anchorPulse}, первый глоб.пульс шага={firstStepGlobal} < {minActivation} → anchor={adjusted}");
           _anchorPulse = adjusted;
         }
       }
+      _firstStepGlobalPulse = _doc.Lines.Count > 0
+          ? _anchorPulse + _doc.Lines.Min(r => r.PulseWithinScenario)
+          : _anchorPulse + 1;
       _lastExecutedStepPulse = 0;
       _pendingSuccessCompletion = false;
       _running = true;
@@ -147,7 +155,10 @@ namespace ISIDA.Scenarios
         return;
 
       if (globalPulseCount < _anchorPulse + 1)
+      {
+        WaitingForActivation?.Invoke(globalPulseCount, _firstStepGlobalPulse);
         return;
+      }
 
       ScenarioLineRow line = null;
       foreach (var row in _doc.Lines)
@@ -180,30 +191,41 @@ namespace ISIDA.Scenarios
         }
         else
         {
-          var pult = _getPult();
-          if (pult == null)
-          {
-            Fail("Пульт агента недоступен (откройте вкладку агента).");
-            return;
-          }
-
           if (line.ResetWaitingPeriod && AppGlobalState.EvolutionStage >= 3
               && AppGlobalState.WaitingForOperatorEvaluation)
             _cancelWaitingPeriod?.Invoke();
 
-          var err = pult.TryApplyScenarioStimulus(
-              line.ActionIds,
-              line.Phrase ?? "",
-              line.ToneId,
-              line.MoodId);
-          if (err != null)
+          bool hasPhrase = !string.IsNullOrWhiteSpace(line.Phrase);
+          bool hasActions = line.ActionIds != null && line.ActionIds.Count > 0;
+
+          if (hasPhrase || hasActions)
           {
-            ScenarioRunnerDiagnostics.Write($"[Apply FAIL] step={line.StepIndex} global={globalPulseCount} err={err}");
-            Fail(err);
-            return;
+            var pult = _getPult();
+            if (pult == null)
+            {
+              Fail("Пульт агента недоступен (откройте вкладку агента).");
+              return;
+            }
+
+            var err = pult.TryApplyScenarioStimulus(
+                line.ActionIds,
+                line.Phrase ?? "",
+                line.ToneId,
+                line.MoodId);
+            if (err != null)
+            {
+              ScenarioRunnerDiagnostics.Write($"[Apply FAIL] step={line.StepIndex} global={globalPulseCount} err={err}");
+              Fail(err);
+              return;
+            }
+            ScenarioRunnerDiagnostics.Write(
+                $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0}");
           }
-          ScenarioRunnerDiagnostics.Write(
-              $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0}");
+          else
+          {
+            ScenarioRunnerDiagnostics.Write(
+                $"[ResetOnly OK] step={line.StepIndex} global={globalPulseCount} — только сброс ожидания, стимул не подаётся");
+          }
         }
 
         int delta = line.PulseWithinScenario;

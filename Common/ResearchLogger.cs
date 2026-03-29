@@ -704,6 +704,13 @@ namespace ISIDA.Common
       if (state.CurrentAutomatizmID.HasValue)
         AppGlobalState.LastTriggerStimulusID = 0;
 
+      // Иерархия активации: при выбранном автоматизме рефлексы «найдены» в активаторе, но в агентной строке не показываем
+      // (как для триггера — см. GetCurrentTriggerImageID). Иначе в логе и отчёте смешиваются уровни.
+      bool reflexSuppressedByAutomatizm =
+          state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID.Value > 0;
+      if (reflexSuppressedByAutomatizm)
+        reflexChainInfo = string.Empty;
+
       return new Dictionary<string, object>
       {
         ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -717,10 +724,14 @@ namespace ISIDA.Common
             ? state.CurrentTriggerStimulusID.ToString() : "",
         ["ОР"] = orTypeString,
         // Б/у и усл. рефлекс — только при изменении (фиксация запуска), не дублировать на следующих пульсах
-        ["Б/у рефлекс"] = !AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
-            ? (state.CurrentGeneticReflexID?.ToString() ?? "") : "",
-        ["Усл. рефлекс"] = !AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
-            ? (state.CurrentConditionReflexID?.ToString() ?? "") : "",
+        ["Б/у рефлекс"] = reflexSuppressedByAutomatizm
+            ? ""
+            : (!AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
+                ? (state.CurrentGeneticReflexID?.ToString() ?? "") : ""),
+        ["Усл. рефлекс"] = reflexSuppressedByAutomatizm
+            ? ""
+            : (!AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
+                ? (state.CurrentConditionReflexID?.ToString() ?? "") : ""),
         // Автоматизм — только при изменении (фиксация запуска), не дублировать на следующих пульсах
         ["Автоматизм"] = (state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID != _lastState.CurrentAutomatizmID)
             ? state.CurrentAutomatizmID.ToString() : "",
@@ -1675,9 +1686,15 @@ namespace ISIDA.Common
 
       var current = _chainInfoByPulse[pulse];
       if (chainType == "Reflex")
-        _chainInfoByPulse[pulse] = (chainInfo, current.AutomatizmChain);
+      {
+        // Иерархия: если на этом пульсе уже зафиксирована цепочка АВ, не подмешивать цепочку РФ в ту же строку лога
+        if (!string.IsNullOrEmpty(current.AutomatizmChain))
+          _chainInfoByPulse[pulse] = (string.Empty, current.AutomatizmChain);
+        else
+          _chainInfoByPulse[pulse] = (chainInfo, current.AutomatizmChain);
+      }
       else if (chainType == "Automatizm")
-        _chainInfoByPulse[pulse] = (current.ReflexChain, chainInfo);
+        _chainInfoByPulse[pulse] = (string.Empty, chainInfo);
     }
 
     /// <summary>

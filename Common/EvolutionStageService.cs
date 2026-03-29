@@ -187,6 +187,28 @@ namespace ISIDA.Common
       }
     }
 
+    /// <summary>
+    /// Полная очистка всех накопленных данных агента перед запуском сценария
+    /// (как при переходе с текущей стадии на стадию 0): рефлексы, автоматизмы и т.д.
+    /// Номер стадии (<see cref="AppGlobalState.EvolutionStage"/>) не изменяется.
+    /// </summary>
+    public void ClearStageDataOnlyForScenarioPreRun(int stage)
+    {
+      if (stage < 0 || stage > 5)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        Logger.Info($"Предзапуск сценария: очистка данных стадий 1..{stage} (как при переходе на стадию 0, без смены номера)");
+        ClearSubsequentStagesData(0, stage);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #region Методы очистки стадий
 
     /// <summary>

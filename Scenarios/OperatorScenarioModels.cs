@@ -182,6 +182,23 @@ namespace ISIDA.Scenarios
     public string Title { get; set; } = "";
     /// <summary>Описание.</summary>
     public string Description { get; set; } = "";
+
+    private const int DescriptionDisplayLimit = 100;
+
+    /// <summary>Первые N символов описания (без переносов строк) для отображения в списках.</summary>
+    public string DescriptionShort
+    {
+      get
+      {
+        if (string.IsNullOrEmpty(Description))
+          return "";
+        var flat = Description.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+        return flat.Length <= DescriptionDisplayLimit
+            ? flat
+            : flat.Substring(0, DescriptionDisplayLimit) + "…";
+      }
+    }
+
     /// <summary>Дата или подпись версии (произвольная строка).</summary>
     public string DateText { get; set; } = "";
     /// <summary>Начальные значения параметров гомеостаза: «id=value» через «;» (см. <see cref="ScenarioHomeostasisValuesFormat"/>).</summary>

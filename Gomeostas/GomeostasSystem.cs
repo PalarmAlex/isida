@@ -2152,6 +2152,34 @@ namespace ISIDA.Gomeostas
       }
     }
 
+    /// <summary>
+    /// Очищает данные текущей стадии агента как при шаге вниз, без смены стадии (предзапуск сценария).
+    /// </summary>
+    public EvolutionStageChangeResult ClearEvolutionStageDataForScenarioPreRun()
+    {
+      try
+      {
+        if (_evolutionStageService == null)
+        {
+          const string errorMsg = "Сервис переключения стадий не инициализирован";
+          Logger.Error(errorMsg);
+          return EvolutionStageChangeResult.CreateFailure(errorMsg);
+        }
+
+        int stage = _agentState.EvolutionStage;
+        _evolutionStageService.ClearStageDataOnlyForScenarioPreRun(stage);
+        return EvolutionStageChangeResult.CreateSuccess(
+            $"Данные стадии {stage} очищены перед запуском сценария",
+            stage,
+            stage);
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        return EvolutionStageChangeResult.CreateFailure(ex.Message);
+      }
+    }
+
     internal AgentHomeostasisState GetHomeostasisStateInternal()
     {
       var lastWellStatePulse = _agentState.LastWellStatePulse;

@@ -25,6 +25,8 @@ namespace ISIDA.Scenarios
       if (doc.Lines == null || doc.Lines.Count == 0)
         return "Добавьте хотя бы одну строку сценария.";
 
+      int stageForFeatureRules = EffectiveEvolutionStageForValidation(doc);
+
       var validIds = new HashSet<int>();
       try
       {
@@ -63,8 +65,10 @@ namespace ISIDA.Scenarios
 
         bool hasPhrase = !string.IsNullOrWhiteSpace(row.Phrase);
         bool hasActions = row.ActionIds != null && row.ActionIds.Count > 0;
-        if (!hasPhrase && !hasActions)
-          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): укажите фразу и/или воздействия с пульта.";
+        if (row.ResetWaitingPeriod && (hasPhrase || hasActions))
+          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с фразой или воздействиями.";
+        if (!hasPhrase && !hasActions && !row.ResetWaitingPeriod)
+          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): укажите фразу и/или воздействия с пульта, или установите сброс ожидания.";
 
         if (row.Phrase != null && row.Phrase.IndexOf('|') >= 0)
           return "Символ «|» в тексте фразы недопустим.";
@@ -78,11 +82,23 @@ namespace ISIDA.Scenarios
           }
         }
 
-        if (row.ResetWaitingPeriod && AppGlobalState.EvolutionStage < 3)
+        if (row.ResetWaitingPeriod && stageForFeatureRules < 3)
           return "Сброс времени ожидания доступен со стадии развития 3.";
       }
 
       return null;
+    }
+
+    /// <summary>
+    /// Стадия, относительно которой проверяем доступность функций шагов: явная стадия перед запуском (0–5)
+    /// из шапки сценария или текущая стадия агента при «не менять стадию» (−1).
+    /// </summary>
+    private static int EffectiveEvolutionStageForValidation(ScenarioDocument doc)
+    {
+      int t = doc.Header.PreRunTargetStage;
+      if (t >= 0 && t <= 5)
+        return t;
+      return AppGlobalState.EvolutionStage;
     }
 
     /// <summary>Проверка перед запуском: документ, пульсация, живой агент.</summary>
