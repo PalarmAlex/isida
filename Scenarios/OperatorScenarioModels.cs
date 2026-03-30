@@ -8,6 +8,17 @@ using System.Runtime.CompilerServices;
 
 namespace ISIDA.Scenarios
 {
+  /// <summary>Как приращивать номер пульса при переходе к следующему шагу (см. <see cref="ScenarioPulseSchedule"/>).</summary>
+  public enum ScenarioPulseStepIncrement
+  {
+    /// <summary>Следующий по порядку: +1 пульс на шаг.</summary>
+    Sequential = 1,
+    /// <summary>+ время удержания действий (пульсов) + 1.</summary>
+    ActionHoldPlusOne = 2,
+    /// <summary>+ время удержания состояний (пульсов) + 1.</summary>
+    StateHoldPlusOne = 3
+  }
+
   /// <summary>Тип шага сценария: воздействие с пульта или ожидание клика по плашке.</summary>
   public enum ScenarioLineKind
   {
@@ -216,6 +227,18 @@ namespace ISIDA.Scenarios
     /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах агента).</summary>
     public bool PreRunClearAgentData { get; set; }
 
+    /// <summary>При прогоне сценария: режим наблюдения (воздействия не меняют гомеостаз), как флажок на пульте.</summary>
+    public bool ScenarioObservationMode { get; set; }
+
+    /// <summary>При прогоне сценария: авторитарная запись вербального стимула, как флажок на пульте.</summary>
+    public bool ScenarioAuthoritativeRecording { get; set; }
+
+    /// <summary>
+    /// Приращение пульса между шагами: 1 — по порядку (+1); 2 — + время удержания действий + 1; 3 — + время удержания состояний + 1.
+    /// Значения глобальных времён берутся из настроек проекта при расчёте.
+    /// </summary>
+    public int PulseStepIncrement { get; set; } = (int)ScenarioPulseStepIncrement.ActionHoldPlusOne;
+
     /// <summary>Копия записи реестра.</summary>
     public ScenarioHeader Clone()
     {
@@ -229,7 +252,10 @@ namespace ISIDA.Scenarios
         GroupNumber = GroupNumber,
         SortOrderInGroup = SortOrderInGroup,
         PreRunTargetStage = PreRunTargetStage,
-        PreRunClearAgentData = PreRunClearAgentData
+        PreRunClearAgentData = PreRunClearAgentData,
+        ScenarioObservationMode = ScenarioObservationMode,
+        ScenarioAuthoritativeRecording = ScenarioAuthoritativeRecording,
+        PulseStepIncrement = PulseStepIncrement
       };
     }
   }

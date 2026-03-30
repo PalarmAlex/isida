@@ -7,11 +7,30 @@ using System.Linq;
 namespace ISIDA.Scenarios
 {
   /// <summary>
-  /// Расчёт номеров пульсов по шагам: следующий пульс = предыдущий + задержка + 1,
-  /// где задержка — ReflexActionDisplayDuration (пульсов), время отображения рефлекторного действия.
+  /// Расчёт номеров пульсов по шагам: следующий пульс = предыдущий + задержка + 1.
+  /// Задержка задаётся режимом <see cref="ScenarioPulseStepIncrement"/> и глобальными настройками (время удержания действий / состояний).
   /// </summary>
   public static class ScenarioPulseSchedule
   {
+    /// <summary>Число пульсов между шагами (без учёта «+1» к следующему номеру шага).</summary>
+    public static int ResolveDelayBetweenSteps(
+        ScenarioPulseStepIncrement mode,
+        int reflexActionDisplayDuration,
+        int stateHoldDynamicTime)
+    {
+      switch (mode)
+      {
+        case ScenarioPulseStepIncrement.Sequential:
+          return 0;
+        case ScenarioPulseStepIncrement.ActionHoldPlusOne:
+          return Math.Max(0, reflexActionDisplayDuration);
+        case ScenarioPulseStepIncrement.StateHoldPlusOne:
+          return Math.Max(0, stateHoldDynamicTime);
+        default:
+          return Math.Max(0, reflexActionDisplayDuration);
+      }
+    }
+
     /// <summary>Нормализует порядок строк, перенумеровывает шаги 1..n и задаёт PulseWithinScenario.</summary>
     public static void Normalize(IList<ScenarioLineRow> lines, int delayPulsesBetweenSteps)
     {

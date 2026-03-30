@@ -24,6 +24,11 @@ namespace ISIDA.Scenarios
         return "Укажите название сценария.";
       if (doc.Lines == null || doc.Lines.Count == 0)
         return "Добавьте хотя бы одну строку сценария.";
+      int psi = doc.Header.PulseStepIncrement;
+      if (psi != (int)ScenarioPulseStepIncrement.Sequential
+          && psi != (int)ScenarioPulseStepIncrement.ActionHoldPlusOne
+          && psi != (int)ScenarioPulseStepIncrement.StateHoldPlusOne)
+        return "Укажите корректный режим приращения пульса на шаге (1, 2 или 3).";
 
       int stageForFeatureRules = EffectiveEvolutionStageForValidation(doc);
 
@@ -84,6 +89,21 @@ namespace ISIDA.Scenarios
 
         if (row.ResetWaitingPeriod && stageForFeatureRules < 3)
           return "Сброс времени ожидания доступен со стадии развития 3.";
+      }
+
+      var ordered = doc.Lines.OrderBy(r => r.StepIndex).ToList();
+      for (int i = 1; i < ordered.Count; i++)
+      {
+        int prevPulse = ordered[i - 1].PulseWithinScenario;
+        int curPulse = ordered[i].PulseWithinScenario;
+        if (curPulse <= prevPulse)
+        {
+          return "Номер пульса на шаге " + ordered[i].StepIndex.ToString(CultureInfo.InvariantCulture)
+              + " (" + curPulse.ToString(CultureInfo.InvariantCulture) + ") должен быть больше, чем на предыдущем шаге "
+              + ordered[i - 1].StepIndex.ToString(CultureInfo.InvariantCulture)
+              + " (" + prevPulse.ToString(CultureInfo.InvariantCulture)
+              + "): нельзя задавать пульс, не превышающий уже использованный у предшествующих шагов.";
+        }
       }
 
       return null;
