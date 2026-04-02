@@ -1941,6 +1941,30 @@ namespace ISIDA.Gomeostas
       return v;
     }
 
+    /// <summary>
+    /// Перед запуском сценария: дефицит-ориентированные параметры (Speed &lt; 0) → 100, избыток-ориентированные (Speed &gt; 0) → 0,
+    /// с усечением по критическим границам параметра.
+    /// </summary>
+    public void ApplySpeedOrientedNormalHomeostasisForScenarioPreRun()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        EnsureAgentState(AgentCheck.NotDead);
+        foreach (var p in _agentState.Parameters)
+        {
+          if (p.Speed < 0)
+            p.Value = ClampValueToParameterRange(p, 100f);
+          else if (p.Speed > 0)
+            p.Value = ClampValueToParameterRange(p, 0f);
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     private static ParameterData CloneParameterForPreview(ParameterData p, float valueForClone)
     {
       float v = ClampValueToParameterRange(p, valueForClone);

@@ -259,13 +259,15 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Метод выполнения автоматизма с поддержкой цепочек
+    /// Метод выполнения автоматизма с поддержкой цепочек.
+    /// Момент отложенного старта цепочки привязывается к <see cref="GlobalTimer.GlobalPulsCount"/> (а не к устаревшему
+    /// <c>PulseCount</c> психики), т.к. сценарий может вызвать активацию до <c>ProcessPsychicPulse</c> на том же пульсе.
     /// </summary>
-    public (bool Success, string ErrorMessage, bool ChainActivated) ExecuteAutomatizmWithChains(
-        int automatizmId,
-        int pulseCount)
+    public (bool Success, string ErrorMessage, bool ChainActivated) ExecuteAutomatizmWithChains(int automatizmId)
     {
-      StopCurrentAutomatizmChain(pulseCount);
+      int chainSchedulePulse = GlobalTimer.GlobalPulsCount;
+
+      StopCurrentAutomatizmChain(chainSchedulePulse);
       _pendingChainActivation = null;
 
       var result = ExecuteAutomatizm(automatizmId);
@@ -286,7 +288,7 @@ namespace ISIDA.Psychic.Automatism
       _pendingChainActivation = new PendingChainActivation
       {
         ChainId = automatizm.NextID,
-        StartPulse = pulseCount,
+        StartPulse = chainSchedulePulse,
         StartAutomatizmId = automatizmId
       };
 

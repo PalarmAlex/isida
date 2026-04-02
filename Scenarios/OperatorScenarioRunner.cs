@@ -223,8 +223,11 @@ namespace ISIDA.Scenarios
           }
           else
           {
+            string note = line.ResetWaitingPeriod
+                ? "сброс периода ожидания выполнен выше, стимул не подаётся"
+                : "пустая строка (маркер пульса), стимул не подаётся";
             ScenarioRunnerDiagnostics.Write(
-                $"[ResetOnly OK] step={line.StepIndex} global={globalPulseCount} — только сброс ожидания, стимул не подаётся");
+                $"[SkipStimulus] step={line.StepIndex} global={globalPulseCount} — {note}");
           }
         }
 

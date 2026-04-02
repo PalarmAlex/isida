@@ -7,12 +7,13 @@ using System.Linq;
 namespace ISIDA.Scenarios
 {
   /// <summary>
-  /// Расчёт номеров пульсов по шагам: следующий пульс = предыдущий + задержка + 1.
+  /// Расчёт номеров пульсов по шагам: следующий пульс = предыдущий + зазор + хвост,
+  /// где хвост = 1 для всех режимов, кроме <see cref="ScenarioPulseStepIncrement.ActionHold"/> (только зазор; при нулевом зазоре — минимум 1 пульс).
   /// Задержка задаётся режимом <see cref="ScenarioPulseStepIncrement"/> и глобальными настройками (время удержания действий / состояний).
   /// </summary>
   public static class ScenarioPulseSchedule
   {
-    /// <summary>Число пульсов между шагами (без учёта «+1» к следующему номеру шага).</summary>
+    /// <summary>Число пульсов между шагами (без учёта хвостового +1 к следующему номеру шага).</summary>
     public static int ResolveDelayBetweenSteps(
         ScenarioPulseStepIncrement mode,
         int reflexActionDisplayDuration,
@@ -22,6 +23,7 @@ namespace ISIDA.Scenarios
       {
         case ScenarioPulseStepIncrement.Sequential:
           return 0;
+        case ScenarioPulseStepIncrement.ActionHold:
         case ScenarioPulseStepIncrement.ActionHoldPlusOne:
           return Math.Max(0, reflexActionDisplayDuration);
         case ScenarioPulseStepIncrement.StateHoldPlusOne:
@@ -29,6 +31,20 @@ namespace ISIDA.Scenarios
         default:
           return Math.Max(0, reflexActionDisplayDuration);
       }
+    }
+
+    /// <summary>Дополнительный пульс после зазора: 0 только для <see cref="ScenarioPulseStepIncrement.ActionHold"/>.</summary>
+    public static int TailPulseAfterGap(ScenarioPulseStepIncrement mode) =>
+        mode == ScenarioPulseStepIncrement.ActionHold ? 0 : 1;
+
+    /// <summary>Приращение номера пульса от шага к шагу (не меньше 1).</summary>
+    public static int PulseDeltaBetweenConsecutiveSteps(
+        ScenarioPulseStepIncrement mode,
+        int reflexActionDisplayDuration,
+        int stateHoldDynamicTime)
+    {
+      int gap = ResolveDelayBetweenSteps(mode, reflexActionDisplayDuration, stateHoldDynamicTime);
+      return Math.Max(1, gap + TailPulseAfterGap(mode));
     }
 
     /// <summary>Нормализует порядок строк, перенумеровывает шаги 1..n и задаёт PulseWithinScenario.</summary>

@@ -16,7 +16,9 @@ namespace ISIDA.Scenarios
     /// <summary>+ время удержания действий (пульсов) + 1.</summary>
     ActionHoldPlusOne = 2,
     /// <summary>+ время удержания состояний (пульсов) + 1.</summary>
-    StateHoldPlusOne = 3
+    StateHoldPlusOne = 3,
+    /// <summary>Только время удержания действий (пульсов), без дополнительного +1 к следующему шагу.</summary>
+    ActionHold = 4
   }
 
   /// <summary>Тип шага сценария: воздействие с пульта или ожидание клика по плашке.</summary>
@@ -227,6 +229,9 @@ namespace ISIDA.Scenarios
     /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах агента).</summary>
     public bool PreRunClearAgentData { get; set; }
 
+    /// <summary>Перед запуском: выставить «норму» по ориентации Speed — дефицит (Speed &lt; 0) в 100, избыток (Speed &gt; 0) в 0; затем хост выдерживает паузу на стабилизацию.</summary>
+    public bool PreRunNormalHomeostasisState { get; set; }
+
     /// <summary>При прогоне сценария: режим наблюдения (воздействия не меняют гомеостаз), как флажок на пульте.</summary>
     public bool ScenarioObservationMode { get; set; }
 
@@ -253,6 +258,7 @@ namespace ISIDA.Scenarios
         SortOrderInGroup = SortOrderInGroup,
         PreRunTargetStage = PreRunTargetStage,
         PreRunClearAgentData = PreRunClearAgentData,
+        PreRunNormalHomeostasisState = PreRunNormalHomeostasisState,
         ScenarioObservationMode = ScenarioObservationMode,
         ScenarioAuthoritativeRecording = ScenarioAuthoritativeRecording,
         PulseStepIncrement = PulseStepIncrement

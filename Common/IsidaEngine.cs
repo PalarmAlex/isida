@@ -1002,12 +1002,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V2.5";
+    public const string ProjectVersion = "V3.0";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.03.07";
+    public const string BuildDate = "2026.03.31";
 
     /// <summary>
     /// Краткое описание концепции проекта

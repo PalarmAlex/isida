@@ -998,7 +998,7 @@ namespace ISIDA.Psychic
             automatizm.BranchID,
             automatizm.ActionsImageID);
 
-        var result = _automatismExecutionService.ExecuteAutomatizmWithChains(automatizm.ID, PulseCount);
+        var result = _automatismExecutionService.ExecuteAutomatizmWithChains(automatizm.ID);
 
         if (result.Success)
         {

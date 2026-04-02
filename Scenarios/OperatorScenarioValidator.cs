@@ -27,8 +27,9 @@ namespace ISIDA.Scenarios
       int psi = doc.Header.PulseStepIncrement;
       if (psi != (int)ScenarioPulseStepIncrement.Sequential
           && psi != (int)ScenarioPulseStepIncrement.ActionHoldPlusOne
-          && psi != (int)ScenarioPulseStepIncrement.StateHoldPlusOne)
-        return "Укажите корректный режим приращения пульса на шаге (1, 2 или 3).";
+          && psi != (int)ScenarioPulseStepIncrement.StateHoldPlusOne
+          && psi != (int)ScenarioPulseStepIncrement.ActionHold)
+        return "Укажите корректный режим приращения пульса на шаге (1, 2, 3 или 4).";
 
       int stageForFeatureRules = EffectiveEvolutionStageForValidation(doc);
 
@@ -72,8 +73,7 @@ namespace ISIDA.Scenarios
         bool hasActions = row.ActionIds != null && row.ActionIds.Count > 0;
         if (row.ResetWaitingPeriod && (hasPhrase || hasActions))
           return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с фразой или воздействиями.";
-        if (!hasPhrase && !hasActions && !row.ResetWaitingPeriod)
-          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): укажите фразу и/или воздействия с пульта, или установите сброс ожидания.";
+        // Пустая строка пульта (без фразы, без воздействий, без сброса) допустима — маркер пульса только для ожидаемого лога.
 
         if (row.Phrase != null && row.Phrase.IndexOf('|') >= 0)
           return "Символ «|» в тексте фразы недопустим.";
