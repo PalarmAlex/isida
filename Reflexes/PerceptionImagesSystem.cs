@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
 using System.Collections.Generic;
@@ -173,7 +173,6 @@ namespace ISIDA.Reflexes
       };
 
       int resultId = 0;
-      bool needSave = false;
 
       _lock.EnterWriteLock();
       try
@@ -194,27 +193,11 @@ namespace ISIDA.Reflexes
 
           _behaviorStyleImages.Add(newId, styleImage);
           resultId = newId;
-          needSave = true; // Помечаем, что нужно сохранить
         }
       }
       finally
       {
         _lock.ExitWriteLock();
-      }
-
-      // Сохраняем за пределами блокировок
-      if (needSave)
-      {
-        try
-        {
-          var saveResult = SaveBehaviorStyleImages();
-          if (!saveResult.Success)
-            Logger.Warning($"Ошибка сохранения образа стилей ID {resultId}: {saveResult.ErrorMessage}");
-        }
-        catch (Exception ex)
-        {
-          Logger.Error(ex.Message);
-        }
       }
 
       return resultId;
@@ -249,7 +232,6 @@ namespace ISIDA.Reflexes
       };
 
       int resultId = 0;
-      bool needSave = false;
 
       _lock.EnterWriteLock();
       try
@@ -274,29 +256,11 @@ namespace ISIDA.Reflexes
 
           _perceptionImages.Add(newId, perceptionImage);
           resultId = newId;
-          needSave = true; // Помечаем, что нужно сохранить
         }
       }
       finally
       {
         _lock.ExitWriteLock();
-      }
-
-      // Сохраняем за пределами блокировок
-      if (needSave)
-      {
-        try
-        {
-          var saveResult = SavePerceptionImages();
-          if (!saveResult.Success)
-          {
-            Logger.Warning($"Ошибка сохранения образа восприятия ID {resultId}: {saveResult.ErrorMessage}");
-          }
-        }
-        catch (Exception ex)
-        {
-          Logger.Error(ex.Message);
-        }
       }
 
       return resultId;
@@ -689,9 +653,6 @@ namespace ISIDA.Reflexes
         {
           image.PhraseIdList.Clear();
         }
-
-        // Сохраняем изменения
-        SavePerceptionImages();
       }
       finally
       {

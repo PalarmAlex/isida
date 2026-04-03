@@ -384,13 +384,6 @@ namespace ISIDA.Psychic.Automatism
 
         CreateBasicAutomatizmTree();
 
-        var saveResult = SaveAutomatizmTreeNoLock();
-        if (!saveResult.Success)
-        {
-          Logger.Error($"Не удалось сохранить очищенное дерево: {saveResult.ErrorMessage}");
-          return false;
-        }
-
         return true;
       }
       catch (Exception ex)

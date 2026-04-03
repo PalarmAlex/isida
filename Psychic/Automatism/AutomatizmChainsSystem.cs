@@ -103,7 +103,6 @@ namespace ISIDA.Psychic.Automatism
 
         if (chainsToRemove.Any())
         {
-          SaveAutomatizmChainsCore();
           if (!isMassCleanup)
             Logger.Info($"Удалены цепочки автоматизмов {string.Join(", ", chainsToRemove)} при удалении автоматизма {automatizmId}");
         }
@@ -360,7 +359,6 @@ namespace ISIDA.Psychic.Automatism
 
         if (removed)
         {
-          SaveAutomatizmChainsCore();
           OnAutomatizmChainDeleted(chainId);
           if (!silent)
             Logger.Info($"Цепочка автоматизмов {chainId} удалена. Удалено звеньев: {linkIds.Count}");
@@ -549,7 +547,6 @@ namespace ISIDA.Psychic.Automatism
         link.Description = description ?? link.Description;
         link.ChainUsefulness = SettingsValidator.ClampChainLinkUsefulness(ChainUsefulness);
 
-        SaveAutomatizmChainsCore();
         return (true, warnings.ToArray());
       }
       finally
@@ -610,8 +607,6 @@ namespace ISIDA.Psychic.Automatism
         _actionsImageToChain.Remove(linkToRemove.ActionsImageId);
 
         bool removed = chain.Links.Remove(linkToRemove);
-        if (removed)
-          SaveAutomatizmChainsCore();
 
         return removed;
       }

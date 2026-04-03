@@ -373,7 +373,7 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Очистить дерево понимания в памяти и в файле, оставить только базовую структуру (для перехода на младшую стадию).</summary>
+    /// <summary>Очистить дерево понимания в памяти, оставить только базовую структуру (для перехода на младшую стадию). Запись на диск — при Dispose.</summary>
     public (bool Success, string Error) Clear()
     {
       _lock.EnterWriteLock();
@@ -389,7 +389,7 @@ namespace ISIDA.Psychic.Understanding
       {
         _lock.ExitWriteLock();
       }
-      return Save();
+      return (true, null);
     }
 
     /// <summary>Сохранить дерево</summary>

@@ -207,12 +207,6 @@ namespace ISIDA.Sensors
         WordSandbox.Clear();
         PhraseSandbox.Clear();
 
-        // Сохраняем изменения
-        WordTree.Save();
-        PhraseTree.Save();
-        WordSandbox.Save();
-        PhraseSandbox.Save();
-
         OnClearAllTrees();
       }
       finally
@@ -333,7 +327,6 @@ namespace ISIDA.Sensors
         if (_authoritativeMode)
         {
           var newId = WordTree.AddBranch(word);
-          WordTree.Save(); // Явное сохранение
           return newId;
         }
 
@@ -343,7 +336,6 @@ namespace ISIDA.Sensors
         {
           var newId = WordTree.AddBranch(word);
           WordSandbox.Remove(word);
-          WordTree.Save(); // Явное сохранение
           return newId;
         }
 
@@ -681,7 +673,6 @@ namespace ISIDA.Sensors
         if (_authoritativeMode)
         {
           var newId = PhraseTree.AddBranch(wordIds);
-          PhraseTree.Save(); // Явное сохранение
           return newId;
         }
 
@@ -691,7 +682,6 @@ namespace ISIDA.Sensors
         {
           var newId = PhraseTree.AddBranch(wordIds);
           PhraseSandbox.Remove(wordIds);
-          PhraseTree.Save(); // Явное сохранение
           return newId;
         }
 
@@ -842,11 +832,6 @@ namespace ISIDA.Sensors
         }
       }
 
-      // Явное сохранение всех данных
-      WordTree.Save();
-      PhraseTree.Save();
-      WordSandbox.Save();
-      PhraseSandbox.Save();
     }
 
     /// <summary>
@@ -968,7 +953,6 @@ namespace ISIDA.Sensors
         PhraseTree?.Dispose();
         WordSandbox?.Dispose();
         PhraseSandbox?.Dispose();
-        _gomeostas?.Dispose();
       }
       finally
       {

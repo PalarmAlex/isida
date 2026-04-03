@@ -246,7 +246,6 @@ namespace ISIDA.Sensors
       finally
       {
         _lock.ExitWriteLock();
-        Save();
       }
     }
 
@@ -402,9 +401,19 @@ namespace ISIDA.Sensors
     public void Dispose()
     {
       if (_disposed) return;
-
-      _lock?.Dispose();
-      _disposed = true;
+      try
+      {
+        Save();
+      }
+      catch
+      {
+        // при выгрузке не пробрасываем
+      }
+      finally
+      {
+        _lock?.Dispose();
+        _disposed = true;
+      }
     }
 
     #endregion

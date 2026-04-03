@@ -784,8 +784,6 @@ namespace ISIDA.Reflexes
         int oldChainId = _geneticReflexes[reflexId].ReflexChainID;
         _geneticReflexes[reflexId].ReflexChainID = 0;
 
-        SaveGeneticReflexes(false);
-
         Logger.Info($"Отвязана цепочка {oldChainId} от рефлекса {reflexId}");
         return true;
       }
@@ -869,13 +867,7 @@ namespace ISIDA.Reflexes
       }
 
       if (clearedCount > 0)
-      {
-        var (success, errMsg) = SaveGeneticReflexes(false);
-        if (!success)
-          Logger.Info($"Не удалось обновить файл б/у рефлексов после удаления ссылок цепочек: {errMsg}");
-        else
-          Logger.Info($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
-      }
+        Logger.Info($"Очищены ссылки на цепочку {chainId} в {clearedCount} рефлексах");
     }
 
     #region Работа с файлами
@@ -1297,6 +1289,13 @@ namespace ISIDA.Reflexes
         // Очищаем подписчиков на наши события
         GeneticReflexDeleted = null;
         MultipleGeneticReflexesDeleted = null;
+
+        if (AppGlobalState.EvolutionStage == 0)
+        {
+          var (ok, err) = SaveGeneticReflexes(false);
+          if (!ok && !string.IsNullOrEmpty(err))
+            Logger.Warning($"GeneticReflexesSystem: сохранение при выгрузке: {err}");
+        }
       }
       catch (Exception ex)
       {

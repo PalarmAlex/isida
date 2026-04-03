@@ -309,11 +309,7 @@ namespace ISIDA.Common
         }
 
         ActionsImagesSystem.Instance.ClearAllActionsImages();
-        var result = ActionsImagesSystem.Instance.SaveActionsImages();
-        if (!result.Success)
-          Logger.Warning($"Не удалось сохранить файл action_images после очистки: {result.ErrorMessage}");
-        else
-          Logger.Info("Образы действий (action_images.dat) очищены и сохранены");
+        Logger.Info("Образы действий (action_images.dat) очищены в памяти; запись при закрытии системы");
       }
       catch (Exception ex)
       {
@@ -336,11 +332,7 @@ namespace ISIDA.Common
           _conditionedReflexesSystem.RemoveAllConditionedReflexes();
           _conditionedReflexesSystem.removeAllConditionedReflexes = originalRemoveFlag;
 
-          var result = _conditionedReflexesSystem.SaveConditionedReflexes();
-          if (!result.Success)
-            Logger.Warning($"Не удалось обновить файл условных рефлексов после очистки: {result.ErrorMessage}");
-          else
-            Logger.Info("Условные рефлексы успешно очищены и сохранены");
+          Logger.Info("Условные рефлексы очищены в памяти; запись при закрытии системы");
         }
         else
           Logger.Info("Система условных рефлексов не инициализирована, очистка не требуется");
@@ -363,11 +355,7 @@ namespace ISIDA.Common
         if (_automatizmSystem != null)
         {
           _automatizmSystem.DeleteAllAutomatizm();
-          var result = _automatizmSystem.SaveAutomatizm();
-          if (!result.Success)
-            Logger.Warning($"Не удалось обновить файл автоматизмов после очистки: {result.ErrorMessage}");
-          else
-            Logger.Info("Автоматизмы успешно очищены");
+          Logger.Info("Автоматизмы очищены в памяти; запись при закрытии системы");
         }
         else
           Logger.Info("Система автоматизмов не инициализирована, очистка не требуется");

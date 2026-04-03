@@ -244,6 +244,9 @@ namespace ISIDA.Scenarios
     /// </summary>
     public int PulseStepIncrement { get; set; } = (int)ScenarioPulseStepIncrement.ActionHoldPlusOne;
 
+    /// <summary>Ускорение пульса по календарю при прогоне (1, 10, 50, 100). 1 — обычная скорость.</summary>
+    public int RunPulseTimingCoefficient { get; set; } = 1;
+
     /// <summary>Копия записи реестра.</summary>
     public ScenarioHeader Clone()
     {
@@ -261,7 +264,8 @@ namespace ISIDA.Scenarios
         PreRunNormalHomeostasisState = PreRunNormalHomeostasisState,
         ScenarioObservationMode = ScenarioObservationMode,
         ScenarioAuthoritativeRecording = ScenarioAuthoritativeRecording,
-        PulseStepIncrement = PulseStepIncrement
+        PulseStepIncrement = PulseStepIncrement,
+        RunPulseTimingCoefficient = RunPulseTimingCoefficient
       };
     }
   }

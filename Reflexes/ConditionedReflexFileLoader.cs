@@ -175,18 +175,6 @@ namespace ISIDA.Reflexes
           "Нет корректных строк. Ожидается формат: Состояние|Стили|Триггер безусловного рефлекса|Новый триггер [|Тон|Настроение].",
           nameof(content));
 
-      var cr = ConditionedReflexesSystem.Instance;
-      try
-      {
-        var (saveOk, saveErr) = cr.SaveConditionedReflexes();
-        if (!saveOk)
-          Logger.Warning($"Сохранение условных рефлексов после загрузки: {saveErr}");
-      }
-      catch (Exception ex)
-      {
-        Logger.Warning($"Сохранение условных рефлексов: {ex.Message}");
-      }
-
       return result;
     }
 

@@ -25,11 +25,16 @@ namespace ISIDA.Common
     #region Поля и свойства
 
     private static Timer _timer;
-    private static Timer _autosaveTimer;
     private static readonly object _timerLock = new object();
     private static bool _isRunning = false;
-    private static int _secondsSinceLastSave = 0;
     private static ResearchLogger _researchLogger; // это нужно для корректной выгрузки в IsidaEngine!!!
+
+    /// <summary>Ускорение пульса по календарю: 1 — базово ~1 с на цикл; &gt;1 укорачивает паузы (сценарии).</summary>
+    /// <remarks>volatile: чтение с UI во время пульса не должно вызывать <c>lock(_timerLock)</c> — иначе взаимная блокировка с <c>Dispatcher.Invoke</c> в обработчике пульса при удержании того же lock в <c>ProcessAgentPulse</c>.</remarks>
+    private static volatile int _pulseWallTimeMultiplier = 1;
+
+    /// <summary>При прогоне сценария: не тратить время на фазу анимации пульса.</summary>
+    private static volatile bool _suppressPulseAnimation = false;
 
     /// <summary>
     /// Установка ссылки на логер
@@ -60,7 +65,6 @@ namespace ISIDA.Common
     private const int GreenDurationMs = 200;   // Яркая вспышка
     private const int FadeDurationMs = 300;    // Плавное затухание
     private const int GrayDurationMs = 500;    // Пауза после затухания (итого 1000мс = 1сек)
-    private const int AutosaveIntervalSeconds = 10; // Интервал автосохранения
 
     /// <summary>
     /// Глобальный счетчик пульсов
@@ -71,6 +75,31 @@ namespace ISIDA.Common
     /// Флаг активности пульсации
     /// </summary>
     public static bool IsPulsationRunning { get; private set; } = false;
+
+    /// <summary>Текущий множитель скорости пульса по времени (1 = норма).</summary>
+    public static int PulseWallTimeMultiplier => _pulseWallTimeMultiplier;
+
+    /// <summary>Анимация пульса пропущена (ускоренный прогон).</summary>
+    public static bool IsPulseAnimationSuppressed => _suppressPulseAnimation;
+
+    /// <summary>
+    /// Ускорение пульсации по календарю (например прогон сценария). Частота ~ в <paramref name="multiplier"/> раз выше при той же логике по счётчику пульсов.
+    /// </summary>
+    public static void SetPulseWallClockAcceleration(int multiplier, bool suppressAnimation)
+    {
+      int clamped = multiplier < 1 ? 1 : (multiplier > 100 ? 100 : multiplier);
+      _pulseWallTimeMultiplier = clamped;
+      _suppressPulseAnimation = suppressAnimation && clamped > 1;
+      if (clamped <= 1)
+        _suppressPulseAnimation = false;
+    }
+
+    /// <summary>Сброс ускорения пульса по времени (после сценария).</summary>
+    public static void ClearPulseWallClockAcceleration()
+    {
+      _suppressPulseAnimation = false;
+      _pulseWallTimeMultiplier = 1;
+    }
 
     // Системы, участвующие в пульсе
     private static GomeostasSystem _gomeostas;
@@ -118,11 +147,6 @@ namespace ISIDA.Common
     /// </summary>
     public static event Action<double> OnPulseBrightnessChanged;
 
-    /// <summary>
-    /// Событие автосохранения
-    /// </summary>
-    public static event Action OnAutosave;
-
     #endregion
 
     #region Публичные методы
@@ -169,13 +193,9 @@ namespace ISIDA.Common
         IsPulsationRunning = true;
         PulsationStateChanged?.Invoke();
         _isRunning = true;
-        _secondsSinceLastSave = 0;
 
         // Запуск таймера пульсации
         _timer = new Timer(TimerCallback, null, 0, Timeout.Infinite);
-
-        // Запуск таймера автосохранения
-        _autosaveTimer = new Timer(AutosaveCallback, null, 1000, 1000);
       }
     }
 
@@ -212,7 +232,6 @@ namespace ISIDA.Common
     public static void Reset()
     {
       GlobalPulsCount = 0;
-      _secondsSinceLastSave = 0;
     }
 
     /// <summary>
@@ -239,7 +258,6 @@ namespace ISIDA.Common
         OnPulseStateChanged = null;
         OnPulseBrightnessChanged = null;
         PulsationStateChanged = null;
-        OnAutosave = null;
 
         Logger.Info("GlobalTimer: все системы очищены");
       }
@@ -248,44 +266,6 @@ namespace ISIDA.Common
     #endregion
 
     #region Приватные методы
-
-      /// <summary>
-      /// Callback таймера автосохранения
-      /// </summary>
-    private static void AutosaveCallback(object state)
-    {
-      lock (_timerLock)
-      {
-        if (!_isRunning) return;
-
-        _secondsSinceLastSave++;
-
-        if (_secondsSinceLastSave >= AutosaveIntervalSeconds)
-        {
-          TriggerAutosave();
-          _secondsSinceLastSave = 0;
-        }
-      }
-    }
-
-    /// <summary>
-    /// Вызывает автосохранение
-    /// </summary>
-    private static void TriggerAutosave()
-    {
-      if (_researchLogger != null && _researchLogger.IsDisposed)
-        return;
-
-      try
-      {
-        _gomeostas.SaveAgentProperties();
-        OnAutosave?.Invoke();
-      }
-      catch
-      {
-        // Игнорируем ошибки при завершении
-      }
-    }
 
     private static void TimerCallback(object state)
     {
@@ -301,21 +281,34 @@ namespace ISIDA.Common
 
       try
       {
-        // Фаза 1: Сигнализация начала пульса
-        OnPulseStateChanged?.Invoke(true);
-        OnPulseBrightnessChanged?.Invoke(1.0);
-        Thread.Sleep(GreenDurationMs);
+        int m = _pulseWallTimeMultiplier < 1 ? 1 : _pulseWallTimeMultiplier;
+        if (m > 100) m = 100;
+        bool suppressAnim = _suppressPulseAnimation;
 
-        // Фаза 2: Затухание
-        for (int i = 9; i >= 0; i--)
+        int greenMs = suppressAnim ? 0 : Math.Max(1, GreenDurationMs / m);
+        int fadeStepMs = suppressAnim ? 0 : Math.Max(1, FadeDurationMs / 10 / m);
+        int grayMs = Math.Max(1, GrayDurationMs / m);
+
+        // Фаза 1–2: анимация пульса (пропуск при ускоренном прогоне сценария)
+        OnPulseStateChanged?.Invoke(true);
+        if (suppressAnim)
         {
-          lock (_timerLock)
+          OnPulseBrightnessChanged?.Invoke(0);
+        }
+        else
+        {
+          OnPulseBrightnessChanged?.Invoke(1.0);
+          Thread.Sleep(greenMs);
+          for (int i = 9; i >= 0; i--)
           {
-            if (!_isRunning)
-              return;
+            lock (_timerLock)
+            {
+              if (!_isRunning)
+                return;
+            }
+            OnPulseBrightnessChanged?.Invoke(i * 0.1);
+            Thread.Sleep(fadeStepMs);
           }
-          OnPulseBrightnessChanged?.Invoke(i * 0.1);
-          Thread.Sleep(FadeDurationMs / 10);
         }
 
         // Фаза 3: Обновление состояния агента
@@ -339,7 +332,7 @@ namespace ISIDA.Common
             Logger.Warning("Таймер остановлен перед изменением интервала");
             return;
           }
-          _timer?.Change(GrayDurationMs, Timeout.Infinite);
+          _timer?.Change(grayMs, Timeout.Infinite);
           Monitor.Pulse(_timerLock);
         }
       }
@@ -438,7 +431,6 @@ namespace ISIDA.Common
     private static void StopTimers(bool notifyUI = true)
     {
       Timer timerToDispose = null;
-      Timer autosaveTimerToDispose = null;
 
       lock (_timerLock)
       {
@@ -448,22 +440,26 @@ namespace ISIDA.Common
 
         // Сохраняем ссылки на таймеры для dispose вне lock
         timerToDispose = _timer;
-        autosaveTimerToDispose = _autosaveTimer;
 
         // Обнуляем ссылки
         _timer = null;
-        _autosaveTimer = null;
       }
 
       try
       {
         // Dispose таймеров ВНЕ lock чтобы избежать deadlock
         timerToDispose?.Dispose();
-        autosaveTimerToDispose?.Dispose();
         Logger.Info("Таймеры остановлены и disposed");
 
-        // Вызываем автосохранение ПОСЛЕ остановки таймеров
-        TriggerAutosave();
+        try
+        {
+          if (_researchLogger == null || !_researchLogger.IsDisposed)
+            _gomeostas?.SaveAgentProperties();
+        }
+        catch
+        {
+          // Игнорируем ошибки при завершении
+        }
 
         // Уведомляем UI только если нужно
         if (notifyUI)
@@ -482,7 +478,6 @@ namespace ISIDA.Common
           OnPulseStateChanged = null;
           OnPulseBrightnessChanged = null;
           PulsationStateChanged = null;
-          OnAutosave = null;
         }
 
         Logger.Info("Остановка завершена успешно");

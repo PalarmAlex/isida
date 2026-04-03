@@ -238,7 +238,6 @@ namespace ISIDA.Reflexes
             _lastLinkId = link.ID;
 
         // Полная валидация новой цепочки (без повторной блокировки — уже удерживается write lock)
-        SaveReflexChainsCore();
         var validationIssues = new List<string>();
         ValidateChainCore(newId, validationIssues);
         if (validationIssues.Any())
@@ -271,7 +270,6 @@ namespace ISIDA.Reflexes
 
         if (removed)
         {
-          SaveReflexChainsCore();
           OnReflexChainDeleted(chainId);
           Logger.Info($"Цепочка {chainId} удалена. Удалено звеньев: {linkIds.Count}");
         }
@@ -306,7 +304,6 @@ namespace ISIDA.Reflexes
         _reflexChains.Clear();
         _lastChainId = 0;
         _lastLinkId = 0;
-        SaveReflexChainsCore();
 
         foreach (var chainId in chainIds)
           OnReflexChainDeleted(chainId);
@@ -470,7 +467,6 @@ namespace ISIDA.Reflexes
         link.FailureNextLink = failureNextLink;
         link.Description = description ?? link.Description;
 
-        SaveReflexChainsCore();
         return (true, warnings.ToArray());
       }
       finally
@@ -525,8 +521,6 @@ namespace ISIDA.Reflexes
         }
 
         bool removed = chain.Links.Remove(linkToRemove);
-        if (removed)
-          SaveReflexChainsCore();
 
         return removed;
       }
@@ -863,6 +857,8 @@ namespace ISIDA.Reflexes
       try
       {
         if (AppGlobalState.EvolutionStage == 0)
+          SaveReflexChains();
+        else if (AppGlobalState.EvolutionStage >= 1)
           SaveReflexChains();
       }
       catch (Exception ex)

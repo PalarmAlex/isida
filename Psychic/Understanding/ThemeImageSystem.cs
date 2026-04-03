@@ -507,13 +507,13 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Очистить все образы тем в памяти и в файле theme_images.dat (для перехода на младшую стадию). Справочник типов тем не трогает.</summary>
+    /// <summary>Очистить все образы тем в памяти (для перехода на младшую стадию). Справочник типов тем не трогает. Запись на диск — при Dispose.</summary>
     public (bool Success, string Error) Clear()
     {
       _byId.Clear();
       _unicumKeyToId.Clear();
       _lastId = 0;
-      return Save();
+      return (true, null);
     }
 
     /// <summary>Сохранить на диск (образы тем и справочник типов)</summary>

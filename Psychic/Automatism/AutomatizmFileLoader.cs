@@ -406,9 +406,6 @@ namespace ISIDA.Psychic.Automatism
         _verbalChannel.AuthoritativeMode = originalMode;
       }
 
-      _verbalChannel.WordTree.Save();
-      _verbalChannel.PhraseTree.Save();
-
       return successCount > 0;
     }
 
@@ -481,9 +478,6 @@ namespace ISIDA.Psychic.Automatism
       {
         _verbalChannel.AuthoritativeMode = originalMode;
       }
-
-      _verbalChannel.WordTree.Save();
-      _verbalChannel.PhraseTree.Save();
 
       return successCount > 0;
     }

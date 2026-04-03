@@ -85,14 +85,8 @@ namespace ISIDA.Psychic.Understanding
     /// </summary>
     public (bool Saved, string Error) EnsureSlotsAndSaveIfNeeded()
     {
-      int countBefore = _byId.Count;
       EnsureSlots();
       RebuildIndexes();
-      if (_byId.Count > countBefore)
-      {
-        var (ok, err) = Save();
-        return (ok, err);
-      }
       return (true, null);
     }
 
@@ -184,7 +178,7 @@ namespace ISIDA.Psychic.Understanding
       }
       EnsureSlots();
       RebuildIndexes();
-      return Save();
+      return (true, null);
     }
 
     #endregion

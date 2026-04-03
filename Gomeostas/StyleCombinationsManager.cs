@@ -1,4 +1,4 @@
-﻿﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -20,6 +20,7 @@ namespace ISIDA.Gomeostas
     private readonly Func<List<GomeostasSystem.ParameterData>> _getParametersFunc;
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
+    private List<List<GomeostasSystem.BehaviorStyle>> _pendingStyleCombinationsSave;
 
     /// <summary>
     /// Инициализирует новый экземпляр менеджера комбинаций стилей
@@ -55,15 +56,14 @@ namespace ISIDA.Gomeostas
         var loadedCombinations = LoadStyleCombinations();
         if (loadedCombinations.Any())
         {
+          _pendingStyleCombinationsSave = null;
           return loadedCombinations;
         }
       }
 
       // Генерируем новые комбинации из привязок параметров
       var validCombinations = GenerateCombinationsFromParameterBindings();
-
-      // Сохраняем сгенерированные комбинации
-      var saveResult = SaveStyleCombinations(validCombinations);
+      _pendingStyleCombinationsSave = validCombinations;
 
       return validCombinations;
     }
@@ -299,8 +299,25 @@ namespace ISIDA.Gomeostas
     public void Dispose()
     {
       if (_disposed) return;
-      _lock?.Dispose();
-      _disposed = true;
+      try
+      {
+        if (_pendingStyleCombinationsSave != null)
+        {
+          var saveResult = SaveStyleCombinations(_pendingStyleCombinationsSave);
+          if (!saveResult.Success && !string.IsNullOrEmpty(saveResult.ErrorMessage))
+            Logger.Warning($"StyleCombinations при Dispose: {saveResult.ErrorMessage}");
+          _pendingStyleCombinationsSave = null;
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"StyleCombinations при Dispose: {ex.Message}");
+      }
+      finally
+      {
+        _lock?.Dispose();
+        _disposed = true;
+      }
     }
 
     #endregion

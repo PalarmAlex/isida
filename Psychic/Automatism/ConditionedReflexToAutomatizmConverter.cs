@@ -745,11 +745,6 @@ namespace ISIDA.Psychic
         if (chainId == 0)
           return (false, 0, "Не удалось создать цепочку автоматизмов");
 
-        // Сохраняем изменения
-        var saveResult = _automatizmChains.SaveAutomatizmChains();
-        if (!saveResult.Success)
-          return (false, 0, $"Ошибка сохранения цепочки: {saveResult.ErrorMessage}");
-
         Logger.Info($"Создана цепочка автоматизмов ID={chainId} с {automatizmLinks.Count} звеньями");
         return (true, chainId, "Цепочка автоматизмов успешно создана");
       }

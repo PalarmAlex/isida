@@ -517,10 +517,6 @@ namespace ISIDA.Actions
 
         int imageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdList);
 
-        // Синхронное сохранение вместо асинхронного
-        if (imageId > 0)
-          _perceptionImagesSystem.SavePerceptionImages();
-
         return imageId;
       }
       catch (Exception ex)

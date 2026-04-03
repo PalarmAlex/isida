@@ -388,7 +388,7 @@ namespace ISIDA.Psychic.Understanding
         CollectLines(c, lines);
     }
 
-    /// <summary>Очистить дерево проблем в памяти и сохранить пустое состояние на диск</summary>
+    /// <summary>Очистить дерево проблем в памяти. Запись на диск — при Dispose.</summary>
     /// <remarks>Вызывается при переходе с стадии 4 на 3 для полной очистки данных дерева проблем</remarks>
     public (bool Success, string ErrorMessage) ClearProblemTree()
     {
@@ -402,8 +402,7 @@ namespace ISIDA.Psychic.Understanding
         DetectedActiveLastProblemNodeId = 0;
         OldDetectedActiveLastProblemNodeId = 0;
 
-        var result = SaveProblemTreeCore();
-        return result;
+        return (true, null);
       }
       finally
       {

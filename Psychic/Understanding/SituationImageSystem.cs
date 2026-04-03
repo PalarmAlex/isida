@@ -247,13 +247,13 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Очистить все образы ситуаций в памяти и в файле (для перехода на младшую стадию).</summary>
+    /// <summary>Очистить все образы ситуаций в памяти (для перехода на младшую стадию). Запись на диск — при Dispose.</summary>
     public (bool Success, string Error) Clear()
     {
       _byId.Clear();
       _unicumKeyToId.Clear();
       _lastId = 0;
-      return Save();
+      return (true, null);
     }
 
     /// <summary>Сохранить на диск</summary>

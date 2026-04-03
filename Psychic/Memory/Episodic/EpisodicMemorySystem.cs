@@ -246,7 +246,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
     }
 
-    /// <summary>Очистить дерево и историю эпизодов в памяти и на диске</summary>
+    /// <summary>Очистить дерево и историю эпизодов в памяти. Запись на диск — при Dispose.</summary>
     public void Clear()
     {
       _lock.EnterWriteLock();
@@ -257,13 +257,6 @@ namespace ISIDA.Psychic.Memory.Episodic
         _nodesById[0] = Tree;
         History.Clear();
         _lastNodeId = 1;
-
-        var treePath = EpisodicMemoryStorage.GetTreeFilePath(_dataPath);
-        var histPath = EpisodicMemoryStorage.GetHistoryFilePath(_dataPath);
-        if (System.IO.File.Exists(treePath))
-          System.IO.File.WriteAllText(treePath, string.Empty);
-        if (System.IO.File.Exists(histPath))
-          System.IO.File.WriteAllText(histPath, string.Empty);
       }
       finally
       {

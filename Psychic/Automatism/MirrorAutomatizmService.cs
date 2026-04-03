@@ -303,10 +303,6 @@ namespace ISIDA.Psychic.Automatism
           links[0].SuccessNextLink = links[1].ID;
         _automatizmSystem.AttachChainToAutomatizm(echoId, chainId);
 
-        var saveResult = AutomatizmChainsSystem.Instance.SaveAutomatizmChains();
-        if (!saveResult.Success)
-          Logger.Warning($"Stage2 echo+chain: цепочка {chainId} создана, сохранение: {saveResult.ErrorMessage}");
-
         Logger.Info($"Stage2 echo+chain: automatism ID={echoId}, chain ID={chainId}, node={detectedNodeId}");
         return echoId;
       }

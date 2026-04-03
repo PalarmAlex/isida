@@ -2469,10 +2469,7 @@ namespace ISIDA.Gomeostas
       {
         int imageId = _perceptionImagesSystem.AddBehaviorStyleImage(activeStyleIds);
         if (imageId != ActiveBehaviorStyleImageId)
-        {
           ActiveBehaviorStyleImageId = imageId;
-          SaveBehaviorStyleImagesWithRetry();
-        }
 
         return imageId;
       }
@@ -2480,32 +2477,6 @@ namespace ISIDA.Gomeostas
       {
         Logger.Error(ex.Message);
         return 0;
-      }
-    }
-
-    /// <summary>
-    /// Сохранение образов стилей с повторными попытками при ошибках
-    /// </summary>
-    private void SaveBehaviorStyleImagesWithRetry(int maxRetries = 2)
-    {
-      for (int attempt = 1; attempt <= maxRetries; attempt++)
-      {
-        try
-        {
-          var result = _perceptionImagesSystem.SaveBehaviorStyleImages();
-          if (result.Success)
-            break;
-
-          if (attempt == maxRetries)
-            Logger.Warning($"{result.ErrorMessage}");
-          else
-            Thread.Sleep(100 * attempt); // Увеличивающаяся задержка
-        }
-        catch (Exception ex)
-        {
-          if (attempt == maxRetries)
-            Logger.Error(ex.Message);
-        }
       }
     }
 
