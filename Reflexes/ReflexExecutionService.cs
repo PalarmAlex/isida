@@ -379,7 +379,7 @@ namespace ISIDA.Reflexes
     #region Блокировка выполнения
 
     /// <summary>
-    /// Проверяет, заблокированы ли моторные действия
+    /// Проверяет, заблокированы ли моторные действия.
     /// </summary>
     public bool IsBlockingMotorsAction()
     {
