@@ -471,7 +471,7 @@ namespace ISIDA.Psychic.Automatism
       try
       {
         if (AppGlobalState.EvolutionStage < 2)
-          throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
+          return true;
 
         var deletedAutomatizmIds = _automatizmsById.Keys.ToList();
 
@@ -813,6 +813,12 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     private void LoadAutomatizm()
     {
+      if (AppGlobalState.EvolutionStage < 2)
+      {
+        InitializeAutomatizms();
+        return;
+      }
+
       string filePath = GetAutomatizmFilePath();
 
       // Если файл не существует или невалиден, создаем новый
@@ -966,7 +972,7 @@ namespace ISIDA.Psychic.Automatism
     private (bool Success, string ErrorMessage) SaveAutomatizmNoLock()
     {
       if (AppGlobalState.EvolutionStage < 2)
-        throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+        return (true, null);
 
       try
       {

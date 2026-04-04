@@ -87,7 +87,7 @@ namespace ISIDA.Common
     /// </summary>
     public static void SetPulseWallClockAcceleration(int multiplier, bool suppressAnimation)
     {
-      int clamped = multiplier < 1 ? 1 : (multiplier > 100 ? 100 : multiplier);
+      int clamped = multiplier < 1 ? 1 : (multiplier > 20 ? 20 : multiplier);
       _pulseWallTimeMultiplier = clamped;
       _suppressPulseAnimation = suppressAnimation && clamped > 1;
       if (clamped <= 1)
@@ -282,7 +282,7 @@ namespace ISIDA.Common
       try
       {
         int m = _pulseWallTimeMultiplier < 1 ? 1 : _pulseWallTimeMultiplier;
-        if (m > 100) m = 100;
+        if (m > 20) m = 20;
         bool suppressAnim = _suppressPulseAnimation;
 
         int greenMs = suppressAnim ? 0 : Math.Max(1, GreenDurationMs / m);

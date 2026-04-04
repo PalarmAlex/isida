@@ -1,6 +1,7 @@
 using ISIDA.Common;
 using ISIDA.Psychic;
 using System;
+using System.Diagnostics;
 using System.Linq;
 
 namespace ISIDA.Scenarios
@@ -30,6 +31,12 @@ namespace ISIDA.Scenarios
 
     /// <summary>Глобальный номер пульса на момент старта сценария (для сопоставления с логами).</summary>
     public int AnchorGlobalPulse { get; set; }
+
+    /// <summary>Фактическое время прогона (wall clock) от <c>Start</c> до <c>Complete</c>.</summary>
+    public TimeSpan ElapsedWallTime { get; set; }
+
+    /// <summary>Количество глобальных пульсов, прошедших за время прогона.</summary>
+    public int ElapsedPulses { get; set; }
   }
 
   /// <summary>Выполнение сценария оператора по событиям пульса.</summary>
@@ -44,6 +51,7 @@ namespace ISIDA.Scenarios
     private bool _running;
     private int _lastExecutedStepPulse;
     private bool _pendingSuccessCompletion;
+    private Stopwatch _runStopwatch;
 
     /// <summary>Истина, пока сценарий ожидает пульсы.</summary>
     public bool IsRunning => _running;
@@ -105,6 +113,7 @@ namespace ISIDA.Scenarios
           : _anchorPulse + 1;
       _lastExecutedStepPulse = 0;
       _pendingSuccessCompletion = false;
+      _runStopwatch = Stopwatch.StartNew();
       _running = true;
       // До первого шага сбросить «висящее» ожидание оценки/зеркало с ручной сессии — иначе первый стимул не получает ОР+эхо (блок по WaitingForOperatorEvaluation).
       _cancelWaitingPeriod?.Invoke();
@@ -280,12 +289,16 @@ namespace ISIDA.Scenarios
     {
       if (!_running)
         return;
+      _runStopwatch?.Stop();
+      e.ElapsedWallTime = _runStopwatch?.Elapsed ?? TimeSpan.Zero;
+      e.ElapsedPulses = GlobalTimer.GlobalPulsCount - _anchorPulse;
       ScenarioRunnerDiagnostics.Write(
-          $"[Finish] success={e.Success} userAbort={e.AbortedByUser} pulsStop={e.AbortedByPulsationStop} lastВнутрПульс={e.LastExecutedPulseWithinScenario} anchor={_anchorPulse} err={e.ErrorMessage ?? ""}");
+          $"[Finish] success={e.Success} userAbort={e.AbortedByUser} pulsStop={e.AbortedByPulsationStop} lastВнутрПульс={e.LastExecutedPulseWithinScenario} anchor={_anchorPulse} elapsed={e.ElapsedWallTime.TotalSeconds:F2}s pulses={e.ElapsedPulses} err={e.ErrorMessage ?? ""}");
       e.Document = _doc;
       e.AnchorGlobalPulse = _anchorPulse;
       _running = false;
       _doc = null;
+      _runStopwatch = null;
       RunningStateChanged?.Invoke();
       Finished?.Invoke(this, e);
     }

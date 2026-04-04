@@ -1110,7 +1110,7 @@ namespace ISIDA.Psychic.Automatism
     private (bool Success, string ErrorMessage) SaveAutomatizmChainsCore()
     {
       if (AppGlobalState.EvolutionStage < 2)
-        throw new InvalidOperationException("Цепочки автоматизмов доступны только начиная со стадии 2");
+        return (true, null);
 
       var lines = new List<string>
     {

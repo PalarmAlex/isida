@@ -217,12 +217,6 @@ namespace ISIDA.Scenarios
     /// <summary>Начальные значения параметров гомеостаза: «id=value» через «;» (см. <see cref="ScenarioHomeostasisValuesFormat"/>).</summary>
     public string InitialHomeostasisValues { get; set; } = "";
 
-    /// <summary>Номер группы (для сортировки и фильтра в реестре).</summary>
-    public int GroupNumber { get; set; }
-
-    /// <summary>Порядок сценария внутри группы.</summary>
-    public int SortOrderInGroup { get; set; }
-
     /// <summary>Стадия для перехода перед запуском (0–5); −1 — не менять стадию.</summary>
     public int PreRunTargetStage { get; set; } = -1;
 
@@ -257,8 +251,6 @@ namespace ISIDA.Scenarios
         Description = Description,
         DateText = DateText,
         InitialHomeostasisValues = InitialHomeostasisValues ?? "",
-        GroupNumber = GroupNumber,
-        SortOrderInGroup = SortOrderInGroup,
         PreRunTargetStage = PreRunTargetStage,
         PreRunClearAgentData = PreRunClearAgentData,
         PreRunNormalHomeostasisState = PreRunNormalHomeostasisState,
@@ -276,8 +268,8 @@ namespace ISIDA.Scenarios
     /// <summary>Версия заголовка реестра сценариев.</summary>
     public const int FormatVersion = 1;
 
-    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи).</summary>
-    public const int LinesFileFormatVersion = 4;
+    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи; v5 — META без полей группы в шапке).</summary>
+    public const int LinesFileFormatVersion = 5;
 
     /// <summary>Метаданные сценария (id, название, дата).</summary>
     public ScenarioHeader Header { get; set; } = new ScenarioHeader();
