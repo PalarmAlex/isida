@@ -45,8 +45,17 @@ using static ISIDA.Common.FileValidator;
    - MaxAchievedStrength отслеживает максимальную достигнутую крепость
    - IsEstablished = (MaxAchievedStrength > 0.8) - флаг установившегося рефлекса
 
+7. Высшие порядки условных рефлексов (second/third-order conditioning):
+   Коэффициент понижения K ∈ [1.2, 3.0]:
+   - Первичный (порядок 1): образуется от безусловного. Без понижения.
+   - Вторичный (порядок 2): образуется от условного 1-го порядка.
+     α' = α/K, η' = η^K, начальная крепость /= K
+   - Третичный (порядок 3): образуется от условного 2-го порядка.
+     α' = α/(K·2), η' = η^(K·2), начальная крепость /= (K·2)
+   - При усилении родительского рефлекса каскадно усиливаются дочерние.
+
 Параметры по умолчанию:
-   α = 0.2, β = 1.0, η = 0.98, γ = 0.6, τ = 500 мс, C_min = 0.1, T_base = 1000
+   α = 0.2, β = 1.0, η = 0.98, γ = 0.6, τ = 500 мс, C_min = 0.1, T_base = 1000, K = 1.5
 */
 
 namespace ISIDA.Reflexes
@@ -184,6 +193,16 @@ namespace ISIDA.Reflexes
       public int SourceGeneticReflexId { get; set; }
 
       /// <summary>
+      /// ID родительского условного рефлекса (0 для первичных — образованных от безусловного)
+      /// </summary>
+      public int SourceConditionedReflexId { get; set; }
+
+      /// <summary>
+      /// Порядок условного рефлекса: 1 — первичный, 2 — вторичный, 3 — третичный
+      /// </summary>
+      public int Order { get; set; } = 1;
+
+      /// <summary>
       /// ID тона пускового стимула (фразы с пульта). 0 — нормальный.
       /// </summary>
       public int ToneId { get; set; }
@@ -283,9 +302,16 @@ namespace ISIDA.Reflexes
       /// </summary>
       public void StrengthenAssociation()
       {
+        float effectiveLearningRate = _learningRate;
+        if (Order > 1)
+        {
+          float reductionCoeff = Instance.GetReductionCoefficientForOrder(Order);
+          effectiveLearningRate /= reductionCoeff;
+        }
+
         // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
         float beta = 1.0f; // асимптотический максимум
-        AssociationStrength = AssociationStrength + _learningRate * (beta - AssociationStrength);
+        AssociationStrength = AssociationStrength + effectiveLearningRate * (beta - AssociationStrength);
 
         // Обновляем максимальную достигнутую прочность
         if (AssociationStrength > MaxAchievedStrength)
@@ -326,6 +352,13 @@ namespace ISIDA.Reflexes
         else
           // Слабые рефлексы: нормальное затухание
           effectiveDecayRate = (float)Math.Pow(_decayRate, Math.Sqrt(strengthFactor));
+
+        // Для вторичных/третичных: ускоренное затухание
+        if (Order > 1)
+        {
+          float reductionCoeff = Instance.GetReductionCoefficientForOrder(Order);
+          effectiveDecayRate = (float)Math.Pow(effectiveDecayRate, reductionCoeff);
+        }
 
         // Применяем затухание
         float oldStrength = AssociationStrength;
@@ -414,6 +447,13 @@ namespace ISIDA.Reflexes
       /// Временное окно корреляции τ (пульсов)
       /// </summary>
       public int TimeWindowPulses { get; set; } = 5;
+
+      /// <summary>
+      /// Коэффициент понижения крепости для вторичных условных рефлексов (1.2-3.0).
+      /// Для третичных автоматически удваивается.
+      /// Влияет на начальную крепость, скорость обучения и скорость затухания.
+      /// </summary>
+      public float HigherOrderStrengthReductionCoefficient { get; set; } = 1.5f;
     }
 
     #endregion
@@ -529,7 +569,8 @@ namespace ISIDA.Reflexes
         int sourceGeneticReflexId,
         bool authoritativeMod = false,
         int toneId = 0,
-        int moodId = 0)
+        int moodId = 0,
+        int sourceConditionedReflexId = 0)
     {
       if (AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
@@ -577,12 +618,30 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
+        // Определяем порядок нового рефлекса
+        int order = 1;
+        if (sourceConditionedReflexId > 0)
+        {
+          if (_conditionedReflexes.TryGetValue(sourceConditionedReflexId, out var parentReflex))
+            order = parentReflex.Order + 1;
+          else
+            order = 2;
+
+          if (order > 3)
+          {
+            warnings.Add("Невозможно создать условный рефлекс порядка выше третичного.");
+            return (0, warnings.ToArray());
+          }
+        }
+
+        float reductionCoeff = GetReductionCoefficientForOrder(order);
+
         newId = ++_lastConditionedReflexId;
         int currentLifetime = GetAgentLifetime();
-        float _associationStrength = _settings.MinAssociationStrength + 0.1f;
+        float _associationStrength = (_settings.MinAssociationStrength + 0.1f) / reductionCoeff;
 
         if (authoritativeMod)
-          _associationStrength = 0.95f;
+          _associationStrength = 0.95f / reductionCoeff;
 
         var conditionedReflex = new ConditionedReflex
         {
@@ -594,6 +653,8 @@ namespace ISIDA.Reflexes
           LastActivation = currentLifetime,
           BirthTime = currentLifetime,
           SourceGeneticReflexId = sourceGeneticReflexId,
+          SourceConditionedReflexId = sourceConditionedReflexId,
+          Order = order,
           ToneId = toneId,
           MoodId = moodId
         };
@@ -632,17 +693,47 @@ namespace ISIDA.Reflexes
       {
         if (_conditionedReflexes.TryGetValue(reflexId, out var reflex))
         {
-          // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
-          reflex.AssociationStrength = reflex.AssociationStrength +
-              _settings.LearningRate * (_settings.MaxAssociationStrength - reflex.AssociationStrength);
-
-          reflex.LastActivation = GetAgentLifetime();
-          reflex.AssociationStrength = Math.Min(reflex.AssociationStrength, _settings.MaxAssociationStrength);
+          StrengthenReflexInternal(reflex);
+          CascadeStrengthenChildren(reflex.Id);
         }
       }
       finally
       {
         _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Усиливает крепость одного рефлекса (без блокировки, вызывается внутри write-lock)
+    /// </summary>
+    private void StrengthenReflexInternal(ConditionedReflex reflex)
+    {
+      float reductionCoeff = GetReductionCoefficientForOrder(reflex.Order);
+      float effectiveLearningRate = _settings.LearningRate / reductionCoeff;
+
+      // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
+      reflex.AssociationStrength = reflex.AssociationStrength +
+          effectiveLearningRate * (_settings.MaxAssociationStrength - reflex.AssociationStrength);
+
+      reflex.LastActivation = GetAgentLifetime();
+      reflex.AssociationStrength = Math.Min(reflex.AssociationStrength, _settings.MaxAssociationStrength);
+    }
+
+    /// <summary>
+    /// Каскадное усиление дочерних рефлексов: при усилении первичного
+    /// синхронно усиливаются вторичные (с понижающим коэфф.), а от вторичных — третичные.
+    /// Вызывается внутри write-lock.
+    /// </summary>
+    private void CascadeStrengthenChildren(int parentReflexId)
+    {
+      foreach (var child in _conditionedReflexes.Values)
+      {
+        if (child.SourceConditionedReflexId == parentReflexId)
+        {
+          StrengthenReflexInternal(child);
+          if (child.Order < 3)
+            CascadeStrengthenChildren(child.Id);
+        }
       }
     }
 
@@ -887,6 +978,73 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Возвращает коэффициент понижения крепости для указанного порядка рефлекса.
+    /// Первичный (1) — без понижения.
+    /// Вторичный (2) — K.
+    /// Третичный (3) — K * 2.
+    /// </summary>
+    internal float GetReductionCoefficientForOrder(int order)
+    {
+      if (order <= 1) return 1f;
+      float K = _settings.HigherOrderStrengthReductionCoefficient;
+      if (order == 2) return K;
+      return K * 2; // order >= 3
+    }
+
+    /// <summary>
+    /// Определяет порядок условного рефлекса, обходя цепочку родителей (до 3 проходов).
+    /// 1 — первичный (родитель — безусловный), 2 — вторичный, 3 — третичный.
+    /// Возвращает 0 если рефлекс не найден, -1 если глубина больше допустимой.
+    /// </summary>
+    public int GetReflexOrder(int conditionedReflexId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        // Проход 1: сам рефлекс
+        if (!_conditionedReflexes.TryGetValue(conditionedReflexId, out var reflex))
+          return 0;
+        if (reflex.SourceConditionedReflexId == 0)
+          return 1;
+
+        // Проход 2: родительский условный рефлекс
+        if (!_conditionedReflexes.TryGetValue(reflex.SourceConditionedReflexId, out var parent))
+          return 0;
+        if (parent.SourceConditionedReflexId == 0)
+          return 2;
+
+        // Проход 3: родитель родителя
+        if (!_conditionedReflexes.TryGetValue(parent.SourceConditionedReflexId, out var grandparent))
+          return 0;
+        if (grandparent.SourceConditionedReflexId == 0)
+          return 3;
+
+        // Глубина больше допустимой
+        return -1;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Получает условный рефлекс по ID
+    /// </summary>
+    public ConditionedReflex GetConditionedReflexById(int reflexId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _conditionedReflexes.TryGetValue(reflexId, out var reflex) ? reflex : null;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Проверяет, находятся ли два стимула в пределах временного окна корреляции
     /// </summary>
     /// <param name="pulse1">Пульс первого стимула</param>
@@ -998,7 +1156,9 @@ namespace ISIDA.Reflexes
               BirthTime = int.Parse(parts[6]),
               SourceGeneticReflexId = parts.Length > 7 ? int.Parse(parts[7]) : 0,
               ToneId = parts.Length > 8 && int.TryParse(parts[8], out int tid) ? tid : 0,
-              MoodId = parts.Length > 9 && int.TryParse(parts[9], out int mid) ? mid : 0
+              MoodId = parts.Length > 9 && int.TryParse(parts[9], out int mid) ? mid : 0,
+              SourceConditionedReflexId = parts.Length > 10 && int.TryParse(parts[10], out int scrid) ? scrid : 0,
+              Order = parts.Length > 11 && int.TryParse(parts[11], out int ord) ? ord : 1
             };
 
             _conditionedReflexes[id] = reflex;
@@ -1087,6 +1247,9 @@ namespace ISIDA.Reflexes
             case "TimeWindowPulses":
               _settings.TimeWindowPulses = int.Parse(value);
               break;
+            case "HigherOrderStrengthReductionCoefficient":
+              _settings.HigherOrderStrengthReductionCoefficient = float.Parse(value);
+              break;
           }
         }
       }
@@ -1112,7 +1275,9 @@ namespace ISIDA.Reflexes
           FileHeaders.ConditionedReflexesLevel3,
           FileHeaders.ConditionedReflexesActions,
           FileHeaders.ConditionedReflexesToneId,
-          FileHeaders.ConditionedReflexesMoodId
+          FileHeaders.ConditionedReflexesMoodId,
+          FileHeaders.ConditionedReflexesSourceConditioned,
+          FileHeaders.ConditionedReflexesOrder
         };
 
         foreach (var reflex in _conditionedReflexes.Values.OrderBy(r => r.Id))
@@ -1120,7 +1285,8 @@ namespace ISIDA.Reflexes
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|{reflex.Level3}|" +
                    $"{reflex.AssociationStrength}|{reflex.LastActivation}|" +
-                   $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}|{reflex.ToneId}|{reflex.MoodId}");
+                   $"{reflex.BirthTime}|{reflex.SourceGeneticReflexId}|{reflex.ToneId}|{reflex.MoodId}|" +
+                   $"{reflex.SourceConditionedReflexId}|{reflex.Order}");
         }
 
         var result = FileValidator.SafeSaveFile(
@@ -1155,13 +1321,15 @@ namespace ISIDA.Reflexes
             "# LearningRate: коэффициент обучения α (0.1-0.3)",
             "# DecayRate: коэффициент затухания η (0.95-0.99)",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
-            "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)"
+            "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
+            "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)"
           };
 
         lines.Add($"LearningRate={_settings.LearningRate}");
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
         lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
+        lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

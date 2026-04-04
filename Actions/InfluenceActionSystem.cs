@@ -29,7 +29,7 @@ namespace ISIDA.Actions
     public event Action<int, List<int>, bool> TriggerStimulusActivated;
 
     /// <summary>Событие активации фразового стимула (фразы с пульта)</summary>
-    public event Action<int, List<int>, List<int>, int, int> PhraseStimulusActivated;
+    public event Action<int, List<int>, List<int>, int, int, bool> PhraseStimulusActivated;
 
     #region Инициализация
 
@@ -431,7 +431,7 @@ namespace ISIDA.Actions
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
         if (phraseIdList?.Any() == true)
-          PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId);
+          PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId, authoritativeMode);
         if (actionIdList?.Any() == true)
           TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, authoritativeMode);
 

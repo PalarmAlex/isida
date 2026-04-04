@@ -295,6 +295,126 @@ namespace ISIDA.Reflexes
       return currentStyles.Select(s => s.Id).ToList();
     }
 
+    /// <summary>
+    /// Проверяет возможность формирования вторичного условного рефлекса.
+    /// Вызывается когда фраза с пульта активировала существующий условный рефлекс.
+    /// Если перед этой фразой (в пределах временного окна) была другая фраза (CS),
+    /// то для той предыдущей фразы может быть создан вторичный у-рефлекс.
+    /// </summary>
+    /// <param name="currentPulse">Текущий пульс</param>
+    /// <param name="reinforcingStimulusImageId">ID образа стимула, активировавшего условный рефлекс</param>
+    /// <param name="baseState">Базовое состояние гомеостаза</param>
+    /// <param name="behaviorStyleImageId">ID образа стилей поведения</param>
+    /// <param name="activatedConditionedReflexId">ID условного рефлекса, который был активирован</param>
+    /// <param name="authoritativeMode">Флаг авторитарной записи</param>
+    /// <param name="reinforcingToneId">Тон стимула, активировавшего рефлекс</param>
+    /// <param name="reinforcingMoodId">Настроение стимула, активировавшего рефлекс</param>
+    internal void CheckSecondaryConditioning(
+        int currentPulse,
+        int reinforcingStimulusImageId,
+        int baseState,
+        int behaviorStyleImageId,
+        int activatedConditionedReflexId,
+        bool authoritativeMode,
+        int reinforcingToneId,
+        int reinforcingMoodId)
+    {
+      if (_lastConditionedStimulus == null)
+        return;
+
+      // Проверяем, что родительский условный рефлекс достаточно силён
+      var parentReflex = _conditionedReflexes.GetConditionedReflexById(activatedConditionedReflexId);
+      if (parentReflex == null || !parentReflex.CanBeActivated())
+        return;
+
+      // Не создаём рефлексы порядка выше третичного
+      if (parentReflex.Order >= 3)
+        return;
+
+      var settings = _conditionedReflexes.Settings;
+      int timeWindow = settings.TimeWindowPulses;
+
+      bool previousCSInWindow = (currentPulse - _lastConditionedStimulus.Pulse) <= timeWindow;
+
+      if (!previousCSInWindow)
+        return;
+
+      // Предыдущий CS должен предшествовать текущему подкрепляющему стимулу
+      if (_lastConditionedStimulus.Pulse >= currentPulse)
+        return;
+
+      // Убеждаемся, что предыдущий CS — это другой стимул (не тот же самый)
+      if (_lastConditionedStimulus.StimulusImageId == reinforcingStimulusImageId)
+        return;
+
+      ProcessSecondaryConditionedAssociation(
+          _lastConditionedStimulus,
+          parentReflex,
+          currentPulse,
+          authoritativeMode);
+    }
+
+    /// <summary>
+    /// Обрабатывает ассоциацию для вторичного условного рефлекса
+    /// </summary>
+    private void ProcessSecondaryConditionedAssociation(
+        StimulusRecord conditionedStimulus,
+        ConditionedReflexesSystem.ConditionedReflex parentConditionedReflex,
+        int currentPulse,
+        bool authoritativeMode)
+    {
+      try
+      {
+        var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
+            .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
+            .ToList();
+
+        bool foundMatchingReflex = false;
+
+        foreach (var existingReflex in existingReflexes)
+        {
+          if (existingReflex.Level1 == conditionedStimulus.BaseState &&
+              existingReflex.Level2.OrderBy(x => x).SequenceEqual(GetCurrentStyleIds().OrderBy(x => x)) &&
+              existingReflex.ToneId == conditionedStimulus.ToneId &&
+              existingReflex.MoodId == conditionedStimulus.MoodId)
+          {
+            _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
+            foundMatchingReflex = true;
+            Logger.Info($"Усилен вторичный условный рефлекс ID={existingReflex.Id} " +
+                       $"(порядок {existingReflex.Order}) от условного {parentConditionedReflex.Id}");
+            break;
+          }
+        }
+
+        if (!foundMatchingReflex)
+        {
+          List<int> reflexStyles = GetCurrentStyleIds();
+
+          var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
+              level1: conditionedStimulus.BaseState,
+              level2: reflexStyles,
+              level3: conditionedStimulus.StimulusImageId,
+              sourceGeneticReflexId: parentConditionedReflex.SourceGeneticReflexId,
+              authoritativeMod: authoritativeMode,
+              toneId: conditionedStimulus.ToneId,
+              moodId: conditionedStimulus.MoodId,
+              sourceConditionedReflexId: parentConditionedReflex.Id);
+
+          if (newReflexId > 0)
+          {
+            int newOrder = parentConditionedReflex.Order + 1;
+            Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
+                       $"от условного {parentConditionedReflex.Id} " +
+                       $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+      }
+    }
+
     #endregion
 
     #region Управление жизненным циклом рефлексов

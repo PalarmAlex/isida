@@ -14,13 +14,15 @@ namespace ISIDA.Common
     internal static class FileHeaders
     {
       // Условные рефлексы
-      public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId|ToneId|MoodId";
+      public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId|ToneId|MoodId|SourceConditionedReflexId|Order";
       public const string ConditionedReflexesLevel1 = "# Level1: -1:Плохо, 0:Норма, 1:Хорошо";
       public const string ConditionedReflexesLevel2 = "# Level2: id1,id2,id3 (ID стилей поведения)";
       public const string ConditionedReflexesLevel3 = "# Level3: ID образа пускового стимула";
       public const string ConditionedReflexesActions = "# AssociationStrength: крепость связи C_ij ∈ [0,1]";
       public const string ConditionedReflexesToneId = "# ToneId: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ConditionedReflexesMoodId = "# MoodId: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
+      public const string ConditionedReflexesSourceConditioned = "# SourceConditionedReflexId: ID родительского условного рефлекса (0 для первичных)";
+      public const string ConditionedReflexesOrder = "# Order: порядок рефлекса (1=первичный, 2=вторичный, 3=третичный)";
 
       // Безусловные рефлексы
       public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|Level3|Адаптивные действия|ReflexChainID";

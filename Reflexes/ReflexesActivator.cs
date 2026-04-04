@@ -122,9 +122,10 @@ namespace ISIDA.Reflexes
       List<int> actionIdList,
       List<int> phraseIdList,
       int toneId,
-      int moodId)
+      int moodId,
+      bool authoritativeMode)
     {
-      ActiveFromPhrase(pulseCount, actionIdList, phraseIdList, toneId, moodId);
+      ActiveFromPhrase(pulseCount, actionIdList, phraseIdList, toneId, moodId, authoritativeMode);
     }
 
     /// <summary>
@@ -398,7 +399,8 @@ namespace ISIDA.Reflexes
       List<int> actionIdList,
       List<int> phraseIdList,
       int toneId,
-      int moodId)
+      int moodId,
+      bool authoritativeMode = false)
     {
       if (!CanActivate(pulseCount, _isSleeping)) return;
 
@@ -441,6 +443,22 @@ namespace ISIDA.Reflexes
 
         if (_activeCurTriggerStimulusID != 0)
         {
+          // Вторичное обусловливание: если эта фраза активировала у-рефлекс,
+          // проверяем, не было ли перед ней другой фразы (CS) во временном окне.
+          // Проверка до RecordStimulus, чтобы _lastConditionedStimulus ещё хранил предыдущий CS.
+          if (_activeConditionReflexID != 0)
+          {
+            _reflexFormationService.CheckSecondaryConditioning(
+                pulseCount,
+                _activeCurTriggerStimulusID,
+                _activeCurBaseID,
+                _activeCurBaseStyleID,
+                _activeConditionReflexID,
+                authoritativeMode,
+                toneId,
+                moodId);
+          }
+
           // Сохраняем как условный стимул (с тоном и настроением фразы с пульта)
           _reflexFormationService.RecordStimulus(
             pulseCount,
