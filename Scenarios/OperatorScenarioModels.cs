@@ -1,4 +1,5 @@
 using ISIDA.Actions;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -67,6 +68,8 @@ namespace ISIDA.Scenarios
     public int ToneId { get; set; }
     /// <summary>Идентификатор настроения.</summary>
     public int MoodId { get; set; }
+    /// <summary>Код зрительного канала (фон сцены), см. <see cref="AgentVisualColor"/>.</summary>
+    public int VisualColorId { get; set; }
     /// <summary>Идентификаторы воздействий с пульта.</summary>
     public List<int> ActionIds { get; set; } = new List<int>();
     /// <summary>Текст фразы для подачи агенту.</summary>
@@ -179,6 +182,7 @@ namespace ISIDA.Scenarios
         Kind = Kind,
         ToneId = ToneId,
         MoodId = MoodId,
+        VisualColorId = VisualColorId,
         ActionIds = ActionIds?.ToList() ?? new List<int>(),
         Phrase = Phrase ?? "",
         ResetWaitingPeriod = ResetWaitingPeriod
@@ -268,8 +272,8 @@ namespace ISIDA.Scenarios
     /// <summary>Версия заголовка реестра сценариев.</summary>
     public const int FormatVersion = 1;
 
-    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи; v5 — META без полей группы в шапке).</summary>
-    public const int LinesFileFormatVersion = 5;
+    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи; v5 — META без полей группы; v6 — код зрительного канала в строке шага).</summary>
+    public const int LinesFileFormatVersion = 6;
 
     /// <summary>Метаданные сценария (id, название, дата).</summary>
     public ScenarioHeader Header { get; set; } = new ScenarioHeader();

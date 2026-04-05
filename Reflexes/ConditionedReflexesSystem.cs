@@ -1237,7 +1237,8 @@ namespace ISIDA.Reflexes
         PerceptionImagesSystem.PerceptionImage component,
         PerceptionImagesSystem.PerceptionImage compound)
     {
-      if (component.VisualColorId != compound.VisualColorId)
+      if (component.VisualColorId != AgentVisualColor.White &&
+          component.VisualColorId != compound.VisualColorId)
         return false;
 
       bool hasActions = component.InfluenceActionsList.Any();

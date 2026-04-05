@@ -1,5 +1,6 @@
 using ISIDA.Common;
 using ISIDA.Psychic;
+using ISIDA.Reflexes;
 using System;
 using System.Diagnostics;
 using System.Linq;
@@ -206,8 +207,10 @@ namespace ISIDA.Scenarios
 
           bool hasPhrase = !string.IsNullOrWhiteSpace(line.Phrase);
           bool hasActions = line.ActionIds != null && line.ActionIds.Count > 0;
+          int colorStep = AgentVisualColor.IsValidCode(line.VisualColorId) ? line.VisualColorId : AgentVisualColor.White;
+          bool hasVisualColor = colorStep != AgentVisualColor.White;
 
-          if (hasPhrase || hasActions)
+          if (hasPhrase || hasActions || hasVisualColor)
           {
             var pult = _getPult();
             if (pult == null)
@@ -221,7 +224,7 @@ namespace ISIDA.Scenarios
                 line.Phrase ?? "",
                 line.ToneId,
                 line.MoodId,
-                0);
+                colorStep);
             if (err != null)
             {
               ScenarioRunnerDiagnostics.Write($"[Apply FAIL] step={line.StepIndex} global={globalPulseCount} err={err}");

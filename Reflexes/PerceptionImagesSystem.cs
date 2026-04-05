@@ -184,16 +184,23 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Два пусковых образа совместимы для активации одного у-рефлекса по иерархии «часть — целое»:
     /// либо I ⊆ S (богаче стимул, беднее запись рефлекса), либо S ⊆ I (богаче запись, беднее стимул).
-    /// Цвет всегда должен совпадать.
+    /// Цвет участвует в проверке подмножества как модальность: White (отсутствие цвета)
+    /// допускает любое значение у партнёра, а два различных ненулевых цвета конфликтуют.
     /// </summary>
     public static bool StimulusImagesHierarchyCompatible(PerceptionImage stimulus, PerceptionImage reflexTrigger)
     {
       if (stimulus == null || reflexTrigger == null) return false;
-      if (stimulus.VisualColorId != reflexTrigger.VisualColorId) return false;
-      bool iSubsetS =
+
+      int sColor = stimulus.VisualColorId;
+      int tColor = reflexTrigger.VisualColorId;
+
+      bool colorTriggerSubsetStimulus = tColor == AgentVisualColor.White || tColor == sColor;
+      bool colorStimulusSubsetTrigger = sColor == AgentVisualColor.White || sColor == tColor;
+
+      bool iSubsetS = colorTriggerSubsetStimulus &&
           IsIntListSubset(reflexTrigger.InfluenceActionsList, stimulus.InfluenceActionsList) &&
           IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList);
-      bool sSubsetI =
+      bool sSubsetI = colorStimulusSubsetTrigger &&
           IsIntListSubset(stimulus.InfluenceActionsList, reflexTrigger.InfluenceActionsList) &&
           IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList);
       return iSubsetS || sSubsetI;

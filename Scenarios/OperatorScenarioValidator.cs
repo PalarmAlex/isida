@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -58,6 +59,11 @@ namespace ISIDA.Scenarios
         if (!pulses.Add(row.PulseWithinScenario))
           return $"Дублируется номер пульса {row.PulseWithinScenario} (шаг {row.StepIndex}).";
 
+        if (!AgentVisualColor.IsValidCode(row.VisualColorId))
+          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): код цвета фона должен быть от "
+              + AgentVisualColor.MinCode.ToString(CultureInfo.InvariantCulture) + " до "
+              + AgentVisualColor.MaxCode.ToString(CultureInfo.InvariantCulture) + ".";
+
         if (row.Kind == ScenarioLineKind.WaitClick)
         {
           if (row.ActionIds != null && row.ActionIds.Count > 0)
@@ -66,13 +72,16 @@ namespace ISIDA.Scenarios
             return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается с фразой.";
           if (row.ResetWaitingPeriod)
             return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается со сбросом ожидания.";
+          if (row.VisualColorId != AgentVisualColor.White)
+            return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается с цветом фона.";
           continue;
         }
 
         bool hasPhrase = !string.IsNullOrWhiteSpace(row.Phrase);
         bool hasActions = row.ActionIds != null && row.ActionIds.Count > 0;
-        if (row.ResetWaitingPeriod && (hasPhrase || hasActions))
-          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с фразой или воздействиями.";
+        bool hasVisualColor = row.VisualColorId != AgentVisualColor.White;
+        if (row.ResetWaitingPeriod && (hasPhrase || hasActions || hasVisualColor))
+          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с фразой, воздействиями или цветом фона.";
         // Пустая строка пульта (без фразы, без воздействий, без сброса) допустима — маркер пульса только для ожидаемого лога.
 
         if (row.Phrase != null && row.Phrase.IndexOf('|') >= 0)

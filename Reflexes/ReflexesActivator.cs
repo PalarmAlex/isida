@@ -180,7 +180,9 @@ namespace ISIDA.Reflexes
     private int _activeConditionReflexID = 0;           // ID текущего условного рефлекса
     private int _activeGeneticReflexID = 0;             // ID текущего безусловного рефлекса
 
-    private int _activatedPulsCount = 0;                // номер текущего пульса
+    private int _activatedPulsCount = 0;                // номер текущего пульса (блокирует ActiveFromConditionChange и ProcessReflexPulse)
+    private int _activatedFromPhrasePulse = 0;          // пульс последней активации по CS-пути (фраза/цвет) — не блокирует US-путь
+    private int _activatedFromActionPulse = 0;           // пульс последней активации по US-пути (действие) — не блокирует CS-путь
     private int _reflexActionDuration = 0;              // время удержания действия рефлекса (в пульсах) для визуализации
     private int _weitPulceCount = 0;
     private bool _chainAlreadyActivatedInThisContext = false;   // Флаг предотвращения повторной активации цепочки в тех же условиях
@@ -338,10 +340,11 @@ namespace ISIDA.Reflexes
       List<int> actionIdList,
       bool authoritativeMode = false)
     {
-      if (!CanActivate(pulseCount, _isSleeping)) return;
+      if (_activatedFromActionPulse == pulseCount || _isSleeping) return;
 
       try
       {
+        _activatedFromActionPulse = pulseCount;
         _activatedPulsCount = pulseCount;
         _weitPulceCount = pulseCount;
         UpdateCurrentStates();
@@ -412,10 +415,11 @@ namespace ISIDA.Reflexes
       int moodId,
       bool authoritativeMode = false)
     {
-      if (!CanActivate(pulseCount, _isSleeping)) return;
+      if (_activatedFromPhrasePulse == pulseCount || _isSleeping) return;
 
       try
       {
+        _activatedFromPhrasePulse = pulseCount;
         _activatedPulsCount = pulseCount;
         _weitPulceCount = pulseCount;
         UpdateCurrentStates();
@@ -994,17 +998,16 @@ namespace ISIDA.Reflexes
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
       if (detectedNode == null) return;
 
-      // только если это не условный рефлекс
+      // Цепочка б/у рефлекса — обрабатываем, только если есть что запускать.
+      // Если chain-узел пустой (GenRef=0, CondRef=0), падаем к иерархическому поиску у-рефлексов.
       if (detectedNode.IsChainNode && detectedNode.ConditionedReflex == 0)
       {
-        // Цепочка будет обработана в ExecuteReflexes()
-        // Собираем только стартовый рефлекс
         if (detectedNode.GeneticReflexID > 0)
         {
           _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
           GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+          return;
         }
-        return;
       }
 
       if (_activeCurTriggerStimulusID > 0)
@@ -1649,6 +1652,8 @@ namespace ISIDA.Reflexes
         _activeGeneticReflexID = 0;
         _activeConditionReflexID = 0;
         _activatedPulsCount = 0;
+        _activatedFromPhrasePulse = 0;
+        _activatedFromActionPulse = 0;
         _influenceActions.ActiveCurTriggerStimulusID = 0;
         _influenceActions.ActiveCurReflexTriggerStimulusID = 0;
         _lastReflexActivationPulse = 0;
