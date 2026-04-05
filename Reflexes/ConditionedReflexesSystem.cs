@@ -54,8 +54,20 @@ using static ISIDA.Common.FileValidator;
      α' = α/(K·2), η' = η^(K·2), начальная крепость /= (K·2)
    - При усилении родительского рефлекса каскадно усиливаются дочерние.
 
+8. Суммация крепости при компаундном стимуле (Rescorla, 1997; Weiss, 1972):
+   При совместном предъявлении S₁ и S₂, если оба имеют у-рефлексы
+   к одному безусловному ответу (одинаковый SourceGeneticReflexId):
+   C_combined = min(1.0, Σ C_i)
+   Рефлекс активируется, если C_combined ≥ γ (даже если каждый C_i < γ по отдельности)
+
+9. Конкурентное подавление / смешанный ответ (Kamin, 1969; Bouton & Nelson, 1994):
+   При совместном предъявлении S₁ и S₂ с у-рефлексами к разным безусловным ответам:
+   θ = min(C₁, C₂) / max(C₁, C₂) — отношение крепостей
+   Если θ ≥ θ_comp → оба ответа активируются (смешанный ответ)
+   Если θ < θ_comp → активируется только сильнейший (конкурентное подавление)
+
 Параметры по умолчанию:
-   α = 0.2, β = 1.0, η = 0.98, γ = 0.6, τ = 500 мс, C_min = 0.1, T_base = 1000, K = 1.5
+   α = 0.2, β = 1.0, η = 0.98, γ = 0.6, τ = 500 мс, C_min = 0.1, T_base = 1000, K = 1.5, θ_comp = 0.7
 */
 
 namespace ISIDA.Reflexes
@@ -454,6 +466,40 @@ namespace ISIDA.Reflexes
       /// Влияет на начальную крепость, скорость обучения и скорость затухания.
       /// </summary>
       public float HigherOrderStrengthReductionCoefficient { get; set; } = 1.5f;
+
+      /// <summary>
+      /// Порог отношения крепостей для конкурентного подавления θ_comp (0.5-0.9).
+      /// Если min(C₁,C₂)/max(C₁,C₂) >= θ_comp — смешанный ответ (оба активируются).
+      /// Если ниже — конкурентное подавление (активируется только сильнейший).
+      /// </summary>
+      public float CompetitionStrengthRatioThreshold { get; set; } = 0.7f;
+    }
+
+    /// <summary>
+    /// Режим активации при компаундном стимуле
+    /// </summary>
+    public enum CompoundActivationMode
+    {
+      /// <summary>Одиночный рефлекс (компаунд не обнаружен)</summary>
+      Single,
+      /// <summary>Суммация крепости: оба у-рефлекса к одному безусловному, объединённая крепость</summary>
+      Summation,
+      /// <summary>Смешанный ответ: оба у-рефлекса к разным безусловным, близкая крепость</summary>
+      MixedResponse,
+      /// <summary>Конкурентное подавление: активируется только сильнейший</summary>
+      CompetitiveSuppression
+    }
+
+    /// <summary>
+    /// Результат разрешения компаундной активации
+    /// </summary>
+    public class CompoundActivationResult
+    {
+      /// <summary>Список у-рефлексов, отобранных для активации</summary>
+      public List<ConditionedReflex> ReflexesToActivate { get; set; } = new List<ConditionedReflex>();
+
+      /// <summary>Режим активации (суммация, смешанный ответ, конкурентное подавление)</summary>
+      public CompoundActivationMode Mode { get; set; } = CompoundActivationMode.Single;
     }
 
     #endregion
@@ -818,6 +864,123 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Находит все условные рефлексы, чей пусковой стимул (Level3) является
+    /// компонентом составного (компаундного) стимула.
+    /// Используется для механизмов суммации и конкурентного подавления.
+    /// </summary>
+    public List<ConditionedReflex> FindReflexesForCompoundStimulus(
+        int level1, List<int> level2, int compoundImageId)
+    {
+      var allImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
+      var compoundImage = allImages.FirstOrDefault(img => img.Id == compoundImageId);
+      if (compoundImage == null)
+        return new List<ConditionedReflex>();
+
+      int totalComponents = compoundImage.InfluenceActionsList.Count + compoundImage.PhraseIdList.Count;
+      if (totalComponents < 2)
+        return new List<ConditionedReflex>();
+
+      if (level2 == null || !level2.Any())
+        return new List<ConditionedReflex>();
+
+      var sortedLevel2 = level2.OrderBy(x => x).ToList();
+      var result = new List<ConditionedReflex>();
+
+      _lock.EnterReadLock();
+      try
+      {
+        foreach (var reflex in _conditionedReflexes.Values)
+        {
+          if (reflex.Level1 != level1) continue;
+
+          var reflexLevel2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>();
+          if (!reflexLevel2.SequenceEqual(sortedLevel2)) continue;
+
+          var reflexImage = allImages.FirstOrDefault(img => img.Id == reflex.Level3);
+          if (reflexImage == null) continue;
+          if (reflexImage.Id == compoundImageId) continue;
+
+          if (IsImageComponentOf(reflexImage, compoundImage))
+            result.Add(reflex);
+        }
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      return result;
+    }
+
+    /// <summary>
+    /// Разрешает конфликт при компаундной активации: суммация, смешанный ответ
+    /// или конкурентное подавление.
+    /// </summary>
+    public CompoundActivationResult ResolveCompoundActivation(List<ConditionedReflex> candidates)
+    {
+      var result = new CompoundActivationResult();
+
+      if (candidates == null || candidates.Count < 2)
+      {
+        if (candidates?.Count == 1 && candidates[0].CanBeActivated())
+          result.ReflexesToActivate.Add(candidates[0]);
+        result.Mode = CompoundActivationMode.Single;
+        return result;
+      }
+
+      var groups = candidates.GroupBy(r => r.SourceGeneticReflexId).ToList();
+
+      if (groups.Count == 1)
+      {
+        // Все ведут к одному безусловному ответу → суммация крепости
+        float combinedStrength = Math.Min(1.0f, candidates.Sum(r => r.AssociationStrength));
+
+        if (combinedStrength >= _settings.ActivationThreshold)
+        {
+          result.ReflexesToActivate.Add(
+              candidates.OrderByDescending(r => r.AssociationStrength).First());
+          result.Mode = CompoundActivationMode.Summation;
+        }
+        return result;
+      }
+
+      // Разные безусловные ответы → конкуренция или смешанный ответ
+      var groupLeaders = groups
+          .Select(g => g.OrderByDescending(r => r.AssociationStrength).First())
+          .OrderByDescending(r => r.AssociationStrength)
+          .ToList();
+
+      float maxStrength = groupLeaders[0].AssociationStrength;
+      float secondStrength = groupLeaders[1].AssociationStrength;
+
+      if (maxStrength <= 0)
+      {
+        result.Mode = CompoundActivationMode.Single;
+        return result;
+      }
+
+      float ratio = secondStrength / maxStrength;
+
+      if (ratio >= _settings.CompetitionStrengthRatioThreshold)
+      {
+        // Близкая крепость → смешанный ответ (оба ответа)
+        result.ReflexesToActivate = groupLeaders
+            .Where(r => r.AssociationStrength >= _settings.ActivationThreshold)
+            .ToList();
+        result.Mode = CompoundActivationMode.MixedResponse;
+      }
+      else
+      {
+        // Разная крепость → конкурентное подавление (только сильнейший)
+        if (groupLeaders[0].AssociationStrength >= _settings.ActivationThreshold)
+          result.ReflexesToActivate.Add(groupLeaders[0]);
+        result.Mode = CompoundActivationMode.CompetitiveSuppression;
+      }
+
+      return result;
+    }
+
+    /// <summary>
     /// Попытка образования условного рефлекса на основе временной корреляции
     /// </summary>
     public bool TryFormAssociation(
@@ -950,6 +1113,31 @@ namespace ISIDA.Reflexes
     private int GetAgentLifetime()
     {
       return _currentAgentLifetime;
+    }
+
+    /// <summary>
+    /// Проверяет, является ли один образ восприятия компонентом (подмножеством) другого.
+    /// Компонент — образ, все действия и фразы которого содержатся в составном образе.
+    /// </summary>
+    private bool IsImageComponentOf(
+        PerceptionImagesSystem.PerceptionImage component,
+        PerceptionImagesSystem.PerceptionImage compound)
+    {
+      bool hasActions = component.InfluenceActionsList.Any();
+      bool hasPhrases = component.PhraseIdList.Any();
+
+      if (!hasActions && !hasPhrases)
+        return false;
+
+      if (hasActions && !component.InfluenceActionsList.All(
+          a => compound.InfluenceActionsList.Contains(a)))
+        return false;
+
+      if (hasPhrases && !component.PhraseIdList.All(
+          p => compound.PhraseIdList.Contains(p)))
+        return false;
+
+      return true;
     }
 
     private bool AreConditionedReflexesEqual(ConditionedReflex a, ConditionedReflex b)
@@ -1250,6 +1438,9 @@ namespace ISIDA.Reflexes
             case "HigherOrderStrengthReductionCoefficient":
               _settings.HigherOrderStrengthReductionCoefficient = float.Parse(value);
               break;
+            case "CompetitionStrengthRatioThreshold":
+              _settings.CompetitionStrengthRatioThreshold = float.Parse(value);
+              break;
           }
         }
       }
@@ -1322,7 +1513,8 @@ namespace ISIDA.Reflexes
             "# DecayRate: коэффициент затухания η (0.95-0.99)",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
             "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
-            "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)"
+            "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)",
+            "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)"
           };
 
         lines.Add($"LearningRate={_settings.LearningRate}");
@@ -1330,6 +1522,7 @@ namespace ISIDA.Reflexes
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
         lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
         lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
+        lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

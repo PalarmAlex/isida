@@ -43,6 +43,11 @@ namespace ISIDA.Sensors
     /// </summary>
     public SensorSandbox<List<int>> PhraseSandbox { get; private set; }
 
+    /// <summary>
+    /// Текстовая песочница фраз — считает повторения по тексту, независимо от наличия ID слов в дереве
+    /// </summary>
+    public SensorSandbox<string> PhraseTextSandbox { get; private set; }
+
     private Dictionary<char, int> _primarySensors = new Dictionary<char, int>();
 
     /// <summary>
@@ -125,6 +130,7 @@ namespace ISIDA.Sensors
         PhraseTree = new SensorTree<int, int>("Phrases", baseFolderPath);
         WordSandbox = new SensorSandbox<string>("Words", baseFolderPath);
         PhraseSandbox = new SensorSandbox<List<int>>("Phrases", baseFolderPath);
+        PhraseTextSandbox = new SensorSandbox<string>("PhrasesText", baseFolderPath);
 
         LoadTrees();
         LoadSandboxes();
@@ -181,6 +187,7 @@ namespace ISIDA.Sensors
       {
         WordSandbox.Load();
         PhraseSandbox.Load();
+        PhraseTextSandbox.Load();
       }
       catch
       {
@@ -206,6 +213,7 @@ namespace ISIDA.Sensors
         // Очищаем песочницы
         WordSandbox.Clear();
         PhraseSandbox.Clear();
+        PhraseTextSandbox.Clear();
 
         OnClearAllTrees();
       }
@@ -801,37 +809,70 @@ namespace ISIDA.Sensors
     {
       if (string.IsNullOrWhiteSpace(text)) return;
 
-      // Разбиваем текст на слова
-      var words = Regex.Matches(text, @"(\S+)")  // \S+ - все непробельные символы
+      var words = Regex.Matches(text, @"(\S+)")
                      .Cast<Match>()
                      .Select(m => m.Value)
                      .ToList();
 
-      // Обрабатываем слова
-      var wordIds = new List<int>();
       foreach (var word in words)
       {
-        var wordId = ProcessWord(word);
-        if (wordId.HasValue)
-        {
-          wordIds.Add(wordId.Value);
-        }
+        ProcessWord(word);
       }
 
-      // если не передали в метод специальную длину фразы
       if (maxPhraseLength == 0)
         maxPhraseLength = _maxPhraseLength;
 
-      // Обрабатываем фразы
-      for (int i = 0; i < wordIds.Count; i++)
+      _lock.EnterWriteLock();
+      try
       {
-        for (int j = 1; j <= maxPhraseLength && i + j <= wordIds.Count; j++)
+        for (int i = 0; i < words.Count; i++)
         {
-          var phraseWords = wordIds.Skip(i).Take(j).ToList();
-          ProcessPhrase(phraseWords);
+          for (int j = 1; j <= maxPhraseLength && i + j <= words.Count; j++)
+          {
+            var phraseSlice = words.Skip(i).Take(j).ToList();
+            var phraseText = string.Join(" ", phraseSlice);
+
+            bool isNew = PhraseTextSandbox.FindOrAdd(phraseText, out int textCount);
+
+            var wordIds = new List<int>();
+            bool allResolved = true;
+            foreach (var w in phraseSlice)
+            {
+              var wId = WordTree.FindBranchInternal(w);
+              if (wId != 0)
+                wordIds.Add(wId);
+              else
+              {
+                allResolved = false;
+                break;
+              }
+            }
+
+            if (!allResolved) continue;
+
+            var existingId = PhraseTree.FindBranchInternal(wordIds);
+            if (existingId != 0) continue;
+
+            if (_authoritativeMode)
+            {
+              PhraseTree.AddBranch(wordIds);
+              PhraseTextSandbox.Remove(phraseText);
+              continue;
+            }
+
+            if (!isNew && textCount >= _recognitionThreshold)
+            {
+              PhraseTree.AddBranch(wordIds);
+              PhraseTextSandbox.Remove(phraseText);
+              PhraseSandbox.Remove(wordIds);
+            }
+          }
         }
       }
-
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     /// <summary>
@@ -953,6 +994,7 @@ namespace ISIDA.Sensors
         PhraseTree?.Dispose();
         WordSandbox?.Dispose();
         PhraseSandbox?.Dispose();
+        PhraseTextSandbox?.Dispose();
       }
       finally
       {

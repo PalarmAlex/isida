@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,6 +7,33 @@ using ISIDA.Common;
 
 namespace ISIDA.Sensors
 {
+  internal sealed class ListIntEqualityComparer : IEqualityComparer<List<int>>
+  {
+    public static readonly ListIntEqualityComparer Instance = new ListIntEqualityComparer();
+
+    public bool Equals(List<int> x, List<int> y)
+    {
+      if (ReferenceEquals(x, y)) return true;
+      if (x == null || y == null) return false;
+      if (x.Count != y.Count) return false;
+      for (int i = 0; i < x.Count; i++)
+        if (x[i] != y[i]) return false;
+      return true;
+    }
+
+    public int GetHashCode(List<int> list)
+    {
+      if (list == null) return 0;
+      unchecked
+      {
+        int hash = 17;
+        for (int i = 0; i < list.Count; i++)
+          hash = hash * 31 + list[i];
+        return hash;
+      }
+    }
+  }
+
   /// <summary>
   /// Песочница для новых элементов, ожидающих подтверждения
   /// </summary>
@@ -17,7 +44,7 @@ namespace ISIDA.Sensors
     /// <summary>
     /// Хранилище элементов и счетчиков повторений
     /// </summary>
-    protected readonly Dictionary<TElement, int> _items = new Dictionary<TElement, int>();
+    protected readonly Dictionary<TElement, int> _items;
 
     /// <summary>
     /// Путь к файлу хранения данных песочницы
@@ -46,6 +73,11 @@ namespace ISIDA.Sensors
     /// <exception cref="ArgumentNullException">Выбрасывается если logger равен null</exception>
     public SensorSandbox(string sandboxName, string baseFolderPath)
     {
+      if (typeof(TElement) == typeof(List<int>))
+        _items = new Dictionary<TElement, int>((IEqualityComparer<TElement>)(object)ListIntEqualityComparer.Instance);
+      else
+        _items = new Dictionary<TElement, int>();
+
       var folderPath = baseFolderPath;
 
       if (!Directory.Exists(folderPath))
@@ -82,7 +114,19 @@ namespace ISIDA.Sensors
 
           try
           {
-            var element = (TElement)Convert.ChangeType(parts[0], typeof(TElement));
+            TElement element;
+            if (typeof(TElement) == typeof(List<int>))
+            {
+              var ints = parts[0].Split(',')
+                  .Where(s => !string.IsNullOrWhiteSpace(s))
+                  .Select(s => int.Parse(s.Trim()))
+                  .ToList();
+              element = (TElement)(object)ints;
+            }
+            else
+            {
+              element = (TElement)Convert.ChangeType(parts[0], typeof(TElement));
+            }
             var count = int.Parse(parts[1]);
 
             _items[element] = count;
@@ -120,7 +164,12 @@ namespace ISIDA.Sensors
           {
             try
             {
-              var line = $"{item.Key}|#|{item.Value}";
+              string keyStr;
+              if (item.Key is List<int> intList)
+                keyStr = string.Join(",", intList);
+              else
+                keyStr = item.Key?.ToString() ?? "";
+              var line = $"{keyStr}|#|{item.Value}";
               writer.WriteLine(line);
             }
             catch
@@ -239,10 +288,13 @@ namespace ISIDA.Sensors
       try
       {
         Save();
-        _lock?.Dispose();
+      }
+      catch
+      {
       }
       finally
       {
+        _lock?.Dispose();
         _disposed = true;
       }
     }
