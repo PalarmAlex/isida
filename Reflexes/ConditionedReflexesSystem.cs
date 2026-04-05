@@ -479,7 +479,7 @@ namespace ISIDA.Reflexes
       /// Если min(C₁,C₂)/max(C₁,C₂) >= θ_comp — смешанный ответ (оба активируются).
       /// Если ниже — конкурентное подавление (активируется только сильнейший).
       /// </summary>
-      public float CompetitionStrengthRatioThreshold { get; set; } = 0.7f;
+      public float CompetitionStrengthRatioThreshold { get; set; } = 0.8f;
 
       /// <summary>
       /// При равной крепости кандидатов на одном уровне иерархии (или внутри группы UR):

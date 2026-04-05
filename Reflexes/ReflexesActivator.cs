@@ -330,6 +330,27 @@ namespace ISIDA.Reflexes
       }
 
       ExecuteReflexes(pulseCount);
+
+      // Как в ActiveFromAction: снимок до конца пульса и ResetStates. Иначе при ускоренном прогоне
+      // LogSystemState уходит в Dispatcher.BeginInvoke и видит уже обнулённый _activeGeneticReflexID.
+      if (_activeGeneticReflexID != 0)
+      {
+        if (_activeCurReflexTriggerStimulusID > 0)
+        {
+          _reflexFormationService.RecordStimulus(
+              pulseCount,
+              _activeCurReflexTriggerStimulusID,
+              _activeCurBaseID,
+              _activeCurBaseStyleID,
+              _activeGeneticReflexID);
+
+          _reflexFormationService.CheckTemporalCorrelations(pulseCount, false);
+        }
+
+        _researchLogger.LogSystemState(pulseCount);
+        _activeGlobalCurTriggerStimulusID = 0;
+        _activeGeneticReflexID = 0;
+      }
     }
 
     /// <summary>
@@ -998,27 +1019,36 @@ namespace ISIDA.Reflexes
       var detectedNode = _reflexTree.FindNodeByID(detectedNodeId);
       if (detectedNode == null) return;
 
-      // Цепочка б/у рефлекса — обрабатываем, только если есть что запускать.
-      // Если chain-узел пустой (GenRef=0, CondRef=0), падаем к иерархическому поиску у-рефлексов.
-      if (detectedNode.IsChainNode && detectedNode.ConditionedReflex == 0)
+      // Цепочка б/у рефлекса — раннее завершение ТОЛЬКО когда нет условного стимула.
+      // Если есть trigStimulusID > 0, сначала проверяем условные рефлексы
+      // (exact → compound → hierarchical), и лишь при отсутствии — fallback на chain.
+      if (detectedNode.IsChainNode && detectedNode.ConditionedReflex == 0
+          && detectedNode.GeneticReflexID > 0 && _activeCurTriggerStimulusID <= 0)
       {
-        if (detectedNode.GeneticReflexID > 0)
-        {
-          _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
-          GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
-          return;
-        }
+        _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
+        GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        return;
       }
 
       if (_activeCurTriggerStimulusID > 0)
         CollectConditionedReflexes(detectedNode);
 
+      // Компаунд-стимул (2+ модальности): суммация / смешанный ответ / конкурентное подавление.
+      if (!_conditionedReflexesToRun.Any() && _activeCurTriggerStimulusID > 0)
+        CollectCompoundConditionedReflexes();
+
+      // Иерархический поиск (частичный стимул → более богатый триггер): сенсорная прекондиция и пр.
       if (!_conditionedReflexesToRun.Any() && _activeCurTriggerStimulusID > 0)
         CollectConditionedReflexesHierarchical();
 
-      // Компаунд-стимул: суммация / конкурентное подавление (компоненты одного образа)
-      if (!_conditionedReflexesToRun.Any() && _activeCurTriggerStimulusID > 0)
-        CollectCompoundConditionedReflexes();
+      // Fallback: chain-node генетический рефлекс, если условные не найдены
+      if (!_conditionedReflexesToRun.Any() && detectedNode.IsChainNode
+          && detectedNode.ConditionedReflex == 0 && detectedNode.GeneticReflexID > 0)
+      {
+        _geneticReflexesToRun.Add(detectedNode.GeneticReflexID);
+        GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
+        return;
+      }
 
       if (_activeCurReflexTriggerStimulusID > 0)
       {

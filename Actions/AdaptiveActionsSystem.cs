@@ -673,7 +673,7 @@ namespace ISIDA.Actions
       var now = DateTime.UtcNow;
       var reflexActionsToRemove = _activeActions
           .Where(a => a.ActivationPulse > 0)
-          .Where(a => (GlobalTimer.GlobalPulsCount - a.ActivationPulse) >= ReflexActionDisplayDuration)
+          .Where(a => (GlobalTimer.GlobalPulsCount - a.ActivationPulse) > ReflexActionDisplayDuration)
           .ToList();
 
       foreach (var action in reflexActionsToRemove)
