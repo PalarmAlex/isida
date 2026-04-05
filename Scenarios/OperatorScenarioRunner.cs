@@ -220,7 +220,8 @@ namespace ISIDA.Scenarios
                 line.ActionIds,
                 line.Phrase ?? "",
                 line.ToneId,
-                line.MoodId);
+                line.MoodId,
+                0);
             if (err != null)
             {
               ScenarioRunnerDiagnostics.Write($"[Apply FAIL] step={line.StepIndex} global={globalPulseCount} err={err}");

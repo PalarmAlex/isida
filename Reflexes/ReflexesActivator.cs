@@ -441,7 +441,8 @@ namespace ISIDA.Reflexes
         _geneticReflexesToRun.Clear();
         GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
 
-        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId); // Тип 3 - фраза с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId,
+            _influenceActions.LastAppliedVisualColorId);
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
@@ -1009,7 +1010,10 @@ namespace ISIDA.Reflexes
       if (_activeCurTriggerStimulusID > 0)
         CollectConditionedReflexes(detectedNode);
 
-      // Компаунд-стимул: суммация / конкурентное подавление
+      if (!_conditionedReflexesToRun.Any() && _activeCurTriggerStimulusID > 0)
+        CollectConditionedReflexesHierarchical();
+
+      // Компаунд-стимул: суммация / конкурентное подавление (компоненты одного образа)
       if (!_conditionedReflexesToRun.Any() && _activeCurTriggerStimulusID > 0)
         CollectCompoundConditionedReflexes();
 
@@ -1075,6 +1079,27 @@ namespace ISIDA.Reflexes
         Logger.Info($"Компаунд-активация: режим={resolution.Mode}, " +
                     $"рефлексов={resolution.ReflexesToActivate.Count}");
       }
+    }
+
+    /// <summary>
+    /// Иерархия пусковых образов (полный / частичный стимул) и суммация по группам одного UR на уровне.
+    /// </summary>
+    private void CollectConditionedReflexesHierarchical()
+    {
+      var resolution = _conditionedReflexes.ResolveHierarchicalConditionedActivation(
+          _activeCurBaseID, _activetStyleIds, _activeCurTriggerStimulusID);
+
+      if (!resolution.ReflexesToActivate.Any())
+        return;
+
+      foreach (var reflex in resolution.ReflexesToActivate)
+        _conditionedReflexesToRun.Add(reflex.Id);
+
+      AppGlobalState.FlgConditionReflexes = true;
+      GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
+
+      Logger.Info($"Иерархическая активация у-рефлексов: режим={resolution.Mode}, " +
+                  $"n={resolution.ReflexesToActivate.Count}");
     }
 
     /// <summary>

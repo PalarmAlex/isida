@@ -427,18 +427,16 @@ namespace ISIDA.Sensors
     internal Dictionary<int, string> GetAllWordsInternal()
     {
       var words = new Dictionary<int, string>();
-      foreach (var node in WordTreeFromID.Values)
+      var branchEndpoints = WordTree.GetBranchEndpointIds();
+
+      foreach (var id in branchEndpoints)
       {
-        // Конечный узел - это узел без детей И с ненулевым ID
-        if (node.Children.Count == 0 && node.Id != 0)
-        {
-          var word = GetWordFromWordIdInternal(node.Id);
-          if (!string.IsNullOrEmpty(word))
-          {
-            words.Add(node.Id, word);
-          }
-        }
+        if (id == 0) continue;
+        var word = GetWordFromWordIdInternal(id);
+        if (!string.IsNullOrEmpty(word))
+          words.Add(id, word);
       }
+
       return words;
     }
 
@@ -801,7 +799,9 @@ namespace ISIDA.Sensors
     #region Обработка текста
 
     /// <summary>
-    /// Обрабатывает текст, разбивая его на слова и фразы
+    /// Обрабатывает текст, разбивая его на слова и фразы.
+    /// Вся обработка выполняется в одном захвате канальной блокировки,
+    /// чтобы гарантировать атомарность перехода слово→дерево→фраза.
     /// </summary>
     /// <param name="text">Текст для обработки</param>
     /// <param name="maxPhraseLength">Максимальная длина фразы (по умолчанию 5)</param>
@@ -814,17 +814,45 @@ namespace ISIDA.Sensors
                      .Select(m => m.Value)
                      .ToList();
 
-      foreach (var word in words)
-      {
-        ProcessWord(word);
-      }
-
       if (maxPhraseLength == 0)
         maxPhraseLength = _maxPhraseLength;
 
       _lock.EnterWriteLock();
       try
       {
+        // Фаза 1: обработка слов (инлайн-логика ProcessWord без вложенных блокировок)
+        var wordIdMap = new Dictionary<string, int>();
+        foreach (var word in words)
+        {
+          if (string.IsNullOrWhiteSpace(word)) continue;
+
+          var existingId = WordTree.FindBranchInternal(word);
+          if (existingId != 0)
+          {
+            wordIdMap[word] = existingId;
+            WordSandbox.Remove(word);
+            continue;
+          }
+
+          if (IsGarbageWord(word)) continue;
+
+          if (_authoritativeMode)
+          {
+            var newId = WordTree.AddBranch(word);
+            if (newId != 0) wordIdMap[word] = newId;
+            continue;
+          }
+
+          bool isNewWord = WordSandbox.FindOrAdd(word, out int wordCount);
+          if (!isNewWord && wordCount >= _recognitionThreshold)
+          {
+            var newId = WordTree.AddBranch(word);
+            WordSandbox.Remove(word);
+            if (newId != 0) wordIdMap[word] = newId;
+          }
+        }
+
+        // Фаза 2: обработка фраз (используем собранные ID из фазы 1)
         for (int i = 0; i < words.Count; i++)
         {
           for (int j = 1; j <= maxPhraseLength && i + j <= words.Count; j++)
@@ -832,15 +860,14 @@ namespace ISIDA.Sensors
             var phraseSlice = words.Skip(i).Take(j).ToList();
             var phraseText = string.Join(" ", phraseSlice);
 
-            bool isNew = PhraseTextSandbox.FindOrAdd(phraseText, out int textCount);
-
             var wordIds = new List<int>();
             bool allResolved = true;
             foreach (var w in phraseSlice)
             {
-              var wId = WordTree.FindBranchInternal(w);
-              if (wId != 0)
+              if (wordIdMap.TryGetValue(w, out int wId))
+              {
                 wordIds.Add(wId);
+              }
               else
               {
                 allResolved = false;
@@ -848,10 +875,17 @@ namespace ISIDA.Sensors
               }
             }
 
+            bool isNew = PhraseTextSandbox.FindOrAdd(phraseText, out int textCount);
+
             if (!allResolved) continue;
 
             var existingId = PhraseTree.FindBranchInternal(wordIds);
-            if (existingId != 0) continue;
+            if (existingId != 0)
+            {
+              PhraseTextSandbox.Remove(phraseText);
+              PhraseSandbox.Remove(wordIds);
+              continue;
+            }
 
             if (_authoritativeMode)
             {

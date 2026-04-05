@@ -377,10 +377,13 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Текущий ID полного образа сочетаний пусковых стимулов: действие + фраза
+    /// Текущий ID полного образа сочетаний пусковых стимулов: действие + фраза + цвет
     /// Используется как стимул у-рефлексов и автоматизмов
      /// </summary>
     internal int ActiveCurTriggerStimulusID = 0;
+
+    /// <summary>Код зрительного канала, применённый в последнем <see cref="ApplyMultipleInfluenceActions"/>.</summary>
+    public int LastAppliedVisualColorId { get; private set; }
 
     /// <summary>
     /// Текущий ID частичного образа сочетаний пусковых стимулов: только действия.
@@ -396,7 +399,8 @@ namespace ISIDA.Actions
         List<int> phraseIdList,
         bool authoritativeMode = false,
         int toneId = 0,
-        int moodId = 0)
+        int moodId = 0,
+        int visualColorId = 0)
     {
       string errorMessage = string.Empty;
 
@@ -425,12 +429,16 @@ namespace ISIDA.Actions
 
         // Заполняем активные воздействия ДО их применения
         _influenceActiveActions.AddRange(actionsToApply);
-        ActiveCurTriggerStimulusID = CreatePerceptionImage(actionIdList, phraseIdList ?? new List<int>());
-        // для стимула б/у рефлексов фразу игнорируем
-        ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(actionIdList, new List<int>());
+        if (!AgentVisualColor.IsValidCode(visualColorId))
+          visualColorId = AgentVisualColor.White;
+        LastAppliedVisualColorId = visualColorId;
+        ActiveCurTriggerStimulusID = CreatePerceptionImage(actionIdList, phraseIdList ?? new List<int>(), visualColorId);
+        // для стимула б/у рефлексов фразу и цвет игнорируем
+        ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(actionIdList, new List<int>(), AgentVisualColor.White);
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
-        if (phraseIdList?.Any() == true)
+        bool verbalReflexPath = phraseIdList?.Any() == true || visualColorId != AgentVisualColor.White;
+        if (verbalReflexPath)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId, authoritativeMode);
         if (actionIdList?.Any() == true)
           TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, authoritativeMode);
@@ -508,16 +516,14 @@ namespace ISIDA.Actions
     /// <summary>
     /// Создает образ восприятия из примененных воздействий и фраз
     /// </summary>
-    private int CreatePerceptionImage(List<int> actionIdList, List<int> phraseIdList)
+    private int CreatePerceptionImage(List<int> actionIdList, List<int> phraseIdList, int visualColorId = 0)
     {
       try
       {
         if (_perceptionImagesSystem == null)
           return 0;
 
-        int imageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdList);
-
-        return imageId;
+        return _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdList, visualColorId);
       }
       catch (Exception ex)
       {

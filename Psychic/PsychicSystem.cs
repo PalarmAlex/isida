@@ -422,6 +422,7 @@ namespace ISIDA.Psychic
     /// <param name="phraseIdList">список ID фраз с пульта</param>
     /// <param name="toneId">ID тона сообщения</param>
     /// <param name="moodId">ID настроения сообщения</param>
+    /// <param name="visualColorId">Код зрительного канала (см. <see cref="AgentVisualColor"/>)</param>
     /// <returns>True если нужно заблокировать рефлексы</returns>
     internal bool SensorActivation(
       int activationType,
@@ -430,7 +431,8 @@ namespace ISIDA.Psychic
       List<int> actionIdList,
       List<int> phraseIdList,
       int toneId,
-      int moodId)
+      int moodId,
+      int visualColorId = 0)
     {
       if (AppGlobalState.EvolutionStage < 2)
       {
@@ -438,8 +440,12 @@ namespace ISIDA.Psychic
         return false;
       }
 
-      if ((actionIdList?.Count ?? 0) == 0 && (phraseIdList?.Count ?? 0) == 0)
+      if ((actionIdList?.Count ?? 0) == 0 && (phraseIdList?.Count ?? 0) == 0 &&
+          visualColorId == AgentVisualColor.White)
         return false;
+
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+        visualColorId = AgentVisualColor.White;
 
       try
       {
@@ -461,7 +467,8 @@ namespace ISIDA.Psychic
           (verbId, verbIdForTree, firstSimbol, phraseIdListForStimulus) = PrepareVerbalStimulusForStage2(
               phraseIdList, toneId, moodId);
           AppGlobalState.CurActiveVerbalId = verbId;
-          var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(actionIdList, phraseIdListForStimulus);
+          var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(
+              actionIdList, phraseIdListForStimulus, visualColorId);
           AppGlobalState.LastTriggerStimulusID = perceptionImageId;
         }
         else

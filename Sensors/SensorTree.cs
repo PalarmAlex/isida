@@ -249,6 +249,38 @@ namespace ISIDA.Sensors
       }
     }
 
+    /// <summary>
+    /// Проверяет, является ли узел конечной точкой ветки (а не просто промежуточным узлом)
+    /// </summary>
+    public bool IsBranchEndpoint(TNodeId id)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return _branches.ContainsKey(id);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Возвращает множество ID всех конечных точек веток (для bulk-проверки без повторного захвата блокировки)
+    /// </summary>
+    public HashSet<TNodeId> GetBranchEndpointIds()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return new HashSet<TNodeId>(_branches.Keys);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     #endregion
 
     #region Загрузка и сохранение

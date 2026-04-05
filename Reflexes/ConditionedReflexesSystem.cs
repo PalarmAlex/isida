@@ -73,7 +73,12 @@ using static ISIDA.Common.FileValidator;
 namespace ISIDA.Reflexes
 {
   /// <summary>
-  /// Система управления условными рефлексами агента
+  /// Система управления условными рефлексами агента.
+  /// Активация по пусковому образу (<see cref="ConditionedReflex.Level3"/>) использует иерархию
+  /// «полный / частичный стимул» через отношение подмножества на <see cref="PerceptionImagesSystem.PerceptionImage"/>  
+  /// (обобщение по структуре образа). Это не отдельная ассоциативная сеть «стимул–стимул» в смысле
+  /// сенсорной прекондиции с явным хранением пар CS–CS; перенос и частичное срабатывание следуют из
+  /// совместимости признаков действие / фраза / цвет в одном дереве образов восприятия.
   /// </summary>
   public sealed class ConditionedReflexesSystem : IDisposable
   {
@@ -180,7 +185,9 @@ namespace ISIDA.Reflexes
       public List<int> Level2 { get; set; } = new List<int>();
 
       /// <summary>
-      /// Третий уровень: ID образа пускового стимула (TriggerStimulusID)
+      /// Третий уровень: ID образа пускового стимула (TriggerStimulusID) в <see cref="PerceptionImagesSystem"/> —
+      /// действия с пульта, ID фраз и код зрительного канала. Поддерживается иерархия «полный / частичный» образ
+      /// (совпадение по подмножеству модальностей при том же цвете), без отдельной сети ассоциаций «стимул–стимул».
       /// </summary>
       public int Level3 { get; set; }
 
@@ -473,6 +480,12 @@ namespace ISIDA.Reflexes
       /// Если ниже — конкурентное подавление (активируется только сильнейший).
       /// </summary>
       public float CompetitionStrengthRatioThreshold { get; set; } = 0.7f;
+
+      /// <summary>
+      /// При равной крепости кандидатов на одном уровне иерархии (или внутри группы UR):
+      /// true — предпочитать условный рефлекс с меньшим ID; false — с большим ID.
+      /// </summary>
+      public bool TieBreakPreferSmallerReflexId { get; set; } = true;
     }
 
     /// <summary>
@@ -876,8 +889,7 @@ namespace ISIDA.Reflexes
       if (compoundImage == null)
         return new List<ConditionedReflex>();
 
-      int totalComponents = compoundImage.InfluenceActionsList.Count + compoundImage.PhraseIdList.Count;
-      if (totalComponents < 2)
+      if (PerceptionImagesSystem.CompoundModalityCount(compoundImage) < 2)
         return new List<ConditionedReflex>();
 
       if (level2 == null || !level2.Any())
@@ -918,11 +930,35 @@ namespace ISIDA.Reflexes
     /// </summary>
     public CompoundActivationResult ResolveCompoundActivation(List<ConditionedReflex> candidates)
     {
+      return ResolveCompoundActivation(candidates, null);
+    }
+
+    /// <summary>
+    /// То же с эффективными крепостями (например после суммации нескольких у-рефлексов на одном UR на уровне иерархии).
+    /// </summary>
+    public CompoundActivationResult ResolveCompoundActivation(
+        List<ConditionedReflex> candidates,
+        Dictionary<int, float> effectiveStrengthByReflexId)
+    {
       var result = new CompoundActivationResult();
+      float Eff(ConditionedReflex r) =>
+          effectiveStrengthByReflexId != null &&
+          effectiveStrengthByReflexId.TryGetValue(r.Id, out float e)
+              ? e
+              : r.AssociationStrength;
+
+      ConditionedReflex PickTie(IEnumerable<ConditionedReflex> seq)
+      {
+        bool sm = _settings.TieBreakPreferSmallerReflexId;
+        return seq
+            .OrderByDescending(Eff)
+            .ThenBy(r => sm ? r.Id : -r.Id)
+            .First();
+      }
 
       if (candidates == null || candidates.Count < 2)
       {
-        if (candidates?.Count == 1 && candidates[0].CanBeActivated())
+        if (candidates?.Count == 1 && Eff(candidates[0]) >= _settings.ActivationThreshold)
           result.ReflexesToActivate.Add(candidates[0]);
         result.Mode = CompoundActivationMode.Single;
         return result;
@@ -932,26 +968,24 @@ namespace ISIDA.Reflexes
 
       if (groups.Count == 1)
       {
-        // Все ведут к одному безусловному ответу → суммация крепости
-        float combinedStrength = Math.Min(1.0f, candidates.Sum(r => r.AssociationStrength));
+        float combinedStrength = Math.Min(1.0f, candidates.Sum(Eff));
 
         if (combinedStrength >= _settings.ActivationThreshold)
         {
-          result.ReflexesToActivate.Add(
-              candidates.OrderByDescending(r => r.AssociationStrength).First());
+          var best = PickTie(candidates);
+          result.ReflexesToActivate.Add(best);
           result.Mode = CompoundActivationMode.Summation;
         }
         return result;
       }
 
-      // Разные безусловные ответы → конкуренция или смешанный ответ
       var groupLeaders = groups
-          .Select(g => g.OrderByDescending(r => r.AssociationStrength).First())
-          .OrderByDescending(r => r.AssociationStrength)
+          .Select(g => PickTie(g))
+          .OrderByDescending(Eff)
           .ToList();
 
-      float maxStrength = groupLeaders[0].AssociationStrength;
-      float secondStrength = groupLeaders[1].AssociationStrength;
+      float maxStrength = Eff(groupLeaders[0]);
+      float secondStrength = Eff(groupLeaders[1]);
 
       if (maxStrength <= 0)
       {
@@ -963,18 +997,98 @@ namespace ISIDA.Reflexes
 
       if (ratio >= _settings.CompetitionStrengthRatioThreshold)
       {
-        // Близкая крепость → смешанный ответ (оба ответа)
         result.ReflexesToActivate = groupLeaders
-            .Where(r => r.AssociationStrength >= _settings.ActivationThreshold)
+            .Where(r => Eff(r) >= _settings.ActivationThreshold)
             .ToList();
         result.Mode = CompoundActivationMode.MixedResponse;
       }
       else
       {
-        // Разная крепость → конкурентное подавление (только сильнейший)
-        if (groupLeaders[0].AssociationStrength >= _settings.ActivationThreshold)
+        if (Eff(groupLeaders[0]) >= _settings.ActivationThreshold)
           result.ReflexesToActivate.Add(groupLeaders[0]);
         result.Mode = CompoundActivationMode.CompetitiveSuppression;
+      }
+
+      return result;
+    }
+
+    /// <summary>
+    /// Подбор условных рефлексов по иерархии специфичности пускового образа (3 → 2 → 1 модальности).
+    /// На каждом уровне: сначала суммация крепостей по группам одного безусловного ответа, затем
+    /// <see cref="ResolveCompoundActivation(List{ConditionedReflex}, Dictionary{int, float})"/>; если ни одна
+    /// группа не достигла порога — один рефлекс с максимальной индивидуальной крепостью (при ничьей — настройка ID).
+    /// </summary>
+    public CompoundActivationResult ResolveHierarchicalConditionedActivation(
+        int level1, List<int> level2, int stimulusImageId)
+    {
+      var result = new CompoundActivationResult();
+      if (stimulusImageId <= 0 || level2 == null || !level2.Any())
+        return result;
+
+      var sortedL2 = level2.OrderBy(x => x).ToList();
+      var allImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
+      var S = allImages.FirstOrDefault(img => img.Id == stimulusImageId);
+      if (S == null) return result;
+
+      List<ConditionedReflex> pool;
+      _lock.EnterReadLock();
+      try
+      {
+        pool = _conditionedReflexes.Values
+            .Where(r => r.Level1 == level1)
+            .Where(r =>
+                (r.Level2?.OrderBy(x => x).ToList() ?? new List<int>()).SequenceEqual(sortedL2))
+            .ToList();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      bool sm = _settings.TieBreakPreferSmallerReflexId;
+      ConditionedReflex PickByIndividual(IEnumerable<ConditionedReflex> seq) =>
+          seq
+              .OrderByDescending(r => r.AssociationStrength)
+              .ThenBy(r => sm ? r.Id : -r.Id)
+              .First();
+
+      for (int reflexTier = 3; reflexTier >= 1; reflexTier--)
+      {
+        var tierCandidates = pool
+            .Where(r =>
+            {
+              var img = allImages.FirstOrDefault(i => i.Id == r.Level3);
+              if (img == null) return false;
+              return PerceptionImagesSystem.GetTriggerSpecificityTier(img) == reflexTier &&
+                     PerceptionImagesSystem.StimulusImagesHierarchyCompatible(S, img);
+            })
+            .ToList();
+
+        if (!tierCandidates.Any()) continue;
+
+        var geneticGroups = tierCandidates.GroupBy(r => r.SourceGeneticReflexId).ToList();
+        var leaders = new List<ConditionedReflex>();
+        var effMap = new Dictionary<int, float>();
+
+        foreach (var g in geneticGroups)
+        {
+          float sum = Math.Min(1f, g.Sum(x => x.AssociationStrength));
+          if (sum < _settings.ActivationThreshold) continue;
+          var rep = PickByIndividual(g);
+          leaders.Add(rep);
+          effMap[rep.Id] = sum;
+        }
+
+        if (leaders.Any())
+          return ResolveCompoundActivation(leaders, effMap);
+
+        var best = PickByIndividual(tierCandidates);
+        if (best.CanBeActivated())
+        {
+          result.ReflexesToActivate.Add(best);
+          result.Mode = CompoundActivationMode.Single;
+          return result;
+        }
       }
 
       return result;
@@ -1123,11 +1237,14 @@ namespace ISIDA.Reflexes
         PerceptionImagesSystem.PerceptionImage component,
         PerceptionImagesSystem.PerceptionImage compound)
     {
+      if (component.VisualColorId != compound.VisualColorId)
+        return false;
+
       bool hasActions = component.InfluenceActionsList.Any();
       bool hasPhrases = component.PhraseIdList.Any();
 
       if (!hasActions && !hasPhrases)
-        return false;
+        return true;
 
       if (hasActions && !component.InfluenceActionsList.All(
           a => compound.InfluenceActionsList.Contains(a)))
@@ -1433,6 +1550,7 @@ namespace ISIDA.Reflexes
               _settings.ActivationThreshold = float.Parse(value);
               break;
             case "TimeWindowPulses":
+            case "TimeWindowMs":
               _settings.TimeWindowPulses = int.Parse(value);
               break;
             case "HigherOrderStrengthReductionCoefficient":
@@ -1440,6 +1558,11 @@ namespace ISIDA.Reflexes
               break;
             case "CompetitionStrengthRatioThreshold":
               _settings.CompetitionStrengthRatioThreshold = float.Parse(value);
+              break;
+            case "TieBreakPreferSmallerReflexId":
+              _settings.TieBreakPreferSmallerReflexId =
+                  value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                  value == "1";
               break;
           }
         }
@@ -1514,15 +1637,17 @@ namespace ISIDA.Reflexes
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
             "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
             "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)",
-            "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)"
+            "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)",
+            "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)"
           };
 
         lines.Add($"LearningRate={_settings.LearningRate}");
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
-        lines.Add($"TimeWindowMs={_settings.TimeWindowPulses}");
+        lines.Add($"TimeWindowPulses={_settings.TimeWindowPulses}");
         lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
         lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
+        lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

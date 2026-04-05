@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using ISIDA.Reflexes;
 
 namespace ISIDA.Common
 {
@@ -23,6 +24,12 @@ namespace ISIDA.Common
       public const string ConditionedReflexesMoodId = "# MoodId: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ConditionedReflexesSourceConditioned = "# SourceConditionedReflexId: ID родительского условного рефлекса (0 для первичных)";
       public const string ConditionedReflexesOrder = "# Order: порядок рефлекса (1=первичный, 2=вторичный, 3=третичный)";
+
+      // Образы восприятия (пусковые стимулы для условных рефлексов)
+      public const string PerceptionImagesFormat = "# ID|InfluenceActionsList|PhraseIdList|VisualColorId";
+      public const string PerceptionImagesLists = "# Формат списков: id1,id2,id3";
+      public const string PerceptionImagesVisualColor =
+          "# VisualColorId: 0 белый, 1 чёрный, 2–8 спектр (см. AgentVisualColor); столбец опционален в старых файлах (как 0)";
 
       // Безусловные рефлексы
       public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|Level3|Адаптивные действия|ReflexChainID";
@@ -237,6 +244,67 @@ namespace ISIDA.Common
     }
 
     // ======== ПЕРЕГРУЗКИ ВАЛИДАЦИЙ: по пути и по содержимому ========
+
+    #region IsValidPerceptionImagesFile
+
+    /// <summary>
+    /// Проверяет валидность файла образов восприятия по пути
+    /// </summary>
+    public static bool IsValidPerceptionImagesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidPerceptionImagesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла образов восприятия.
+    /// Строка данных: ID|список воздействий|список фраз|опционально VisualColorId (0–8).
+    /// </summary>
+    public static bool IsValidPerceptionImagesFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 3 || parts.Length > 4)
+          return false;
+
+        if (!int.TryParse(parts[0], out int id) || id <= 0)
+          return false;
+
+        if (parts.Length == 4)
+        {
+          if (string.IsNullOrWhiteSpace(parts[3]) ||
+              !int.TryParse(parts[3].Trim(), out int colorId) ||
+              !AgentVisualColor.IsValidCode(colorId))
+            return false;
+        }
+      }
+
+      return true;
+    }
+
+    #endregion
 
     #region IsValidReflexChainsFile
 

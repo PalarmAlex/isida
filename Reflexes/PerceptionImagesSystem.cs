@@ -9,6 +9,43 @@ using System.Threading;
 namespace ISIDA.Reflexes
 {
   /// <summary>
+  /// Дискретные коды зрительного канала агента (фон сцены / поле зрения).
+  /// 0 — белый по умолчанию; 1 — чёрный; 2–8 — семь спектральных оттенков (для протоколов компаундного CS).
+  /// </summary>
+  public static class AgentVisualColor
+  {
+    /// <summary>Код белого фона (по умолчанию).</summary>
+    public const int White = 0;
+    /// <summary>Код чёрного фона.</summary>
+    public const int Black = 1;
+    /// <summary>Минимальный допустимый код.</summary>
+    public const int MinCode = 0;
+    /// <summary>Максимальный допустимый код (семь спектральных оттенков после чёрного).</summary>
+    public const int MaxCode = 8;
+
+    /// <summary>Проверка, что код входит в диапазон зрительного канала.</summary>
+    public static bool IsValidCode(int code) => code >= MinCode && code <= MaxCode;
+
+    /// <summary>Краткое имя цвета для UI.</summary>
+    public static string GetDisplayName(int code)
+    {
+      switch (code)
+      {
+        case 0: return "Белый";
+        case 1: return "Чёрный";
+        case 2: return "Красный";
+        case 3: return "Оранжевый";
+        case 4: return "Жёлтый";
+        case 5: return "Зелёный";
+        case 6: return "Голубой";
+        case 7: return "Синий";
+        case 8: return "Фиолетовый";
+        default: return $"Код {code}";
+      }
+    }
+  }
+
+  /// <summary>
   /// Образы восприятия рефлексов
   /// </summary>
   public sealed class PerceptionImagesSystem : IDisposable
@@ -91,6 +128,86 @@ namespace ISIDA.Reflexes
       /// Список ID фраз
       /// </summary>
       public List<int> PhraseIdList { get; set; } = new List<int>();
+
+      /// <summary>
+      /// Код зрительного канала (см. <see cref="AgentVisualColor"/>). Всегда задан; по умолчанию белый (0).
+      /// </summary>
+      public int VisualColorId { get; set; }
+    }
+
+    /// <summary>
+    /// Степень специфичности пускового образа по числу задействованных модальностей:
+    /// 3 — действия и фраза; 2 — только действия или только фраза (плюс учёт цвета в совпадении);
+    /// 1 — ни действий, ни фраз (только цвет как опора; редко).
+    /// </summary>
+    public static int GetTriggerSpecificityTier(PerceptionImage img)
+    {
+      if (img == null) return 0;
+      bool hasA = img.InfluenceActionsList?.Any() == true;
+      bool hasP = img.PhraseIdList?.Any() == true;
+      if (hasA && hasP) return 3;
+      if (hasA || hasP) return 2;
+      return 1;
+    }
+
+    /// <summary>
+    /// Число модальностей, задающих «компаунд» (для суммации нескольких CS): действие, речь, ненулевой цвет.
+    /// </summary>
+    public static int CompoundModalityCount(PerceptionImage img)
+    {
+      if (img == null) return 0;
+      int n = 0;
+      if (img.InfluenceActionsList?.Any() == true) n++;
+      if (img.PhraseIdList?.Any() == true) n++;
+      if (img.VisualColorId != AgentVisualColor.White) n++;
+      return n;
+    }
+
+    /// <summary>
+    /// Множество list1 содержится в list2 (с учётом кратности через группировку минимальных Count).
+    /// Пустой list1 не ограничивает.
+    /// </summary>
+    public static bool IsIntListSubset(List<int> small, List<int> large)
+    {
+      if (small == null || !small.Any()) return true;
+      if (large == null) return false;
+      var gSmall = small.GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+      var gLarge = large.GroupBy(x => x).ToDictionary(g => g.Key, g => g.Count());
+      foreach (var kv in gSmall)
+      {
+        if (!gLarge.TryGetValue(kv.Key, out int c) || c < kv.Value)
+          return false;
+      }
+      return true;
+    }
+
+    /// <summary>
+    /// Два пусковых образа совместимы для активации одного у-рефлекса по иерархии «часть — целое»:
+    /// либо I ⊆ S (богаче стимул, беднее запись рефлекса), либо S ⊆ I (богаче запись, беднее стимул).
+    /// Цвет всегда должен совпадать.
+    /// </summary>
+    public static bool StimulusImagesHierarchyCompatible(PerceptionImage stimulus, PerceptionImage reflexTrigger)
+    {
+      if (stimulus == null || reflexTrigger == null) return false;
+      if (stimulus.VisualColorId != reflexTrigger.VisualColorId) return false;
+      bool iSubsetS =
+          IsIntListSubset(reflexTrigger.InfluenceActionsList, stimulus.InfluenceActionsList) &&
+          IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList);
+      bool sSubsetI =
+          IsIntListSubset(stimulus.InfluenceActionsList, reflexTrigger.InfluenceActionsList) &&
+          IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList);
+      return iSubsetS || sSubsetI;
+    }
+
+    /// <summary>
+    /// Строгое равенство содержимого образов (включая цвет).
+    /// </summary>
+    public static bool PerceptionImagesEqual(PerceptionImage a, PerceptionImage b)
+    {
+      if (a == null || b == null) return false;
+      return a.VisualColorId == b.VisualColorId &&
+             a.InfluenceActionsList.OrderBy(x => x).SequenceEqual(b.InfluenceActionsList.OrderBy(x => x)) &&
+             a.PhraseIdList.OrderBy(x => x).SequenceEqual(b.PhraseIdList.OrderBy(x => x));
     }
 
     /// <summary>
@@ -216,19 +333,24 @@ namespace ISIDA.Reflexes
     /// </summary>
     /// <param name="influenceActionList">Список ID воздействий с пульта</param>
     /// <param name="phraseIdList">Список ID фраз</param>
+    /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
     /// <returns>ID существующего или нового образа. 0 если ошибка</returns>
-    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList)
+    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList, int visualColorId = 0)
     {
-      // образы нужны уже на стадии 0 - для привязки к дереву рефлексов
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+        visualColorId = AgentVisualColor.White;
 
-      if ((influenceActionList == null || !influenceActionList.Any()) &&
-          (phraseIdList == null || !phraseIdList.Any()))
+      bool hasA = influenceActionList != null && influenceActionList.Any();
+      bool hasP = phraseIdList != null && phraseIdList.Any();
+      bool hasColorSignal = visualColorId != AgentVisualColor.White;
+      if (!hasA && !hasP && !hasColorSignal)
         return 0;
 
       var newPerceptionImage = new PerceptionImage
       {
         InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
-        PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>()
+        PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
+        VisualColorId = visualColorId
       };
 
       int resultId = 0;
@@ -240,18 +362,16 @@ namespace ISIDA.Reflexes
             IsArePerceptionImage(existing, newPerceptionImage));
 
         if (existingImage != null)
-        {
           resultId = existingImage.Id;
-        }
         else
         {
-          // Создаем новый образ
           int newId = ++_lastPerceptionImageId;
           var perceptionImage = new PerceptionImage
           {
             Id = newId,
-            InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
-            PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>()
+            InfluenceActionsList = newPerceptionImage.InfluenceActionsList,
+            PhraseIdList = newPerceptionImage.PhraseIdList,
+            VisualColorId = visualColorId
           };
 
           _perceptionImages.Add(newId, perceptionImage);
@@ -270,10 +390,11 @@ namespace ISIDA.Reflexes
     {
       if (existing == null || newImage == null) return false;
 
-      return existing.InfluenceActionsList.OrderBy(x => x).SequenceEqual(
-             newImage.InfluenceActionsList.OrderBy(x => x)) &&
+      return existing.VisualColorId == newImage.VisualColorId &&
+             existing.InfluenceActionsList.OrderBy(x => x).SequenceEqual(
+                 newImage.InfluenceActionsList.OrderBy(x => x)) &&
              existing.PhraseIdList.OrderBy(x => x).SequenceEqual(
-             newImage.PhraseIdList.OrderBy(x => x));
+                 newImage.PhraseIdList.OrderBy(x => x));
     }
 
     /// <summary>
@@ -341,56 +462,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверяет валидность файла образов восприятия
-    /// </summary>
-    private bool IsValidPerceptionImagesFile(string filePath)
-    {
-      if (!File.Exists(filePath))
-        return false;
-
-      try
-      {
-        var lines = File.ReadLines(filePath).ToList();
-        return IsValidPerceptionImagesFile(lines);
-      }
-      catch
-      {
-        return false;
-      }
-    }
-
-    /// <summary>
-    /// Проверяет валидность содержимого файла образов восприятия
-    /// </summary>
-    private bool IsValidPerceptionImagesFile(IEnumerable<string> lines)
-    {
-      if (lines == null)
-        return false;
-
-      var lineList = lines.ToList();
-      if (lineList.Count < 1)
-        return false;
-
-      foreach (var line in lineList)
-      {
-        var trimmed = line?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
-          continue;
-
-        var parts = trimmed.Split('|');
-        if (parts.Length < 3)
-          return false;
-
-        if (!int.TryParse(parts[0], out _))
-          return false;
-
-        return true;
-      }
-
-      return true;
-    }
-
-    /// <summary>
     /// Проверяет валидность файла образов стилей поведения
     /// </summary>
     private bool IsValidBehaviorStyleImagesFile(string filePath)
@@ -447,7 +518,7 @@ namespace ISIDA.Reflexes
     {
       string filePath = GetPerceptionImagesFilePath();
 
-      if (!IsValidPerceptionImagesFile(filePath))
+      if (!FileValidator.IsValidPerceptionImagesFile(filePath))
         return;
 
       try
@@ -471,11 +542,16 @@ namespace ISIDA.Reflexes
             if (!int.TryParse(parts[0], out int id))
               continue;
 
+            int colorId = AgentVisualColor.White;
+            if (parts.Length > 3 && int.TryParse(parts[3].Trim(), out int parsedColor))
+              colorId = AgentVisualColor.IsValidCode(parsedColor) ? parsedColor : AgentVisualColor.White;
+
             var perceptionImage = new PerceptionImage
             {
               Id = id,
               InfluenceActionsList = AddUtils.ParseIntList(parts[1]),
-              PhraseIdList = AddUtils.ParseIntList(parts[2])
+              PhraseIdList = AddUtils.ParseIntList(parts[2]),
+              VisualColorId = colorId
             };
 
             _perceptionImages[id] = perceptionImage;
@@ -556,13 +632,15 @@ namespace ISIDA.Reflexes
       {
         var lines = new List<string>
                 {
-                  "# ID|InfluenceActionsList|PhraseIdList",
-                  "# Формат списков: id1,id2,id3"
+                  FileValidator.FileHeaders.PerceptionImagesFormat,
+                  FileValidator.FileHeaders.PerceptionImagesLists,
+                  FileValidator.FileHeaders.PerceptionImagesVisualColor
                 };
 
         foreach (var image in _perceptionImages.Values.OrderBy(x => x.Id))
         {
-          lines.Add($"{image.Id}|{AddUtils.IntListToString(image.InfluenceActionsList)}|{AddUtils.IntListToString(image.PhraseIdList)}");
+          lines.Add($"{image.Id}|{AddUtils.IntListToString(image.InfluenceActionsList)}|" +
+                    $"{AddUtils.IntListToString(image.PhraseIdList)}|{image.VisualColorId}");
         }
 
         var lineCount = 3;
@@ -572,7 +650,7 @@ namespace ISIDA.Reflexes
         var result = FileValidator.SafeSaveFile(
             GetPerceptionImagesFilePath(),
             lines,
-            content => IsValidPerceptionImagesFile(string.Join(Environment.NewLine, content)),
+            FileValidator.IsValidPerceptionImagesFile,
             minLinesCount: lineCount,
             fileDescription: "образов восприятия");
 
