@@ -224,6 +224,12 @@ namespace ISIDA.Scenarios
     /// <summary>Стадия для перехода перед запуском (0–5); −1 — не менять стадию.</summary>
     public int PreRunTargetStage { get; set; } = -1;
 
+    /// <summary>Номер стадии 0–5 для списков; пустая строка, если стадию менять не нужно (−1).</summary>
+    public string PreRunStageNumberDisplay =>
+        PreRunTargetStage >= 0 && PreRunTargetStage <= 5
+            ? PreRunTargetStage.ToString(CultureInfo.InvariantCulture)
+            : "";
+
     /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах агента).</summary>
     public bool PreRunClearAgentData { get; set; }
 
