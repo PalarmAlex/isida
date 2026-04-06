@@ -14,7 +14,7 @@ namespace ISIDA.Reflexes
   /// </summary>
   public static class AgentVisualColor
   {
-    /// <summary>Код белого фона (по умолчанию).</summary>
+    /// <summary>Код белого фона (по умолчанию)</summary>
     public const int White = 0;
     /// <summary>Код чёрного фона.</summary>
     public const int Black = 1;
