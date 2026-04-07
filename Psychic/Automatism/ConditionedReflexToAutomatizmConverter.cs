@@ -171,8 +171,8 @@ namespace ISIDA.Psychic
               if (AddUtils.FloatLessOrEqual(conditionedReflex.AssociationStrength, actReflexTreshold))
                 continue; // пропускаем рефлекс с крепостью <= пороговой
 
-              var (actions, phrases, toneId, moodId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
-              var imageHash = CalculateImageHash(conditionedReflex.Level1, conditionedReflex.Level2, actions, phrases, toneId, moodId);
+              var (actions, phrases, toneId, moodId, visualColorId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
+              var imageHash = CalculateImageHash(conditionedReflex.Level1, conditionedReflex.Level2, actions, phrases, toneId, moodId, visualColorId);
 
               if (processedImageIds.Contains(imageHash))
               {
@@ -244,7 +244,7 @@ namespace ISIDA.Psychic
           return (false, 0, ConversionStatus.Failed, $"Нет действий для условного рефлекса ID={conditionedReflex.Id}");
 
         // получаем пусковые действия и фразу для триггера автоматизма из Level 3 условного рефлекса
-        var (actionsTrigger, phrases, toneId, moodId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
+        var (actionsTrigger, phrases, toneId, moodId, triggerVisualColorId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
         int symbolId = 0;
         int verbId = 0;
 
@@ -272,7 +272,8 @@ namespace ISIDA.Psychic
             toneId,
             moodId,
             symbolId,
-            verbId);
+            verbId,
+            triggerVisualColorId);
 
         if (!treeComponentsResult.IsValid)
           return (false, 0, ConversionStatus.Failed, treeComponentsResult.Error);
@@ -319,7 +320,8 @@ namespace ISIDA.Psychic
             phraseIdList: null, // условный рефлекс это только действия безусловного
             toneId: toneId,
             moodId: moodId,
-            checkUnicum: true);
+            checkUnicum: true,
+            visualColorId: triggerVisualColorId);
 
         if (actionsImageId == 0)
           return (false, 0, ConversionStatus.Failed, $"Не удалось создать образ действий");
@@ -381,7 +383,7 @@ namespace ISIDA.Psychic
     /// Вычисляет хэш образа для обнаружения дубликатов.
     /// Учитывает: Level1, Level2 (эмоции), пусковые действия, фразы, тон, настроение.
     /// </summary>
-    private int CalculateImageHash(int baseId, List<int> level2, List<int> actions, List<int> phrases, int toneId, int moodId)
+    private int CalculateImageHash(int baseId, List<int> level2, List<int> actions, List<int> phrases, int toneId, int moodId, int visualColorId)
     {
       unchecked
       {
@@ -408,6 +410,7 @@ namespace ISIDA.Psychic
 
         hash = hash * 31 + toneId.GetHashCode();
         hash = hash * 31 + moodId.GetHashCode();
+        hash = hash * 31 + visualColorId.GetHashCode();
 
         return hash;
       }
@@ -416,31 +419,34 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Получает фразы и действия из пускового стимула условного рефлекса
     /// </summary>
-    private (List<int> Action, List<int> Phrases, int ToneId, int MoodId) GetActionPhrasesFromConditionedReflex(
+    private (List<int> Action, List<int> Phrases, int ToneId, int MoodId, int VisualColorId) GetActionPhrasesFromConditionedReflex(
         ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
     {
       try
       {
         if (_perceptionImagesSystem == null)
-          return (new List<int>(), new List<int>(), 0, 0);
+          return (new List<int>(), new List<int>(), 0, 0, AgentVisualColor.White);
 
         var perceptionImage = _perceptionImagesSystem.GetAllPerceptionImagesList()
             .FirstOrDefault(img => img.Id == conditionedReflex.Level3);
 
         if (perceptionImage == null)
-          return (new List<int>(), new List<int>(), 0, 0);
+          return (new List<int>(), new List<int>(), 0, 0, AgentVisualColor.White);
 
         var phrases = perceptionImage.PhraseIdList ?? new List<int>();
         var actions = perceptionImage.InfluenceActionsList ?? new List<int>();
         int toneId = conditionedReflex.ToneId;
         int moodId = conditionedReflex.MoodId;
+        int visualColorId = perceptionImage.VisualColorId;
+        if (!AgentVisualColor.IsValidCode(visualColorId))
+          visualColorId = AgentVisualColor.White;
 
-        return (actions, phrases, toneId, moodId);
+        return (actions, phrases, toneId, moodId, visualColorId);
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
-        return (new List<int>(), new List<int>(), 0, 0);
+        return (new List<int>(), new List<int>(), 0, 0, AgentVisualColor.White);
       }
     }
 
@@ -454,7 +460,8 @@ namespace ISIDA.Psychic
         int toneId,
         int moodId,
         int symbolId,
-        int verbId)
+        int verbId,
+        int triggerVisualColorId)
     {
       try
       {
@@ -475,6 +482,9 @@ namespace ISIDA.Psychic
         components.ToneMoodID = PsychicSystem.GetToneMoodID(toneId, moodId);
         components.SimbolID = symbolId;
         components.VerbID = verbId;
+        components.VisualID = AgentVisualColor.IsValidCode(triggerVisualColorId)
+            ? triggerVisualColorId
+            : AgentVisualColor.White;
 
         return (true, string.Empty, components);
       }
@@ -530,6 +540,7 @@ namespace ISIDA.Psychic
             components.ToneMoodID,
             components.SimbolID,
             components.VerbID,
+            components.VisualID,
             isUnrecognizedPhrase: false);
 
         if (newNodeId > 0)
@@ -617,6 +628,7 @@ namespace ISIDA.Psychic
       public int ToneMoodID { get; set; }
       public int SimbolID { get; set; }
       public int VerbID { get; set; }
+      public int VisualID { get; set; }
     }
 
     #endregion
@@ -777,7 +789,7 @@ namespace ISIDA.Psychic
           return (false, 0, $"Не удалось получить информацию о цепочке рефлексов");
 
         // Создаем дерево автоматизмов для этого условного рефлекса
-        var (actionsTrigger, phrases, toneId, moodId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
+        var (actionsTrigger, phrases, toneId, moodId, chainVisualColorId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
 
         int symbolId = 0;
         int verbId = 0;
@@ -805,7 +817,8 @@ namespace ISIDA.Psychic
             toneId,
             moodId,
             symbolId,
-            verbId);
+            verbId,
+            chainVisualColorId);
 
         if (!treeComponentsResult.IsValid)
           return (false, 0, treeComponentsResult.Error);

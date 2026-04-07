@@ -1,5 +1,6 @@
 using ISIDA.Common;
 using ISIDA.Psychic.Understanding;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -48,6 +49,12 @@ namespace ISIDA.Psychic.Automatism
     /// ID вербального образа
     /// </summary>
     public int VerbID { get; set; }
+
+    /// <summary>
+    /// Код зрительного канала сцены (<see cref="AgentVisualColor"/>): 0 — белый (нейтральный), иначе чёрный или спектральный оттенок.
+    /// Уточняет контекст после <see cref="VerbID"/>; на родительских шагах ветки — 0.
+    /// </summary>
+    public int VisualID { get; set; }
 
     /// <summary>
     /// Дочерние узлы (ветвление)
@@ -184,6 +191,16 @@ namespace ISIDA.Psychic.Automatism
     /// Создает новый узел дерева автоматизмов.
     /// Не допускает создание узла, когда оба ActivityID и VerbID равны 0 (допускается только для прямых потомков корня — три базовые ветки).
     /// </summary>
+    /// <param name="parent">Родительский узел дерева.</param>
+    /// <param name="id">ID узла; 0 — назначить следующий свободный.</param>
+    /// <param name="baseId">Базовое состояние (-1 / 0 / 1).</param>
+    /// <param name="emotionId">ID образа эмоций.</param>
+    /// <param name="activityId">ID образа сочетания действий с пульта.</param>
+    /// <param name="toneMoodId">ID тона и настроения.</param>
+    /// <param name="simbolId">ID первого символа фразы.</param>
+    /// <param name="verbID">ID вербального образа.</param>
+    /// <param name="visualID">Код зрительного канала (<see cref="AgentVisualColor"/>); на родительских шагах ветки — 0.</param>
+    /// <param name="checkUnicum">Проверять уникальность и отклонять дубликаты.</param>
     public (int Id, AutomatizmNode Node) CreateNewAutomatizmNode(
         AutomatizmNode parent,
         int id,
@@ -193,21 +210,25 @@ namespace ISIDA.Psychic.Automatism
         int toneMoodId,
         int simbolId,
         int verbID,
+        int visualID,
         bool checkUnicum = true)
     {
       if (parent == null)
         return (0, null);
 
+      if (!AgentVisualColor.IsValidCode(visualID))
+        visualID = AgentVisualColor.White;
+
       // Не допускаем под не-корнем только узлы «только BaseID» (все остальные 0) — иначе разрешаем эмоцию, toneMood и т.д.
       if (checkUnicum && parent.ID != 0
-          && emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0)
+          && emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0 && visualID == 0)
         return (0, null);
 
       try
       {
         if (checkUnicum)
         {
-          var existing = FindAutomatizmTreeNodeFromCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
+          var existing = FindAutomatizmTreeNodeFromCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID);
           if (existing.Node != null)
             return existing;
         }
@@ -233,7 +254,8 @@ namespace ISIDA.Psychic.Automatism
           ActivityID = activityId,
           ToneMoodID = toneMoodId,
           SimbolID = simbolId,
-          VerbID = verbID
+          VerbID = verbID,
+          VisualID = visualID
         };
 
         parent.Children.Add(node);
@@ -251,20 +273,31 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Находит конечный узел по условиям
     /// </summary>
+    /// <param name="baseId">Базовое состояние.</param>
+    /// <param name="emotionId">ID образа эмоций.</param>
+    /// <param name="activityId">ID образа действий.</param>
+    /// <param name="toneMoodId">ID тона и настроения.</param>
+    /// <param name="simbolId">ID первого символа фразы.</param>
+    /// <param name="verbID">ID вербального образа.</param>
+    /// <param name="visualID">Код зрительного канала; 0 — нейтральный (белый).</param>
     public (int Id, AutomatizmNode Node) FindAutomatizmTreeNodeFromCondition(
         int baseId,
         int emotionId,
         int activityId,
         int toneMoodId,
         int simbolId,
-        int verbID)
+        int verbID,
+        int visualID = 0)
     {
+      if (!AgentVisualColor.IsValidCode(visualID))
+        visualID = AgentVisualColor.White;
+
       _lock.EnterReadLock();
       try
       {
         foreach (var child in Tree.Children)
         {
-          var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
+          var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID);
           if (result.Node != null)
             return result;
         }
@@ -286,11 +319,12 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int verbID)
+        int verbID,
+        int visualID)
     {
       if (node.BaseID == baseId && node.EmotionID == emotionId &&
           node.ActivityID == activityId && toneMoodId == node.ToneMoodID &&
-          node.SimbolID == simbolId && node.VerbID == verbID)
+          node.SimbolID == simbolId && node.VerbID == verbID && node.VisualID == visualID)
       {
         return (node.ID, node);
       }
@@ -300,7 +334,7 @@ namespace ISIDA.Psychic.Automatism
 
       foreach (var child in node.Children)
       {
-        var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
+        var result = CheckAutomatizmTree(child, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID);
         if (result.Node != null)
           return result;
       }
@@ -317,9 +351,9 @@ namespace ISIDA.Psychic.Automatism
 
       try
       {
-        CreateNewAutomatizmNode(Tree, 0, -1, 0, 0, 0, 0, 0, false);
-        CreateNewAutomatizmNode(Tree, 0, 0, 0, 0, 0, 0, 0, false);
-        CreateNewAutomatizmNode(Tree, 0, 1, 0, 0, 0, 0, 0, false);
+        CreateNewAutomatizmNode(Tree, 0, -1, 0, 0, 0, 0, 0, 0, false);
+        CreateNewAutomatizmNode(Tree, 0, 0, 0, 0, 0, 0, 0, 0, false);
+        CreateNewAutomatizmNode(Tree, 0, 1, 0, 0, 0, 0, 0, 0, false);
       }
       finally
       {
@@ -415,6 +449,14 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Активация дерева автоматизмов
     /// </summary>
+    /// <param name="baseId">Базовое состояние.</param>
+    /// <param name="emotionId">ID образа эмоций.</param>
+    /// <param name="activityId">ID образа действий.</param>
+    /// <param name="toneMoodId">ID тона и настроения.</param>
+    /// <param name="simbolId">ID первого символа фразы.</param>
+    /// <param name="verbID">ID вербального образа.</param>
+    /// <param name="visualID">Код зрительного канала сцены (<see cref="AgentVisualColor"/>).</param>
+    /// <param name="isUnrecognizedPhrase">Флаг нераспознанной фразы при обходе дерева.</param>
     public int AutomatizmTreeActivation(
         int baseId,
         int emotionId,
@@ -422,10 +464,14 @@ namespace ISIDA.Psychic.Automatism
         int toneMoodId,
         int simbolId,
         int verbID,
+        int visualID,
         bool isUnrecognizedPhrase = false)
     {
       if (_notAllowScanInTreeThisTime || AppGlobalState.EvolutionStage < 2)
         return 0;
+
+      if (!AgentVisualColor.IsValidCode(visualID))
+        visualID = AgentVisualColor.White;
 
       _notAllowScanInTreeThisTime = true;
 
@@ -437,7 +483,7 @@ namespace ISIDA.Psychic.Automatism
         _currentStepCount = 0;
         AppGlobalState.CurrentFindAtmzStepCount = _currentStepCount;
 
-        var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
+        var condArr = GetActiveConditionsArr(baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID);
 
         foreach (var node in Tree.Children)
         {
@@ -454,7 +500,7 @@ namespace ISIDA.Psychic.Automatism
         {
           CurrentAutomatizmTreeEnd = condArr.Skip(_currentStepCount).ToList();
 
-          // Строим ветку до листа с полным набором условий (baseId..verbID), чтобы узел был пусковым для автоматизма.
+          // Строим ветку до листа с полным набором условий (baseId..visualID), чтобы узел был пусковым для автоматизма.
           // Раньше использовалось _currentStepCount < GetConditionsCount(condArr): при verbID!=0 и нулях в середине
           // (например [0,1,0,200,17,333]) получалось 5 < 4 → ветка не строилась, возвращался узел без VerbID/ActivityID.
           if (_currentStepCount < condArr.Count)
@@ -510,6 +556,9 @@ namespace ISIDA.Psychic.Automatism
             break;
           case 5:
             val = child.VerbID;
+            break;
+          case 6:
+            val = child.VisualID;
             break;
         }
 
@@ -576,26 +625,30 @@ namespace ISIDA.Psychic.Automatism
       int toneMoodId = level > 2 ? conditions[3] : 0;
       int simbolId = level > 3 ? conditions[4] : 0;
       int verbID = level > 4 ? conditions[5] : 0;
+      int visualID = level > 5 ? conditions[6] : 0;
 
       switch (level)
       {
         case 0:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, 0, 0, 0, 0, 0, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, 0, 0, 0, 0, 0, 0, true);
           break;
         case 1:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, 0, 0, 0, 0, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, 0, 0, 0, 0, 0, true);
           break;
         case 2:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, 0, 0, 0, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, 0, 0, 0, 0, true);
           break;
         case 3:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, 0, 0, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, 0, 0, 0, true);
           break;
         case 4:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, 0, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, 0, 0, true);
           break;
         case 5:
-          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, true);
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, 0, true);
+          break;
+        case 6:
+          (id, _) = CreateNewAutomatizmNode(node, 0, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID, true);
           break;
       }
 
@@ -610,9 +663,9 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Создает последовательность уровней условий
     /// </summary>
-    private List<int> GetActiveConditionsArr(int lev1, int lev2, int lev3, int lev4, int lev5, int lev6)
+    private List<int> GetActiveConditionsArr(int lev1, int lev2, int lev3, int lev4, int lev5, int lev6, int lev7)
     {
-      return new List<int> { lev1, lev2, lev3, lev4, lev5, lev6 };
+      return new List<int> { lev1, lev2, lev3, lev4, lev5, lev6, lev7 };
     }
 
     /// <summary>
@@ -666,7 +719,8 @@ namespace ISIDA.Psychic.Automatism
               FileValidator.FileHeaders.AutomatizmTreeFields5,
               FileValidator.FileHeaders.AutomatizmTreeFields6,
               FileValidator.FileHeaders.AutomatizmTreeFields7,
-              FileValidator.FileHeaders.AutomatizmTreeFields8
+              FileValidator.FileHeaders.AutomatizmTreeFields8,
+              FileValidator.FileHeaders.AutomatizmTreeFields9
             };
 
           File.WriteAllLines(filePath, lines);
@@ -685,14 +739,8 @@ namespace ISIDA.Psychic.Automatism
       {
         InitializeTree();
 
-        // Пропускаем строки заголовков (первые 9 строк)
-        int lineNumber = 0;
         foreach (var line in File.ReadLines(filePath))
         {
-          lineNumber++;
-          if (lineNumber <= 9) // Пропускаем 9 строк заголовков
-            continue;
-
           var trimmedLine = line.Trim();
           if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("#"))
             continue;
@@ -725,18 +773,22 @@ namespace ISIDA.Psychic.Automatism
           if (!int.TryParse(parts[7], out int verbID))
             verbID = 0;
 
+          int visualID = AgentVisualColor.White;
+          if (parts.Length > 8 && int.TryParse(parts[8].Trim(), out int parsedVisual))
+            visualID = AgentVisualColor.IsValidCode(parsedVisual) ? parsedVisual : AgentVisualColor.White;
+
           AutomatizmNode parent = GetNodeById(parentId);
           // Восстановление родителя при «плоском» файле (у всех ParentID=0): для не-базовых узлов ищем родителя по условиям
-          if (parentId == 0 && !IsBaseBranchNode(baseId, emotionId, activityId, toneMoodId, simbolId, verbID))
+          if (parentId == 0 && !IsBaseBranchNode(baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID))
           {
-            var (pBase, pEmo, pAct, pTone, pSim, pVerb) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID);
-            var (_, parentNode) = FindAutomatizmTreeNodeFromCondition(pBase, pEmo, pAct, pTone, pSim, pVerb);
+            var (pBase, pEmo, pAct, pTone, pSim, pVerb, pVis) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID);
+            var (_, parentNode) = FindAutomatizmTreeNodeFromCondition(pBase, pEmo, pAct, pTone, pSim, pVerb, pVis);
             if (parentNode != null)
               parent = parentNode;
           }
 
           if (parent != null)
-            CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, false);
+            CreateNewAutomatizmNode(parent, id, baseId, emotionId, activityId, toneMoodId, simbolId, verbID, visualID, false);
         }
       }
       catch (Exception ex)
@@ -749,29 +801,31 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Узел считается базовой веткой (прямой потомок корня), если задан только BaseID и он из {-1,0,1}.
     /// </summary>
-    private static bool IsBaseBranchNode(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID)
+    private static bool IsBaseBranchNode(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID, int visualID)
     {
-      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0
+      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbID == 0 && visualID == 0
           && (baseId == -1 || baseId == 0 || baseId == 1);
     }
 
     /// <summary>
     /// Возвращает условия «родительского» узла (на один уровень иерархии выше).
     /// </summary>
-    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID) GetParentCondition(
-        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID)
+    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID, int VisualID) GetParentCondition(
+        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbID, int visualID)
     {
+      if (visualID != 0)
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, verbID, 0);
       if (verbID != 0)
-        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0);
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0, 0);
       if (simbolId != 0)
-        return (baseId, emotionId, activityId, toneMoodId, 0, 0);
+        return (baseId, emotionId, activityId, toneMoodId, 0, 0, 0);
       if (toneMoodId != 0)
-        return (baseId, emotionId, activityId, 0, 0, 0);
+        return (baseId, emotionId, activityId, 0, 0, 0, 0);
       if (activityId != 0)
-        return (baseId, emotionId, 0, 0, 0, 0);
+        return (baseId, emotionId, 0, 0, 0, 0, 0);
       if (emotionId != 0)
-        return (baseId, 0, 0, 0, 0, 0);
-      return (baseId, 0, 0, 0, 0, 0);
+        return (baseId, 0, 0, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0, 0, 0);
     }
 
     /// <summary>
@@ -801,7 +855,7 @@ namespace ISIDA.Psychic.Automatism
         return lines;
 
       lines.Add($"{node.ID}|{node.ParentID}|{node.BaseID}|{node.EmotionID}|" +
-                $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.VerbID}");
+                $"{node.ActivityID}|{node.ToneMoodID}|{node.SimbolID}|{node.VerbID}|{node.VisualID}");
 
       foreach (var child in node.Children)
       {
@@ -828,7 +882,8 @@ namespace ISIDA.Psychic.Automatism
           FileValidator.FileHeaders.AutomatizmTreeFields5,
           FileValidator.FileHeaders.AutomatizmTreeFields6,
           FileValidator.FileHeaders.AutomatizmTreeFields7,
-          FileValidator.FileHeaders.AutomatizmTreeFields8
+          FileValidator.FileHeaders.AutomatizmTreeFields8,
+          FileValidator.FileHeaders.AutomatizmTreeFields9
         };
 
         // Обход в глубину (как у дерева рефлексов): родитель всегда перед детьми — при загрузке по порядку родитель уже в словаре
@@ -841,7 +896,7 @@ namespace ISIDA.Psychic.Automatism
             GetAutomatizmTreeFilePath(),
             lines,
             content => FileValidator.IsValidAutomatizmTreeFile(string.Join(Environment.NewLine, content)),
-            minLinesCount: 9,
+            minLinesCount: 10,
             fileDescription: "дерева автоматизмов");
 
         return result;

@@ -1,4 +1,5 @@
 using ISIDA.Common;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -130,6 +131,11 @@ namespace ISIDA.Psychic.Automatism
       /// ID настроения при передаче фразы с Пульта или Ответного действия
       /// </summary>
       public int MoodId { get; set; }
+
+      /// <summary>
+      /// Код зрительного канала сцены при стимуле/ответе (<see cref="AgentVisualColor"/>). 0 — белый (нейтральный).
+      /// </summary>
+      public int VisualColorId { get; set; }
     }
 
     #endregion
@@ -447,14 +453,18 @@ namespace ISIDA.Psychic.Automatism
     List<int> phraseIdList,
     int toneId,
     int moodId,
+    int visualColorId,
     bool checkUnicum)
     {
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+        visualColorId = AgentVisualColor.White;
+
       if (actIdList == null && (phraseIdList == null || _isUnrecognizedPhraseFromAtmtzmTreeActivation))
         return (0, null);
 
       if (checkUnicum)
       {
-        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId, visualColorId);
         if (existing.Image != null)
           return existing;
       }
@@ -473,22 +483,23 @@ namespace ISIDA.Psychic.Automatism
         ActIdList = actIdList?.ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
         ToneId = toneId,
-        MoodId = moodId
+        MoodId = moodId,
+        VisualColorId = visualColorId
       };
 
       _actionsImages[newId] = image;
-      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId)] = newId;
+      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId, visualColorId)] = newId;
       if (checkUnicum)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
-    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, int toneId, int moodId)
+    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, int toneId, int moodId, int visualColorId)
     {
       string actKey = actIdList == null || actIdList.Count == 0 ? "" : string.Join(",", actIdList.OrderBy(x => x));
       string phraseKey = phraseIdList == null || phraseIdList.Count == 0 ? "" : string.Join(",", phraseIdList.OrderBy(x => x));
-      return $"{kind}_{toneId}_{moodId}_{actKey}_{phraseKey}";
+      return $"{kind}_{toneId}_{moodId}_{visualColorId}_{actKey}_{phraseKey}";
     }
 
     /// <summary>
@@ -499,6 +510,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="phraseIdList">Массив ID фраз</param>
     /// <param name="toneId">ID тона</param>
     /// <param name="moodId">ID настроения</param>
+    /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
     /// <param name="checkUnicum">Проверять уникальность</param>
     /// <returns>ID образа и сам образ</returns>
     internal (int Id, ActionsImage Image) CreateNewActionsImage(
@@ -507,14 +519,18 @@ namespace ISIDA.Psychic.Automatism
         List<int> phraseIdList,
         int toneId,
         int moodId,
-        bool checkUnicum)
+        bool checkUnicum,
+        int visualColorId = 0)
     {
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+        visualColorId = AgentVisualColor.White;
+
       _lock.EnterUpgradeableReadLock();
       try
       {
         if (checkUnicum)
         {
-          var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId);
+          var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, toneId, moodId, visualColorId);
           if (existing.Image != null)
             return existing;
         }
@@ -522,7 +538,7 @@ namespace ISIDA.Psychic.Automatism
         _lock.EnterWriteLock();
         try
         {
-          return CreateActionsImageCore(0, kind, actIdList, phraseIdList, toneId, moodId, false);
+          return CreateActionsImageCore(0, kind, actIdList, phraseIdList, toneId, moodId, visualColorId, false);
         }
         finally
         {
@@ -535,6 +551,17 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
+    /// <summary>
+    /// Создать образ действий с заданным ID без блокировки (внутренний вызов).
+    /// </summary>
+    /// <param name="id">ID образа; 0 — назначить при записи в хранилище по правилам ядра.</param>
+    /// <param name="kind">Тип: 0 — объективное действие, 1 — субъективное предположение.</param>
+    /// <param name="actIdList">Список ID действий.</param>
+    /// <param name="phraseIdList">Список ID фраз.</param>
+    /// <param name="toneId">ID тона.</param>
+    /// <param name="moodId">ID настроения.</param>
+    /// <param name="checkUnicum">Проверять уникальность.</param>
+    /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
     internal (int Id, ActionsImage Image) CreateNewActionsImageWithIdNoLock(
         int id,
         int kind,
@@ -542,9 +569,10 @@ namespace ISIDA.Psychic.Automatism
         List<int> phraseIdList,
         int toneId,
         int moodId,
-        bool checkUnicum)
+        bool checkUnicum,
+        int visualColorId = 0)
     {
-      return CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, checkUnicum);
+      return CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, visualColorId, checkUnicum);
     }
 
     /// <summary>
@@ -555,9 +583,13 @@ namespace ISIDA.Psychic.Automatism
         List<int> actIdList,
         List<int> phraseIdList,
         int toneId,
-        int moodId)
+        int moodId,
+        int visualColorId)
     {
-      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId);
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+        visualColorId = AgentVisualColor.White;
+
+      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, toneId, moodId, visualColorId);
       if (_unicumActionsImageKeyToId.TryGetValue(key, out int existingId) &&
           _actionsImages.TryGetValue(existingId, out var existingImg))
         return (existingId, existingImg);
@@ -578,6 +610,9 @@ namespace ISIDA.Psychic.Automatism
           continue;
 
         if (toneId != v.ToneId || moodId != v.MoodId)
+          continue;
+
+        if (v.VisualColorId != visualColorId)
           continue;
 
         _unicumActionsImageKeyToId[key] = kvp.Key;
@@ -643,7 +678,8 @@ namespace ISIDA.Psychic.Automatism
             FileValidator.FileHeaders.ActionsImagesPhraseIdList,
             FileValidator.FileHeaders.ActionsImagesToneId,
             FileValidator.FileHeaders.ActionsImagesMoodId,
-            FileValidator.FileHeaders.ActionsImagesKind
+            FileValidator.FileHeaders.ActionsImagesKind,
+            FileValidator.FileHeaders.ActionsImagesVisualColorId
           };
 
           File.WriteAllLines(filePath, lines);
@@ -696,8 +732,12 @@ namespace ISIDA.Psychic.Automatism
             if (!string.IsNullOrWhiteSpace(parts[5]))
               int.TryParse(parts[5], out kind);
 
+            int visualColorId = AgentVisualColor.White;
+            if (parts.Length > 6 && int.TryParse(parts[6].Trim(), out int parsedVisual))
+              visualColorId = AgentVisualColor.IsValidCode(parsedVisual) ? parsedVisual : AgentVisualColor.White;
+
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, false);
+            CreateActionsImageCore(id, kind, actIdList, phraseIdList, toneId, moodId, visualColorId, false);
           }
         }
         finally
@@ -741,7 +781,8 @@ namespace ISIDA.Psychic.Automatism
           FileValidator.FileHeaders.ActionsImagesPhraseIdList,
           FileValidator.FileHeaders.ActionsImagesToneId,
           FileValidator.FileHeaders.ActionsImagesMoodId,
-          FileValidator.FileHeaders.ActionsImagesKind
+          FileValidator.FileHeaders.ActionsImagesKind,
+          FileValidator.FileHeaders.ActionsImagesVisualColorId
         };
 
         foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
@@ -756,12 +797,13 @@ namespace ISIDA.Psychic.Automatism
           line += AddUtils.IntListToString(v.PhraseIdList) + "|";
           line += $"{v.ToneId}|";
           line += $"{v.MoodId}|";
-          line += $"{v.Kind}";
+          line += $"{v.Kind}|";
+          line += $"{v.VisualColorId}";
 
           lines.Add(line);
         }
 
-        var minLinesCount = lines.Count == 6 ? 6 : 7;
+        var minLinesCount = lines.Count == 7 ? 7 : 8;
         var result = FileValidator.SafeSaveFile(
             GetActionsImagesFilePath(),
             lines,

@@ -276,7 +276,7 @@ namespace ISIDA.Psychic
             WakeUpping(activetStyleIds);
 
             // Первый запуск дерева автоматизмов и активация Understanding
-            int wakeNodeId = AutomatizmTreeActivation(0, 0, 0, 0, 0, 0);
+            int wakeNodeId = AutomatizmTreeActivation(0, 0, 0, 0, 0, 0, 0);
             if (_understandingTreeSystem != null && _problemTreeSystem != null && wakeNodeId > 0)
             {
               int baseId = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad ? -1
@@ -474,7 +474,7 @@ namespace ISIDA.Psychic
         else
           AppGlobalState.CurActiveVerbalId = 0;
 
-        actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId);
+        actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId, visualColorId);
         int stimulusActionsImageIdForContext = actionsImageId;
 
         // Зафиксировать наличие внешнего стимула для пассивного режима (dreaming) и для события «долго без оператора».
@@ -488,7 +488,8 @@ namespace ISIDA.Psychic
             currentActivityId,
             toneMood,
             firstSimbol,
-            verbIdForTree);
+            verbIdForTree,
+            visualColorId);
 
         if (_understandingTreeSystem != null && _problemTreeSystem != null && automatizmNodeId > 0)
         {
@@ -824,6 +825,14 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Активация дерева автоматизмов
     /// </summary>
+    /// <param name="baseId">Базовое состояние.</param>
+    /// <param name="emotionId">ID образа эмоций.</param>
+    /// <param name="activityId">ID образа действий.</param>
+    /// <param name="toneMoodId">ID тона и настроения.</param>
+    /// <param name="simbolId">ID первого символа фразы.</param>
+    /// <param name="verbId">ID вербального образа.</param>
+    /// <param name="visualId">Код зрительного канала (<see cref="AgentVisualColor"/>).</param>
+    /// <param name="isUnrecognizedPhrase">Флаг нераспознанной фразы при обходе дерева.</param>
     internal int AutomatizmTreeActivation(
         int baseId,
         int emotionId,
@@ -831,6 +840,7 @@ namespace ISIDA.Psychic
         int toneMoodId,
         int simbolId,
         int verbId,
+        int visualId,
         bool isUnrecognizedPhrase = false)
     {
       if (PulseCount < MinGlobalPulseForAutomatizmTreeActivation)
@@ -838,6 +848,9 @@ namespace ISIDA.Psychic
 
       if (IsSleeping)
         return 0;
+
+      if (!AgentVisualColor.IsValidCode(visualId))
+        visualId = AgentVisualColor.White;
 
       // Активация дерева
       int detectedNodeId = _automatizmTreeSystem.AutomatizmTreeActivation(
@@ -847,6 +860,7 @@ namespace ISIDA.Psychic
           toneMoodId,
           simbolId,
           verbId,
+          visualId,
           isUnrecognizedPhrase);
 
       return detectedNodeId;
@@ -970,7 +984,11 @@ namespace ISIDA.Psychic
       var (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(phraseIdList, toneId, moodId);
       int toneMood = GetToneMoodID(toneId, moodId);
 
-      return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree);
+      int responseVisual = img.VisualColorId;
+      if (!AgentVisualColor.IsValidCode(responseVisual))
+        responseVisual = AgentVisualColor.White;
+
+      return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree, responseVisual);
     }
 
     /// <summary>
@@ -1358,9 +1376,14 @@ namespace ISIDA.Psychic
     #region Создание образов
 
     /// <summary>
-    /// Создает образ действий оператора с учетом тона и настроения
+    /// Создает образ действий оператора с учетом тона, настроения и зрительного канала сцены
     /// </summary>
-    private int CreateActionsImage(List<int> actionIdList, List<int> phraseIdList, int toneId, int moodId)
+    /// <param name="actionIdList">Список ID действий с пульта.</param>
+    /// <param name="phraseIdList">Список ID фраз.</param>
+    /// <param name="toneId">ID тона.</param>
+    /// <param name="moodId">ID настроения.</param>
+    /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
+    private int CreateActionsImage(List<int> actionIdList, List<int> phraseIdList, int toneId, int moodId, int visualColorId)
     {
       try
       {
@@ -1386,6 +1409,9 @@ namespace ISIDA.Psychic
           moodId = 0; // Нормальное
         }
 
+        if (!AgentVisualColor.IsValidCode(visualColorId))
+          visualColorId = AgentVisualColor.White;
+
         // Создаем образ действий оператора
         // Kind = 0 (объективное действие) - реальное воздействие с пульта
         var (imageId, actionsImage) = _actionsImagesSystem.CreateNewActionsImage(
@@ -1394,8 +1420,8 @@ namespace ISIDA.Psychic
             phraseIdList: phraseIdList,
             toneId: toneId,
             moodId: moodId,
-            checkUnicum: true // проверяем уникальность
-        );
+            checkUnicum: true, // проверяем уникальность
+            visualColorId: visualColorId);
 
         if (imageId > 0)
           Logger.Info($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");

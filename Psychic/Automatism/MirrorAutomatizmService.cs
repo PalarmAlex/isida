@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -199,6 +200,11 @@ namespace ISIDA.Psychic.Automatism
       if (partPhraseIds == null || partPhraseIds.Count == 0)
         return 0;
 
+      var fullStimulusImg = ActionsImagesSystem.Instance.GetActionsImage(fullStimulusActionsImageId);
+      int stimulusVisual = fullStimulusImg?.VisualColorId ?? 0;
+      if (!AgentVisualColor.IsValidCode(stimulusVisual))
+        stimulusVisual = AgentVisualColor.White;
+
       var actList = actionIdList ?? new List<int>();
 
       // Образ для первой части (первое слово + действие с пульта) и ответный образ для эхо
@@ -208,7 +214,8 @@ namespace ISIDA.Psychic.Automatism
           phraseIdList: new List<int> { partPhraseIds[0] },
           toneId: toneId,
           moodId: moodId,
-          checkUnicum: true);
+          checkUnicum: true,
+          visualColorId: stimulusVisual);
       if (firstPartImageId <= 0)
         return 0;
 
@@ -242,7 +249,8 @@ namespace ISIDA.Psychic.Automatism
             phraseIdList: new List<int> { partForLink1 },
             toneId: toneId,
             moodId: moodId,
-            checkUnicum: true);
+            checkUnicum: true,
+            visualColorId: stimulusVisual);
         if (img1Id <= 0)
           return echoId;
         int responseImg1 = GetOrCreateResponseActionsImageWithAdaptiveIds(img1Id);
@@ -268,7 +276,8 @@ namespace ISIDA.Psychic.Automatism
               phraseIdList: new List<int> { partForLink2 },
               toneId: toneId,
               moodId: moodId,
-              checkUnicum: true);
+              checkUnicum: true,
+              visualColorId: stimulusVisual);
           if (img2Id <= 0)
             return echoId;
           int responseImg2 = GetOrCreateResponseActionsImageWithAdaptiveIds(img2Id);
@@ -448,7 +457,8 @@ namespace ISIDA.Psychic.Automatism
         phraseIdList: img.PhraseIdList,
         toneId: img.ToneId,
         moodId: img.MoodId,
-        checkUnicum: true);
+        checkUnicum: true,
+        visualColorId: img.VisualColorId);
       return newId > 0 ? newId : stimulusActionsImageId;
     }
   }

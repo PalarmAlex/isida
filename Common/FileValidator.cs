@@ -75,12 +75,13 @@ namespace ISIDA.Common
       public const string PropertiesIsDead = "IsDead|";
 
       // Образы действий агента для психики
-      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind";
+      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID";
       public const string ActionsImagesActIdList = "# ActIdList: ID образа действий с Пульта (через запятую)";
       public const string ActionsImagesPhraseIdList = "# PhraseIdList: ID фраз (через запятую)";
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
+      public const string ActionsImagesVisualColorId = "# VisualColorID: зрительный канал (AgentVisualColor): 0=белый, 1=чёрный, 2–8=спектр; при отсутствии столбца в старых файлах подразумевается 0";
 
       // Образы действий с пульта для психики
       public const string InfluenceActionsImagesFormat = "# ID|ActIdList";
@@ -98,7 +99,7 @@ namespace ISIDA.Common
       public const string VerbalBrocaMoodId = "# MoodId: ID настроения при передаче фразы с Пульта или Ответного действия";
 
       // Дерево автоматизмов
-      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|VerbID";
+      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|VerbID|VisualID";
       public const string AutomatizmTreeFields1 = "# ID: уникальный идентификатор узла дерева";
       public const string AutomatizmTreeFields2 = "# ParentID: ID родительского узла (0 для корневых веток)";
       public const string AutomatizmTreeFields3 = "# BaseID: базовое состояние: -1=Плохо, 0=Норма, 1=Хорошо";
@@ -107,6 +108,7 @@ namespace ISIDA.Common
       public const string AutomatizmTreeFields6 = "# ToneMoodID: ID образа контекста сообщения";
       public const string AutomatizmTreeFields7 = "# SimbolID: ID первого символа фразы (0 если нет фразы)";
       public const string AutomatizmTreeFields8 = "# VerbID: ID вербального образа (0 если нет фразы)";
+      public const string AutomatizmTreeFields9 = "# VisualID: код зрительного канала (AgentVisualColor), 0=нейтральный; при отсутствии столбца в старых файлах подразумевается 0";
 
       // Автоматизмы
       public const string AutomatizmFormat = "# Формат записи: ID|BranchID|Usefulness|ActionsImageID|NextID|Energy|Belief|Count|GomeoIdSuccesArr";
@@ -863,6 +865,16 @@ namespace ISIDA.Common
           }
         }
 
+        // VisualColorID (опционально для старых файлов): диапазон как у AgentVisualColor 0–8
+        if (parts.Length > 6 && !string.IsNullOrWhiteSpace(parts[6]))
+        {
+          if (int.TryParse(parts[6], out int visualColorId))
+          {
+            if (visualColorId < 0 || visualColorId > 8)
+              return false;
+          }
+        }
+
         return true; // Достаточно одной валидной строки данных
       }
 
@@ -1111,6 +1123,16 @@ namespace ISIDA.Common
         // Проверяем VerbID (может быть 0)
         if (!int.TryParse(parts[7], out int verbId) || verbId < 0)
           return false;
+
+        // VisualID (опционально в старых файлах): 0–8 как у AgentVisualColor
+        if (parts.Length > 8 && !string.IsNullOrWhiteSpace(parts[8]))
+        {
+          if (int.TryParse(parts[8], out int visualId))
+          {
+            if (visualId < 0 || visualId > 8)
+              return false;
+          }
+        }
 
         return true; // Достаточно одной валидной строки данных
       }

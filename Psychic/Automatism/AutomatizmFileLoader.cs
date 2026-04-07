@@ -567,26 +567,34 @@ namespace ISIDA.Psychic.Automatism
       int verbId = CreateVerbalImage(stimulus, firstSimbol, phraseId, toneId, moodId);
 
       // Найти или создать узел с учётом иерархии (база → эмоция → activity → toneMood → simbol/verb)
-      return FindOrCreateTreeNodeByCondition(baseId, emotionId, activityId, toneMoodId, firstSimbol, verbId);
+      return FindOrCreateTreeNodeByCondition(baseId, emotionId, activityId, toneMoodId, firstSimbol, verbId, 0);
     }
 
     /// <summary>
     /// Находит узел по условиям или создаёт его и всю цепочку родителей (не вешая фразовые узлы прямо на базовую ветку).
     /// </summary>
+    /// <param name="baseId">Базовое состояние.</param>
+    /// <param name="emotionId">ID образа эмоций.</param>
+    /// <param name="activityId">ID образа действий.</param>
+    /// <param name="toneMoodId">ID тона и настроения.</param>
+    /// <param name="simbolId">ID первого символа фразы.</param>
+    /// <param name="verbId">ID вербального образа.</param>
+    /// <param name="visualId">Код зрительного канала (<see cref="ISIDA.Reflexes.AgentVisualColor"/>); для загрузки цепочек из файла — 0.</param>
     private int FindOrCreateTreeNodeByCondition(
         int baseId,
         int emotionId,
         int activityId,
         int toneMoodId,
         int simbolId,
-        int verbId)
+        int verbId,
+        int visualId)
     {
       var existing = _treeSystem.FindAutomatizmTreeNodeFromCondition(
-          baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
+          baseId, emotionId, activityId, toneMoodId, simbolId, verbId, visualId);
       if (existing.Node != null)
         return existing.Id;
 
-      AutomatizmNode parentNode = GetParentNodeForCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
+      AutomatizmNode parentNode = GetParentNodeForCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId, visualId);
       if (parentNode == null)
         return 0;
 
@@ -599,6 +607,7 @@ namespace ISIDA.Psychic.Automatism
           toneMoodId,
           simbolId,
           verbId,
+          visualId,
           true);
 
       return newNodeId;
@@ -614,12 +623,13 @@ namespace ISIDA.Psychic.Automatism
         int activityId,
         int toneMoodId,
         int simbolId,
-        int verbId)
+        int verbId,
+        int visualId)
     {
-      var (pBase, pEmo, pAct, pTone, pSim, pVerb) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId);
+      var (pBase, pEmo, pAct, pTone, pSim, pVerb, pVis) = GetParentCondition(baseId, emotionId, activityId, toneMoodId, simbolId, verbId, visualId);
 
       // Родитель — базовая ветка (прямой потомок корня)
-      if (IsBaseBranchCondition(pBase, pEmo, pAct, pTone, pSim, pVerb))
+      if (IsBaseBranchCondition(pBase, pEmo, pAct, pTone, pSim, pVerb, pVis))
       {
         foreach (var child in _treeSystem.Tree.Children)
         {
@@ -631,33 +641,35 @@ namespace ISIDA.Psychic.Automatism
       }
 
       // Родитель — промежуточный узел; находим или создаём его
-      int parentId = FindOrCreateTreeNodeByCondition(pBase, pEmo, pAct, pTone, pSim, pVerb);
+      int parentId = FindOrCreateTreeNodeByCondition(pBase, pEmo, pAct, pTone, pSim, pVerb, pVis);
       if (parentId <= 0)
         return null;
 
       return _treeSystem.GetNodeById(parentId);
     }
 
-    private static bool IsBaseBranchCondition(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId)
+    private static bool IsBaseBranchCondition(int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId, int visualId)
     {
-      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbId == 0
+      return emotionId == 0 && activityId == 0 && toneMoodId == 0 && simbolId == 0 && verbId == 0 && visualId == 0
           && (baseId == -1 || baseId == 0 || baseId == 1);
     }
 
-    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID) GetParentCondition(
-        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId)
+    private static (int BaseID, int EmotionID, int ActivityID, int ToneMoodID, int SimbolID, int VerbID, int VisualID) GetParentCondition(
+        int baseId, int emotionId, int activityId, int toneMoodId, int simbolId, int verbId, int visualId)
     {
+      if (visualId != 0)
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, verbId, 0);
       if (verbId != 0)
-        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0);
+        return (baseId, emotionId, activityId, toneMoodId, simbolId, 0, 0);
       if (simbolId != 0)
-        return (baseId, emotionId, activityId, toneMoodId, 0, 0);
+        return (baseId, emotionId, activityId, toneMoodId, 0, 0, 0);
       if (toneMoodId != 0)
-        return (baseId, emotionId, activityId, 0, 0, 0);
+        return (baseId, emotionId, activityId, 0, 0, 0, 0);
       if (activityId != 0)
-        return (baseId, emotionId, 0, 0, 0, 0);
+        return (baseId, emotionId, 0, 0, 0, 0, 0);
       if (emotionId != 0)
-        return (baseId, 0, 0, 0, 0, 0);
-      return (baseId, 0, 0, 0, 0, 0);
+        return (baseId, 0, 0, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0, 0, 0);
     }
 
     private static List<string> ParseStimuliLine(string line)

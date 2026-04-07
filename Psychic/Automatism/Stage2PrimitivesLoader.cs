@@ -244,7 +244,7 @@ namespace ISIDA.Psychic.Automatism
           firstSymbol, new List<int> { mergedPhraseId }, toneId, moodId, true);
 
       int nodeId = _automatizmTreeSystem.AutomatizmTreeActivation(
-          baseId, emotionId, activityId, toneMoodId, firstSymbol, verbId, false);
+          baseId, emotionId, activityId, toneMoodId, firstSymbol, verbId, 0, false);
       if (nodeId <= 0)
         return (false, "Other");
 
