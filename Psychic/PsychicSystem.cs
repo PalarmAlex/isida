@@ -228,6 +228,11 @@ namespace ISIDA.Psychic
     /// </summary>
     private int _deferredOperatorEvaluationLastRunPulseForResponse = 0;
 
+    /// <summary>
+    /// Стадия 3: на следующем пульсе не создавать пары зеркала по отложенной оценке — стимул уже запустил штатный сдвиг на своей ветке (сценарий шаги 6–7).
+    /// </summary>
+    private bool _skipStage3MirrorLearningOnNextEval;
+
     #endregion
 
     #region Основные методы
@@ -490,6 +495,7 @@ namespace ISIDA.Psychic
             firstSimbol,
             verbIdForTree,
             visualColorId);
+        bool deferredOperatorEvalScheduledThisStimulus = false;
 
         if (_understandingTreeSystem != null && _problemTreeSystem != null && automatizmNodeId > 0)
         {
@@ -522,6 +528,7 @@ namespace ISIDA.Psychic
           // Стадия 3–4+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId).
           TryScheduleDeferredOperatorEvaluationOnStimulus(
               activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
+          deferredOperatorEvalScheduledThisStimulus = _deferredOperatorEvaluationAutomatizmId > 0;
 
           // Стадия < 4 — только ОР (без уровней 1–2 и без циклов мышления). Стадия >= 4 — уровни мышления и циклы; без ОР.
           if (AppGlobalState.EvolutionStage < 4)
@@ -552,10 +559,17 @@ namespace ISIDA.Psychic
 
             // Стадия 3: перед запуском уже выученного автоматизма включить цикл зеркалирования — иначе RegisterOperatorResponse
             // не примет следующий стимул оператора (требуется _dialogMirrorActive), цепочка «ответ агента → новый стимул» рвётся.
-            if (foundForOR != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2)
+            // Якорь следующего сдвига — узел фразы ответа выполняемого автоматизма (как в зеркале до визуального канала), иначе после «хай→как дела»
+            // следующий ответ оператора ошибочно строился бы как сдвиг от узла «хай», а не «как дела».
+            // Не вызывать, если на этом же стимуле уже поставлена отложенная оценка зеркала: иначе StartDialogMirror перезапишет якорь
+            // (например «здравствуй») узлом ответа только что сработавшего эхо («все ОК»), и TryCreateMirror сформирует не тот сдвиг.
+            if (foundForOR != null && AppGlobalState.EvolutionStage == 3 && activationType >= 2 &&
+                !deferredOperatorEvalScheduledThisStimulus)
             {
-              int responseNodeId = GetTreeNodeIdForResponseActionsImage(foundForOR.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
-              _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+              int responseNodeId = GetTreeNodeIdForResponseActionsImage(
+                  foundForOR.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
+              _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(
+                  responseNodeId > 0 ? responseNodeId : automatizmNodeId);
             }
 
             atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
@@ -577,6 +591,7 @@ namespace ISIDA.Psychic
               if (atmz != null)
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
+                ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
                 return ExecuteAutomatizm(atmz);
               }
             }
@@ -651,6 +666,8 @@ namespace ISIDA.Psychic
         if (atmz != null)
         {
           AppGlobalState.CurStimulusImageId = actionsImageId;
+          if (automatizmNodeId > 0)
+            ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
           return ExecuteAutomatizm(atmz); // блокируем рефлексы при удачном запуске автоматизма
         }
       }
@@ -955,8 +972,8 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить ID узла дерева автоматизмов для образа ответа (например, ответа агента «как дела»).
-    /// Используется для зеркалирования: триггером учительской пары должен быть узел ответа агента, а не стимула.
+    /// Получить ID узла дерева автоматизмов по вербальной части образа действий (например ответа агента).
+    /// Для сдвига после штатного автоматизма на ст. 3 см. <see cref="ApplyStage3MirrorContextBeforeExecute"/>.
     /// </summary>
     /// <param name="responseActionsImageId">ID образа действий (ответ автоматизма).</param>
     /// <param name="currentBaseId">Текущее базовое состояние.</param>
@@ -989,6 +1006,58 @@ namespace ISIDA.Psychic
         responseVisual = AgentVisualColor.White;
 
       return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree, responseVisual);
+    }
+
+    /// <summary>
+    /// Стадия 3: эхо-автоматизм (S→S) — узел ветки совпадает с узлом по фразе ответа в контексте этой ветки.
+    /// </summary>
+    private bool IsStage3MirrorEchoAutomatizm(Automatizm automatizm)
+    {
+      if (automatizm == null || automatizm.BranchID <= 0)
+        return false;
+      var branchNode = _automatizmTreeSystem.GetNodeById(automatizm.BranchID);
+      if (branchNode == null)
+        return false;
+      int phraseNodeId = GetTreeNodeIdForResponseActionsImage(
+          automatizm.ActionsImageID,
+          branchNode.BaseID,
+          branchNode.EmotionID,
+          branchNode.ActivityID);
+      return phraseNodeId > 0 && phraseNodeId == automatizm.BranchID;
+    }
+
+    /// <summary>
+    /// Стадия 3: стимул в окне ожидания пришёл вместе с постановкой отложенной оценки и сразу запускает штатный сдвиг на своей ветке —
+    /// не создавать на следующем пульсе новые пары зеркала (сценарий: шаги 6–7); якорь следующего сдвига — узел фразы ответа этого сдвига (шаг 8).
+    /// </summary>
+    private void ApplyStage3MirrorContextBeforeExecute(
+      Automatizm atmz,
+      int stimulusTreeNodeId,
+      bool deferredOperatorEvalScheduledThisStimulus)
+    {
+      if (AppGlobalState.EvolutionStage != 3 || atmz == null || !deferredOperatorEvalScheduledThisStimulus)
+        return;
+      if (atmz.BranchID != stimulusTreeNodeId)
+        return;
+      if (IsStage3MirrorEchoAutomatizm(atmz))
+        return;
+      // Снимок «кого оцениваем на следующем пульсе» — тот же, что в TrySchedule (до ExecuteAutomatizm / StartWaiting).
+      int deferredEvalTargetSnap = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+      if (deferredEvalTargetSnap <= 0)
+        deferredEvalTargetSnap = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
+      if (deferredEvalTargetSnap > 0 && deferredEvalTargetSnap != atmz.ID)
+        return;
+
+      _skipStage3MirrorLearningOnNextEval = true;
+      var branchNode = _automatizmTreeSystem.GetNodeById(atmz.BranchID);
+      if (branchNode == null)
+        return;
+      int responsePhraseNodeId = GetTreeNodeIdForResponseActionsImage(
+          atmz.ActionsImageID,
+          branchNode.BaseID,
+          branchNode.EmotionID,
+          branchNode.ActivityID);
+      _mirrorAutomatizmService.SetDialogTriggerNodeIdForActiveMirror(responsePhraseNodeId);
     }
 
     /// <summary>
@@ -1097,6 +1166,7 @@ namespace ISIDA.Psychic
       _mirrorAutomatizmService.ResetDialogMirror();
       _deferredOperatorEvaluationAutomatizmId = 0;
       _deferredOperatorEvaluationLastRunPulseForResponse = 0;
+      _skipStage3MirrorLearningOnNextEval = false;
     }
 
     /// <summary>
@@ -1132,10 +1202,11 @@ namespace ISIDA.Psychic
 
       _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
-      // Как в Programms_28: сначала цепочка эхо (_previous → _current), затем снимок StartWaiting — иначе зеркало/сдвиг ломаются.
-      int automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
+      // Кого оцениваем: в первую очередь тот, на кого открыто ожидание (снимок до выполнения следующего автоматизма
+      // на этом пульсе, иначе StartWaiting перезапишет waitTarget). Цепочка prev/cur — запасной вариант.
+      int automatizmToEvaluate = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
       if (automatizmToEvaluate <= 0)
-        automatizmToEvaluate = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+        automatizmToEvaluate = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
       if (automatizmToEvaluate <= 0)
       {
         EndOperatorEvaluationWait();
@@ -1190,7 +1261,17 @@ namespace ISIDA.Psychic
 
       int mirrorAutomatizmId = 0;
       if (AppGlobalState.EvolutionStage == 3)
-        mirrorAutomatizmId = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+      {
+        if (_skipStage3MirrorLearningOnNextEval)
+        {
+          _skipStage3MirrorLearningOnNextEval = false;
+          _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
+        }
+        else
+        {
+          mirrorAutomatizmId = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+        }
+      }
 
       Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
       return mirrorAutomatizmId;

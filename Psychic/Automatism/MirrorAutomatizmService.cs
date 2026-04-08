@@ -71,24 +71,17 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
-        // При !waiting — чистый старт попугая; при waiting ответ мог уже записать RegisterOperatorResponse (TrySchedule) — не трогать pending.
-        if (!AppGlobalState.WaitingForOperatorEvaluation)
-          ClearPendingOperatorResponse();
-
         _dialogMirrorActive = true;
         _dialogTriggerNodeId = detectedNodeId;
+        ClearPendingOperatorResponse();
 
         var (id, created) = _automatizmSystem.CreateNewAutomatizm(detectedNodeId, responseActionsImageId, true);
         if (created == null)
           return 0;
 
         created.Count = 0;
-        // Штатный на ветке один (Belief=2). Раньше: только если нет штатного — иначе новое эхо с другим ответом оставалось без Belief=2,
-        // а GetAutomatizmFromNode продолжал брать старое эхо/сдвиг → «то новое, то предыдущее».
-        // Новое эхо на тот же узел с новым образом ответа должно стать штатным; SetAutomatizmBelief снимает Belief=2 с предыдущего на ветке.
-        // Если штатный уже тот же (branch, образ) — unicum вернул тот же автоматизм, повторный SetBelief не нужен.
-        var staff = _automatizmSystem.GetBelief2AutomatizmFromTreeId(detectedNodeId);
-        if (staff == null || staff.ActionsImageID != responseActionsImageId)
+        // Штатный Belief=2 только если на ветке ещё нет автоматизма: иначе эхо перезапишет уже выученный сдвиг при повторных прогонах.
+        if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
           _automatizmSystem.SetAutomatizmBelief(created, 2);
 
         Logger.Info($"MirrorAutomatizm: стартовый автоматизм ID={id}, TriggerNode={detectedNodeId}, ActionsImage={responseActionsImageId}");
@@ -104,18 +97,23 @@ namespace ISIDA.Psychic.Automatism
     /// Запустить цикл зеркалирования для уже существующего автоматизма: следующий стимул оператора в окне ожидания будет считаться ответом и создаст пары эхо и сдвиг.
     /// Вызывается при выполнении найденного автоматизма (не попугайского), чтобы следующий стимул с пульта образовывал пары «новый стимул — новый стимул» и «предыдущий ответ агента — новый стимул».
     /// </summary>
-    /// <param name="triggerNodeId">ID узла дерева автоматизмов (триггер выполнившегося автоматизма).</param>
-    public void StartDialogMirrorForExistingAutomatizm(int triggerNodeId)
+    /// <param name="shiftAnchorTreeNodeId">
+    /// Узел дерева — якорь следующего сдвига S_{n-1}→S_n: для выученного автоматизма передаётся узел фразы ответа агента
+    /// (по образу действий выполняемого автоматизма), иначе якорь не совпадёт с цепочкой зеркала.
+    /// </param>
+    public void StartDialogMirrorForExistingAutomatizm(int shiftAnchorTreeNodeId)
     {
-      if (AppGlobalState.EvolutionStage != 3 || triggerNodeId <= 0)
+      if (AppGlobalState.EvolutionStage != 3 || shiftAnchorTreeNodeId <= 0)
         return;
 
       _lock.EnterWriteLock();
       try
       {
         _dialogMirrorActive = true;
-        _dialogTriggerNodeId = triggerNodeId;
-        ClearPendingOperatorResponse();
+        _dialogTriggerNodeId = shiftAnchorTreeNodeId;
+        // На пульсе ответа оператора TrySchedule уже вызвал RegisterOperatorResponse — не сбрасывать pending до EvaluatePrevious / TryMirror.
+        if (!AppGlobalState.WaitingForOperatorEvaluation)
+          ClearPendingOperatorResponse();
       }
       finally
       {
@@ -322,7 +320,8 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создать зеркальный автоматизм (второй шаг) на ответ оператора.
+    /// Создать зеркальную пару на ответ оператора (стадия 3): сначала сдвиг S_{n-1}→S_n на якоре <see cref="_dialogTriggerNodeId"/>,
+    /// затем при продолжении цикла — эхо S_n→S_n без Belief=2 (провокатор следующей пары; штатным остаётся сдвиг).
     /// </summary>
     public int TryCreateMirrorFromPendingOperatorResponse()
     {
@@ -342,7 +341,7 @@ namespace ISIDA.Psychic.Automatism
         if (responseActionsImageId <= 0)
           return 0;
 
-        // 1) Учительский автоматизм: предыдущий триггер -> ответ оператора.
+        // 1) Сдвиг: предыдущий якорь → ответ оператора (штатный Belief=2 на этой ветке).
         var (_, teacherAutomatizm) = _automatizmSystem.CreateNewAutomatizm(_dialogTriggerNodeId, responseActionsImageId, true);
         if (teacherAutomatizm == null)
         {
@@ -355,28 +354,57 @@ namespace ISIDA.Psychic.Automatism
         teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 1);
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
-        // 2) Эхо на узле текущего стимула: новый триггер → тот же ответ (эхо «хай-хай»).
-        // Инвариант: на одном BranchID только один Belief=2. Если узел эхо = узел сдвига, эхо не получает Belief=2
-        // (иначе SetAutomatizmBelief снял бы 2 с сдвига на той же ветке). При разных узлах — у каждой ветки свой штатный.
+        // 2) Эхо на ветке нового стимула: S_n→S_n. Belief=2 не ставим — иначе эхо перезапишет выученный сдвиг на этой ветке.
         bool continueCycle = _pendingResponseHasVerbalPart ||
             (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
         if (continueCycle)
         {
           var (_, nextParrotAutomatizm) = _automatizmSystem.CreateNewAutomatizm(_pendingResponseNodeId, responseActionsImageId, true);
           if (nextParrotAutomatizm != null)
-          {
             nextParrotAutomatizm.Count = 0;
-            if (nextParrotAutomatizm.BranchID != teacherAutomatizm.BranchID)
-              _automatizmSystem.SetAutomatizmBelief(nextParrotAutomatizm, 2);
-          }
         }
 
-        // Переносим триггер диалога на последний стимул оператора.
         _dialogTriggerNodeId = _pendingResponseNodeId;
         ClearPendingOperatorResponse();
 
         Logger.Info($"MirrorAutomatizm: учительский автоматизм ID={teacherAutomatizm.ID}, TriggerNode={teacherAutomatizm.BranchID}, ActionsImage={teacherAutomatizm.ActionsImageID}");
         return teacherAutomatizm.ID;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Сбросить отложенный стимул оператора без создания эхо/сдвига (ст. 3: ответ в окне ожидания обработан только активацией штатного сдвига).
+    /// </summary>
+    public void DiscardPendingOperatorResponseWithoutMirror()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        ClearPendingOperatorResponse();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Задать ветку-триггер для следующего сдвига при активном зеркале (ст. 3: после штатного сдвига — узел фразы ответа агента для «доращивания» цепочки).
+    /// </summary>
+    public void SetDialogTriggerNodeIdForActiveMirror(int treeNodeId)
+    {
+      if (treeNodeId <= 0)
+        return;
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_dialogMirrorActive)
+          return;
+        _dialogTriggerNodeId = treeNodeId;
       }
       finally
       {
