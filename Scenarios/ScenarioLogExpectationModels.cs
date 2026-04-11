@@ -195,7 +195,7 @@ namespace ISIDA.Scenarios
       set { if (_geneticReflexText == value) return; _geneticReflexText = value ?? ""; OnPropertyChanged(); }
     }
 
-    /// <summary>Ожидаемое значение столбца «Усл. рефлекс».</summary>
+    /// <summary>Ожидаемое значение столбца «Усл. рефлекс». Несколько допустимых значений: «1|2» (в .dat внутри поля «|» как \|).</summary>
     public string ConditionReflexText
     {
       get => _conditionReflexText;
