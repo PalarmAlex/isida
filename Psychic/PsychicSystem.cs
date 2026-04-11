@@ -1,3 +1,4 @@
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
@@ -305,6 +306,10 @@ namespace ISIDA.Psychic
             _deferredOperatorEvaluationAutomatizmId = 0;
             _deferredOperatorEvaluationLastRunPulseForResponse = 0;
 
+            if (AppGlobalState.EvolutionStage == 3)
+              Logger.Info(
+                  $"[Stage3Mirror] ProcessPsychicPulse deferred eval: idToEval={idToEval}, lastRunSnap={lastRunSnap}, pulse={PulseCount}, skipMirrorOnThisEval={_skipStage3MirrorLearningOnNextEval}, mirrorState=[{_mirrorAutomatizmService.FormatStage3MirrorDiagnostics()}]");
+
             mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(idToEval, lastRunSnap);
 
             if (_currentAutomatizmId == idToEval && AppGlobalState.WaitingForOperatorEvaluation)
@@ -344,9 +349,38 @@ namespace ISIDA.Psychic
 
       if (mirrorAutomatizmToExecute > 0)
       {
+        if (AppGlobalState.EvolutionStage == 3)
+          Logger.Info($"[Stage3Mirror] ProcessPsychicPulse execute deferred mirror automatizm id={mirrorAutomatizmToExecute}");
         var mirrorAutomatizm = _automatizmSystem.GetAutomatizmById(mirrorAutomatizmToExecute);
         if (mirrorAutomatizm != null)
+        {
+          // TryCreateMirror выставляет trigger = узел фразы оператора; фактически же на этом пульсе может исполняться
+          // предпочтённый штатный автоматизм с другим ответом агента (напр. «все ОК» вместо повтора «как дела»).
+          // Якорь следующего сдвига должен совпадать с узлом фразы ответа выполняемого автоматизма — иначе следующий
+          // TryCreateMirror создаст Belief=2 на старом узле и перевяжет штат с ветки «как дела».
+          if (AppGlobalState.EvolutionStage == 3 &&
+              _automatizmTreeSystem != null &&
+              !IsStage3MirrorEchoAutomatizm(mirrorAutomatizm))
+          {
+            var branchNode = _automatizmTreeSystem.GetNodeById(mirrorAutomatizm.BranchID);
+            if (branchNode != null)
+            {
+              int responsePhraseNodeId = GetTreeNodeIdForResponseActionsImage(
+                  mirrorAutomatizm.ActionsImageID,
+                  branchNode.BaseID,
+                  branchNode.EmotionID,
+                  branchNode.ActivityID);
+              if (responsePhraseNodeId > 0)
+              {
+                Logger.Info(
+                    $"[Stage3Mirror] ProcessPsychicPulse align mirror anchor -> responsePhraseNode={responsePhraseNodeId} (deferred exec id={mirrorAutomatizm.ID})");
+                _mirrorAutomatizmService.SetDialogTriggerNodeIdForActiveMirror(responsePhraseNodeId);
+              }
+            }
+          }
+
           ExecuteAutomatizm(mirrorAutomatizm);
+        }
       }
 
       if (thinkingDecisionToExecute != null)
@@ -557,6 +591,16 @@ namespace ISIDA.Psychic
               }
             }
 
+            if (AppGlobalState.EvolutionStage == 3 && activationType >= 2 && hasVerbalPart)
+            {
+              string ph = BuildPultPhraseText(phraseIdListForStimulus ?? phraseIdList);
+              string forDesc = foundForOR == null
+                  ? "null"
+                  : $"id={foundForOR.ID} br={foundForOR.BranchID} belief={foundForOR.Belief} use={foundForOR.Usefulness} echo={IsStage3MirrorEchoAutomatizm(foundForOR)}";
+              Logger.Info(
+                  $"[Stage3Mirror] stimulus phrase='{ph}' treeNode={automatizmNodeId} foundOR={forDesc} orientAtmzId={orientationAutomatizmId} deferredSched={deferredOperatorEvalScheduledThisStimulus} waitOpEval={AppGlobalState.WaitingForOperatorEvaluation} waitTarget={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation} mirror=[{_mirrorAutomatizmService.FormatStage3MirrorDiagnostics()}]");
+            }
+
             // Стадия 3: перед запуском уже выученного автоматизма включить цикл зеркалирования — иначе RegisterOperatorResponse
             // не примет следующий стимул оператора (требуется _dialogMirrorActive), цепочка «ответ агента → новый стимул» рвётся.
             // Якорь следующего сдвига — узел фразы ответа выполняемого автоматизма (как в зеркале до визуального канала), иначе после «хай→как дела»
@@ -568,11 +612,40 @@ namespace ISIDA.Psychic
             {
               int responseNodeId = GetTreeNodeIdForResponseActionsImage(
                   foundForOR.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
-              _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(
-                  responseNodeId > 0 ? responseNodeId : automatizmNodeId);
+              int anchor = responseNodeId > 0 ? responseNodeId : automatizmNodeId;
+              Logger.Info(
+                  $"[Stage3Mirror] StartDialogMirror call: anchorNode={anchor} (responsePhraseNode={responseNodeId}, stimulusNode={automatizmNodeId}), staffAtmz={foundForOR.ID}");
+              _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(anchor);
+            }
+            else if (AppGlobalState.EvolutionStage == 3 && activationType >= 2 && foundForOR != null)
+            {
+              Logger.Info(
+                  $"[Stage3Mirror] StartDialogMirror SKIPPED (deferredSched={deferredOperatorEvalScheduledThisStimulus}) staffAtmz={foundForOR.ID}");
             }
 
+            // ОР1/ОР2 — на каждый стимул (в т.ч. ответ оператора в окне ожидания); моторный выбор откладываем ниже.
             atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
+
+            if (AppGlobalState.EvolutionStage == 3 && activationType >= 2 && hasVerbalPart)
+            {
+              string ph2 = BuildPultPhraseText(phraseIdListForStimulus ?? phraseIdList);
+              string chosen = atmz == null
+                  ? "null"
+                  : $"id={atmz.ID} br={atmz.BranchID} belief={atmz.Belief} use={atmz.Usefulness} echo={IsStage3MirrorEchoAutomatizm(atmz)}";
+              Logger.Info($"[Stage3Mirror] after OrientationReflex phrase='{ph2}' chosen={chosen}");
+            }
+
+            // Стимул уже поставлен в очередь отложенной оценки: не исполнять автоматизм с этого вызова (зеркало на следующем пульсе).
+            if (AppGlobalState.EvolutionStage == 3 &&
+                activationType >= 2 &&
+                hasVerbalPart &&
+                deferredOperatorEvalScheduledThisStimulus)
+            {
+              AppGlobalState.CurStimulusImageId = actionsImageId;
+              Logger.Info(
+                  "[Stage3Mirror] Skip motor after OR (operator-response stimulus); deferred mirror on next pulse");
+              return true;
+            }
 
             // Стадия 3: если ОР ничего не вернул — попробовать попугай (эхо оператору). Только при отсутствии ожидания оценки:
             // иначе на стимуле-ответе оператора (TrySchedule уже вызвал RegisterOperatorResponse) попугай создавал бы второе эхо и ломал зеркало.
@@ -581,6 +654,25 @@ namespace ISIDA.Psychic
                 !AppGlobalState.WaitingForOperatorEvaluation &&
                 activationType >= 2)
             {
+              atmz = TryCreateStage3CommaGluedAutomatizm(
+                  automatizmNodeId,
+                  actionsImageId,
+                  phraseIdListForStimulus,
+                  currentBaseId,
+                  currentEmotionId,
+                  currentActivityId,
+                  toneId,
+                  moodId,
+                  visualColorId,
+                  activationType,
+                  deferredOperatorEvalScheduledThisStimulus);
+              if (atmz != null)
+              {
+                AppGlobalState.CurStimulusImageId = actionsImageId;
+                ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
+                return ExecuteAutomatizm(atmz);
+              }
+
               int parrotAutomatizmId = _mirrorAutomatizmService.TryCreateInitialParrotAutomatizm(
                 automatizmNodeId,
                 actionsImageId,
@@ -678,6 +770,198 @@ namespace ISIDA.Psychic
 
       return false; // Не блокировать рефлексы
     }
+
+    #region Стадия 3: склейка штатных автоматизмов по запятой
+
+    /// <summary>
+    /// Стадия 3: при стимуле с ровно одной «склейочной» запятой (слева и справа от неё части без запятых внутри),
+    /// без штатного на целую фразу и с штатными на обе части — создать автоматизм на полный стимул.
+    /// Две и более запятых в тексте не склеиваем (цепочки из трёх+ фрагментов — только эхо/зеркало). При неудаче — null.
+    /// </summary>
+    private Automatizm TryCreateStage3CommaGluedAutomatizm(
+        int fullStimulusTreeNodeId,
+        int stimulusActionsImageId,
+        List<int> phraseIdListForStimulus,
+        int currentBaseId,
+        int currentEmotionId,
+        int currentActivityId,
+        int toneId,
+        int moodId,
+        int visualColorId,
+        int activationType,
+        bool deferredOperatorEvalScheduledThisStimulus)
+    {
+      if (activationType < 2 || fullStimulusTreeNodeId <= 0 || stimulusActionsImageId <= 0)
+        return null;
+      if (phraseIdListForStimulus == null || !phraseIdListForStimulus.Any())
+        return null;
+
+      // Уже есть штатный на весь фрагмент — склейка не нужна (и сюда обычно не попадаем).
+      if (_automatizmSystem.GetBelief2AutomatizmFromTreeId(fullStimulusTreeNodeId) != null)
+        return null;
+
+      string fullText = BuildPultPhraseText(phraseIdListForStimulus);
+      if (string.IsNullOrWhiteSpace(fullText))
+        return null;
+
+      int firstComma = fullText.IndexOf(',');
+      if (firstComma < 0)
+        return null;
+
+      string leftPart = fullText.Substring(0, firstComma).Trim();
+      string rightPart = fullText.Substring(firstComma + 1).Trim();
+      if (string.IsNullOrEmpty(leftPart) || string.IsNullOrEmpty(rightPart))
+        return null;
+      // Справа от первой запятой не должно быть ещё запятых — только одна «склейка» пары.
+      if (rightPart.IndexOf(',') >= 0)
+        return null;
+
+      var staff1 = TryResolveStaffAutomatizmForVerbalSubstring(
+          leftPart, currentBaseId, currentEmotionId, currentActivityId, toneId, moodId, visualColorId);
+      var staff2 = TryResolveStaffAutomatizmForVerbalSubstring(
+          rightPart, currentBaseId, currentEmotionId, currentActivityId, toneId, moodId, visualColorId);
+      if (staff1 == null || staff2 == null)
+        return null;
+
+      string mergedPhraseText = BuildCommaGluedResponseText(staff1.ActionsImageID, staff2.ActionsImageID);
+      if (string.IsNullOrWhiteSpace(mergedPhraseText))
+        return null;
+
+      var recognizedMerged = _sensorySystem.VerbalChannel.RecognizeText(mergedPhraseText.Trim(), authoritativeWrite: true);
+      if (recognizedMerged == null || !recognizedMerged.Any())
+        return null;
+
+      int responseImageId = GetOrCreateAgentResponseActionsImageFromStimulusTemplate(
+          stimulusActionsImageId,
+          new List<int> { recognizedMerged[0] });
+      if (responseImageId <= 0)
+        return null;
+
+      var (newId, created) = _automatizmSystem.CreateNewAutomatizm(fullStimulusTreeNodeId, responseImageId, true);
+      if (created == null)
+        return null;
+
+      created.Count = 0;
+      if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(fullStimulusTreeNodeId))
+        _automatizmSystem.SetAutomatizmBelief(created, 2);
+
+      Logger.Info($"Stage3 comma glue: автоматизм ID={newId}, узел={fullStimulusTreeNodeId}, ответ «{mergedPhraseText}»");
+
+      if (!deferredOperatorEvalScheduledThisStimulus)
+      {
+        int responseNodeId = GetTreeNodeIdForResponseActionsImage(
+            created.ActionsImageID,
+            currentBaseId,
+            currentEmotionId,
+            currentActivityId);
+        _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(
+            responseNodeId > 0 ? responseNodeId : fullStimulusTreeNodeId);
+      }
+
+      return created;
+    }
+
+    private string BuildPultPhraseText(List<int> phraseIdList)
+    {
+      if (phraseIdList == null || !phraseIdList.Any())
+        return "";
+      if (phraseIdList.Count == 1)
+        return _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(phraseIdList[0]) ?? "";
+      return string.Join(" ", phraseIdList.Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid) ?? ""));
+    }
+
+    private Automatizm TryResolveStaffAutomatizmForVerbalSubstring(
+        string subPhraseText,
+        int currentBaseId,
+        int currentEmotionId,
+        int currentActivityId,
+        int toneId,
+        int moodId,
+        int visualColorId)
+    {
+      if (string.IsNullOrWhiteSpace(subPhraseText))
+        return null;
+
+      var phraseIds = _sensorySystem.VerbalChannel.RecognizeText(subPhraseText.Trim(), authoritativeWrite: false);
+      if (phraseIds == null || !phraseIds.Any())
+        return null;
+
+      var (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(phraseIds, toneId, moodId);
+      int toneMood = GetToneMoodID(toneId, moodId);
+      int nodeId = AutomatizmTreeActivation(
+          currentBaseId,
+          currentEmotionId,
+          currentActivityId,
+          toneMood,
+          firstSimbol,
+          verbIdForTree,
+          visualColorId);
+      if (nodeId <= 0)
+        return null;
+
+      var staff = _automatizmSystem.GetBelief2AutomatizmFromTreeId(nodeId);
+      if (staff != null && staff.Usefulness >= 0)
+        return staff;
+      return null;
+    }
+
+    private string BuildCommaGluedResponseText(int staffActionsImageId1, int staffActionsImageId2)
+    {
+      string t1 = TextFromActionsImagePhrases(staffActionsImageId1);
+      string t2 = TextFromActionsImagePhrases(staffActionsImageId2);
+      if (string.IsNullOrWhiteSpace(t1) || string.IsNullOrWhiteSpace(t2))
+        return null;
+      return $"{t1.Trim()}, {t2.Trim()}";
+    }
+
+    private string TextFromActionsImagePhrases(int actionsImageId)
+    {
+      if (actionsImageId <= 0 || _actionsImagesSystem == null)
+        return null;
+      var img = _actionsImagesSystem.GetActionsImage(actionsImageId);
+      if (img?.PhraseIdList == null || !img.PhraseIdList.Any())
+        return null;
+      var parts = img.PhraseIdList
+          .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid))
+          .Where(s => !string.IsNullOrWhiteSpace(s))
+          .ToList();
+      if (!parts.Any())
+        return null;
+      return string.Join(" ", parts);
+    }
+
+    /// <summary>
+    /// Образ ответа агента (kind=1, adaptive act ids), по образцу стимула с пульта — аналогично зеркалу.
+    /// </summary>
+    private int GetOrCreateAgentResponseActionsImageFromStimulusTemplate(int stimulusActionsImageId, List<int> responsePhraseIds)
+    {
+      if (stimulusActionsImageId <= 0 || responsePhraseIds == null || !responsePhraseIds.Any())
+        return 0;
+      if (!ActionsImagesSystem.IsInitialized)
+        return 0;
+
+      var img = _actionsImagesSystem.GetActionsImage(stimulusActionsImageId);
+      if (img == null)
+        return 0;
+
+      List<int> adaptiveIds;
+      if (img.ActIdList != null && img.ActIdList.Any() && AdaptiveActionsSystem.IsInitialized)
+        adaptiveIds = AdaptiveActionsSystem.Instance.ConvertInfluenceActionIdsToAdaptiveActionIds(img.ActIdList);
+      else
+        adaptiveIds = new List<int>();
+
+      var (newId, _) = _actionsImagesSystem.CreateNewActionsImage(
+          kind: 1,
+          actIdList: adaptiveIds ?? new List<int>(),
+          phraseIdList: responsePhraseIds,
+          toneId: img.ToneId,
+          moodId: img.MoodId,
+          checkUnicum: true,
+          visualColorId: img.VisualColorId);
+      return newId > 0 ? newId : 0;
+    }
+
+    #endregion
 
     #region Уровни мышления 1 и 2
 
@@ -1037,26 +1321,47 @@ namespace ISIDA.Psychic
     {
       if (AppGlobalState.EvolutionStage != 3 || atmz == null || !deferredOperatorEvalScheduledThisStimulus)
         return;
+
       if (atmz.BranchID != stimulusTreeNodeId)
+      {
+        Logger.Info(
+            $"[Stage3Mirror] ApplyStage3Ctx SKIP: branch mismatch atmz={atmz.ID} br={atmz.BranchID} stimNode={stimulusTreeNodeId}");
         return;
+      }
+
       if (IsStage3MirrorEchoAutomatizm(atmz))
+      {
+        Logger.Info(
+            $"[Stage3Mirror] ApplyStage3Ctx SKIP: echo automatizm atmz={atmz.ID} br={atmz.BranchID}");
         return;
+      }
+
       // Снимок «кого оцениваем на следующем пульсе» — тот же, что в TrySchedule (до ExecuteAutomatizm / StartWaiting).
       int deferredEvalTargetSnap = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
       if (deferredEvalTargetSnap <= 0)
         deferredEvalTargetSnap = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
       if (deferredEvalTargetSnap > 0 && deferredEvalTargetSnap != atmz.ID)
+      {
+        Logger.Info(
+            $"[Stage3Mirror] ApplyStage3Ctx SKIP: eval target mismatch exec={atmz.ID} deferredTarget={deferredEvalTargetSnap} prev={_previousAutomatizmId} cur={_currentAutomatizmId}");
         return;
+      }
 
       _skipStage3MirrorLearningOnNextEval = true;
       var branchNode = _automatizmTreeSystem.GetNodeById(atmz.BranchID);
       if (branchNode == null)
+      {
+        Logger.Info($"[Stage3Mirror] ApplyStage3Ctx SKIP: no branch node for br={atmz.BranchID}");
         return;
+      }
+
       int responsePhraseNodeId = GetTreeNodeIdForResponseActionsImage(
           atmz.ActionsImageID,
           branchNode.BaseID,
           branchNode.EmotionID,
           branchNode.ActivityID);
+      Logger.Info(
+          $"[Stage3Mirror] ApplyStage3Ctx APPLY: staffShift atmz={atmz.ID} respPhraseNode={responsePhraseNodeId} -> skipMirrorLearningOnNextEval=true");
       _mirrorAutomatizmService.SetDialogTriggerNodeIdForActiveMirror(responsePhraseNodeId);
     }
 
@@ -1196,9 +1501,15 @@ namespace ISIDA.Psychic
       // SensorActivation после эхо) timeSince==0 — ответ оператора всё равно валиден, иначе сбрасывается зеркало и не создаётся сдвиг.
       if (!AppGlobalState.IsOperatorResponseWithinWaitingWindow())
       {
+        if (AppGlobalState.EvolutionStage == 3)
+          Logger.Info($"[Stage3Mirror] TryScheduleDeferred: window FAIL -> ResetAutomatizmWaitingState node={automatizmNodeId}");
         ResetAutomatizmWaitingState();
         return;
       }
+
+      if (AppGlobalState.EvolutionStage == 3)
+        Logger.Info(
+            $"[Stage3Mirror] TryScheduleDeferred: REGISTER node={automatizmNodeId} img={actionsImageId} verbal={hasVerbalPart} waitTarget={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation}");
 
       _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
@@ -1215,6 +1526,10 @@ namespace ISIDA.Psychic
 
       _deferredOperatorEvaluationAutomatizmId = automatizmToEvaluate;
       _deferredOperatorEvaluationLastRunPulseForResponse = AppGlobalState.LastRunAutomatizmPulsCount;
+
+      if (AppGlobalState.EvolutionStage == 3)
+        Logger.Info(
+            $"[Stage3Mirror] TryScheduleDeferred: QUEUED evalAtmz={automatizmToEvaluate} lastRunPulse={_deferredOperatorEvaluationLastRunPulseForResponse}");
     }
 
     /// <summary>
@@ -1264,12 +1579,35 @@ namespace ISIDA.Psychic
       {
         if (_skipStage3MirrorLearningOnNextEval)
         {
+          Logger.Info(
+              $"[Stage3Mirror] EvaluatePrevious: skip TryCreateMirror (staff shift path) evalTarget={automatizmIdToEvaluate}");
           _skipStage3MirrorLearningOnNextEval = false;
           _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
         }
         else
         {
+          int pendingOperatorPhraseNodeId = _mirrorAutomatizmService.GetPendingResponseTreeNodeId();
           mirrorAutomatizmId = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+          // Учитель зеркала воспроизводит фразу оператора (S_n→текст S_n) — звучит как эхо. Если на узле текущей фразы
+          // оператора уже выучен штатный Belief=2 (например «как дела»→«все ОК»), исполняем его вместо учителя.
+          if (mirrorAutomatizmId > 0 &&
+              pendingOperatorPhraseNodeId > 0 &&
+              _automatizmSystem != null)
+          {
+            var staffOnOperatorPhrase =
+                _automatizmSystem.GetBelief2AutomatizmFromTreeId(pendingOperatorPhraseNodeId);
+            if (staffOnOperatorPhrase != null &&
+                staffOnOperatorPhrase.Usefulness >= 0 &&
+                staffOnOperatorPhrase.ID != mirrorAutomatizmId)
+            {
+              Logger.Info(
+                  $"[Stage3Mirror] EvaluatePrevious: prefer staff id={staffOnOperatorPhrase.ID} node={pendingOperatorPhraseNodeId} over mirror teacher id={mirrorAutomatizmId}");
+              mirrorAutomatizmId = staffOnOperatorPhrase.ID;
+            }
+          }
+
+          Logger.Info(
+              $"[Stage3Mirror] EvaluatePrevious: TryCreateMirror -> mirrorAtmzToRun={mirrorAutomatizmId} evalTarget={automatizmIdToEvaluate}");
         }
       }
 

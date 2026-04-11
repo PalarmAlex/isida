@@ -94,6 +94,31 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Снимок состояния зеркала без захвата блокировки — вызывать только под уже удерживаемым lock сервиса.
+    /// </summary>
+    private string MirrorStateInlineUnsynchronized()
+    {
+      return
+          $"active={_dialogMirrorActive}, triggerNode={_dialogTriggerNodeId}, pendingImg={_pendingResponseActionsImageId}, pendingNode={_pendingResponseNodeId}, pendingVerbal={_pendingResponseHasVerbalPart}, pendingNonVerbal={_pendingResponseHasNonVerbalPart}";
+    }
+
+    /// <summary>
+    /// Снимок внутреннего состояния зеркала (ст. 3) для диагностики — только для логов.
+    /// </summary>
+    public string FormatStage3MirrorDiagnostics()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return MirrorStateInlineUnsynchronized();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Запустить цикл зеркалирования для уже существующего автоматизма: следующий стимул оператора в окне ожидания будет считаться ответом и создаст пары эхо и сдвиг.
     /// Вызывается при выполнении найденного автоматизма (не попугайского), чтобы следующий стимул с пульта образовывал пары «новый стимул — новый стимул» и «предыдущий ответ агента — новый стимул».
     /// </summary>
@@ -114,6 +139,8 @@ namespace ISIDA.Psychic.Automatism
         // На пульсе ответа оператора TrySchedule уже вызвал RegisterOperatorResponse — не сбрасывать pending до EvaluatePrevious / TryMirror.
         if (!AppGlobalState.WaitingForOperatorEvaluation)
           ClearPendingOperatorResponse();
+        Logger.Info(
+            $"[Stage3Mirror] StartDialogMirrorForExistingAutomatizm shiftAnchor={shiftAnchorTreeNodeId}, waitEval={AppGlobalState.WaitingForOperatorEvaluation}, clearedPending={!AppGlobalState.WaitingForOperatorEvaluation}");
       }
       finally
       {
@@ -154,17 +181,25 @@ namespace ISIDA.Psychic.Automatism
           return;
         }
         if (!_dialogMirrorActive)
+        {
+          Logger.Info($"[Stage3Mirror] RegisterOperatorResponse ignored: mirror not active, node={detectedNodeId}, img={actionsImageId}");
           return;
+        }
 
         // При смешанном стимуле PhraseStimulusActivated вызывается первым (полный ответ),
         // затем TriggerStimulusActivated (только действие). Не перезаписывать полный ответ более бедным.
         if (_pendingResponseHasVerbalPart && !hasVerbalPart)
+        {
+          Logger.Info($"[Stage3Mirror] RegisterOperatorResponse skip overwrite: keep verbal pending, action-only ignored");
           return;
+        }
 
         _pendingResponseActionsImageId = actionsImageId;
         _pendingResponseNodeId = detectedNodeId;
         _pendingResponseHasVerbalPart = hasVerbalPart;
         _pendingResponseHasNonVerbalPart = hasNonVerbalPart;
+        Logger.Info(
+            $"[Stage3Mirror] RegisterOperatorResponse node={detectedNodeId}, img={actionsImageId}, verbal={hasVerbalPart}, nonVerbal={hasNonVerbalPart} | {MirrorStateInlineUnsynchronized()}");
       }
       finally
       {
@@ -335,7 +370,14 @@ namespace ISIDA.Psychic.Automatism
       try
       {
         if (!_dialogMirrorActive || _dialogTriggerNodeId <= 0 || _pendingResponseActionsImageId <= 0 || _pendingResponseNodeId <= 0)
+        {
+          Logger.Info(
+              $"[Stage3Mirror] TryCreateMirrorFromPendingOperatorResponse NO-OP: {MirrorStateInlineUnsynchronized()}");
           return 0;
+        }
+
+        Logger.Info(
+            $"[Stage3Mirror] TryCreateMirror BEFORE: shiftFromTrigger={_dialogTriggerNodeId}, pendingNode={_pendingResponseNodeId}, pendingImg={_pendingResponseActionsImageId} | {MirrorStateInlineUnsynchronized()}");
 
         int responseActionsImageId = GetOrCreateResponseActionsImageWithAdaptiveIds(_pendingResponseActionsImageId);
         if (responseActionsImageId <= 0)
@@ -367,7 +409,10 @@ namespace ISIDA.Psychic.Automatism
         _dialogTriggerNodeId = _pendingResponseNodeId;
         ClearPendingOperatorResponse();
 
-        Logger.Info($"MirrorAutomatizm: учительский автоматизм ID={teacherAutomatizm.ID}, TriggerNode={teacherAutomatizm.BranchID}, ActionsImage={teacherAutomatizm.ActionsImageID}");
+        Logger.Info(
+            $"MirrorAutomatizm: учительский автоматизм ID={teacherAutomatizm.ID}, TriggerNode={teacherAutomatizm.BranchID}, ActionsImage={teacherAutomatizm.ActionsImageID}");
+        Logger.Info(
+            $"[Stage3Mirror] TryCreateMirror AFTER: newTriggerNode={_dialogTriggerNodeId}, teacherId={teacherAutomatizm.ID}, echoCreated={continueCycle} | {MirrorStateInlineUnsynchronized()}");
         return teacherAutomatizm.ID;
       }
       finally
@@ -384,6 +429,8 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
+        Logger.Info(
+            $"[Stage3Mirror] DiscardPendingWithoutMirror (skip mirror learning this eval) | before: {MirrorStateInlineUnsynchronized()}");
         ClearPendingOperatorResponse();
       }
       finally
@@ -403,8 +450,14 @@ namespace ISIDA.Psychic.Automatism
       try
       {
         if (!_dialogMirrorActive)
+        {
+          Logger.Info($"[Stage3Mirror] SetDialogTriggerNodeId skipped: mirror inactive, requested={treeNodeId}");
           return;
+        }
+
+        int prev = _dialogTriggerNodeId;
         _dialogTriggerNodeId = treeNodeId;
+        Logger.Info($"[Stage3Mirror] SetDialogTriggerNodeId {prev} -> {treeNodeId}");
       }
       finally
       {
@@ -455,6 +508,14 @@ namespace ISIDA.Psychic.Automatism
     {
       _lock.EnterReadLock();
       try { return _pendingResponseActionsImageId; }
+      finally { _lock.ExitReadLock(); }
+    }
+
+    /// <summary>Узел дерева по отложенному ответу оператора (ст. 3, до <see cref="TryCreateMirrorFromPendingOperatorResponse"/>).</summary>
+    public int GetPendingResponseTreeNodeId()
+    {
+      _lock.EnterReadLock();
+      try { return _pendingResponseNodeId; }
       finally { _lock.ExitReadLock(); }
     }
 
