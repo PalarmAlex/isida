@@ -285,7 +285,7 @@ namespace ISIDA.Psychic
           return (false, 0, ConversionStatus.Failed, $"Не удалось найти или создать узел в дереве автоматизмов");
 
         // Проверяем существующий автоматизм
-        var existingAutomatizm = _automatizmSystem.GetAutomatizmFromNodeIdNoLock(nodeId);
+        var existingAutomatizm = _automatizmSystem.GetAutomatizmFromNodeId(nodeId);
         if (existingAutomatizm != null)
           return (true, existingAutomatizm.ID, ConversionStatus.AlreadyExists, "Автоматизм уже существует");
 

@@ -48,9 +48,10 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     /// <remarks>
     /// ИНВАРИАНТ (обязателен для логики дерева и зеркала на ст.3): на один <see cref="BranchID"/> может приходиться
-    /// не более одного автоматизма с Belief=2. Значение 2 для штатного задавать только через
-    /// <see cref="AutomatizmSystem.SetAutomatizmBelief"/> — прямое присвоение свойству ломает инвариант и кэш
-    /// <c>_automatizmBelief2FromTreeNodeId</c>.
+    /// не более одного автоматизма с Belief=2. При назначении штатного (2) снимается только <b>Belief=2</b> с прочих
+    /// автоматизмов той же ветки (им выставляется 0); Belief 0 и 1 у соседей на ветке не меняются.
+    /// Значение 2 задавать только через <see cref="AutomatizmSystem.SetAutomatizmBelief"/> — прямое присвоение свойству
+    /// ломает инвариант и кэш <c>_automatizmBelief2FromTreeNodeId</c>.
     /// </remarks>
     public int Belief { get; set; }
 
@@ -72,8 +73,8 @@ namespace ISIDA.Psychic.Automatism
   /// <b>Инвариант Belief=2 (штатный автоматизм на ветке):</b> среди автоматизмов с одинаковым
   /// <see cref="Automatizm.BranchID"/> ровно ноль или один может иметь <see cref="Automatizm.Belief"/> == 2.
   /// Назначение «штатного» только через <see cref="SetAutomatizmBelief(Automatizm, int)"/> с belief==2 — метод
-  /// обнуляет Belief у остальных на той же ветке и обновляет кэш. Не предлагать и не вводить код с двумя Belief=2
-  /// на одной ветке и не присваивать Belief=2 полю напрямую.
+  /// снимает Belief=2 только у других автоматизмов на той же ветке (ставит им 0), не трогая Belief 0 и 1,
+  /// и обновляет кэш. Не предлагать и не вводить код с двумя Belief=2 на одной ветке и не присваивать Belief=2 полю напрямую.
   /// </remarks>
   public sealed class AutomatizmSystem : IDisposable
   {
@@ -362,9 +363,9 @@ namespace ISIDA.Psychic.Automatism
     /// Устанавливает уверенность (Belief) для автоматизма.
     /// </summary>
     /// <remarks>
-    /// При <paramref name="belief"/> == 2 гарантируется инвариант: у всех прочих автоматизмов с тем же
-    /// <see cref="Automatizm.BranchID"/> Belief сбрасывается в 0. Это единственный поддерживаемый способ
-    /// назначить штатный автоматизм на ветке.
+    /// При <paramref name="belief"/> == 2 гарантируется инвариант: у прочих автоматизмов с тем же
+    /// <see cref="Automatizm.BranchID"/>, у которых было <see cref="Automatizm.Belief"/> == 2, оно сбрасывается в 0;
+    /// автоматизмы с Belief 0 или 1 на этой ветке не изменяются. Единственный поддерживаемый способ назначить штатного.
     /// </remarks>
     public void SetAutomatizmBelief(Automatizm automatizm, int belief)
     {
@@ -376,29 +377,115 @@ namespace ISIDA.Psychic.Automatism
 
       try
       {
-        if (belief == 2)
+        _lock.EnterWriteLock();
+        try
         {
-          // Инвариант: на BranchID только один Belief=2 — снимаем 2 с остальных на этой ветке.
-          foreach (var kvp in _automatizmsById)
-          {
-            if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2 && kvp.Value.ID != automatizm.ID)
-              kvp.Value.Belief = 0;
-          }
-
-          // Обновляем карту штатных автоматизмов
-          _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = automatizm;
+          SetAutomatizmBeliefCore(automatizm, belief);
         }
-        else if (automatizm.Belief == 2 && belief != 2)
-          // Убираем из штатных
-          _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
-
-        automatizm.Belief = belief;
+        finally
+        {
+          _lock.ExitWriteLock();
+        }
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
         throw;
       }
+    }
+
+    /// <summary>
+    /// Вызывать после изменения <see cref="Automatizm.Usefulness"/> у автоматизма (например по оценке результата):
+    /// если штатный на ветке (Belief=2) получил Usefulness &lt; 0, снимает штатность и назначает нового штатного
+    /// среди автоматизмов той же ветки с Usefulness &gt;= 0 (максимум Count, затем Usefulness; при равенстве — меньший ID).
+    /// </summary>
+    public void AfterAutomatizmUsefulnessUpdated(int automatizmId)
+    {
+      if (AppGlobalState.EvolutionStage < 2)
+        return;
+
+      try
+      {
+        _lock.EnterWriteLock();
+        try
+        {
+          if (!_automatizmsById.TryGetValue(automatizmId, out var automatizm))
+            return;
+          ReconcileStaffAfterNegativeUsefulnessNoLock(automatizm.BranchID);
+        }
+        finally
+        {
+          _lock.ExitWriteLock();
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+      }
+    }
+
+    /// <summary>
+    /// Без внешней блокировки: логика <see cref="SetAutomatizmBelief"/> и кэша Belief=2.
+    /// </summary>
+    private void SetAutomatizmBeliefCore(Automatizm automatizm, int belief)
+    {
+      if (belief == 2)
+      {
+        // Только бывшие штатные (Belief=2) на этой ветке снимаем в 0; Belief 0 и 1 не трогаем.
+        foreach (var kvp in _automatizmsById)
+        {
+          if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2 && kvp.Value.ID != automatizm.ID)
+            kvp.Value.Belief = 0;
+        }
+
+        _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = automatizm;
+      }
+      else if (automatizm.Belief == 2 && belief != 2)
+      {
+        if (_automatizmBelief2FromTreeNodeId.TryGetValue(automatizm.BranchID, out var cached) &&
+            cached != null && cached.ID == automatizm.ID)
+          _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
+      }
+
+      automatizm.Belief = belief;
+    }
+
+    /// <summary>
+    /// Без внешней блокировки: снять штатного с ветки при Usefulness &lt; 0 и выбрать нового по правилам конкурса.
+    /// </summary>
+    private void ReconcileStaffAfterNegativeUsefulnessNoLock(int branchId)
+    {
+      Automatizm staffBelief2 = null;
+      if (_automatizmBelief2FromTreeNodeId.TryGetValue(branchId, out var cached) &&
+          cached != null && cached.BranchID == branchId && cached.Belief == 2)
+        staffBelief2 = cached;
+
+      if (staffBelief2 == null)
+      {
+        foreach (var a in _automatizmsById.Values)
+        {
+          if (a.BranchID == branchId && a.Belief == 2)
+          {
+            staffBelief2 = a;
+            break;
+          }
+        }
+      }
+
+      if (staffBelief2 == null || staffBelief2.Usefulness >= 0)
+        return;
+
+      SetAutomatizmBeliefCore(staffBelief2, 0);
+
+      var best = _automatizmsById.Values
+          .Where(a => a.BranchID == branchId && a.Usefulness >= 0)
+          .OrderByDescending(a => a.Count)
+          .ThenByDescending(a => a.Usefulness)
+          .ThenBy(a => a.ID)
+          .FirstOrDefault();
+
+      if (best != null)
+        SetAutomatizmBeliefCore(best, 2);
     }
 
     /// <summary>
@@ -636,7 +723,7 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterReadLock();
       try
       {
-        return GetAutomatizmFromNodeIdNoLock(nodeId);
+        return GetAutomatizmFromNodeIdUnsafe(nodeId);
       }
       finally
       {
@@ -645,23 +732,21 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Получает автоматизм для узла дерева (лучший подходящий)
+    /// Получает автоматизм для узла дерева; только при уже удерживаемой блокировке чтения/записи <see cref="_lock"/>.
     /// </summary>
-    internal Automatizm GetAutomatizmFromNodeIdNoLock (int nodeId)
+    private Automatizm GetAutomatizmFromNodeIdUnsafe(int nodeId)
     {
       try
       {
-        // Сначала проверяем штатный автоматизм
-        var belief2 = GetBelief2AutomatizmFromTreeId(nodeId);
+        // Без повторного входа в _lock (иначе взаимоблокировка при вызове из GetAutomatizmFromNodeId).
+        _automatizmBelief2FromTreeNodeId.TryGetValue(nodeId, out var belief2);
         if (belief2 != null && belief2.Usefulness >= 0)
           return belief2;
 
-        // Ищем автоматизмы для этого узла
-        var automatizms = GetMotorsAutomatizmListFromTreeId(nodeId);
+        var automatizms = _automatizmsById.Values.Where(a => a.BranchID == nodeId).ToList();
         if (automatizms.Count == 0)
           return null;
 
-        // Выбираем самый успешный автоматизм
         return automatizms
             .Where(a => a.Usefulness >= 0)
             .OrderByDescending(a => a.Usefulness)
@@ -925,6 +1010,18 @@ namespace ISIDA.Psychic.Automatism
             if (usefulness > 0)
               _automatizmSuccessFromId[id] = automatizm;
           }
+        }
+
+        _lock.EnterWriteLock();
+        try
+        {
+          var branchIds = new HashSet<int>(_automatizmsById.Values.Select(a => a.BranchID));
+          foreach (var bid in branchIds)
+            ReconcileStaffAfterNegativeUsefulnessNoLock(bid);
+        }
+        finally
+        {
+          _lock.ExitWriteLock();
         }
 
         _noWarningCreateShow = saveNoWarningCreateShow;

@@ -392,8 +392,16 @@ namespace ISIDA.Actions
     internal int ActiveCurReflexTriggerStimulusID = 0;
 
     /// <summary>
-    /// Применяет множественные воздействия и создает образ восприятия или возвращает его ID, если такой уже есть
+    /// Применяет множественные воздействия с пульта, создаёт образ восприятия и обновляет пару значимости стимула для эпизодической памяти
+    /// (сдвиг выполняется после фактического применения, кроме режима наблюдения).
     /// </summary>
+    /// <param name="actionIdList">ID гомеостатических воздействий; пустой список — стимул без кнопок гомеостаза (значимость этого тика — 0).</param>
+    /// <param name="phraseIdList">ID фраз стимула для образа восприятия.</param>
+    /// <param name="authoritativeMode">Режим передачи в событие фразового стимула.</param>
+    /// <param name="toneId">ID тона сообщения.</param>
+    /// <param name="moodId">ID настроения.</param>
+    /// <param name="visualColorId">Код зрительного канала сцены.</param>
+    /// <returns>Признак успеха и текст сообщения об ошибках при частичном применении.</returns>
     public (bool Success, string ErrorMessage) ApplyMultipleInfluenceActions(
         List<int> actionIdList,
         List<int> phraseIdList,
@@ -443,12 +451,26 @@ namespace ISIDA.Actions
         if (actionIdList?.Any() == true)
           TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, authoritativeMode);
 
+        Dictionary<int, float> homeostasisSnapshotBeforeApply = null;
+        if (!AppGlobalState.ObservationMode &&
+            OperatorStimulusHasHomeostasisActionComponents(actionIdList) &&
+            actionsToApply.Count > 0)
+          homeostasisSnapshotBeforeApply = SnapshotHomeostasisParameterValues(_gomeostas);
+
         // Применение воздействий (после вызова событий)
         foreach (var action in actionsToApply)
         {
           var result = ApplySingleInfluenceActionInternal(action);
           if (!result.Success)
             errors.Add($"Воздействие ID {action.Id}: {result.ErrorMessage}");
+        }
+
+        if (!AppGlobalState.ObservationMode)
+        {
+          int newStimulsEffect = homeostasisSnapshotBeforeApply != null
+            ? ComputeStimulsEffectFromHomeostasisShift(homeostasisSnapshotBeforeApply, _gomeostas)
+            : 0;
+          AppGlobalState.AdvanceStimulusEffectPair(newStimulsEffect);
         }
 
         // Формируем итоговое сообщение
@@ -468,6 +490,61 @@ namespace ISIDA.Actions
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Определяет, передан ли с пульта хотя бы один ID гомеостатического воздействия (непустой список).
+    /// При пустом списке значимость стимула для эпизодики на этом тике принудительно обнуляется, чтобы не переносить эффект предыдущих кнопок.
+    /// </summary>
+    /// <param name="actionIdList">Список ID воздействий, как в <see cref="ApplyMultipleInfluenceActions"/>.</param>
+    /// <returns>True, если список не null и содержит хотя бы один элемент.</returns>
+    public static bool OperatorStimulusHasHomeostasisActionComponents(IList<int> actionIdList)
+    {
+      return actionIdList != null && actionIdList.Count > 0;
+    }
+
+    /// <summary>
+    /// Снимает значения параметров гомеостаза для последующего сравнения после применения воздействий.
+    /// </summary>
+    /// <param name="gomeostas">Система гомеостаза.</param>
+    /// <returns>Словарь ID параметра — значение.</returns>
+    private static Dictionary<int, float> SnapshotHomeostasisParameterValues(GomeostasSystem gomeostas)
+    {
+      var list = gomeostas.GetAllParameters();
+      var snapshot = new Dictionary<int, float>(list.Count);
+      for (int i = 0; i < list.Count; i++)
+      {
+        var p = list[i];
+        snapshot[p.Id] = p.Value;
+      }
+      return snapshot;
+    }
+
+    /// <summary>
+    /// Суммирует изменения значений параметров гомеостаза между снимком и текущим состоянием, округляет и усечёт к диапазону −10…10.
+    /// </summary>
+    /// <param name="valuesBeforeApply">Снимок до применения воздействий.</param>
+    /// <param name="gomeostas">Система гомеостаза после применения.</param>
+    /// <returns>Оценка значимости стимула для записи в пару Prev/Current.</returns>
+    private static int ComputeStimulsEffectFromHomeostasisShift(
+      Dictionary<int, float> valuesBeforeApply,
+      GomeostasSystem gomeostas)
+    {
+      if (valuesBeforeApply == null || valuesBeforeApply.Count == 0)
+        return 0;
+
+      var after = gomeostas.GetAllParameters();
+      float sum = 0f;
+      for (int i = 0; i < after.Count; i++)
+      {
+        var p = after[i];
+        if (!valuesBeforeApply.TryGetValue(p.Id, out float oldValue))
+          oldValue = p.Value;
+        sum += p.Value - oldValue;
+      }
+
+      int rounded = (int)Math.Round(sum, MidpointRounding.AwayFromZero);
+      return ClampInt(rounded, -10, 10);
     }
 
     /// <summary>

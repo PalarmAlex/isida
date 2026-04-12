@@ -152,6 +152,19 @@ namespace ISIDA.Psychic
       }
     }
 
+    /// <summary>
+    /// После смены <see cref="AppGlobalState.CurStimulusImageId"/> пересчитывает объект экстремальной значимости в информационной среде (при стадии ≥ 4 и инициализированных зависимостях).
+    /// </summary>
+    /// <param name="actionsImageId">ID образа действий стимула, совпадающий с записанным в CurStimulusImageId.</param>
+    private void RefreshExtremImportanceForCurrentStimulus(int actionsImageId)
+    {
+      ObjectImportanceService.UpdateExtremImportanceObject(
+        _episodicMemorySystem,
+        _informationEnvironmentSystem,
+        actionsImageId,
+        _understandingTreeSystem);
+    }
+
     /// <summary>Параметры затухания и срока жизни главного цикла мышления (из конфигурации движка).</summary>
     /// <param name="decayAgeDivisor">Устарело, передаётся для совместимости конфигов.</param>
     /// <param name="decayBase">Устарело, передаётся для совместимости конфигов.</param>
@@ -642,6 +655,7 @@ namespace ISIDA.Psychic
                 deferredOperatorEvalScheduledThisStimulus)
             {
               AppGlobalState.CurStimulusImageId = actionsImageId;
+              RefreshExtremImportanceForCurrentStimulus(actionsImageId);
               Logger.Info(
                   "[Stage3Mirror] Skip motor after OR (operator-response stimulus); deferred mirror on next pulse");
               return true;
@@ -669,6 +683,7 @@ namespace ISIDA.Psychic
               if (atmz != null)
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
+                RefreshExtremImportanceForCurrentStimulus(actionsImageId);
                 ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
                 return ExecuteAutomatizm(atmz);
               }
@@ -683,6 +698,7 @@ namespace ISIDA.Psychic
               if (atmz != null)
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
+                RefreshExtremImportanceForCurrentStimulus(actionsImageId);
                 ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
                 return ExecuteAutomatizm(atmz);
               }
@@ -701,6 +717,7 @@ namespace ISIDA.Psychic
                 _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(responseNodeId > 0 ? responseNodeId : automatizmNodeId);
               }
               AppGlobalState.CurStimulusImageId = actionsImageId;
+              RefreshExtremImportanceForCurrentStimulus(actionsImageId);
               return ExecuteAutomatizm(toExecute);
             }
 
@@ -736,6 +753,7 @@ namespace ISIDA.Psychic
               if (decision != null && (decision.AutomatizmToExecute != null || decision.ActionsImageIdToAutomatize > 0))
               {
                 AppGlobalState.CurStimulusImageId = actionsImageId;
+                RefreshExtremImportanceForCurrentStimulus(actionsImageId);
                 ExecuteThinkingDecision(decision);
                 return true; // блокировать рефлексы при удачном запуске
               }
@@ -758,6 +776,7 @@ namespace ISIDA.Psychic
         if (atmz != null)
         {
           AppGlobalState.CurStimulusImageId = actionsImageId;
+          RefreshExtremImportanceForCurrentStimulus(actionsImageId);
           if (automatizmNodeId > 0)
             ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
           return ExecuteAutomatizm(atmz); // блокируем рефлексы при удачном запуске автоматизма

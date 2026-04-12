@@ -518,7 +518,7 @@ namespace ISIDA.Psychic
           result.OperatorResponseTime = responseTime;
 
           if (_episodicRulesService != null && operatorResponseActionsImageId > 0 && result.ActionsImageId > 0)
-            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, result.ActionsImageId, AppGlobalState.PrevStimulsEffect);
+            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, result.ActionsImageId, AppGlobalState.CurrentStimulsEffect);
 
           // Обновляем полезность автоматизма на основе оценки оператора
           UpdateAutomatizmUsefulness(automatizmId, assessment);
@@ -539,7 +539,7 @@ namespace ISIDA.Psychic
           };
 
           if (_episodicRulesService != null && operatorResponseActionsImageId > 0 && newResult.ActionsImageId > 0)
-            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, newResult.ActionsImageId, AppGlobalState.PrevStimulsEffect);
+            _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, newResult.ActionsImageId, AppGlobalState.CurrentStimulsEffect);
 
           _lastAutomatizmResults[automatizmId] = newResult;
           UpdateAutomatizmUsefulness(automatizmId, assessment);
@@ -812,6 +812,7 @@ namespace ISIDA.Psychic
         {
           automatizm.Usefulness += assessment;
           automatizm.Usefulness = AddUtils.Clamp(automatizm.Usefulness, -10, 10);
+          _automatizmSystem.AfterAutomatizmUsefulnessUpdated(automatizmId);
         }
       }
       catch (Exception ex)

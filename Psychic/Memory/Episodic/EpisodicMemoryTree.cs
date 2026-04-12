@@ -177,7 +177,6 @@ namespace ISIDA.Psychic.Memory.Episodic
 
       int sw = (p.StimulsEffect * (count - 1) + stimulsEffect) / count;
       p.StimulsEffect = AddUtils.Clamp(sw, -10, 10);
-      p.StimulsEffect = sw;
       p.Count = count;
     }
 

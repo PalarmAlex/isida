@@ -140,7 +140,10 @@ public static class AppGlobalState
   /// <summary>Образ стимула (действий оператора) перед ответом Beast</summary>
   private static int _curStimulusImageId = 0;
 
-  /// <summary>Значимость стимула для записи правил</summary>
+  /// <summary>Текущая значимость стимула (−10…10) после последнего применения воздействий с пульта; для учительского правила в эпизодике.</summary>
+  private static int _currentStimulsEffect = 0;
+
+  /// <summary>Предыдущая значимость стимула до последнего сдвига при воздействии с пульта; для прямого правила в эпизодике.</summary>
   private static int _prevStimulsEffect = 0;
 
   /// <summary>Образ стимула (действий оператора) перед ответом Beast</summary>
@@ -150,11 +153,36 @@ public static class AppGlobalState
     set { _lock.EnterWriteLock(); try { _curStimulusImageId = value; } finally { _lock.ExitWriteLock(); } }
   }
 
-  /// <summary>Значимость стимула для записи правил</summary>
+  /// <summary>Текущая значимость стимула (−10…10) после последнего применения воздействий с пульта.</summary>
+  public static int CurrentStimulsEffect
+  {
+    get { _lock.EnterReadLock(); try { return _currentStimulsEffect; } finally { _lock.ExitReadLock(); } }
+    set { _lock.EnterWriteLock(); try { _currentStimulsEffect = value; } finally { _lock.ExitWriteLock(); } }
+  }
+
+  /// <summary>Предыдущая значимость стимула (значение «текущей» до последнего сдвига при воздействии с пультом).</summary>
   public static int PrevStimulsEffect
   {
     get { _lock.EnterReadLock(); try { return _prevStimulsEffect; } finally { _lock.ExitReadLock(); } }
     set { _lock.EnterWriteLock(); try { _prevStimulsEffect = value; } finally { _lock.ExitWriteLock(); } }
+  }
+
+  /// <summary>
+  /// Атомарно сдвигает пару значимости стимула: предыдущая ← бывшая текущая, текущая ← новое значение (уже с учётом обнуления для стимула без гомео-кнопок и усечения −10…10).
+  /// </summary>
+  /// <param name="newCurrentStimulsEffect">Новое значение текущей значимости.</param>
+  public static void AdvanceStimulusEffectPair(int newCurrentStimulsEffect)
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      _prevStimulsEffect = _currentStimulsEffect;
+      _currentStimulsEffect = newCurrentStimulsEffect;
+    }
+    finally
+    {
+      _lock.ExitWriteLock();
+    }
   }
 
   #endregion
