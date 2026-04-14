@@ -93,8 +93,10 @@ namespace ISIDA.Common
     /// </summary>
     public bool IsDisposed => _disposed;
 
-    // Писатель в память (для UI)
+    // Писатель в память (для UI) — полные строки агента (отчёты сценариев, отладка)
     private static ILogWriter _memoryLogWriter;
+    /// <summary>Опционально: сжатый канал агентного лога для отображения (например <see cref="CoalescingAgentLogWriter"/>).</summary>
+    private static ILogWriter _displayLogWriter;
 
     private Dictionary<string, object> _currentPulseLogEntry = null;
     /// <summary>Номер пульса в колонке «Пульс» (может отличаться от глобального на +1, см. correctPulse).</summary>
@@ -590,6 +592,12 @@ namespace ISIDA.Common
       _memoryLogWriter = logWriter;
     }
 
+    /// <summary>Канал только для агентных строк (тот же вызов, что и в полный лог). Параметры/стили не дублируются.</summary>
+    public void SetDisplayLogWriter(ILogWriter logWriter)
+    {
+      _displayLogWriter = logWriter;
+    }
+
     #endregion
 
     #region Основной метод логирования
@@ -846,7 +854,8 @@ namespace ISIDA.Common
     private void WriteToMemoryLog(Dictionary<string, object> logEntry, int globalPulseForMemory,
                                   string reflexChainInfo = "", string automatizmChainInfo = "")
     {
-      if (_memoryLogWriter == null || _disposed) return;
+      if (_disposed || (_memoryLogWriter == null && _displayLogWriter == null))
+        return;
 
       int pulseForWriter = globalPulseForMemory >= 0
           ? globalPulseForMemory
@@ -909,33 +918,74 @@ namespace ISIDA.Common
           ? BuildMainThinkingCycleTooltip(mcWeight, mcThemeId, mcPurposeId, mcProblem, mcLastStrat, mainThinkingCycleTaskStatus, mainThinkingCycleId)
           : null;
 
-      _memoryLogWriter.WriteLog(
-          "ResearchLogger",
-          "LogSystemState",
-          pulseForWriter,
-          logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString()) ?
-              int.Parse(logEntry["Состояние"].ToString()) : (int?)null,
-          logEntry.ContainsKey("Стили") && !string.IsNullOrEmpty(logEntry["Стили"].ToString()) ?
-              int.Parse(logEntry["Стили"].ToString()) : (int?)null,
-          logEntry.ContainsKey("Триггер") && !string.IsNullOrEmpty(logEntry["Триггер"].ToString()) ?
-              int.Parse(logEntry["Триггер"].ToString()) : (int?)null,
-          orType,
-          logEntry.ContainsKey("Б/у рефлекс") && !string.IsNullOrEmpty(logEntry["Б/у рефлекс"].ToString()) ?
-              int.Parse(logEntry["Б/у рефлекс"].ToString()) : (int?)null,
-          logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString()) ?
-              int.Parse(logEntry["Усл. рефлекс"].ToString()) : (int?)null,
-          logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString()) ?
-              int.Parse(logEntry["Автоматизм"].ToString()) : (int?)null,
-          reflexChainInfo,
-          automatizmChainInfo,
-          thinkingLevel,
-          thinkingLevelSuccess,
-          thinkingThemeTypeId,
-          thinkingThemeTooltip,
-          mainThinkingCycleId,
-          mainThinkingCycleTooltip,
-          mainThinkingCycleTaskStatus
-      );
+      int? baseId = logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString())
+          ? int.Parse(logEntry["Состояние"].ToString())
+          : (int?)null;
+      int? styleId = logEntry.ContainsKey("Стили") && !string.IsNullOrEmpty(logEntry["Стили"].ToString())
+          ? int.Parse(logEntry["Стили"].ToString())
+          : (int?)null;
+      int? triggerId = logEntry.ContainsKey("Триггер") && !string.IsNullOrEmpty(logEntry["Триггер"].ToString())
+          ? int.Parse(logEntry["Триггер"].ToString())
+          : (int?)null;
+      int? genRef = logEntry.ContainsKey("Б/у рефлекс") && !string.IsNullOrEmpty(logEntry["Б/у рефлекс"].ToString())
+          ? int.Parse(logEntry["Б/у рефлекс"].ToString())
+          : (int?)null;
+      int? condRef = logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString())
+          ? int.Parse(logEntry["Усл. рефлекс"].ToString())
+          : (int?)null;
+      int? autoId = logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString())
+          ? int.Parse(logEntry["Автоматизм"].ToString())
+          : (int?)null;
+
+      void WriteBoth()
+      {
+        if (_memoryLogWriter != null)
+        {
+          _memoryLogWriter.WriteLog(
+              "ResearchLogger",
+              "LogSystemState",
+              pulseForWriter,
+              baseId,
+              styleId,
+              triggerId,
+              orType,
+              genRef,
+              condRef,
+              autoId,
+              reflexChainInfo,
+              automatizmChainInfo,
+              thinkingLevel,
+              thinkingLevelSuccess,
+              thinkingThemeTypeId,
+              thinkingThemeTooltip,
+              mainThinkingCycleId,
+              mainThinkingCycleTooltip,
+              mainThinkingCycleTaskStatus);
+        }
+
+        _displayLogWriter?.WriteLog(
+            "ResearchLogger",
+            "LogSystemState",
+            pulseForWriter,
+            baseId,
+            styleId,
+            triggerId,
+            orType,
+            genRef,
+            condRef,
+            autoId,
+            reflexChainInfo,
+            automatizmChainInfo,
+            thinkingLevel,
+            thinkingLevelSuccess,
+            thinkingThemeTypeId,
+            thinkingThemeTooltip,
+            mainThinkingCycleId,
+            mainThinkingCycleTooltip,
+            mainThinkingCycleTaskStatus);
+      }
+
+      WriteBoth();
     }
 
     /// <summary>Подсказка для UI: имя типа темы и вес по справочнику.</summary>
@@ -1039,6 +1089,8 @@ namespace ISIDA.Common
         _bufferedPulse = -1;
         _bufferedRawPulse = -1;
         _chainInfoByPulse.Clear();
+        if (_displayLogWriter is CoalescingAgentLogWriter coalescer)
+          coalescer.ResetPending();
       }
     }
 

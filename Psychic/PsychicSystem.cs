@@ -319,10 +319,6 @@ namespace ISIDA.Psychic
             _deferredOperatorEvaluationAutomatizmId = 0;
             _deferredOperatorEvaluationLastRunPulseForResponse = 0;
 
-            if (AppGlobalState.EvolutionStage == 3)
-              Logger.Info(
-                  $"[Stage3Mirror] ProcessPsychicPulse deferred eval: idToEval={idToEval}, lastRunSnap={lastRunSnap}, pulse={PulseCount}, skipMirrorOnThisEval={_skipStage3MirrorLearningOnNextEval}, mirrorState=[{_mirrorAutomatizmService.FormatStage3MirrorDiagnostics()}]");
-
             mirrorAutomatizmToExecute = EvaluatePreviousAutomatizm(idToEval, lastRunSnap);
 
             if (_currentAutomatizmId == idToEval && AppGlobalState.WaitingForOperatorEvaluation)
@@ -362,8 +358,6 @@ namespace ISIDA.Psychic
 
       if (mirrorAutomatizmToExecute > 0)
       {
-        if (AppGlobalState.EvolutionStage == 3)
-          Logger.Info($"[Stage3Mirror] ProcessPsychicPulse execute deferred mirror automatizm id={mirrorAutomatizmToExecute}");
         var mirrorAutomatizm = _automatizmSystem.GetAutomatizmById(mirrorAutomatizmToExecute);
         if (mirrorAutomatizm != null)
         {
@@ -385,8 +379,6 @@ namespace ISIDA.Psychic
                   branchNode.ActivityID);
               if (responsePhraseNodeId > 0)
               {
-                Logger.Info(
-                    $"[Stage3Mirror] ProcessPsychicPulse align mirror anchor -> responsePhraseNode={responsePhraseNodeId} (deferred exec id={mirrorAutomatizm.ID})");
                 _mirrorAutomatizmService.SetDialogTriggerNodeIdForActiveMirror(responsePhraseNodeId);
               }
             }
@@ -610,8 +602,6 @@ namespace ISIDA.Psychic
               string forDesc = foundForOR == null
                   ? "null"
                   : $"id={foundForOR.ID} br={foundForOR.BranchID} belief={foundForOR.Belief} use={foundForOR.Usefulness} echo={IsStage3MirrorEchoAutomatizm(foundForOR)}";
-              Logger.Info(
-                  $"[Stage3Mirror] stimulus phrase='{ph}' treeNode={automatizmNodeId} foundOR={forDesc} orientAtmzId={orientationAutomatizmId} deferredSched={deferredOperatorEvalScheduledThisStimulus} waitOpEval={AppGlobalState.WaitingForOperatorEvaluation} waitTarget={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation} mirror=[{_mirrorAutomatizmService.FormatStage3MirrorDiagnostics()}]");
             }
 
             // Стадия 3: перед запуском уже выученного автоматизма включить цикл зеркалирования — иначе RegisterOperatorResponse
@@ -626,14 +616,7 @@ namespace ISIDA.Psychic
               int responseNodeId = GetTreeNodeIdForResponseActionsImage(
                   foundForOR.ActionsImageID, currentBaseId, currentEmotionId, currentActivityId);
               int anchor = responseNodeId > 0 ? responseNodeId : automatizmNodeId;
-              Logger.Info(
-                  $"[Stage3Mirror] StartDialogMirror call: anchorNode={anchor} (responsePhraseNode={responseNodeId}, stimulusNode={automatizmNodeId}), staffAtmz={foundForOR.ID}");
               _mirrorAutomatizmService.StartDialogMirrorForExistingAutomatizm(anchor);
-            }
-            else if (AppGlobalState.EvolutionStage == 3 && activationType >= 2 && foundForOR != null)
-            {
-              Logger.Info(
-                  $"[Stage3Mirror] StartDialogMirror SKIPPED (deferredSched={deferredOperatorEvalScheduledThisStimulus}) staffAtmz={foundForOR.ID}");
             }
 
             // ОР1/ОР2 — на каждый стимул (в т.ч. ответ оператора в окне ожидания); моторный выбор откладываем ниже.
@@ -645,7 +628,6 @@ namespace ISIDA.Psychic
               string chosen = atmz == null
                   ? "null"
                   : $"id={atmz.ID} br={atmz.BranchID} belief={atmz.Belief} use={atmz.Usefulness} echo={IsStage3MirrorEchoAutomatizm(atmz)}";
-              Logger.Info($"[Stage3Mirror] after OrientationReflex phrase='{ph2}' chosen={chosen}");
             }
 
             // Стимул уже поставлен в очередь отложенной оценки: не исполнять автоматизм с этого вызова (зеркало на следующем пульсе).
@@ -656,8 +638,6 @@ namespace ISIDA.Psychic
             {
               AppGlobalState.CurStimulusImageId = actionsImageId;
               RefreshExtremImportanceForCurrentStimulus(actionsImageId);
-              Logger.Info(
-                  "[Stage3Mirror] Skip motor after OR (operator-response stimulus); deferred mirror on next pulse");
               return true;
             }
 
@@ -1342,45 +1322,29 @@ namespace ISIDA.Psychic
         return;
 
       if (atmz.BranchID != stimulusTreeNodeId)
-      {
-        Logger.Info(
-            $"[Stage3Mirror] ApplyStage3Ctx SKIP: branch mismatch atmz={atmz.ID} br={atmz.BranchID} stimNode={stimulusTreeNodeId}");
         return;
-      }
 
       if (IsStage3MirrorEchoAutomatizm(atmz))
-      {
-        Logger.Info(
-            $"[Stage3Mirror] ApplyStage3Ctx SKIP: echo automatizm atmz={atmz.ID} br={atmz.BranchID}");
         return;
-      }
 
       // Снимок «кого оцениваем на следующем пульсе» — тот же, что в TrySchedule (до ExecuteAutomatizm / StartWaiting).
       int deferredEvalTargetSnap = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
       if (deferredEvalTargetSnap <= 0)
         deferredEvalTargetSnap = _previousAutomatizmId > 0 ? _previousAutomatizmId : _currentAutomatizmId;
       if (deferredEvalTargetSnap > 0 && deferredEvalTargetSnap != atmz.ID)
-      {
-        Logger.Info(
-            $"[Stage3Mirror] ApplyStage3Ctx SKIP: eval target mismatch exec={atmz.ID} deferredTarget={deferredEvalTargetSnap} prev={_previousAutomatizmId} cur={_currentAutomatizmId}");
         return;
-      }
 
       _skipStage3MirrorLearningOnNextEval = true;
       var branchNode = _automatizmTreeSystem.GetNodeById(atmz.BranchID);
       if (branchNode == null)
-      {
-        Logger.Info($"[Stage3Mirror] ApplyStage3Ctx SKIP: no branch node for br={atmz.BranchID}");
         return;
-      }
 
       int responsePhraseNodeId = GetTreeNodeIdForResponseActionsImage(
           atmz.ActionsImageID,
           branchNode.BaseID,
           branchNode.EmotionID,
           branchNode.ActivityID);
-      Logger.Info(
-          $"[Stage3Mirror] ApplyStage3Ctx APPLY: staffShift atmz={atmz.ID} respPhraseNode={responsePhraseNodeId} -> skipMirrorLearningOnNextEval=true");
+
       _mirrorAutomatizmService.SetDialogTriggerNodeIdForActiveMirror(responsePhraseNodeId);
     }
 
@@ -1521,14 +1485,9 @@ namespace ISIDA.Psychic
       if (!AppGlobalState.IsOperatorResponseWithinWaitingWindow())
       {
         if (AppGlobalState.EvolutionStage == 3)
-          Logger.Info($"[Stage3Mirror] TryScheduleDeferred: window FAIL -> ResetAutomatizmWaitingState node={automatizmNodeId}");
         ResetAutomatizmWaitingState();
         return;
       }
-
-      if (AppGlobalState.EvolutionStage == 3)
-        Logger.Info(
-            $"[Stage3Mirror] TryScheduleDeferred: REGISTER node={automatizmNodeId} img={actionsImageId} verbal={hasVerbalPart} waitTarget={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation}");
 
       _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
 
@@ -1545,10 +1504,6 @@ namespace ISIDA.Psychic
 
       _deferredOperatorEvaluationAutomatizmId = automatizmToEvaluate;
       _deferredOperatorEvaluationLastRunPulseForResponse = AppGlobalState.LastRunAutomatizmPulsCount;
-
-      if (AppGlobalState.EvolutionStage == 3)
-        Logger.Info(
-            $"[Stage3Mirror] TryScheduleDeferred: QUEUED evalAtmz={automatizmToEvaluate} lastRunPulse={_deferredOperatorEvaluationLastRunPulseForResponse}");
     }
 
     /// <summary>
@@ -1598,8 +1553,6 @@ namespace ISIDA.Psychic
       {
         if (_skipStage3MirrorLearningOnNextEval)
         {
-          Logger.Info(
-              $"[Stage3Mirror] EvaluatePrevious: skip TryCreateMirror (staff shift path) evalTarget={automatizmIdToEvaluate}");
           _skipStage3MirrorLearningOnNextEval = false;
           _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
         }
@@ -1619,14 +1572,9 @@ namespace ISIDA.Psychic
                 staffOnOperatorPhrase.Usefulness >= 0 &&
                 staffOnOperatorPhrase.ID != mirrorAutomatizmId)
             {
-              Logger.Info(
-                  $"[Stage3Mirror] EvaluatePrevious: prefer staff id={staffOnOperatorPhrase.ID} node={pendingOperatorPhraseNodeId} over mirror teacher id={mirrorAutomatizmId}");
               mirrorAutomatizmId = staffOnOperatorPhrase.ID;
             }
           }
-
-          Logger.Info(
-              $"[Stage3Mirror] EvaluatePrevious: TryCreateMirror -> mirrorAtmzToRun={mirrorAutomatizmId} evalTarget={automatizmIdToEvaluate}");
         }
       }
 

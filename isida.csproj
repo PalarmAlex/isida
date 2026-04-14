@@ -95,6 +95,7 @@
     <Compile Include="Common\GenerateListContentPreprocessor.cs" />
     <Compile Include="Common\GlobalTimer.cs" />
     <Compile Include="Common\IDisposableState.cs" />
+    <Compile Include="Common\CoalescingAgentLogWriter.cs" />
     <Compile Include="Common\ILogWriter.cs" />
     <Compile Include="Common\IsidaEngine.cs" />
     <Compile Include="Common\Logger.cs" />
