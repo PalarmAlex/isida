@@ -80,7 +80,7 @@ namespace ISIDA.Psychic
       public bool IsIdleness100pulse { get; set; }
 
       /// <summary>
-      /// Общая оценка гомео-настроения: сила Плохо -10 ... 0 ...+10 Хорошо
+      /// Интегральное гомео-настроение −10…+10 (оценка с пульса, см. <see cref="HomeostasisMoodPerception.EstimateMood"/>).
       /// </summary>
       public int Mood { get; set; }
 
@@ -95,7 +95,7 @@ namespace ISIDA.Psychic
       public int PsyEmotionId { get; set; }
 
       /// <summary>
-      /// Опасность состояния
+      /// Опасность: хотя бы один жизненно важный параметр в зоне хуже нормы (см. <see cref="ISIDA.Gomeostas.HomeostasisCalculator.AnyVitalParameterInHarmfulZone"/>).
       /// </summary>
       public bool Danger { get; set; }
 
@@ -105,7 +105,7 @@ namespace ISIDA.Psychic
       public bool VeryActualSituation { get; set; }
 
       /// <summary>
-      /// Субъективно ощущаемая оценка, текущее осознаваемое настроение, которое можно произвольно изменять
+      /// Субъективное настроение −10…+10: догоняет <see cref="Mood"/> с инерцией на пульсе (<see cref="HomeostasisMoodPerception.AdjustPsyMoodTowardIntegrated"/>), не равно ID эмоции.
       /// </summary>
       public int PsyMood { get; set; }
 
@@ -236,12 +236,37 @@ namespace ISIDA.Psychic
     public bool VeryActualSituation { get; set; } = false;
 
     /// <summary>
-    /// Установить признак опасной ситуации
+    /// Установить признак очень актуальной ситуации и список целей гомеостаза (параметры в состоянии Bad, по убыванию веса).
+    /// Вызывается из <see cref="ISIDA.Gomeostas.GomeostasSystem.UpdateStateOnly"/> на каждом пульсе после <c>CalculateAgentState</c>.
     /// </summary>
-    public void SetVeryActualSituation(bool hasCriticalChanges)
+    /// <param name="hasCriticalChanges">Критические изменения жизненно важных параметров (как раньше для VeryActualSituation).</param>
+    /// <param name="homeostasisImprovementTargetIds">ID параметров-целей; null или пусто — очистить список в инфо-картине.</param>
+    public void SetVeryActualSituation(bool hasCriticalChanges, IReadOnlyList<int> homeostasisImprovementTargetIds = null)
     {
       VeryActualSituation = hasCriticalChanges;
       CurrentInformationEnvironment.VeryActualSituation = hasCriticalChanges;
+
+      var targets = homeostasisImprovementTargetIds == null || homeostasisImprovementTargetIds.Count == 0
+          ? new List<int>()
+          : homeostasisImprovementTargetIds.ToList();
+      CurrentInformationEnvironment.CurTargetArrID = targets;
+      CurTargetArrID = targets.ToList();
+    }
+
+    /// <summary>
+    /// Опасность (жизненно важные параметры в зоне хуже нормы) и гомео-настроение с пульса.
+    /// Вызывается из <see cref="ISIDA.Gomeostas.GomeostasSystem.UpdateStateOnly"/> после <c>CalculateAgentState</c>
+    /// (см. <see cref="ISIDA.Gomeostas.HomeostasisCalculator.AnyVitalParameterInHarmfulZone"/> и <see cref="HomeostasisMoodPerception"/>).
+    /// </summary>
+    /// <param name="danger">Маркер опасности для текущего кадра информационной среды.</param>
+    /// <param name="integratedMood">Интегральное настроение −10…+10 для текущего кадра информационной среды.</param>
+    public void SetDangerAndIntegratedMood(bool danger, int integratedMood)
+    {
+      CurrentInformationEnvironment.Danger = danger;
+      CurrentInformationEnvironment.Mood = integratedMood;
+      int newPsy = HomeostasisMoodPerception.AdjustPsyMoodTowardIntegrated(PsyMood, integratedMood);
+      PsyMood = newPsy;
+      CurrentInformationEnvironment.PsyMood = newPsy;
     }
 
     /// <summary>
@@ -308,19 +333,20 @@ namespace ISIDA.Psychic
     /// </remarks>
     public void GetCurrentInformationEnvironment(int currentEmotionId, int actionsImageId)
     {
+      // PsyMood — субъективное настроение (−10…+10), обновляется на пульсе в SetDangerAndIntegratedMood; не смешивать с ID эмоции.
+      // На пульсе в GomeostasSystem.UpdateStateOnly() после CalculateAgentState:
+      // — SetVeryActualSituation(HasCriticalChanges, BadParameterTargetIds) — VeryActualSituation, CurTargetArrID;
+      // — SetDangerAndIntegratedMood(danger, mood) — Danger, Mood, PsyMood (инерция к mood);
+      //   danger: HomeostasisCalculator.AnyVitalParameterInHarmfulZone; mood: HomeostasisMoodPerception.EstimateMood.
+      // Здесь поля не пересчитываются — новый кадр наследует их через SaveOldIE(); порядок: UpdateStateOnly, затем психика.
+          
       SaveOldIE();
 
       CurrentInformationEnvironment.LifeTime = LifeTime;
       CurrentInformationEnvironment.IsSleep = IsSleeping;
       CurrentInformationEnvironment.PsyEmotionId = currentEmotionId;
-      CurrentInformationEnvironment.PsyMood = currentEmotionId;
+      CurrentInformationEnvironment.PsyMood = PsyMood;
       CurrentInformationEnvironment.ActionsImageID = actionsImageId;
-
-      PsyMood = currentEmotionId;
-
-      // CurrentInformationEnvironment.VeryActualSituation, CurrentInformationEnvironment.CurTargetArrID = gomeostas.FindTargetGomeostazID();
-      // CurrentInformationEnvironment.Danger = GetAttentionDanger();
-      // CurrentInformationEnvironment.Mood = GetCurMood();
 
       WriteInformationEnvironmentMarker();
     }

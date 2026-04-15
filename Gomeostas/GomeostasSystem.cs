@@ -198,7 +198,6 @@ namespace ISIDA.Gomeostas
         // Сохраняем предыдущее состояние ДО обновления
         SaveParametersState();
         HasCriticalChanges = _calculator.HasCriticalParameterChanges(_agentState.Parameters, _previousParametersState);
-        _informationEnvironmentSystem.SetVeryActualSituation(HasCriticalChanges);
 
         // ритмичное убывание/нарастание параметров в зависимости от типа: дефицит/избыток ориентированные
         foreach (var param in _agentState.Parameters)
@@ -224,6 +223,16 @@ namespace ISIDA.Gomeostas
         var currentAgentState = _calculator.CalculateAgentState(_agentState.Parameters, _dynamicTime, _difSensorPar, ref lastWellStatePulse, _compareLevel);
         _agentState.LastWellStatePulse = lastWellStatePulse;
         _currentOverallState = currentAgentState.OverallState;
+
+        _informationEnvironmentSystem.SetVeryActualSituation(HasCriticalChanges, currentAgentState.BadParameterTargetIds);
+
+        bool danger = _calculator.AnyVitalParameterInHarmfulZone(_agentState.Parameters);
+        int mood = HomeostasisMoodPerception.EstimateMood(
+            currentAgentState,
+            _agentState.PainValue,
+            _agentState.JoyValue,
+            AppGlobalState.CurrentOverallState);
+        _informationEnvironmentSystem.SetDangerAndIntegratedMood(danger, mood);
 
         UpdateNoveltyDetector(previousOverallState, previousActiveStyleIds);
         UpdateActiveStyles();
@@ -526,7 +535,9 @@ namespace ISIDA.Gomeostas
       _lock.EnterReadLock();
       try
       {
-        var allStyles = GetAllBehaviorStyles();
+        // Не вызывать GetAllBehaviorStyles() здесь: он снова берёт read lock, а ReaderWriterLockSlim
+        // по умолчанию без рекурсии — второй EnterReadLock того же потока даёт LockRecursionException.
+        var allStyles = new ReadOnlyDictionary<int, BehaviorStyle>(_agentState.BehaviorStyles);
 
         foreach (var param in parameters)
         {
@@ -1177,6 +1188,11 @@ namespace ISIDA.Gomeostas
       ///  Список состояний всех параметров агента
       /// </summary>
       public List<ParameterStateInfo> ParametersState { get; set; }
+
+      /// <summary>
+      /// ID параметров в состоянии Bad, отсортированные по убыванию веса — цели улучшения для инфо-картины (CurTargetArrID).
+      /// </summary>
+      public List<int> BadParameterTargetIds { get; set; } = new List<int>();
     }
 
     /// <summary>

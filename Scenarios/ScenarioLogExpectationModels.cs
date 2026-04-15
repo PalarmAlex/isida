@@ -11,6 +11,7 @@ namespace ISIDA.Scenarios
     private bool _skipTheme;
     private bool _skipTrigger;
     private bool _skipOrUm;
+    private bool _skipDanger;
     private bool _skipGeneticReflex;
     private bool _skipConditionReflex;
     private bool _skipAutomatizm;
@@ -51,6 +52,13 @@ namespace ISIDA.Scenarios
     {
       get => _skipOrUm;
       set { if (_skipOrUm == value) return; _skipOrUm = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>Не сравнивать столбец «Опасно» (признак опасной ситуации в информационной среде).</summary>
+    public bool SkipDanger
+    {
+      get => _skipDanger;
+      set { if (_skipDanger == value) return; _skipDanger = value; OnPropertyChanged(); }
     }
 
     /// <summary>Не сравнивать столбец «Б/у рефлекс» (безусловный рефлекс).</summary>
@@ -106,6 +114,7 @@ namespace ISIDA.Scenarios
         SkipTheme = SkipTheme,
         SkipTrigger = SkipTrigger,
         SkipOrUm = SkipOrUm,
+        SkipDanger = SkipDanger,
         SkipGeneticReflex = SkipGeneticReflex,
         SkipConditionReflex = SkipConditionReflex,
         SkipAutomatizm = SkipAutomatizm,
@@ -132,6 +141,7 @@ namespace ISIDA.Scenarios
     private string _themeText = "-";
     private string _triggerText = "-";
     private string _orUmText = "-";
+    private string _dangerText = "-";
     private string _geneticReflexText = "-";
     private string _conditionReflexText = "-";
     private string _automatizmText = "-";
@@ -186,6 +196,13 @@ namespace ISIDA.Scenarios
     {
       get => _orUmText;
       set { if (_orUmText == value) return; _orUmText = value ?? ""; OnPropertyChanged(); }
+    }
+
+    /// <summary>Ожидаемое значение столбца «Опасно» (0 или 1).</summary>
+    public string DangerText
+    {
+      get => _dangerText;
+      set { if (_dangerText == value) return; _dangerText = value ?? ""; OnPropertyChanged(); }
     }
 
     /// <summary>Ожидаемое значение столбца «Б/у рефлекс».</summary>
@@ -243,6 +260,7 @@ namespace ISIDA.Scenarios
         ThemeText = ThemeText ?? "",
         TriggerText = TriggerText ?? "",
         OrUmText = OrUmText ?? "",
+        DangerText = DangerText ?? "",
         GeneticReflexText = GeneticReflexText ?? "",
         ConditionReflexText = ConditionReflexText ?? "",
         AutomatizmText = AutomatizmText ?? "",

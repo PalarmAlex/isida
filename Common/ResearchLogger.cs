@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic;
 using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Thinking.Strategies;
 using ISIDA.Psychic.Understanding;
@@ -152,6 +153,8 @@ namespace ISIDA.Common
       public string MainThinkingCycleLastStrategyId { get; set; }
       /// <summary>Статус задачи главного цикла для UI: Awaiting / NoSolution / Solved (как обводки матрицы циклов).</summary>
       public string MainThinkingCycleTaskStatus { get; set; }
+      /// <summary>Признак опасной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.Danger"/>).</summary>
+      public bool InformationEnvironmentDanger { get; set; }
     }
 
     /// <summary>
@@ -761,7 +764,8 @@ namespace ISIDA.Common
         ["ЦиклМ_стратегия"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
             ? (state.MainThinkingCycleLastStrategyId ?? "") : "",
         ["ЦиклМ_задача"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
-            ? (state.MainThinkingCycleTaskStatus ?? "") : ""
+            ? (state.MainThinkingCycleTaskStatus ?? "") : "",
+        ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0"
       };
     }
 
@@ -939,6 +943,8 @@ namespace ISIDA.Common
 
       void WriteBoth()
       {
+        bool dangerForWriter = logEntry.TryGetValue("Опасно", out var dDanger) && dDanger != null &&
+            string.Equals(dDanger.ToString()?.Trim(), "1", StringComparison.Ordinal);
         if (_memoryLogWriter != null)
         {
           _memoryLogWriter.WriteLog(
@@ -960,7 +966,8 @@ namespace ISIDA.Common
               thinkingThemeTooltip,
               mainThinkingCycleId,
               mainThinkingCycleTooltip,
-              mainThinkingCycleTaskStatus);
+              mainThinkingCycleTaskStatus,
+              dangerForWriter);
         }
 
         _displayLogWriter?.WriteLog(
@@ -982,7 +989,8 @@ namespace ISIDA.Common
             thinkingThemeTooltip,
             mainThinkingCycleId,
             mainThinkingCycleTooltip,
-            mainThinkingCycleTaskStatus);
+            mainThinkingCycleTaskStatus,
+            dangerForWriter);
       }
 
       WriteBoth();
@@ -1210,6 +1218,9 @@ namespace ISIDA.Common
           ? ComputeMainThinkingCycleTaskStatus(mc.AwaitingEvaluation, mc.PendingSolutionAutomatizmId)
           : null;
 
+      if (InformationEnvironmentSystem.IsInitialized)
+        state.InformationEnvironmentDanger = InformationEnvironmentSystem.Instance.CurrentInformationEnvironment.Danger;
+
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
         AppGlobalState.ResetAutomatizmInfo();
@@ -1297,7 +1308,8 @@ namespace ISIDA.Common
              _lastState.MainThinkingCycleProblemNodeId != current.MainThinkingCycleProblemNodeId ||
              _lastState.MainThinkingCycleThemeId != current.MainThinkingCycleThemeId ||
              _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId ||
-             _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus;
+             _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus ||
+             _lastState.InformationEnvironmentDanger != current.InformationEnvironmentDanger;
     }
 
     /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>

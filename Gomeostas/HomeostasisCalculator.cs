@@ -128,6 +128,27 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// true, если хотя бы один параметр с <see cref="ParameterData.IsVital"/> находится в зоне хуже нормы:
+    /// для дефицит-ориентированных (Speed &lt; 0) — значение ниже NormaWell; для избыток-ориентированных — выше NormaWell.
+    /// Используется как маркер опасности для информационной среды (InformationEnvironment.Danger).
+    /// </summary>
+    public bool AnyVitalParameterInHarmfulZone(IEnumerable<ParameterData> parameters)
+    {
+      if (parameters == null)
+        return false;
+
+      foreach (var param in parameters)
+      {
+        if (!param.IsVital)
+          continue;
+        if (IsBadZone(param.Value, param.NormaWell, param.Speed))
+          return true;
+      }
+
+      return false;
+    }
+
+    /// <summary>
     /// Определение внешних критических воздействий
     /// </summary>
     public bool HasExternalCriticalImpact(Dictionary<int, int> externalInfluences,
@@ -446,12 +467,19 @@ namespace ISIDA.Gomeostas
         lastWellStatePulse = null;
 
       AppGlobalState.CurrentOverallState = (AppGlobalState.HomeostasisState)overallState;
+
+      var weightById = parameters.ToDictionary(p => p.Id, p => p.Weight);
+      var badTargetsSorted = badParameterIds
+          .OrderByDescending(id => weightById.TryGetValue(id, out var w) ? w : 0f)
+          .ToList();
+
       var result = new AgentHomeostasisState
       {
         OverallState = overallState,
         BadSum = badSum,
         WellSum = wellSum,
-        ParametersState = parametersState
+        ParametersState = parametersState,
+        BadParameterTargetIds = badTargetsSorted
       };
 
       return result;

@@ -17,7 +17,8 @@ namespace ISIDA.Common
                  int? thinkingLevel = null, bool? thinkingLevelSuccess = null,
                  int? thinkingThemeTypeId = null, string thinkingThemeTooltip = null,
                  int? mainThinkingCycleId = null, string mainThinkingCycleTooltip = null,
-                 string mainThinkingCycleTaskStatus = null);
+                 string mainThinkingCycleTaskStatus = null,
+                 bool informationEnvironmentDanger = false);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

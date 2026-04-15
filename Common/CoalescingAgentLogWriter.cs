@@ -48,7 +48,8 @@ namespace ISIDA.Common
         int? thinkingLevel = null, bool? thinkingLevelSuccess = null,
         int? thinkingThemeTypeId = null, string thinkingThemeTooltip = null,
         int? mainThinkingCycleId = null, string mainThinkingCycleTooltip = null,
-        string mainThinkingCycleTaskStatus = null)
+        string mainThinkingCycleTaskStatus = null,
+        bool informationEnvironmentDanger = false)
     {
       lock (_lock)
       {
@@ -61,7 +62,7 @@ namespace ISIDA.Common
               orientationReflexType, geneticReflexId, conditionedReflexId, automatizmId,
               reflexChainInfo, automatizmChainInfo, thinkingLevel, thinkingLevelSuccess,
               thinkingThemeTypeId, thinkingThemeTooltip, mainThinkingCycleId,
-              mainThinkingCycleTooltip, mainThinkingCycleTaskStatus);
+              mainThinkingCycleTooltip, mainThinkingCycleTaskStatus, informationEnvironmentDanger);
           return;
         }
 
@@ -71,13 +72,14 @@ namespace ISIDA.Common
               triggerStimulusId, orientationReflexType, geneticReflexId, conditionedReflexId,
               automatizmId, reflexChainInfo, automatizmChainInfo, thinkingLevel,
               thinkingLevelSuccess, thinkingThemeTypeId, thinkingThemeTooltip,
-              mainThinkingCycleId, mainThinkingCycleTooltip, mainThinkingCycleTaskStatus);
+              mainThinkingCycleId, mainThinkingCycleTooltip, mainThinkingCycleTaskStatus,
+              informationEnvironmentDanger);
         else
           _pending.Merge(baseId, baseStyleId, triggerStimulusId, orientationReflexType,
               geneticReflexId, conditionedReflexId, automatizmId, reflexChainInfo,
               automatizmChainInfo, thinkingLevel, thinkingLevelSuccess, thinkingThemeTypeId,
               thinkingThemeTooltip, mainThinkingCycleId, mainThinkingCycleTooltip,
-              mainThinkingCycleTaskStatus);
+              mainThinkingCycleTaskStatus, informationEnvironmentDanger);
 
         _pending.WriteTo(_inner);
       }
@@ -123,6 +125,7 @@ namespace ISIDA.Common
       public int? MainThinkingCycleId;
       public string MainThinkingCycleTooltip;
       public string MainThinkingCycleTaskStatus;
+      public bool InformationEnvironmentDanger;
 
       public static PendingRow FromSnapshot(string className, string method, int pulse,
           int? baseId, int? baseStyleId, int? triggerStimulusId, int? orientationReflexType,
@@ -130,7 +133,7 @@ namespace ISIDA.Common
           string reflexChainInfo, string automatizmChainInfo, int? thinkingLevel,
           bool? thinkingLevelSuccess, int? thinkingThemeTypeId, string thinkingThemeTooltip,
           int? mainThinkingCycleId, string mainThinkingCycleTooltip,
-          string mainThinkingCycleTaskStatus)
+          string mainThinkingCycleTaskStatus, bool informationEnvironmentDanger)
       {
         return new PendingRow
         {
@@ -152,7 +155,8 @@ namespace ISIDA.Common
           ThinkingThemeTooltip = string.IsNullOrEmpty(thinkingThemeTooltip) ? null : thinkingThemeTooltip,
           MainThinkingCycleId = PositiveOrNull(mainThinkingCycleId),
           MainThinkingCycleTooltip = string.IsNullOrEmpty(mainThinkingCycleTooltip) ? null : mainThinkingCycleTooltip,
-          MainThinkingCycleTaskStatus = string.IsNullOrEmpty(mainThinkingCycleTaskStatus) ? null : mainThinkingCycleTaskStatus
+          MainThinkingCycleTaskStatus = string.IsNullOrEmpty(mainThinkingCycleTaskStatus) ? null : mainThinkingCycleTaskStatus,
+          InformationEnvironmentDanger = informationEnvironmentDanger
         };
       }
 
@@ -161,7 +165,7 @@ namespace ISIDA.Common
           int? automatizmId, string reflexChainInfo, string automatizmChainInfo,
           int? thinkingLevel, bool? thinkingLevelSuccess, int? thinkingThemeTypeId,
           string thinkingThemeTooltip, int? mainThinkingCycleId, string mainThinkingCycleTooltip,
-          string mainThinkingCycleTaskStatus)
+          string mainThinkingCycleTaskStatus, bool informationEnvironmentDanger)
       {
         if (baseId.HasValue)
           BaseId = baseId;
@@ -182,6 +186,7 @@ namespace ISIDA.Common
         MainThinkingCycleId = MergePositive(MainThinkingCycleId, mainThinkingCycleId);
         MainThinkingCycleTooltip = MergeTooltip(MainThinkingCycleTooltip, mainThinkingCycleTooltip);
         MainThinkingCycleTaskStatus = MergeTooltip(MainThinkingCycleTaskStatus, mainThinkingCycleTaskStatus);
+        InformationEnvironmentDanger = informationEnvironmentDanger;
       }
 
       public void WriteTo(ILogWriter inner)
@@ -190,7 +195,7 @@ namespace ISIDA.Common
             OrientationReflexType, GeneticReflexId, ConditionedReflexId, AutomatizmId,
             ReflexChainInfo, AutomatizmChainInfo, ThinkingLevel, ThinkingLevelSuccess,
             ThinkingThemeTypeId, ThinkingThemeTooltip, MainThinkingCycleId,
-            MainThinkingCycleTooltip, MainThinkingCycleTaskStatus);
+            MainThinkingCycleTooltip, MainThinkingCycleTaskStatus, InformationEnvironmentDanger);
       }
 
       private static int? ZeroToNull(int? v) => v == 0 ? null : v;

@@ -165,7 +165,7 @@ namespace ISIDA.Psychic
         _understandingTreeSystem);
     }
 
-    /// <summary>Параметры затухания и срока жизни главного цикла мышления (из конфигурации движка).</summary>
+    /// <summary>Параметры затухания и срока жизни главного цикла мышления.</summary>
     /// <param name="decayAgeDivisor">Устарело, передаётся для совместимости конфигов.</param>
     /// <param name="decayBase">Устарело, передаётся для совместимости конфигов.</param>
     /// <param name="mainMaxAgePulses">Максимальный возраст главного цикла в пульсах до принудительного снятия.</param>
