@@ -155,6 +155,8 @@ namespace ISIDA.Common
       public string MainThinkingCycleTaskStatus { get; set; }
       /// <summary>Признак опасной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.Danger"/>).</summary>
       public bool InformationEnvironmentDanger { get; set; }
+      /// <summary>Признак актуальной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.VeryActualSituation"/>).</summary>
+      public bool InformationEnvironmentVeryActual { get; set; }
     }
 
     /// <summary>
@@ -765,7 +767,8 @@ namespace ISIDA.Common
             ? (state.MainThinkingCycleLastStrategyId ?? "") : "",
         ["ЦиклМ_задача"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
             ? (state.MainThinkingCycleTaskStatus ?? "") : "",
-        ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0"
+        ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0",
+        ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0"
       };
     }
 
@@ -945,6 +948,8 @@ namespace ISIDA.Common
       {
         bool dangerForWriter = logEntry.TryGetValue("Опасно", out var dDanger) && dDanger != null &&
             string.Equals(dDanger.ToString()?.Trim(), "1", StringComparison.Ordinal);
+        bool veryActualForWriter = logEntry.TryGetValue("Актуально", out var dActual) && dActual != null &&
+            string.Equals(dActual.ToString()?.Trim(), "1", StringComparison.Ordinal);
         if (_memoryLogWriter != null)
         {
           _memoryLogWriter.WriteLog(
@@ -967,7 +972,8 @@ namespace ISIDA.Common
               mainThinkingCycleId,
               mainThinkingCycleTooltip,
               mainThinkingCycleTaskStatus,
-              dangerForWriter);
+              dangerForWriter,
+              veryActualForWriter);
         }
 
         _displayLogWriter?.WriteLog(
@@ -990,7 +996,8 @@ namespace ISIDA.Common
             mainThinkingCycleId,
             mainThinkingCycleTooltip,
             mainThinkingCycleTaskStatus,
-            dangerForWriter);
+            dangerForWriter,
+            veryActualForWriter);
       }
 
       WriteBoth();
@@ -1219,7 +1226,10 @@ namespace ISIDA.Common
           : null;
 
       if (InformationEnvironmentSystem.IsInitialized)
+      {
         state.InformationEnvironmentDanger = InformationEnvironmentSystem.Instance.CurrentInformationEnvironment.Danger;
+        state.InformationEnvironmentVeryActual = InformationEnvironmentSystem.Instance.CurrentInformationEnvironment.VeryActualSituation;
+      }
 
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
@@ -1309,7 +1319,8 @@ namespace ISIDA.Common
              _lastState.MainThinkingCycleThemeId != current.MainThinkingCycleThemeId ||
              _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId ||
              _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus ||
-             _lastState.InformationEnvironmentDanger != current.InformationEnvironmentDanger;
+             _lastState.InformationEnvironmentDanger != current.InformationEnvironmentDanger ||
+             _lastState.InformationEnvironmentVeryActual != current.InformationEnvironmentVeryActual;
     }
 
     /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>

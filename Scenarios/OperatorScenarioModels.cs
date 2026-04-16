@@ -279,7 +279,7 @@ namespace ISIDA.Scenarios
     public const int FormatVersion = 1;
 
     /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи; v5 — META без полей группы; v6 — код зрительного канала в строке шага).</summary>
-    public const int LinesFileFormatVersion = 7;
+    public const int LinesFileFormatVersion = 8;
 
     /// <summary>Метаданные сценария (id, название, дата).</summary>
     public ScenarioHeader Header { get; set; } = new ScenarioHeader();

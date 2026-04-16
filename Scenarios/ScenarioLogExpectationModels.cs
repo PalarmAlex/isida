@@ -12,6 +12,7 @@ namespace ISIDA.Scenarios
     private bool _skipTrigger;
     private bool _skipOrUm;
     private bool _skipDanger;
+    private bool _skipVeryActual;
     private bool _skipGeneticReflex;
     private bool _skipConditionReflex;
     private bool _skipAutomatizm;
@@ -59,6 +60,13 @@ namespace ISIDA.Scenarios
     {
       get => _skipDanger;
       set { if (_skipDanger == value) return; _skipDanger = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>Не сравнивать столбец «Актуально» (признак актуальной ситуации в информационной среде).</summary>
+    public bool SkipVeryActual
+    {
+      get => _skipVeryActual;
+      set { if (_skipVeryActual == value) return; _skipVeryActual = value; OnPropertyChanged(); }
     }
 
     /// <summary>Не сравнивать столбец «Б/у рефлекс» (безусловный рефлекс).</summary>
@@ -115,6 +123,7 @@ namespace ISIDA.Scenarios
         SkipTrigger = SkipTrigger,
         SkipOrUm = SkipOrUm,
         SkipDanger = SkipDanger,
+        SkipVeryActual = SkipVeryActual,
         SkipGeneticReflex = SkipGeneticReflex,
         SkipConditionReflex = SkipConditionReflex,
         SkipAutomatizm = SkipAutomatizm,
@@ -142,6 +151,7 @@ namespace ISIDA.Scenarios
     private string _triggerText = "-";
     private string _orUmText = "-";
     private string _dangerText = "-";
+    private string _veryActualText = "-";
     private string _geneticReflexText = "-";
     private string _conditionReflexText = "-";
     private string _automatizmText = "-";
@@ -205,6 +215,13 @@ namespace ISIDA.Scenarios
       set { if (_dangerText == value) return; _dangerText = value ?? ""; OnPropertyChanged(); }
     }
 
+    /// <summary>Ожидаемое значение столбца «Актуально» (0 или 1, в отчёте как у «Опасно»).</summary>
+    public string VeryActualText
+    {
+      get => _veryActualText;
+      set { if (_veryActualText == value) return; _veryActualText = value ?? ""; OnPropertyChanged(); }
+    }
+
     /// <summary>Ожидаемое значение столбца «Б/у рефлекс».</summary>
     public string GeneticReflexText
     {
@@ -261,6 +278,7 @@ namespace ISIDA.Scenarios
         TriggerText = TriggerText ?? "",
         OrUmText = OrUmText ?? "",
         DangerText = DangerText ?? "",
+        VeryActualText = VeryActualText ?? "",
         GeneticReflexText = GeneticReflexText ?? "",
         ConditionReflexText = ConditionReflexText ?? "",
         AutomatizmText = AutomatizmText ?? "",

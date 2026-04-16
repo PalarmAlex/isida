@@ -239,7 +239,7 @@ namespace ISIDA.Psychic
     /// Установить признак очень актуальной ситуации и список целей гомеостаза (параметры в состоянии Bad, по убыванию веса).
     /// Вызывается из <see cref="ISIDA.Gomeostas.GomeostasSystem.UpdateStateOnly"/> на каждом пульсе после <c>CalculateAgentState</c>.
     /// </summary>
-    /// <param name="hasCriticalChanges">Критические изменения жизненно важных параметров (как раньше для VeryActualSituation).</param>
+    /// <param name="hasCriticalChanges">Ухудшение жизненно важных параметров относительно конца предыдущего пульса (см. <see cref="ISIDA.Gomeostas.HomeostasisCalculator.HasCriticalParameterChanges"/>); не то же самое, что зона Danger.</param>
     /// <param name="homeostasisImprovementTargetIds">ID параметров-целей; null или пусто — очистить список в инфо-картине.</param>
     public void SetVeryActualSituation(bool hasCriticalChanges, IReadOnlyList<int> homeostasisImprovementTargetIds = null)
     {

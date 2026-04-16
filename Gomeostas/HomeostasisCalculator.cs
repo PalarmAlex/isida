@@ -16,7 +16,11 @@ namespace ISIDA.Gomeostas
   public sealed class HomeostasisCalculator : IDisposable
   {
     /// <summary>
-    /// Определение критичности изменений
+    /// Ухудшение жизненно важных параметров относительно снимка на конце предыдущего пульса
+    /// (см. <see cref="GomeostasSystem.UpdateStateOnly"/>): для дефицит-ориентированных
+    /// (Speed &lt; 0) — значение уменьшилось; для избыток-ориентированных — увеличилось.
+    /// Не требует «плохой» зоны относительно NormaWell (её даёт <see cref="AnyVitalParameterInHarmfulZone"/> / Danger).
+    /// Игнорирует изменения не больше ожидаемого одно-пульсового шага |Speed|/100 (шум и фоновая пульсация).
     /// </summary>
     public bool HasCriticalParameterChanges(IEnumerable<ParameterData> currentParameters,
                                           IEnumerable<ParameterData> previousParameters)
@@ -24,48 +28,39 @@ namespace ISIDA.Gomeostas
       try
       {
         if (previousParameters == null || !previousParameters.Any())
-          return true;
-
-        bool hasRealCriticalChanges = false;
+          return false;
+        if (currentParameters == null || !currentParameters.Any())
+          return false;
 
         foreach (var param in currentParameters)
         {
-          if (!param.IsVital) continue;
+          if (!param.IsVital)
+            continue;
 
           var prevParam = previousParameters.FirstOrDefault(p => p.Id == param.Id);
-          if (prevParam == null) continue;
+          if (prevParam == null)
+            continue;
+
+          float speed = param.Speed;
+          if (speed == 0f)
+            continue;
 
           float change = Math.Abs(param.Value - prevParam.Value);
-          float _speed = Math.Abs(param.Speed);
+          float naturalStep = Math.Abs(speed) / 100f;
+          float minSignificant = Math.Max(naturalStep, 1e-4f);
+          if (change <= minSignificant + 1e-5f)
+            continue;
 
-          bool isDeficitOriented = param.Speed < 0;
-          bool isExcessOriented = param.Speed > 0;
-
-          bool isCriticalValue = false;
-          bool isNaturalDecay = change <= _speed;
-
-          if (isDeficitOriented)
-          {
-            float deviation = param.NormaWell - param.Value;
-            isCriticalValue = deviation > 0;
-          }
-          else if (isExcessOriented)
-          {
-            float deviation = param.Value - param.NormaWell;
-            isCriticalValue = deviation > 0;
-          }
-
-          if (isCriticalValue && !isNaturalDecay)
-          {
-            hasRealCriticalChanges = true;
-            break;
-          }
+          bool worsening = speed < 0 ? param.Value < prevParam.Value : param.Value > prevParam.Value;
+          if (worsening)
+            return true;
         }
-        return hasRealCriticalChanges;
+
+        return false;
       }
       catch
       {
-        return true;
+        return false;
       }
     }
 

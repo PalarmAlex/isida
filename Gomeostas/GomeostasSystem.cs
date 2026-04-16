@@ -195,8 +195,7 @@ namespace ISIDA.Gomeostas
         if (_agentState.IsFirstPulse)
           _agentState.IsFirstPulse = false;
 
-        // Сохраняем предыдущее состояние ДО обновления
-        SaveParametersState();
+        // Снимок конца предыдущего пульса в _previousParametersState; сравнение до шага пульсации в этом пульсе.
         HasCriticalChanges = _calculator.HasCriticalParameterChanges(_agentState.Parameters, _previousParametersState);
 
         // ритмичное убывание/нарастание параметров в зависимости от типа: дефицит/избыток ориентированные
@@ -244,6 +243,9 @@ namespace ISIDA.Gomeostas
         _agentState.Lifetime++;
         AppGlobalState.Lifetime++;
         _informationEnvironmentSystem.SetLifeTime(_agentState.Lifetime);
+
+        // Снимок после пульсации — для сравнения в начале следующего пульса (HasCriticalParameterChanges).
+        SaveParametersState();
       }
       catch (Exception ex)
       {
