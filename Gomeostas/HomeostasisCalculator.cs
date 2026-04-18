@@ -65,6 +65,84 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// Оценка ответа оператора (−1 / 0 / +1) по изменению жизненных параметров между снимком «до» и текущими значениями,
+    /// с запасным вариантом по интегральному состоянию, если дельты незначимы.
+    /// </summary>
+    public int ComputeOperatorAutomatizmAssessment(
+        IReadOnlyDictionary<int, float> valuesBefore,
+        IList<ParameterData> currentParameters,
+        int focusParameterId,
+        AppGlobalState.HomeostasisState overallBefore,
+        AppGlobalState.HomeostasisState overallAfter)
+    {
+      if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
+        return AssessmentFromOverallStates(overallBefore, overallAfter);
+
+      int? focusSigned = null;
+      if (focusParameterId > 0 && valuesBefore.TryGetValue(focusParameterId, out float beforeFocus))
+      {
+        var curFocus = currentParameters.FirstOrDefault(p => p.Id == focusParameterId);
+        if (curFocus != null)
+          focusSigned = TrySignedParameterDelta(beforeFocus, curFocus);
+      }
+
+      int vitalScore = 0;
+      foreach (var p in currentParameters)
+      {
+        if (!p.IsVital)
+          continue;
+        if (!valuesBefore.TryGetValue(p.Id, out float bpv))
+          continue;
+        var s = TrySignedParameterDelta(bpv, p);
+        if (s == 1)
+          vitalScore++;
+        else if (s == -1)
+          vitalScore--;
+      }
+
+      if (focusSigned.HasValue && focusSigned.Value != 0)
+        return focusSigned.Value;
+      if (vitalScore != 0)
+        return vitalScore > 0 ? 1 : -1;
+
+      return AssessmentFromOverallStates(overallBefore, overallAfter);
+    }
+
+    private static int AssessmentFromOverallStates(AppGlobalState.HomeostasisState before, AppGlobalState.HomeostasisState after)
+    {
+      if (after > before)
+        return 1;
+      if (after < before)
+        return -1;
+      return 0;
+    }
+
+    /// <summary>
+    /// Знак изменения параметра: +1 к «лучше» (к норме), −1 к «хуже», 0 — в пределах шума (как в <see cref="HasCriticalParameterChanges"/>).
+    /// </summary>
+    private static int? TrySignedParameterDelta(float valueBefore, ParameterData param)
+    {
+      float speed = param.Speed;
+      if (Math.Abs(speed) < 1e-6f)
+        return null;
+
+      float after = param.Value;
+      float change = after - valueBefore;
+      float naturalStep = Math.Abs(speed) / 100f;
+      float minSignificant = Math.Max(naturalStep, 1e-4f);
+      if (Math.Abs(change) <= minSignificant + 1e-5f)
+        return 0;
+
+      bool worsening = speed < 0 ? after < valueBefore : after > valueBefore;
+      bool improving = speed < 0 ? after > valueBefore : after < valueBefore;
+      if (worsening)
+        return -1;
+      if (improving)
+        return 1;
+      return 0;
+    }
+
+    /// <summary>
     /// Опреляет критичность параметра
     /// </summary>
     public bool IsExternalImpactCritical(Dictionary<int, int> externalInfluences,

@@ -557,8 +557,8 @@ namespace ISIDA.Psychic.Automatism
       _lock.EnterWriteLock();
       try
       {
-        if (AppGlobalState.EvolutionStage < 2)
-          return true;
+        // Не выходить при стадии < 2: при откате на 1–0 автоматизмы не исполняются, но записи могли остаться
+        // (EvolutionStageService.ClearStageDataOnlyForScenarioPreRun и шаг вниз по стадиям должны реально очищать ОЗУ/файлы).
 
         var deletedAutomatizmIds = _automatizmsById.Keys.ToList();
 

@@ -223,7 +223,12 @@ namespace ISIDA.Gomeostas
         _agentState.LastWellStatePulse = lastWellStatePulse;
         _currentOverallState = currentAgentState.OverallState;
 
-        _informationEnvironmentSystem.SetVeryActualSituation(HasCriticalChanges, currentAgentState.BadParameterTargetIds);
+        bool veryActualSituation = currentAgentState.ParametersState != null
+            && currentAgentState.ParametersState.Any(ps =>
+                ps.State == ParameterState.Bad
+                && _agentState.Parameters.FirstOrDefault(p => p.Id == ps.ParameterId)?.IsVital == true);
+
+        _informationEnvironmentSystem.SetVeryActualSituation(veryActualSituation, currentAgentState.BadParameterTargetIds);
 
         bool danger = _calculator.AnyVitalParameterInHarmfulZone(_agentState.Parameters);
         int mood = HomeostasisMoodPerception.EstimateMood(

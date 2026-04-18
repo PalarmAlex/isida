@@ -583,7 +583,7 @@ namespace ISIDA.Psychic
           if (_informationEnvironmentSystem != null)
             _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
-          // Стадия 3–4+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId).
+          // Стадия 3–4+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId). Полезность по оценке — только со стадии 4.
           TryScheduleDeferredOperatorEvaluationOnStimulus(
               activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
           deferredOperatorEvalScheduledThisStimulus = _deferredOperatorEvaluationAutomatizmId > 0;
@@ -1505,7 +1505,7 @@ namespace ISIDA.Psychic
       if (!AppGlobalState.IsOperatorResponseWithinWaitingWindow())
       {
         if (AppGlobalState.EvolutionStage == 3)
-        ResetAutomatizmWaitingState();
+          ResetAutomatizmWaitingState();
         return;
       }
 
@@ -1538,25 +1538,81 @@ namespace ISIDA.Psychic
       if (automatizmIdToEvaluate <= 0)
         return 0;
 
+      if (!AppGlobalState.WaitingForOperatorEvaluation)
+        return 0;
+
       if (lastRunPulseForResponseTime <= 0)
         lastRunPulseForResponseTime = AppGlobalState.LastRunAutomatizmPulsCount;
 
-      // Получаем состояние до автоматизма
+      // Стадия 3: только зеркало без изменения полезности по ответу оператора; оценка — со стадии 4.
+      if (AppGlobalState.EvolutionStage < 4)
+      {
+        int mirrorAutomatizmIdEarly = 0;
+        if (AppGlobalState.EvolutionStage == 3)
+        {
+          if (_skipStage3MirrorLearningOnNextEval)
+          {
+            _skipStage3MirrorLearningOnNextEval = false;
+            _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
+          }
+          else
+          {
+            int pendingOperatorPhraseNodeId = _mirrorAutomatizmService.GetPendingResponseTreeNodeId();
+            mirrorAutomatizmIdEarly = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+            if (mirrorAutomatizmIdEarly > 0 &&
+                pendingOperatorPhraseNodeId > 0 &&
+                _automatizmSystem != null)
+            {
+              var staffOnOperatorPhrase =
+                  _automatizmSystem.GetBelief2AutomatizmFromTreeId(pendingOperatorPhraseNodeId);
+              if (staffOnOperatorPhrase != null &&
+                  staffOnOperatorPhrase.Usefulness >= 0 &&
+                  staffOnOperatorPhrase.ID != mirrorAutomatizmIdEarly)
+              {
+                mirrorAutomatizmIdEarly = staffOnOperatorPhrase.ID;
+              }
+            }
+          }
+        }
+
+        Logger.Info(
+            $"Стадия {AppGlobalState.EvolutionStage}: ответ оператора без оценки полезности для автоматизма ID={automatizmIdToEvaluate}");
+        return mirrorAutomatizmIdEarly;
+      }
+
+      // Состояние до ответа оператора (интегральное — для запасной ветки и смешивания)
       var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
 
       // Текущее состояние после стимула оператора (пересчитано в UpdateStateOnly в начале этого пульса)
       var stateAfter = AppGlobalState.CurrentOverallState;
 
-      // Вычисляем оценку
-      int assessment = 0;
-      if (stateAfter > stateBefore)
-        assessment = 1; // Улучшение
-      else if (stateAfter < stateBefore)
-        assessment = -1; // Ухудшение
+      int assessment;
+      if (GomeostasSystem.IsInitialized &&
+          AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId) &&
+          snapshotBefore != null)
+      {
+        var gh = GomeostasSystem.Instance;
+        var currentParams = gh.GetAllParameters();
+        assessment = gh.Calculator.ComputeOperatorAutomatizmAssessment(
+            snapshotBefore,
+            currentParams,
+            focusParamId,
+            stateBefore,
+            stateAfter);
+      }
+      else
+      {
+        assessment = 0;
+        if (stateAfter > stateBefore)
+          assessment = 1;
+        else if (stateAfter < stateBefore)
+          assessment = -1;
+      }
 
       int responseTime = PulseCount - lastRunPulseForResponseTime;
 
       int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
+      assessment = MergeOperatorAssessmentWithPultInfluence(assessment, operatorResponseImageId);
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
           true, // распознано оператором
@@ -1568,38 +1624,32 @@ namespace ISIDA.Psychic
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)
         _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 
-      int mirrorAutomatizmId = 0;
-      if (AppGlobalState.EvolutionStage == 3)
-      {
-        if (_skipStage3MirrorLearningOnNextEval)
-        {
-          _skipStage3MirrorLearningOnNextEval = false;
-          _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
-        }
-        else
-        {
-          int pendingOperatorPhraseNodeId = _mirrorAutomatizmService.GetPendingResponseTreeNodeId();
-          mirrorAutomatizmId = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
-          // Учитель зеркала воспроизводит фразу оператора (S_n→текст S_n) — звучит как эхо. Если на узле текущей фразы
-          // оператора уже выучен штатный Belief=2 (например «как дела»→«все ОК»), исполняем его вместо учителя.
-          if (mirrorAutomatizmId > 0 &&
-              pendingOperatorPhraseNodeId > 0 &&
-              _automatizmSystem != null)
-          {
-            var staffOnOperatorPhrase =
-                _automatizmSystem.GetBelief2AutomatizmFromTreeId(pendingOperatorPhraseNodeId);
-            if (staffOnOperatorPhrase != null &&
-                staffOnOperatorPhrase.Usefulness >= 0 &&
-                staffOnOperatorPhrase.ID != mirrorAutomatizmId)
-            {
-              mirrorAutomatizmId = staffOnOperatorPhrase.ID;
-            }
-          }
-        }
-      }
-
       Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
-      return mirrorAutomatizmId;
+      return 0;
+    }
+
+    /// <summary>
+    /// При конфликте дельты параметров и явного знака воздействий с пульта приоритет у намерения оператора (сумма влияний по параметрам).
+    /// </summary>
+    private static int MergeOperatorAssessmentWithPultInfluence(int assessment, int operatorResponseActionsImageId)
+    {
+      if (operatorResponseActionsImageId <= 0 || !InfluenceActionSystem.IsInitialized || !InfluenceActionsImagesSystem.IsInitialized)
+        return assessment;
+
+      var ids = InfluenceActionsImagesSystem.Instance.GetInfluenceActionIds(operatorResponseActionsImageId);
+      if (ids == null || ids.Count == 0)
+        return assessment;
+
+      int sum = InfluenceActionSystem.Instance.GetSignedInfluenceSumForActions(ids);
+      if (sum == 0)
+        return assessment;
+
+      int pSign = sum > 0 ? 1 : -1;
+      if (assessment == 0)
+        return pSign;
+      if ((assessment > 0 && pSign < 0) || (assessment < 0 && pSign > 0))
+        return pSign;
+      return assessment;
     }
 
     /// <summary>

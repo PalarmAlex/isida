@@ -89,6 +89,15 @@ public static class AppGlobalState
   private static int _noOperatorStimulusSilencePulses = 30;
   private static HomeostasisState _stateBeforeOperatorImpact = HomeostasisState.Normal;
 
+  /// <summary>Снимок значений параметров гомеостаза на момент старта отслеживания автоматизма (до ответа оператора).</summary>
+  private static Dictionary<int, float> _operatorEvalParameterValuesBefore;
+
+  /// <summary>ID параметра, выбранного как фокус оценки (доминант на момент старта отслеживания).</summary>
+  private static int _operatorEvalFocusParameterId;
+
+  /// <summary>Есть ли валидный снимок для оценки по дельте параметров.</summary>
+  private static bool _operatorEvalParameterSnapshotValid;
+
   /// <summary>
   /// До применения конфига движком период ожидания в пульсах может быть 0 — тогда окно ответа считалось закрытым,
   /// TryScheduleDeferredOperatorEvaluationOnStimulus сбрасывал зеркало и сдвиги не создавались. Дефолт 30 пульсов, как у IsidaEngine.
@@ -790,6 +799,43 @@ public static class AppGlobalState
   {
     get => _stateBeforeOperatorImpact;
     set => _stateBeforeOperatorImpact = value;
+  }
+
+  /// <summary>
+  /// Сохраняет снимок параметров для последующей оценки ответа оператора (вызывается при старте отслеживания автоматизма).
+  /// </summary>
+  public static void SetOperatorEvaluationParameterSnapshot(IReadOnlyDictionary<int, float> valuesByParameterId, int focusParameterId)
+  {
+    if (valuesByParameterId == null || valuesByParameterId.Count == 0)
+    {
+      _operatorEvalParameterSnapshotValid = false;
+      _operatorEvalParameterValuesBefore = null;
+      _operatorEvalFocusParameterId = 0;
+      return;
+    }
+
+    _operatorEvalParameterValuesBefore = new Dictionary<int, float>(valuesByParameterId.Count);
+    foreach (var kv in valuesByParameterId)
+      _operatorEvalParameterValuesBefore[kv.Key] = kv.Value;
+    _operatorEvalFocusParameterId = focusParameterId;
+    _operatorEvalParameterSnapshotValid = true;
+  }
+
+  /// <summary>
+  /// Снимок значений параметров «до ответа оператора» и фокус оценки; <paramref name="focusParameterId"/> — 0 если не задан.
+  /// </summary>
+  public static bool TryGetOperatorEvaluationParameterSnapshot(out IReadOnlyDictionary<int, float> valuesByParameterId, out int focusParameterId)
+  {
+    if (_operatorEvalParameterSnapshotValid && _operatorEvalParameterValuesBefore != null && _operatorEvalParameterValuesBefore.Count > 0)
+    {
+      valuesByParameterId = _operatorEvalParameterValuesBefore;
+      focusParameterId = _operatorEvalFocusParameterId;
+      return true;
+    }
+
+    valuesByParameterId = null;
+    focusParameterId = 0;
+    return false;
   }
 
   /// <summary>

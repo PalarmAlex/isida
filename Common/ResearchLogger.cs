@@ -1295,6 +1295,9 @@ namespace ISIDA.Common
     /// запись и подсказку при любом другом изменении или при сбросе буфера.
     /// Колонка «Тема» в файле соответствует <see cref="SystemState.ThinkingThemeTypeId"/> — оно участвует в сравнении.
     /// Подряд идущие строки с одинаковым набором колонок отсекаются в <see cref="WriteBufferedLogEntry"/> по отпечатку.
+    /// <see cref="SystemState.HasCriticalChanges"/> в сравнении не участвует: в UI (например, таблица LiveLogsView)
+    /// это поле не выводится, а колонка «Актуально» идёт от <see cref="SystemState.InformationEnvironmentVeryActual"/>;
+    /// учёт дельты в фильтре дублей давал бы новые строки при невидимом в таблице отличии.
     /// </remarks>
     private bool IsDuplicateState(SystemState current)
     {
@@ -1307,7 +1310,6 @@ namespace ISIDA.Common
                              current.CurrentGeneticReflexID, current.CurrentConditionReflexID) ||
 
              _lastState.CurrentAutomatizmID != current.CurrentAutomatizmID ||
-             _lastState.HasCriticalChanges != current.HasCriticalChanges ||
              _lastState.OrientationReflexType != current.OrientationReflexType ||
              _lastState.OrientationReflexPulse != current.OrientationReflexPulse ||
              _lastState.ThinkingLevel != current.ThinkingLevel ||

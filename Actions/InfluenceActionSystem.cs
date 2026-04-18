@@ -638,6 +638,28 @@ namespace ISIDA.Actions
       return s;
     }
 
+    /// <summary>Сумма со знаком влияний по всем параметрам для одного действия с пульта (оценка намерения оператора).</summary>
+    public int GetSignedInfluenceSumForAction(int actionId)
+    {
+      if (!_influenceActions.TryGetValue(actionId, out var a) || a?.Influences == null || a.Influences.Count == 0)
+        return 0;
+      int s = 0;
+      foreach (var v in a.Influences.Values)
+        s += v;
+      return s;
+    }
+
+    /// <summary>Сумма со знаком по списку действий (несколько кнопок в одном образе).</summary>
+    public int GetSignedInfluenceSumForActions(IEnumerable<int> actionIds)
+    {
+      if (actionIds == null)
+        return 0;
+      int s = 0;
+      foreach (var id in actionIds)
+        s += GetSignedInfluenceSumForAction(id);
+      return s;
+    }
+
     #endregion
 
     #region Валидация и коррекция антагонистов

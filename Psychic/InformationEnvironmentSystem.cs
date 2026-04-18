@@ -239,12 +239,12 @@ namespace ISIDA.Psychic
     /// Установить признак очень актуальной ситуации и список целей гомеостаза (параметры в состоянии Bad, по убыванию веса).
     /// Вызывается из <see cref="ISIDA.Gomeostas.GomeostasSystem.UpdateStateOnly"/> на каждом пульсе после <c>CalculateAgentState</c>.
     /// </summary>
-    /// <param name="hasCriticalChanges">Ухудшение жизненно важных параметров относительно конца предыдущего пульса (см. <see cref="ISIDA.Gomeostas.HomeostasisCalculator.HasCriticalParameterChanges"/>); не то же самое, что зона Danger.</param>
+    /// <param name="veryActualSituation">True, если среди параметров есть хотя бы один с <c>IsVital == true</c> в состоянии <c>ParameterState.Bad</c> (итог <see cref="ISIDA.Gomeostas.HomeostasisCalculator.CalculateAgentState"/>); не то же самое, что зона Danger.</param>
     /// <param name="homeostasisImprovementTargetIds">ID параметров-целей; null или пусто — очистить список в инфо-картине.</param>
-    public void SetVeryActualSituation(bool hasCriticalChanges, IReadOnlyList<int> homeostasisImprovementTargetIds = null)
+    public void SetVeryActualSituation(bool veryActualSituation, IReadOnlyList<int> homeostasisImprovementTargetIds = null)
     {
-      VeryActualSituation = hasCriticalChanges;
-      CurrentInformationEnvironment.VeryActualSituation = hasCriticalChanges;
+      VeryActualSituation = veryActualSituation;
+      CurrentInformationEnvironment.VeryActualSituation = veryActualSituation;
 
       var targets = homeostasisImprovementTargetIds == null || homeostasisImprovementTargetIds.Count == 0
           ? new List<int>()
@@ -335,7 +335,7 @@ namespace ISIDA.Psychic
     {
       // PsyMood — субъективное настроение (−10…+10), обновляется на пульсе в SetDangerAndIntegratedMood; не смешивать с ID эмоции.
       // На пульсе в GomeostasSystem.UpdateStateOnly() после CalculateAgentState:
-      // — SetVeryActualSituation(HasCriticalChanges, BadParameterTargetIds) — VeryActualSituation, CurTargetArrID;
+      // — SetVeryActualSituation(veryActualSituation, BadParameterTargetIds) — VeryActualSituation, CurTargetArrID;
       // — SetDangerAndIntegratedMood(danger, mood) — Danger, Mood, PsyMood (инерция к mood);
       //   danger: HomeostasisCalculator.AnyVitalParameterInHarmfulZone; mood: HomeostasisMoodPerception.EstimateMood.
       // Здесь поля не пересчитываются — новый кадр наследует их через SaveOldIE(); порядок: UpdateStateOnly, затем психика.

@@ -392,6 +392,43 @@ namespace ISIDA.Psychic
     #region Основные методы
 
     /// <summary>
+    /// Снимок значений параметров и фокус (доминирующий параметр) для оценки ответа оператора по дельте, а не только по интегральному состоянию.
+    /// </summary>
+    private static void CaptureOperatorEvaluationParameterSnapshot()
+    {
+      try
+      {
+        if (!GomeostasSystem.IsInitialized)
+        {
+          AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
+          return;
+        }
+
+        var go = GomeostasSystem.Instance;
+        var parameters = go.GetAllParameters();
+        if (parameters == null || parameters.Count == 0)
+        {
+          AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
+          return;
+        }
+
+        var dict = new Dictionary<int, float>(parameters.Count);
+        foreach (var p in parameters)
+          dict[p.Id] = p.Value;
+
+        var dominant = go.Calculator.FindDominantParameter(parameters, go.DynamicTime, go.DifSensorPar);
+        int focusId = dominant.dominantParam?.Id ?? 0;
+
+        AppGlobalState.SetOperatorEvaluationParameterSnapshot(dict, focusId);
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
+      }
+    }
+
+    /// <summary>
     /// Начать отслеживание выполнения автоматизма
     /// </summary>
     public AutomatizmResult StartTracking(int automatizmId, int branchId, int actionsImageId)
@@ -448,6 +485,10 @@ namespace ISIDA.Psychic
 
         _lastAutomatizmResults[automatizmId] = trackingResult;
         AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
+        if (AppGlobalState.EvolutionStage >= 4)
+          CaptureOperatorEvaluationParameterSnapshot();
+        else
+          AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
         AppGlobalState.UpdateAutomatizmInfo(automatizmId, GlobalTimer.GlobalPulsCount);
 
         Logger.Info($"Начато отслеживание автоматизма ID={automatizmId}, ветка={branchId}");
