@@ -216,8 +216,6 @@ namespace ISIDA.Scenarios
       }
     }
 
-    /// <summary>Дата или подпись версии (произвольная строка).</summary>
-    public string DateText { get; set; } = "";
     /// <summary>Начальные значения параметров гомеостаза: «id=value» через «;» (см. <see cref="ScenarioHomeostasisValuesFormat"/>).</summary>
     public string InitialHomeostasisValues { get; set; } = "";
 
@@ -259,7 +257,6 @@ namespace ISIDA.Scenarios
         Id = Id,
         Title = Title,
         Description = Description,
-        DateText = DateText,
         InitialHomeostasisValues = InitialHomeostasisValues ?? "",
         PreRunTargetStage = PreRunTargetStage,
         PreRunClearAgentData = PreRunClearAgentData,
@@ -275,13 +272,13 @@ namespace ISIDA.Scenarios
   /// <summary>Полный сценарий: шапка и упорядоченные строки шагов.</summary>
   public sealed class ScenarioDocument
   {
-    /// <summary>Версия заголовка реестра сценариев.</summary>
+    /// <summary>Версия заголовка реестра сценариев (число в строке <c># SCENARIO_REGISTRY_FORMAT|</c>).</summary>
     public const int FormatVersion = 1;
 
-    /// <summary>Версия файла строк сценария (шаг + пульс + …; v4 — ожидаемые логи; v5 — META без полей группы; v6 — код зрительного канала в строке шага).</summary>
-    public const int LinesFileFormatVersion = 8;
+    /// <summary>Версия файла строк сценария (число в строке <c># SCENARIO_LINES_FORMAT|</c>).</summary>
+    public const int LinesFileFormatVersion = 1;
 
-    /// <summary>Метаданные сценария (id, название, дата).</summary>
+    /// <summary>Метаданные сценария (идентификатор в реестре, название, параметры предзапуска и пр.).</summary>
     public ScenarioHeader Header { get; set; } = new ScenarioHeader();
     /// <summary>Строки шагов в порядке выполнения.</summary>
     public List<ScenarioLineRow> Lines { get; set; } = new List<ScenarioLineRow>();

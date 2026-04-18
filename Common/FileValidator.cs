@@ -181,6 +181,16 @@ namespace ISIDA.Common
       public const string EpisodicTreeCount = "# Count: число подтверждений применения";
       public const string EpisodicTreeStimulsEffect = "# StimulsEffect: значимость стимула";
       public const string EpisodicHistoryFormat = "# Формат записи: ID,LifeTime|ID,LifeTime|...";
+
+      // Сценарии оператора
+      public const string ScenarioRegistryColumns =
+          "# Реестр: SCENARIO_REGISTRY_FORMAT|версия; строки данных — Id|Title|Description|PreRunTargetStage";
+      public const string ScenarioLinesMeta =
+          "# SCENARIO_META: Title|Description|InitialHomeostasisValues|PreRunTargetStage|Clear|Obs|Auth|Norm|PulseStep|RunPulseCoeff";
+      public const string ScenarioGroupRegistryColumns =
+          "# Реестр групп: SCENARIO_GROUP_REGISTRY_FORMAT|версия; строки — Id|Title|Description";
+      public const string ScenarioGroupMeta =
+          "# SCENARIO_GROUP_META: Title|Description|RunPulseTimingCoefficient|ReportFormat";
     }
 
     private static string _logFilePath;
