@@ -282,6 +282,27 @@ namespace ISIDA.Psychic.Thinking
     }
 
     /// <summary>
+    /// Удаляет все циклы и связанное состояние диспетчера. Вызывается на стадиях &lt; 4,
+    /// где циклы мышления не используются (иначе остаток после стадии 4 продолжал бы шагать по пульсу).
+    /// </summary>
+    public void ClearAllCycles()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_cycles.Count == 0 && _interruptMemory.Count == 0 && _lastCondensedLogDigestByCycleId.Count == 0)
+          return;
+        _cycles.Clear();
+        _interruptMemory.Clear();
+        _lastCondensedLogDigestByCycleId.Clear();
+        _nextId = 1;
+        _nextOrder = 1;
+        _lastStimulusPulse = 0;
+      }
+      finally { _lock.ExitWriteLock(); }
+    }
+
+    /// <summary>
     /// Создать/сбросить главный цикл под новый стимул (вызывается при провале 2 уровня).
     /// </summary>
     public ThinkingCycleInfo OnUnresolvedProblem(ThinkingCycleContext ctx)

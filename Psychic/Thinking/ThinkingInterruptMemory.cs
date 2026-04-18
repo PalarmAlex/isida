@@ -44,6 +44,11 @@ namespace ISIDA.Psychic.Thinking
       _stack.RemoveAt(idx);
       return img;
     }
+
+    internal void Clear()
+    {
+      _stack.Clear();
+    }
   }
 }
 

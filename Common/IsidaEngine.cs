@@ -961,7 +961,8 @@ namespace ISIDA.Common
             Psychic.Understanding.PurposeImageSystem.Instance,
             context.SituationImageSystem,
             Psychic.Understanding.ThemeImageSystem.Instance,
-            context.UnderstandingTreeSystem);
+            context.UnderstandingTreeSystem,
+            context.PsychicSystem);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
 

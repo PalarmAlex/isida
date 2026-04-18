@@ -30,6 +30,7 @@ namespace ISIDA.Common
     private readonly SituationImageSystem _situationImageSystem;
     private readonly ThemeImageSystem _themeImageSystem;
     private readonly UnderstandingTreeSystem _understandingTreeSystem;
+    private readonly PsychicSystem _psychicSystem;
 
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -52,6 +53,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Инициализирует глобальный экземпляр системы (основные зависимости обязательны, системы Understanding — опционально, передаются из движка для избежания перекрёстных ссылок через Instance).
     /// Справочник типов ситуаций в сервис не передаётся: при смене стадии он не очищается.
+    /// Необязательный <c>psychicSystem</c>: сброс циклов мышления при очистке данных стадии 4 (может быть null в тестах).
     /// </summary>
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
@@ -62,7 +64,8 @@ namespace ISIDA.Common
         PurposeImageSystem purposeImageSystem = null,
         SituationImageSystem situationImageSystem = null,
         ThemeImageSystem themeImageSystem = null,
-        UnderstandingTreeSystem understandingTreeSystem = null)
+        UnderstandingTreeSystem understandingTreeSystem = null,
+        PsychicSystem psychicSystem = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("EvolutionStageService уже инициализирован.");
@@ -76,7 +79,8 @@ namespace ISIDA.Common
         purposeImageSystem,
         situationImageSystem,
         themeImageSystem,
-        understandingTreeSystem);
+        understandingTreeSystem,
+        psychicSystem);
     }
 
     private EvolutionStageService(
@@ -88,7 +92,8 @@ namespace ISIDA.Common
         PurposeImageSystem purposeImageSystem,
         SituationImageSystem situationImageSystem,
         ThemeImageSystem themeImageSystem,
-        UnderstandingTreeSystem understandingTreeSystem)
+        UnderstandingTreeSystem understandingTreeSystem,
+        PsychicSystem psychicSystem)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
@@ -99,6 +104,7 @@ namespace ISIDA.Common
       _situationImageSystem = situationImageSystem;
       _themeImageSystem = themeImageSystem;
       _understandingTreeSystem = understandingTreeSystem;
+      _psychicSystem = psychicSystem;
     }
 
     #endregion
@@ -281,6 +287,8 @@ namespace ISIDA.Common
           break;
 
         case 4:
+          // Сначала ОЗУ циклов мышления, затем файлы/память стадии 4 (согласовано с PsychicSystem на пульсе при стадии ниже 4).
+          _psychicSystem?.ClearThinkingCyclesWhenStageFourDataCleared();
           ClearPsychicMemoryAndUnderstanding();
           break;
 

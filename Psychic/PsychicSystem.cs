@@ -176,6 +176,16 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
+    /// Сбрасывает диспетчер циклов мышления и снимок «Цикл М» в <see cref="AppGlobalState"/> при очистке данных стадии 4
+    /// (переход на нижестоящую стадию в <see cref="ISIDA.Common.EvolutionStageService"/>). Подстраховка вне очередного пульса.
+    /// </summary>
+    public void ClearThinkingCyclesWhenStageFourDataCleared()
+    {
+      _thinkingCyclesSystem?.ClearAllCycles();
+      PublishMainThinkingCycleToAppGlobalState();
+    }
+
+    /// <summary>
     /// Инициализирует базовое дерево автоматизмов
     /// </summary>
     private void InitializeBasicAutomatizmTree()
@@ -264,6 +274,14 @@ namespace ISIDA.Psychic
       _lock.EnterWriteLock();
       try
       {
+        // Циклы мышления — только со стадии 4. Сбрасываем до раннего выхода (<2) и для сна: иначе на 0–1
+        // очистка не выполнялась, а остаток после стадии 4 «жил» в памяти до первого пульса на стадии ≥2.
+        if (AppGlobalState.EvolutionStage < 4)
+        {
+          _thinkingCyclesSystem?.ClearAllCycles();
+          PublishMainThinkingCycleToAppGlobalState();
+        }
+
         if (AppGlobalState.EvolutionStage < 2) // Недостаточная стадия развития
           return;
 
@@ -339,8 +357,8 @@ namespace ISIDA.Psychic
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
 
-          // Продолжение циклов мышления по пульсу
-          if (_thinkingCyclesSystem != null)
+          // Диспетчеризация циклов — только стадия 4+ (сброс для <4 уже в начале метода).
+          if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
           {
             thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(
               pulseCount,
@@ -521,8 +539,9 @@ namespace ISIDA.Psychic
         actionsImageId = CreateActionsImage(actionIdList, phraseIdListForStimulus ?? phraseIdList, toneId, moodId, visualColorId);
         int stimulusActionsImageIdForContext = actionsImageId;
 
-        // Зафиксировать наличие внешнего стимула для пассивного режима (dreaming) и для события «долго без оператора».
-        _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
+        // Зафиксировать стимул для пассивного режима (dreaming) в циклах — только со стадии 4 (как и сами циклы).
+        if (AppGlobalState.EvolutionStage >= 4)
+          _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
         AppGlobalState.UpdateLastPultStimulusPulse(PulseCount);
 
         Automatizm atmz = null;
@@ -701,8 +720,9 @@ namespace ISIDA.Psychic
               return ExecuteAutomatizm(toExecute);
             }
 
-            // 3-й уровень: циклы мышления (стадия 4+). Быстрый старт после провала уровня 2.
+            // 3-й уровень: циклы мышления (только стадия 4+). Быстрый старт после провала уровня 2.
             if (!problemSolved &&
+                AppGlobalState.EvolutionStage >= 4 &&
                 _thinkingCyclesSystem != null &&
                 _informationEnvironmentSystem != null &&
                 _informationEnvironmentSystem.CurrentInformationEnvironment.UnresolvedAtThinkingLevel2)
