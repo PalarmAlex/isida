@@ -10,9 +10,6 @@ namespace ISIDA.Psychic.Memory.Episodic
   {
     private readonly EpisodicMemorySystem _episodicMemory;
 
-    /// <summary>Специальный эффект для учительских правил (100)</summary>
-    public const int TeacherRuleEffect = 100;
-
     /// <summary>Создать сервис с привязкой к системе эпизодической памяти</summary>
     /// <param name="episodicMemory">Экземпляр EpisodicMemorySystem</param>
     public EpisodicMemoryRulesService(EpisodicMemorySystem episodicMemory)
@@ -36,12 +33,12 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (triggerId <= 0) return; // нет стимула — не записывать (кроме провокации, TODO)
 
       int effect = AddUtils.Clamp(usefulnessDelta, -10, 10);
-      _episodicMemory.SaveNewEpisode(triggerId, actionId, effect, stimulsEffect, useOldCondition: false);
+      _episodicMemory.SaveNewEpisode(triggerId, actionId, effect, stimulsEffect, useOldCondition: false, isTeacher: false);
     }
 
     /// <summary>
     /// Записать учительское правило (при MarkOperatorRecognition)
-    /// Effect = 100 (учительское), TriggerId = ответ оператора, ActionId = ответ Beast
+    /// IsTeacher = true, Effect = 0, оценка с пульта — в StimulsEffect, TriggerId = ответ оператора, ActionId = ответ Beast
     /// </summary>
     public void FixTeacherRule(int triggerId, int actionId, int stimulsEffect)
     {
@@ -53,7 +50,8 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
       if (actionId <= 0 || triggerId <= 0) return;
 
-      _episodicMemory.SaveNewEpisode(triggerId, actionId, TeacherRuleEffect, stimulsEffect, useOldCondition: true);
+      int se = AddUtils.Clamp(stimulsEffect, -10, 10);
+      _episodicMemory.SaveNewEpisode(triggerId, actionId, 0, se, useOldCondition: true, isTeacher: true);
     }
 
     /// <summary>Вставить пустой кадр — конец темы</summary>

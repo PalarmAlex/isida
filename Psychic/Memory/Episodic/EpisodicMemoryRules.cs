@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace ISIDA.Psychic.Memory.Episodic
 {
@@ -8,6 +8,9 @@ namespace ISIDA.Psychic.Memory.Episodic
   /// </summary>
   public static class EpisodicMemoryRules
   {
+    /// <summary>Масштаб веса учителя относительно прямого правила (оценка с пульта — в Importence)</summary>
+    public const int TeacherUtilityScaleK = 10;
+
     /// <summary>Вес эффекта по Count</summary>
     public static int GetWpower(int effect, int count)
     {
@@ -16,7 +19,25 @@ namespace ISIDA.Psychic.Memory.Episodic
       return effect * 3;
     }
 
-    /// <summary>Найти лучшее правило по Effect*Count</summary>
+    /// <summary>Подписанная валентность: для учителя — оценка (Importence), иначе Effect</summary>
+    public static int SignedValence(EpisodicRule r)
+    {
+      if (r == null) return 0;
+      return r.IsTeacher ? r.Importence : r.Effect;
+    }
+
+    /// <summary>Единая полезность правила: прямое — GetWpower(Effect); учительское — k·sign·GetWpower(|оценка|, Count)</summary>
+    public static int RuleUtility(EpisodicRule r)
+    {
+      if (r == null) return 0;
+      if (!r.IsTeacher)
+        return GetWpower(r.Effect, r.Count);
+      int sign = r.Importence >= 0 ? 1 : -1;
+      int mag = Math.Abs(r.Importence);
+      return TeacherUtilityScaleK * sign * GetWpower(mag, r.Count);
+    }
+
+    /// <summary>Найти лучшее правило по RuleUtility</summary>
     public static (int Index, EpisodicRule Rule) FindBestRule(IReadOnlyList<EpisodicRule> rules)
     {
       if (rules == null || rules.Count == 0)
@@ -28,7 +49,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       for (int i = 0; i < rules.Count; i++)
       {
         var r = rules[i];
-        int w = GetWpower(r.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : r.Effect, r.Count);
+        int w = RuleUtility(r);
         if (w > maxVal)
         {
           maxVal = w;
@@ -51,7 +72,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       for (int i = 0; i < rules.Count; i++)
       {
         var r = rules[i];
-        int w = GetWpower(r.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : r.Effect, r.Count);
+        int w = RuleUtility(r);
         if (w < minVal)
         {
           minVal = w;

@@ -150,7 +150,7 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     /// <summary>Записать новый эпизод</summary>
     /// <remarks>Доступно с 4 стадии развития</remarks>
-    public int SaveNewEpisode(int triggerId, int actionId, int effect, int stimulsEffect, bool useOldCondition = false)
+    public int SaveNewEpisode(int triggerId, int actionId, int effect, int stimulsEffect, bool useOldCondition = false, bool isTeacher = false)
     {
       if (AppGlobalState.EvolutionStage < 4)
       {
@@ -164,12 +164,15 @@ namespace ISIDA.Psychic.Memory.Episodic
 
         var pars = new EpisodicParams
         {
-          Effect = effect,
+          Effect = isTeacher ? 0 : effect,
           Count = 1,
-          StimulsEffect = stimulsEffect
+          StimulsEffect = stimulsEffect,
+          IsTeacher = isTeacher
         };
-        if (effect != 100)
+        if (!isTeacher)
           pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
+        else
+          pars.StimulsEffect = AddUtils.Clamp(pars.StimulsEffect, -10, 10);
 
         var condArr = new[] { baseId, emotionId, nodePid, triggerId, actionId };
         var (idOld, nodeOld) = _treeLogic.CheckBranchFromCondition(Tree, baseId, emotionId, nodePid, triggerId, actionId);
@@ -179,7 +182,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         if (idOld > 0 && nodeOld != null && nodeOld.TriggerId == triggerId && nodeOld.ActionId == actionId)
         {
           History.Append(idOld, AppGlobalState.Lifetime);
-          _treeLogic.AverageEffect(nodeOld, effect, stimulsEffect);
+          _treeLogic.AverageEffect(nodeOld, effect, stimulsEffect, isTeacher);
           return idOld;
         }
 

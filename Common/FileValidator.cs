@@ -169,7 +169,7 @@ namespace ISIDA.Common
       public const string SituationImagesDesc = "# Образы ситуаций";
 
       // Эпизодическая память
-      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect (в каждой строке 10 полей; порядок: обход в глубину, родитель перед детьми)";
+      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect|IsTeacher (в каждой строке 11 полей после #; порядок: обход в глубину, родитель перед детьми)";
       public const string EpisodicTreeId = "# ID: уникальный идентификатор узла";
       public const string EpisodicTreeParentId = "# ParentID: ID родительского узла (0 для корня)";
       public const string EpisodicTreeBaseId = "# BaseID: Базовое состояние. -1: Плохо 0: Норма 1: Хорошо";
@@ -177,9 +177,10 @@ namespace ISIDA.Common
       public const string EpisodicTreeNodePid = "# NodePID: ID узла дерева проблем";
       public const string EpisodicTreeTriggerId = "# TriggerId: ID образа стимула";
       public const string EpisodicTreeActionId = "# ActionId: ID образа ответа";
-      public const string EpisodicTreeEffect = "# Effect: изменение полезности (-10..+10, 100 — учительское)";
+      public const string EpisodicTreeEffect = "# Effect: изменение полезности прямого правила (-10..+10); для учителя 0";
       public const string EpisodicTreeCount = "# Count: число подтверждений применения";
-      public const string EpisodicTreeStimulsEffect = "# StimulsEffect: значимость стимула";
+      public const string EpisodicTreeStimulsEffect = "# StimulsEffect: для прямого — значимость стимула; для учителя — оценка с пульта (-10..10)";
+      public const string EpisodicTreeIsTeacher = "# IsTeacher: 1 — учительское правило (оценка в StimulsEffect), 0 — прямое";
       public const string EpisodicHistoryFormat = "# Формат записи: ID,LifeTime|ID,LifeTime|...";
 
       // Сценарии оператора

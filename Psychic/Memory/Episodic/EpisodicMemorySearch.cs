@@ -21,7 +21,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     private static bool MatchTypeRule(EpisodicMemoryNode node, int typeRule)
     {
       if (node?.Params == null) return false;
-      bool isTeacher = node.Params.Effect == EpisodicMemoryRulesService.TeacherRuleEffect;
+      bool isTeacher = node.Params.IsTeacher;
       if (typeRule == 1 && isTeacher) return false;
       if (typeRule == 2 && !isTeacher) return false;
       return true;
@@ -81,16 +81,17 @@ namespace ISIDA.Psychic.Memory.Episodic
       {
         var node = system != null ? system.GetNodeById(nid) : tree.FindNodeById(root, nid);
         if (node?.Params == null) continue;
-        int effect = node.Params.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : node.Params.Effect;
-        if (kind == 1 && effect < 0) continue;
-        if (kind == 2 && effect >= 0) continue;
+        int signedVal = node.Params.IsTeacher ? node.Params.StimulsEffect : node.Params.Effect;
+        if (kind == 1 && signedVal < 0) continue;
+        if (kind == 2 && signedVal >= 0) continue;
         result.Add(new EpisodicRule
         {
           TriggerId = node.TriggerId,
           ActionId = node.ActionId,
           Effect = node.Params.Effect,
           Count = node.Params.Count,
-          Importence = node.Params.StimulsEffect
+          Importence = node.Params.StimulsEffect,
+          IsTeacher = node.Params.IsTeacher
         });
       }
       return result;
@@ -197,12 +198,11 @@ namespace ISIDA.Psychic.Memory.Episodic
 
         if (chain == null || chain.Count == 0) continue;
 
-        // Конечное звено цепочки должно быть положительным по эффекту
-        int lastEffect = chain[chain.Count - 1].Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : chain[chain.Count - 1].Effect;
-        if (lastEffect < 0) continue;
-        // Суммарный эффект всех звеньев тоже должен быть положительным
-        int effectSum = chain.Sum(r => EpisodicMemoryRules.GetWpower(
-            r.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : r.Effect, r.Count));
+        // Конечное звено цепочки должно быть положительным по валентности
+        var lastRule = chain[chain.Count - 1];
+        if (EpisodicMemoryRules.SignedValence(lastRule) < 0) continue;
+        // Суммарная полезность всех звеньев тоже должна быть положительной
+        int effectSum = chain.Sum(r => EpisodicMemoryRules.RuleUtility(r));
         if (effectSum > 0)
         {
           chains.Add(chain);
@@ -211,9 +211,9 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
       if (chains.Count == 0) return null;
 
-      var best = chains.OrderByDescending(c => c.Count > 0 ? EpisodicMemoryRules.GetWpower(
-          c[c.Count - 1].Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : c[c.Count - 1].Effect,
-          c[c.Count - 1].Count) : 0).FirstOrDefault();
+      var best = chains.OrderByDescending(c => c.Count > 0
+          ? EpisodicMemoryRules.RuleUtility(c[c.Count - 1])
+          : 0).FirstOrDefault();
 
       return best;
     }
@@ -241,7 +241,8 @@ namespace ISIDA.Psychic.Memory.Episodic
           ActionId = node.ActionId,
           Effect = node.Params.Effect,
           Count = node.Params.Count,
-          Importence = node.Params.StimulsEffect
+          Importence = node.Params.StimulsEffect,
+          IsTeacher = node.Params.IsTeacher
         });
       }
       return chain;
@@ -284,9 +285,117 @@ namespace ISIDA.Psychic.Memory.Episodic
         if (rules != null && rules.Count > 0) break;
       }
       if (rules == null || rules.Count == 0) return null;
-      var posRules = rules.Where(r => (r.Effect == EpisodicMemoryRulesService.TeacherRuleEffect ? 1 : r.Effect) >= 0).ToList();
+      var posRules = rules.Where(r => EpisodicMemoryRules.SignedValence(r) >= 0).ToList();
       if (posRules.Count == 0) return null;
       return EpisodicMemoryRules.FindBestRule(posRules).Rule;
+    }
+
+    /// <summary>
+    /// Прогноз последствий выполнения планируемого ответа после данного стимула: только прямые правила с совпадением Trigger и Action.
+    /// Возвращает (0,0) при отсутствии данных; иначе accuracy 1..3 (см. уровень условий в дереве) и суммарную оценку эффекта.
+    /// </summary>
+    public static (int accuracy, int effect) GetAutomatizmActionPrognosis(
+      EpisodicMemorySystem system,
+      int stimulusActionsImageId,
+      int plannedActionImageId)
+    {
+      if (system == null || !EpisodicMemorySystem.IsInitialized || AppGlobalState.EvolutionStage < 4)
+        return (0, 0);
+      if (stimulusActionsImageId <= 0 || plannedActionImageId <= 0)
+        return (0, 0);
+
+      var (acc, eff) = GetPrognoseFromAutomatizmActionPair(system, stimulusActionsImageId, plannedActionImageId);
+      if (acc == 1 && eff < 0)
+      {
+        int bestPos = MaxPositiveDirectValence(system, stimulusActionsImageId, plannedActionImageId);
+        if (bestPos > 0 && bestPos > -eff)
+          return (acc, bestPos);
+      }
+      if (acc == 1 && eff > 0)
+      {
+        int worstNeg = MinNegativeDirectValence(system, stimulusActionsImageId, plannedActionImageId);
+        if (worstNeg < 0 && -worstNeg > eff)
+          return (acc, worstNeg);
+      }
+      return (acc, eff);
+    }
+
+    /// <summary>Сводка по набору прямых правил: сравнение лучшего неотрицательного и худшего отрицательного эффекта (как при свёртке кадров).</summary>
+    private static int FinalCommonResultFromRules(IReadOnlyList<EpisodicRule> rules)
+    {
+      if (rules == null || rules.Count == 0)
+        return 0;
+      var neg = rules.Where(r => EpisodicMemoryRules.SignedValence(r) < 0).ToList();
+      var pos = rules.Where(r => EpisodicMemoryRules.SignedValence(r) >= 0).ToList();
+      var (_, worstNeg) = neg.Count > 0 ? EpisodicMemoryRules.FindWorseRule(neg) : (-1, (EpisodicRule)null);
+      var (_, bestPos) = pos.Count > 0 ? EpisodicMemoryRules.FindBestRule(pos) : (-1, (EpisodicRule)null);
+      int ne = worstNeg != null ? EpisodicMemoryRules.SignedValence(worstNeg) : int.MinValue;
+      int pe = bestPos != null ? EpisodicMemoryRules.SignedValence(bestPos) : int.MinValue;
+      if (pe == int.MinValue)
+        return ne == int.MinValue ? 0 : ne;
+      if (ne == int.MinValue)
+        return pe;
+      return pe > ne ? pe : ne;
+    }
+
+    private static (int accuracy, int effect) GetPrognoseFromAutomatizmActionPair(
+      EpisodicMemorySystem system,
+      int triggerId,
+      int actionId)
+    {
+      const int directOnly = 1;
+      for (int lev = 0; lev <= 2; lev++)
+      {
+        var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
+        if (rules != null && rules.Count > 0)
+          return (lev + 1, FinalCommonResultFromRules(rules));
+      }
+      return (0, 0);
+    }
+
+    private static int MaxPositiveDirectValence(EpisodicMemorySystem system, int triggerId, int actionId)
+    {
+      const int directOnly = 1;
+      int best = 0;
+      for (int lev = 0; lev <= 2; lev++)
+      {
+        var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
+        if (rules == null || rules.Count == 0) continue;
+        var pos = rules.Where(rule => EpisodicMemoryRules.SignedValence(rule) > 0).ToList();
+        if (pos.Count == 0) continue;
+        var (_, bestRule) = EpisodicMemoryRules.FindBestRule(pos);
+        if (bestRule != null)
+        {
+          int v = EpisodicMemoryRules.SignedValence(bestRule);
+          if (v > best) best = v;
+        }
+      }
+      return best;
+    }
+
+    private static int MinNegativeDirectValence(EpisodicMemorySystem system, int triggerId, int actionId)
+    {
+      const int directOnly = 1;
+      int worst = 0;
+      bool any = false;
+      for (int lev = 0; lev <= 2; lev++)
+      {
+        var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
+        if (rules == null || rules.Count == 0) continue;
+        var neg = rules.Where(rule => EpisodicMemoryRules.SignedValence(rule) < 0).ToList();
+        if (neg.Count == 0) continue;
+        var (_, worstRule) = EpisodicMemoryRules.FindWorseRule(neg);
+        if (worstRule != null)
+        {
+          int v = EpisodicMemoryRules.SignedValence(worstRule);
+          if (!any || v < worst)
+          {
+            worst = v;
+            any = true;
+          }
+        }
+      }
+      return any ? worst : 0;
     }
   }
 }

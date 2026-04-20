@@ -22,7 +22,7 @@ namespace ISIDA.Psychic.Importance
     /// <summary>
     /// Найти значимость объекта (ActionsImage ID) для заданных условий в дереве эпизодов.
     /// Условия: BaseID, EmotionID, ProblemID (NodePID). Ищется узел, где Trigger==objectId (прямое правило)
-    /// или Action==objectId (учительское правило, Effect==100), возвращается StimulsEffect.
+    /// или Action==objectId (учительское, IsTeacher), возвращается StimulsEffect.
     /// </summary>
     /// <param name="root">Корень дерева эпизодической памяти</param>
     /// <param name="treeLogic">Логика дерева (для обхода)</param>
@@ -102,8 +102,8 @@ namespace ISIDA.Psychic.Importance
       if (node == null) return null;
       if (node.Params != null)
       {
-        bool isDirect = node.TriggerId == objectId && node.Params.Effect != EpisodicMemoryRulesService.TeacherRuleEffect;
-        bool isTeacher = node.ActionId == objectId && node.Params.Effect == EpisodicMemoryRulesService.TeacherRuleEffect;
+        bool isDirect = node.TriggerId == objectId && !node.Params.IsTeacher;
+        bool isTeacher = node.ActionId == objectId && node.Params.IsTeacher;
         if (isDirect || isTeacher)
           return new ExtremImportance(objectId, node.Params.StimulsEffect);
       }
@@ -241,7 +241,8 @@ namespace ISIDA.Psychic.Importance
           ActionId = node.ActionId,
           Effect = node.Params.Effect,
           Count = node.Params.Count,
-          Importence = node.Params.StimulsEffect
+          Importence = node.Params.StimulsEffect,
+          IsTeacher = node.Params.IsTeacher
         });
       foreach (var child in node.Children ?? Enumerable.Empty<EpisodicMemoryNode>())
         CollectRulesWithImportanceRecursive(child, list);
@@ -275,7 +276,7 @@ namespace ISIDA.Psychic.Importance
       return bestActionId;
     }
 
-    /// <summary>Учительские правила (Effect==100), StimulsEffect > 2; значение = StimulsEffect * Count.</summary>
+    /// <summary>Учительские правила (IsTeacher), усреднённая оценка > 2; значение = StimulsEffect * Count.</summary>
     private static List<ExtremImportance> CollectPositiveTeacherActions(
       EpisodicMemoryNode node,
       EpisodicMemoryTree treeLogic,
@@ -303,7 +304,7 @@ namespace ISIDA.Psychic.Importance
     {
       if (node == null) return;
       if (node.Params != null &&
-          node.Params.Effect == EpisodicMemoryRulesService.TeacherRuleEffect &&
+          node.Params.IsTeacher &&
           node.Params.StimulsEffect > 2)
         list.Add(new ExtremImportance(node.ActionId, node.Params.StimulsEffect * node.Params.Count));
       foreach (var child in node.Children ?? Enumerable.Empty<EpisodicMemoryNode>())

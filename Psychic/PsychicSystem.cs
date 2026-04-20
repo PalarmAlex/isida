@@ -1001,10 +1001,12 @@ namespace ISIDA.Psychic
       infoEnv.UnresolvedActionsImageId = 0;
       infoEnv.UnresolvedPulseCount = 0;
 
-      (bool resolved, Automatizm toExecute) = ProcessLevel1(automatizmNodeId);
+      (bool resolved, Automatizm toExecute) = ProcessLevel1(automatizmNodeId, actionsImageId);
       if (resolved && toExecute != null)
       {
         AppGlobalState.UpdateThinkingLevelInfo(1, true);
+        Logger.Info(
+            $"[ThinkingLevels] уровень 1: выполняется штатный автоматизм id={toExecute.ID}, полезность={toExecute.Usefulness}, ActionsImageID={toExecute.ActionsImageID} (узел={automatizmNodeId}, стимул-образ={actionsImageId}); уровень 2 не запрашивался.");
         return (true, toExecute);
       }
 
@@ -1022,16 +1024,28 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Первый уровень осмысления: решение только за счёт штатного/текущего автоматизма (без правил).
     /// </summary>
-    private (bool resolved, Automatizm toExecute) ProcessLevel1(int automatizmNodeId)
+    /// <remarks>
+    /// При <see cref="InformationEnvironmentSystem.InformationEnvironment.VeryActualSituation"/> и не-<see cref="InformationEnvironmentSystem.InformationEnvironment.Danger"/>:
+    /// по прямым правилам эпизодической памяти оценивается пара «образ стимула <paramref name="stimulusActionsImageId"/> → планируемый ответ штатного»
+    /// (<see cref="Automatizm.ActionsImageID"/>). При уверенном негативном прогнозе штатный автоматизм не утверждается — переход на уровень 2.
+    /// </remarks>
+    private (bool resolved, Automatizm toExecute) ProcessLevel1(int automatizmNodeId, int stimulusActionsImageId)
     {
       Automatizm staff = GetAutomatizmFromNode(automatizmNodeId, 0);
       if (staff == null)
+      {
+        Logger.Info($"[ThinkingL1] узел={automatizmNodeId}, стимул-образ={stimulusActionsImageId}: штатный автоматизм не найден → уровень 2.");
         return (false, null);
+      }
+
+      Logger.Info(
+          $"[ThinkingL1] узел={automatizmNodeId}, стимул-образ={stimulusActionsImageId}: штатный id={staff.ID}, полезность={staff.Usefulness}, ActionsImageID={staff.ActionsImageID}.");
 
       if (staff.Usefulness < 0)
       {
         if (_informationEnvironmentSystem != null)
           _informationEnvironmentSystem.CurrentInformationEnvironment.NeedThinkingAboutAutomatizm = true;
+        Logger.Info($"[ThinkingL1] штатный id={staff.ID} с полезностью < 0 — переход на уровень 2 (правила эпизодики).");
         return (false, null);
       }
 
@@ -1040,50 +1054,43 @@ namespace ISIDA.Psychic
 
       var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
       if (env.Danger)
+      {
+        Logger.Info($"[ThinkingL1] Danger=true — штатный id={staff.ID} без проверки экстрима/эпизодики.");
         return (true, staff);
+      }
 
       if (env.VeryActualSituation && !env.Danger)
       {
-        // 1) если запускаемое действие имеет сильную отрицательную экстремальную значимость,
-        //    то штатный автоматизм блокируем;
-        // 2) если при этом есть позитивный прогноз по правилам (достаточный, чтобы перекрыть вред),
-        //    то штатный автоматизм допускаем.
-        if (_episodicMemorySystem != null && staff.ActionsImageID > 0)
+        if (_episodicMemorySystem != null && staff.ActionsImageID > 0 && stimulusActionsImageId > 0)
         {
-          var conditions = _episodicMemorySystem.GetCurrentConditions(false);
-          var (ext, extremVal) = ObjectImportanceService.GetObjectImportanceValue(
-            _episodicMemorySystem.Tree,
-            _episodicMemorySystem.TreeLogic,
-            staff.ActionsImageID,
-            conditions.BaseId,
-            conditions.EmotionId,
-            conditions.NodePid);
+          var (acc, eff) = EpisodicMemorySearch.GetAutomatizmActionPrognosis(
+            _episodicMemorySystem,
+            stimulusActionsImageId,
+            staff.ActionsImageID);
 
-          bool isNegExtremelyImportant = ext != null
-                                           && extremVal < -ObjectImportanceService.HighImportanceThreshold;
-
-          if (isNegExtremelyImportant)
+          if (acc > 0 && eff < 0)
           {
-            // Попытка "прогноза последствий" для данного ActionsImage:
-            // берем лучший позитивный эпизодический rule и сравниваем его "вес" с величиной вреда.
-            // Если позитивного прогноза недостаточно — уходим на уровень 2 (правила).
-            var nextPositiveRule = _episodicMemorySystem.GetSingleBestRule(3, staff.ActionsImageID);
-            int harmAbs = Math.Abs(extremVal);
-
-            bool offsetByPositive = false;
-            if (nextPositiveRule != null)
-            {
-              int normalizedEffect = nextPositiveRule.Effect == EpisodicMemoryRulesService.TeacherRuleEffect
-                ? 1
-                : nextPositiveRule.Effect;
-              int positiveWpower = EpisodicMemoryRules.GetWpower(normalizedEffect, nextPositiveRule.Count);
-              offsetByPositive = positiveWpower >= harmAbs;
-            }
-
-            if (!offsetByPositive)
-              return (false, null);
+            Logger.Info(
+                $"[ThinkingL1] VeryActualSituation=true: прогноз по паре (стимул={stimulusActionsImageId}, действие={staff.ActionsImageID}) " +
+                $"accuracy={acc}, effect={eff} — штатный id={staff.ID} не утверждается → уровень 2.");
+            return (false, null);
           }
+
+          Logger.Info(
+            $"[ThinkingL1] VeryActualSituation=true: прогноз (стимул={stimulusActionsImageId}, действие={staff.ActionsImageID}) " +
+            $"accuracy={acc}, effect={eff} — штатный id={staff.ID} допускается.");
         }
+        else if (_episodicMemorySystem == null || staff.ActionsImageID <= 0 || stimulusActionsImageId <= 0)
+        {
+          Logger.Info(
+            $"[ThinkingL1] VeryActualSituation=true, но эпизодика недоступна или нет образа стимула/действия " +
+            $"(стимул={stimulusActionsImageId}, ActionsImageID={staff.ActionsImageID}) — штатный id={staff.ID} без прогноза по паре.");
+        }
+      }
+      else
+      {
+        Logger.Info(
+            $"[ThinkingL1] VeryActualSituation=false — прогноз по паре стимул/действие не выполняется; штатный id={staff.ID} (стимул {stimulusActionsImageId} → действие {staff.ActionsImageID}).");
       }
 
       return (true, staff);
@@ -1099,11 +1106,17 @@ namespace ISIDA.Psychic
 
       var chain = _episodicMemorySystem.GetTargetChain(actionsImageId);
       var rule = (chain != null && chain.Count > 0) ? chain[0] : _episodicMemorySystem.GetSingleBestRule(3, actionsImageId);
+      string ruleSrc = chain != null && chain.Count > 0 ? "GPT-цепочка" : "GetSingleBestRule(все типы, только валентность≥0)";
       if (rule == null || rule.ActionId <= 0)
       {
+        Logger.Info(
+            $"[ThinkingL2] узел={automatizmNodeId}, триггер-образ={actionsImageId}: правило не найдено ({ruleSrc}). Отрицательный опыт в эпизодике не подставляется как «лучшее» правило.");
         SetUnresolvedAtLevel2Stub(automatizmNodeId, actionsImageId);
         return (false, null);
       }
+
+      Logger.Info(
+          $"[ThinkingL2] источник={ruleSrc}, правило: Trigger={rule.TriggerId}, Action={rule.ActionId}, Effect={rule.Effect}, IsTeacher={rule.IsTeacher}, Importence/оценка={rule.Importence}, Count={rule.Count}.");
 
       var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
         .FirstOrDefault(a => a.ActionsImageID == rule.ActionId);
@@ -1113,8 +1126,13 @@ namespace ISIDA.Psychic
         episodicAtmz = newId > 0 ? _automatizmSystem.GetAutomatizmById(newId) : null;
       }
       if (episodicAtmz != null && episodicAtmz.Usefulness >= 0)
+      {
+        Logger.Info($"[ThinkingL2] выполняется автоматизм по правилу id={episodicAtmz.ID}, полезность={episodicAtmz.Usefulness}.");
         return (true, episodicAtmz);
+      }
 
+      Logger.Info(
+          $"[ThinkingL2] автоматизм по образу действия {rule.ActionId} не найден или полезность < 0 (id={(episodicAtmz?.ID ?? 0)}).");
       SetUnresolvedAtLevel2Stub(automatizmNodeId, actionsImageId);
       return (false, null);
     }

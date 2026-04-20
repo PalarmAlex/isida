@@ -54,7 +54,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       foreach (var line in File.ReadLines(filePath))
       {
         lineNum++;
-        if (lineNum <= 11) continue;
+        if (lineNum <= 12) continue;
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
 
@@ -79,7 +79,15 @@ namespace ISIDA.Psychic.Memory.Episodic
               int.TryParse(parr[1], out int count) &&
               int.TryParse(parr[2], out int stimEff))
           {
-            pars = new EpisodicParams { Effect = eff, Count = count, StimulsEffect = stimEff };
+            bool isTeacher = false;
+            if (parr.Length >= 4 && int.TryParse(parr[3], out int itFlag))
+              isTeacher = itFlag != 0;
+            else if (eff == 100)
+            {
+              isTeacher = true;
+              eff = 0;
+            }
+            pars = new EpisodicParams { Effect = eff, Count = count, StimulsEffect = stimEff, IsTeacher = isTeacher };
           }
         }
 
@@ -174,7 +182,8 @@ namespace ISIDA.Psychic.Memory.Episodic
           FileValidator.FileHeaders.EpisodicTreeActionId,
           FileValidator.FileHeaders.EpisodicTreeEffect,
           FileValidator.FileHeaders.EpisodicTreeCount,
-          FileValidator.FileHeaders.EpisodicTreeStimulsEffect
+          FileValidator.FileHeaders.EpisodicTreeStimulsEffect,
+          FileValidator.FileHeaders.EpisodicTreeIsTeacher
         };
         CollectTreeLines(root, lines);
 
@@ -183,7 +192,7 @@ namespace ISIDA.Psychic.Memory.Episodic
             path,
             lines,
             FileValidator.IsValidEpisodicTreeFile,
-            minLinesCount: 11,
+            minLinesCount: 12,
             fileDescription: "дерева эпизодической памяти");
 
         return (result.Success, result.ErrorMessage);
@@ -200,15 +209,16 @@ namespace ISIDA.Psychic.Memory.Episodic
       foreach (var c in n.Children)
       {
         var line = $"{c.ID}|{c.ParentID}|{c.BaseID}|{c.EmotionID}|{c.NodePID}|{c.TriggerId}|{c.ActionId}";
-        // Всегда одна структура строки: 7 полей + # + Effect|Count|StimulsEffect (у промежуточных узлов 0|0|0)
-        int eff = 0, count = 0, stimEff = 0;
+        // Всегда одна структура строки: 7 полей + # + Effect|Count|StimulsEffect|IsTeacher (у промежуточных 0|0|0|0)
+        int eff = 0, count = 0, stimEff = 0, isTeacher = 0;
         if (c.Params != null && c.ActionId > 0)
         {
           eff = c.Params.Effect;
           count = c.Params.Count;
           stimEff = c.Params.StimulsEffect;
+          isTeacher = c.Params.IsTeacher ? 1 : 0;
         }
-        line += $"#{eff}|{count}|{stimEff}";
+        line += $"#{eff}|{count}|{stimEff}|{isTeacher}";
         lines.Add(line);
         CollectTreeLines(c, lines);
       }

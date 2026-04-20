@@ -124,7 +124,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       {
         node = nodeOld;
         if (level == 4 && newParams != null)
-          AverageEffect(node, newParams.Effect, newParams.StimulsEffect);
+          AverageEffect(node, newParams.Effect, newParams.StimulsEffect, newParams.IsTeacher);
       }
       else
       {
@@ -133,7 +133,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         if (node == null)
         {
           EpisodicParams pars = level == 4 ? newParams : null;
-          if (pars != null && pars.Effect != 100)
+          if (pars != null && !pars.IsTeacher)
             pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
 
           _lastNodeId++;
@@ -153,7 +153,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         }
         else if (level == 4 && newParams != null)
         {
-          AverageEffect(node, newParams.Effect, newParams.StimulsEffect);
+          AverageEffect(node, newParams.Effect, newParams.StimulsEffect, newParams.IsTeacher);
         }
       }
 
@@ -162,18 +162,23 @@ namespace ISIDA.Psychic.Memory.Episodic
     }
 
     /// <summary>Усреднить эффект при повторной записи</summary>
-    public void AverageEffect(EpisodicMemoryNode node, int effect, int stimulsEffect)
+    public void AverageEffect(EpisodicMemoryNode node, int effect, int stimulsEffect, bool isTeacher)
     {
       if (node?.Params == null) return;
       var p = node.Params;
       int count = p.Count + 1;
       if (count == 0) return;
 
-      if (effect != 100)
+      if (isTeacher)
+        p.IsTeacher = true;
+
+      if (!p.IsTeacher)
       {
         int w = (p.Effect * (count - 1) + effect) / count;
         p.Effect = AddUtils.Clamp(w, -10, 10);
       }
+      else
+        p.Effect = 0;
 
       int sw = (p.StimulsEffect * (count - 1) + stimulsEffect) / count;
       p.StimulsEffect = AddUtils.Clamp(sw, -10, 10);

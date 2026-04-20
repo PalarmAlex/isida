@@ -7,12 +7,14 @@ namespace ISIDA.Psychic.Memory.Episodic
   /// </summary>
   public class EpisodicParams
   {
-    /// <summary>Эффект правила (-10..10, 100 — учительское)</summary>
+    /// <summary>Эффект правила (-10..10); для учительского узла всегда 0</summary>
     public int Effect { get; set; }
     /// <summary>Количество применений (для усреднения)</summary>
     public int Count { get; set; }
-    /// <summary>Эффект стимула</summary>
+    /// <summary>Для прямого правила — значимость стимула; для учительского — подписанная оценка с пульта (-10..10)</summary>
     public int StimulsEffect { get; set; }
+    /// <summary>Учительское правило (оценка в StimulsEffect, Effect = 0)</summary>
+    public bool IsTeacher { get; set; }
   }
 
   /// <summary>
@@ -41,6 +43,8 @@ namespace ISIDA.Psychic.Memory.Episodic
     public int Count { get; set; }
     /// <summary>Важность</summary>
     public int Importence { get; set; }
+    /// <summary>Учительское правило (валентность в Importence как у StimulsEffect в узле)</summary>
+    public bool IsTeacher { get; set; }
   }
 
   /// <summary>
