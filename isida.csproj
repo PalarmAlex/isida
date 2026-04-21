@@ -103,6 +103,9 @@
     <Compile Include="Common\SettingsValidator.cs" />
     <Compile Include="Gomeostas\GomeostasSystem.cs" />
     <Compile Include="Gomeostas\HomeostasisCalculator.cs" />
+    <Compile Include="Research\HomeostasisHarnessIds.cs" />
+    <Compile Include="Research\HomeostasisHarnessModels.cs" />
+    <Compile Include="Research\HomeostasisHarnessRunner.cs" />
     <Compile Include="Gomeostas\StyleActivationCondition.cs" />
     <Compile Include="Gomeostas\StyleAntagonism.cs" />
     <Compile Include="Gomeostas\StyleCombinationsManager.cs" />

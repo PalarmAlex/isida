@@ -864,8 +864,6 @@ namespace ISIDA.Psychic
       if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(fullStimulusTreeNodeId))
         _automatizmSystem.SetAutomatizmBelief(created, 2);
 
-      Logger.Info($"Stage3 comma glue: автоматизм ID={newId}, узел={fullStimulusTreeNodeId}, ответ «{mergedPhraseText}»");
-
       if (!deferredOperatorEvalScheduledThisStimulus)
       {
         int responseNodeId = GetTreeNodeIdForResponseActionsImage(
@@ -1005,8 +1003,6 @@ namespace ISIDA.Psychic
       if (resolved && toExecute != null)
       {
         AppGlobalState.UpdateThinkingLevelInfo(1, true);
-        Logger.Info(
-            $"[ThinkingLevels] уровень 1: выполняется штатный автоматизм id={toExecute.ID}, полезность={toExecute.Usefulness}, ActionsImageID={toExecute.ActionsImageID} (узел={automatizmNodeId}, стимул-образ={actionsImageId}); уровень 2 не запрашивался.");
         return (true, toExecute);
       }
 
@@ -1033,19 +1029,12 @@ namespace ISIDA.Psychic
     {
       Automatizm staff = GetAutomatizmFromNode(automatizmNodeId, 0);
       if (staff == null)
-      {
-        Logger.Info($"[ThinkingL1] узел={automatizmNodeId}, стимул-образ={stimulusActionsImageId}: штатный автоматизм не найден → уровень 2.");
         return (false, null);
-      }
-
-      Logger.Info(
-          $"[ThinkingL1] узел={automatizmNodeId}, стимул-образ={stimulusActionsImageId}: штатный id={staff.ID}, полезность={staff.Usefulness}, ActionsImageID={staff.ActionsImageID}.");
 
       if (staff.Usefulness < 0)
       {
         if (_informationEnvironmentSystem != null)
           _informationEnvironmentSystem.CurrentInformationEnvironment.NeedThinkingAboutAutomatizm = true;
-        Logger.Info($"[ThinkingL1] штатный id={staff.ID} с полезностью < 0 — переход на уровень 2 (правила эпизодики).");
         return (false, null);
       }
 
@@ -1054,10 +1043,7 @@ namespace ISIDA.Psychic
 
       var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
       if (env.Danger)
-      {
-        Logger.Info($"[ThinkingL1] Danger=true — штатный id={staff.ID} без проверки экстрима/эпизодики.");
         return (true, staff);
-      }
 
       if (env.VeryActualSituation && !env.Danger)
       {
@@ -1069,28 +1055,8 @@ namespace ISIDA.Psychic
             staff.ActionsImageID);
 
           if (acc > 0 && eff < 0)
-          {
-            Logger.Info(
-                $"[ThinkingL1] VeryActualSituation=true: прогноз по паре (стимул={stimulusActionsImageId}, действие={staff.ActionsImageID}) " +
-                $"accuracy={acc}, effect={eff} — штатный id={staff.ID} не утверждается → уровень 2.");
             return (false, null);
-          }
-
-          Logger.Info(
-            $"[ThinkingL1] VeryActualSituation=true: прогноз (стимул={stimulusActionsImageId}, действие={staff.ActionsImageID}) " +
-            $"accuracy={acc}, effect={eff} — штатный id={staff.ID} допускается.");
         }
-        else if (_episodicMemorySystem == null || staff.ActionsImageID <= 0 || stimulusActionsImageId <= 0)
-        {
-          Logger.Info(
-            $"[ThinkingL1] VeryActualSituation=true, но эпизодика недоступна или нет образа стимула/действия " +
-            $"(стимул={stimulusActionsImageId}, ActionsImageID={staff.ActionsImageID}) — штатный id={staff.ID} без прогноза по паре.");
-        }
-      }
-      else
-      {
-        Logger.Info(
-            $"[ThinkingL1] VeryActualSituation=false — прогноз по паре стимул/действие не выполняется; штатный id={staff.ID} (стимул {stimulusActionsImageId} → действие {staff.ActionsImageID}).");
       }
 
       return (true, staff);

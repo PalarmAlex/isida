@@ -84,7 +84,6 @@ namespace ISIDA.Psychic.Automatism
         if (!_automatizmSystem.ExistsAutomatizmForThisNodeId(detectedNodeId))
           _automatizmSystem.SetAutomatizmBelief(created, 2);
 
-        Logger.Info($"MirrorAutomatizm: стартовый автоматизм ID={id}, TriggerNode={detectedNodeId}, ActionsImage={responseActionsImageId}");
         return id;
       }
       finally
@@ -246,10 +245,7 @@ namespace ISIDA.Psychic.Automatism
           _automatizmSystem.SetAutomatizmBelief(created, 2);
 
         if (partPhraseIds.Count == 1)
-        {
-          Logger.Info($"Stage2 echo automatism ID={echoId}, node={detectedNodeId}, one part");
           return echoId;
-        }
 
         // Цепочка: не более 2 звеньев. При 2 частях — 1 звено (вторая часть); при 3+ — 2 звена (вторая часть → последняя, промежуточные отбрасываются)
         var links = new List<AutomatizmChainsSystem.ChainLink>();
@@ -323,7 +319,6 @@ namespace ISIDA.Psychic.Automatism
           links[0].SuccessNextLink = links[1].ID;
         _automatizmSystem.AttachChainToAutomatizm(echoId, chainId);
 
-        Logger.Info($"Stage2 echo+chain: automatism ID={echoId}, chain ID={chainId}, node={detectedNodeId}");
         return echoId;
       }
       finally
@@ -380,8 +375,6 @@ namespace ISIDA.Psychic.Automatism
         _dialogTriggerNodeId = _pendingResponseNodeId;
         ClearPendingOperatorResponse();
 
-        Logger.Info(
-            $"MirrorAutomatizm: учительский автоматизм ID={teacherAutomatizm.ID}, TriggerNode={teacherAutomatizm.BranchID}, ActionsImage={teacherAutomatizm.ActionsImageID}");
         return teacherAutomatizm.ID;
       }
       finally
