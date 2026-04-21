@@ -37,6 +37,42 @@ namespace ISIDA.Research
     /// <summary>Для <c>homeostasis.any_vital_harmful_zone</c> — один набор параметров.</summary>
     [JsonProperty("parameters")]
     public List<ParameterSnapshotDto> Parameters { get; set; }
+
+    /// <summary>Для <c>homeostasis.external_impact_critical_flags</c> — id → величина внешнего воздействия.</summary>
+    [JsonProperty("external_influences")]
+    public Dictionary<int, int> ExternalInfluences { get; set; }
+
+    /// <summary>Для <c>homeostasis.compute_operator_automatizm_assessment</c> — значения «до» по id параметра.</summary>
+    [JsonProperty("values_before")]
+    public Dictionary<int, float> ValuesBefore { get; set; }
+
+    /// <summary>Фокусный параметр (0 — не задан).</summary>
+    [JsonProperty("focus_parameter_id")]
+    public int? FocusParameterId { get; set; }
+
+    /// <summary>Интегральное состояние до (−1/0/1).</summary>
+    [JsonProperty("overall_before")]
+    public int? OverallBefore { get; set; }
+
+    /// <summary>Интегральное состояние после (−1/0/1).</summary>
+    [JsonProperty("overall_after")]
+    public int? OverallAfter { get; set; }
+
+    /// <summary>Для доминирующего стиля: dynamicTime.</summary>
+    [JsonProperty("dynamic_time")]
+    public int? DynamicTime { get; set; }
+
+    /// <summary>Для доминирующего стиля: difSensorPar.</summary>
+    [JsonProperty("dif_sensor_par")]
+    public float? DifSensorPar { get; set; }
+
+    /// <summary>Id базовых стилей для GetFinalActiveStyles.</summary>
+    [JsonProperty("base_style_ids")]
+    public List<int> BaseStyleIds { get; set; }
+
+    /// <summary>Строка активаций «зона:стили;…».</summary>
+    [JsonProperty("style_activations")]
+    public string StyleActivations { get; set; }
   }
 
   /// <summary>Плоское описание параметра для JSON (без INotify).</summary>
@@ -97,6 +133,34 @@ namespace ISIDA.Research
     /// <summary>Результат для прогона any_vital_harmful; иначе null.</summary>
     [JsonProperty("any_vital_harmful")]
     public bool? AnyVitalHarmful { get; set; }
+
+    /// <summary>Результат <see cref="ISIDA.Gomeostas.HomeostasisCalculator.HasExternalCriticalImpact"/>; иначе null.</summary>
+    [JsonProperty("has_external_threshold")]
+    public bool? HasExternalThreshold { get; set; }
+
+    /// <summary>Результат <see cref="ISIDA.Gomeostas.HomeostasisCalculator.IsExternalImpactCritical"/>; иначе null.</summary>
+    [JsonProperty("is_external_orientation_critical")]
+    public bool? IsExternalOrientationCritical { get; set; }
+
+    /// <summary>Результат <see cref="ISIDA.Gomeostas.HomeostasisCalculator.CalculateUrgencyFunction"/>; иначе null.</summary>
+    [JsonProperty("urgency")]
+    public float? Urgency { get; set; }
+
+    /// <summary>Результат <see cref="ISIDA.Gomeostas.HomeostasisCalculator.ComputeOperatorAutomatizmAssessment"/> (−1/0/+1); иначе null.</summary>
+    [JsonProperty("operator_assessment")]
+    public int? OperatorAssessment { get; set; }
+
+    /// <summary>Id доминирующего параметра (<see cref="ISIDA.Gomeostas.HomeostasisCalculator.FindDominantParameter"/>); иначе null.</summary>
+    [JsonProperty("dominant_param_id")]
+    public int? DominantParamId { get; set; }
+
+    /// <summary>Зона доминирования (как в прогоне доминанты); иначе null.</summary>
+    [JsonProperty("dominant_zone")]
+    public int? DominantZone { get; set; }
+
+    /// <summary>Скор доминирования; иначе null.</summary>
+    [JsonProperty("dominance_score")]
+    public float? DominanceScore { get; set; }
 
     /// <summary>Текст ошибки по кейсу; пусто при успехе.</summary>
     [JsonProperty("error")]

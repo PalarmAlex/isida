@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using Newtonsoft.Json;
 
@@ -60,6 +61,9 @@ namespace ISIDA.Research
       if (input.Cases == null || input.Cases.Count == 0)
         return Fail("Список cases пуст.");
 
+      if (string.Equals(input.HarnessId, HomeostasisHarnessIds.DominantAndFinalStyles, StringComparison.Ordinal))
+        GlobalTimer.SetGlobalPulseCountForHarness(10_000);
+
       var rows = new List<HomeostasisHarnessResultRow>();
       foreach (var c in input.Cases)
       {
@@ -74,6 +78,14 @@ namespace ISIDA.Research
             RunHasCritical(calculator, c, row);
           else if (string.Equals(input.HarnessId, HomeostasisHarnessIds.AnyVitalHarmfulZone, StringComparison.Ordinal))
             RunAnyVitalHarmful(calculator, c, row);
+          else if (string.Equals(input.HarnessId, HomeostasisHarnessIds.ExternalImpactCriticalFlags, StringComparison.Ordinal))
+            RunExternalFlags(calculator, c, row);
+          else if (string.Equals(input.HarnessId, HomeostasisHarnessIds.CalculateUrgencyFunction, StringComparison.Ordinal))
+            RunUrgency(calculator, c, row);
+          else if (string.Equals(input.HarnessId, HomeostasisHarnessIds.ComputeOperatorAutomatizmAssessment, StringComparison.Ordinal))
+            RunOperatorAssessment(calculator, c, row);
+          else if (string.Equals(input.HarnessId, HomeostasisHarnessIds.DominantAndFinalStyles, StringComparison.Ordinal))
+            RunDominantAndFinal(calculator, c, row);
           else
             row.Error = "Неизвестный harness_id.";
         }
@@ -109,6 +121,15 @@ namespace ISIDA.Research
       var manifestPath = Path.Combine(outputDirectory, "manifest.json");
       File.WriteAllText(manifestPath, JsonConvert.SerializeObject(manifest, Formatting.Indented), Encoding.UTF8);
 
+      try
+      {
+        HomeostasisHarnessJsonReportHtmlBuilder.WriteReport(manifestPath, jsonlPath, manifest.OutputReportHtml);
+      }
+      catch
+      {
+        // отчёт не обязателен для успеха прогона
+      }
+
       return new HomeostasisHarnessRunResult
       {
         Success = true,
@@ -137,6 +158,113 @@ namespace ISIDA.Research
       }
       var list = MapList(c.Parameters);
       row.AnyVitalHarmful = calculator.AnyVitalParameterInHarmfulZone(list);
+    }
+
+    private static void RunExternalFlags(HomeostasisCalculator calculator, HomeostasisHarnessCaseDto c, HomeostasisHarnessResultRow row)
+    {
+      if (c.Parameters == null || c.Parameters.Count == 0)
+      {
+        row.Error = "Нужен массив parameters (один параметр).";
+        return;
+      }
+
+      if (c.ExternalInfluences == null || c.ExternalInfluences.Count == 0)
+      {
+        row.Error = "Нужен объект external_influences (id → воздействие).";
+        return;
+      }
+
+      var list = MapList(c.Parameters);
+      row.HasExternalThreshold = calculator.HasExternalCriticalImpact(c.ExternalInfluences, list);
+      row.IsExternalOrientationCritical = calculator.IsExternalImpactCritical(c.ExternalInfluences, list);
+    }
+
+    private static void RunUrgency(HomeostasisCalculator calculator, HomeostasisHarnessCaseDto c, HomeostasisHarnessResultRow row)
+    {
+      if (c.Parameters == null || c.Parameters.Count != 1)
+      {
+        row.Error = "Нужен ровно один элемент в parameters.";
+        return;
+      }
+
+      var list = MapList(c.Parameters);
+      row.Urgency = calculator.CalculateUrgencyFunction(list[0]);
+    }
+
+    private static void RunOperatorAssessment(HomeostasisCalculator calculator, HomeostasisHarnessCaseDto c, HomeostasisHarnessResultRow row)
+    {
+      if (c.Parameters == null || c.Parameters.Count == 0)
+      {
+        row.Error = "Нужен массив parameters.";
+        return;
+      }
+
+      if (c.ValuesBefore == null || c.ValuesBefore.Count == 0)
+      {
+        row.Error = "Нужен объект values_before.";
+        return;
+      }
+
+      if (!c.OverallBefore.HasValue || !c.OverallAfter.HasValue)
+      {
+        row.Error = "Нужны overall_before и overall_after (−1/0/1).";
+        return;
+      }
+
+      var currents = MapList(c.Parameters);
+      var dict = new Dictionary<int, float>(c.ValuesBefore);
+      int focus = c.FocusParameterId ?? 0;
+      var ob = MapOverallInt(c.OverallBefore.Value);
+      var oa = MapOverallInt(c.OverallAfter.Value);
+      row.OperatorAssessment = calculator.ComputeOperatorAutomatizmAssessment(dict, currents, focus, ob, oa);
+    }
+
+    private static AppGlobalState.HomeostasisState MapOverallInt(int v)
+    {
+      if (v == -1) return AppGlobalState.HomeostasisState.Bad;
+      if (v == 1) return AppGlobalState.HomeostasisState.Well;
+      return AppGlobalState.HomeostasisState.Normal;
+    }
+
+    private static void RunDominantAndFinal(HomeostasisCalculator calculator, HomeostasisHarnessCaseDto c, HomeostasisHarnessResultRow row)
+    {
+      if (c.Parameters == null || c.Parameters.Count != 1)
+      {
+        row.Error = "Нужен ровно один параметр в parameters.";
+        return;
+      }
+
+      if (c.BaseStyleIds == null || c.BaseStyleIds.Count == 0)
+      {
+        row.Error = "Нужен массив base_style_ids.";
+        return;
+      }
+
+      if (!c.DynamicTime.HasValue || !c.DifSensorPar.HasValue)
+      {
+        row.Error = "Нужны dynamic_time и dif_sensor_par.";
+        return;
+      }
+
+      if (string.IsNullOrWhiteSpace(c.StyleActivations))
+      {
+        row.Error = "Нужна строка style_activations.";
+        return;
+      }
+
+      var plist = MapList(c.Parameters);
+      var p = plist[0];
+      foreach (var kv in ResearchHarnessPipeRunner.ParseStyleActivationsHarness(c.StyleActivations))
+        p.StyleActivations[kv.Key] = kv.Value.ToList();
+
+      var baseStyles = ResearchHarnessPipeRunner.BuildBaseStylesFromIds(c.BaseStyleIds);
+      int dyn = c.DynamicTime.Value;
+      float dif = c.DifSensorPar.Value;
+      var (dom, zone, score) = calculator.FindDominantParameter(plist, dyn, dif);
+      calculator.GetFinalActiveStyles(baseStyles, plist, dyn, dif);
+      row.DominantParamId = dom?.Id;
+      row.DominantZone = zone;
+      row.DominanceScore = score;
     }
 
     private static List<GomeostasSystem.ParameterData> MapList(IEnumerable<ParameterSnapshotDto> snapshots)
@@ -177,8 +305,16 @@ namespace ISIDA.Research
         sb.AppendLine("case_id,harness_id,has_critical,error");
       else if (string.Equals(harnessId, HomeostasisHarnessIds.AnyVitalHarmfulZone, StringComparison.Ordinal))
         sb.AppendLine("case_id,harness_id,any_vital_harmful,error");
+      else if (string.Equals(harnessId, HomeostasisHarnessIds.ExternalImpactCriticalFlags, StringComparison.Ordinal))
+        sb.AppendLine("case_id,harness_id,has_external_threshold,is_external_orientation_critical,error");
+      else if (string.Equals(harnessId, HomeostasisHarnessIds.CalculateUrgencyFunction, StringComparison.Ordinal))
+        sb.AppendLine("case_id,harness_id,urgency,error");
+      else if (string.Equals(harnessId, HomeostasisHarnessIds.ComputeOperatorAutomatizmAssessment, StringComparison.Ordinal))
+        sb.AppendLine("case_id,harness_id,operator_assessment,error");
+      else if (string.Equals(harnessId, HomeostasisHarnessIds.DominantAndFinalStyles, StringComparison.Ordinal))
+        sb.AppendLine("case_id,harness_id,dominant_param_id,dominant_zone,dominance_score,error");
       else
-        sb.AppendLine("case_id,harness_id,has_critical,any_vital_harmful,error");
+        sb.AppendLine("case_id,harness_id,error");
 
       foreach (var r in rows)
       {
@@ -194,14 +330,37 @@ namespace ISIDA.Research
               Escape(r.HarnessId),
               r.AnyVitalHarmful.HasValue ? (r.AnyVitalHarmful.Value ? "true" : "false") : "",
               Escape(r.Error ?? "")));
-        else
+        else if (string.Equals(harnessId, HomeostasisHarnessIds.ExternalImpactCriticalFlags, StringComparison.Ordinal))
           sb.AppendLine(string.Join(",",
               Escape(r.CaseId),
               Escape(r.HarnessId),
-              r.HasCritical.HasValue ? (r.HasCritical.Value ? "true" : "false") : "",
-              r.AnyVitalHarmful.HasValue ? (r.AnyVitalHarmful.Value ? "true" : "false") : "",
+              r.HasExternalThreshold.HasValue ? (r.HasExternalThreshold.Value ? "true" : "false") : "",
+              r.IsExternalOrientationCritical.HasValue ? (r.IsExternalOrientationCritical.Value ? "true" : "false") : "",
               Escape(r.Error ?? "")));
+        else if (string.Equals(harnessId, HomeostasisHarnessIds.CalculateUrgencyFunction, StringComparison.Ordinal))
+          sb.AppendLine(string.Join(",",
+              Escape(r.CaseId),
+              Escape(r.HarnessId),
+              r.Urgency.HasValue ? r.Urgency.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
+              Escape(r.Error ?? "")));
+        else if (string.Equals(harnessId, HomeostasisHarnessIds.ComputeOperatorAutomatizmAssessment, StringComparison.Ordinal))
+          sb.AppendLine(string.Join(",",
+              Escape(r.CaseId),
+              Escape(r.HarnessId),
+              r.OperatorAssessment.HasValue ? r.OperatorAssessment.Value.ToString() : "",
+              Escape(r.Error ?? "")));
+        else if (string.Equals(harnessId, HomeostasisHarnessIds.DominantAndFinalStyles, StringComparison.Ordinal))
+          sb.AppendLine(string.Join(",",
+              Escape(r.CaseId),
+              Escape(r.HarnessId),
+              r.DominantParamId.HasValue ? r.DominantParamId.Value.ToString() : "",
+              r.DominantZone.HasValue ? r.DominantZone.Value.ToString() : "",
+              r.DominanceScore.HasValue ? r.DominanceScore.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "",
+              Escape(r.Error ?? "")));
+        else
+          sb.AppendLine(string.Join(",", Escape(r.CaseId), Escape(r.HarnessId), Escape(r.Error ?? "")));
       }
+
       File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
     }
 
