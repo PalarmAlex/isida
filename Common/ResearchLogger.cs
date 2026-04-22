@@ -776,13 +776,14 @@ namespace ISIDA.Common
     /// Стабильный отпечаток содержимого строки лога без «меняющихся каждый раз» колонок (время и номер пульса),
     /// чтобы отсечь подряд идущие дубли, когда <see cref="IsDuplicateState"/> сработал из-за полей,
     /// не попадающих в CSV (например <see cref="SystemState.HasCriticalChanges"/>), а визуально строка совпадает.
+    /// Колонка полезности автоматизма в отпечаток не входит: значение меняется при оценках, иначе дублируются строки с тем же ID автоматизма.
     /// </summary>
     private static string ComputeAgentLogEntryFingerprint(Dictionary<string, object> entry)
     {
       var sb = new StringBuilder(256);
       foreach (var k in entry.Keys.OrderBy(x => x, StringComparer.Ordinal))
       {
-        if (k == "Время" || k == "Пульс")
+        if (k == "Время" || k == "Пульс" || k == "Полезность" || k == "Usefulness")
           continue;
         sb.Append(k).Append('\u001F');
         if (!entry.TryGetValue(k, out var v) || v == null)

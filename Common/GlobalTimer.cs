@@ -72,18 +72,6 @@ namespace ISIDA.Common
     public static int GlobalPulsCount { get; private set; } = 0;
 
     /// <summary>
-    /// Для исследовательских прогонов без тикающего таймера: зафиксировать счётчик пульса,
-    /// чтобы расчёты с <c>LastStateChangePulse</c> и сравнениями по пульсу были детерминированы.
-    /// </summary>
-    /// <param name="pulse">Номер пульса (при отрицательном значении подставляется 0).</param>
-    public static void SetGlobalPulseCountForHarness(int pulse)
-    {
-      if (pulse < 0)
-        pulse = 0;
-      GlobalPulsCount = pulse;
-    }
-
-    /// <summary>
     /// Флаг активности пульсации
     /// </summary>
     public static bool IsPulsationRunning { get; private set; } = false;
