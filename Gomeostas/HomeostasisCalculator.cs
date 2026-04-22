@@ -67,6 +67,8 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Оценка ответа оператора (−1 / 0 / +1) по изменению жизненных параметров между снимком «до» и текущими значениями,
     /// с запасным вариантом по интегральному состоянию, если дельты незначимы.
+    /// Если знак изменения фокусного параметра противоречит интегральному состоянию, а совокупность жизненных
+    /// параметров не даёт сигнала (<c>vitalScore==0</c>), используется интегральная оценка.
     /// </summary>
     public int ComputeOperatorAutomatizmAssessment(
         IReadOnlyDictionary<int, float> valuesBefore,
@@ -76,7 +78,14 @@ namespace ISIDA.Gomeostas
         AppGlobalState.HomeostasisState overallAfter)
     {
       if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
-        return AssessmentFromOverallStates(overallBefore, overallAfter);
+      {
+        int r = AssessmentFromOverallStates(overallBefore, overallAfter);
+        Logger.Info(
+            $"[USEFULNESS_EVAL] ComputeOperatorAutomatizmAssessment branch=empty_snapshot_or_params " +
+            $"snapshotCount={(valuesBefore?.Count ?? 0)} currentParamsCount={(currentParameters?.Count ?? 0)} " +
+            $"focusParamId={focusParameterId} overall={overallBefore}->{overallAfter} result={r}");
+        return r;
+      }
 
       int? focusSigned = null;
       if (focusParameterId > 0 && valuesBefore.TryGetValue(focusParameterId, out float beforeFocus))
@@ -100,12 +109,44 @@ namespace ISIDA.Gomeostas
           vitalScore--;
       }
 
-      if (focusSigned.HasValue && focusSigned.Value != 0)
-        return focusSigned.Value;
-      if (vitalScore != 0)
-        return vitalScore > 0 ? 1 : -1;
+      int overallAssess = AssessmentFromOverallStates(overallBefore, overallAfter);
 
-      return AssessmentFromOverallStates(overallBefore, overallAfter);
+      string branch;
+      int result;
+      // Фокусный параметр может дать заметную дельту по одному каналу (шум/доминанта),
+      // тогда как интегральное состояние уже отражает суммарный эффект ответа оператора.
+      // При отсутствии сигнала по совокупности жизненных (vitalScore==0) не наказываем автоматизм
+      // знаком фокуса, если интеграл явно в противоположную сторону (Normal→Well и т.п.).
+      if (focusSigned.HasValue && focusSigned.Value != 0)
+      {
+        if (vitalScore == 0 && overallAssess != 0 &&
+            Math.Sign(overallAssess) != Math.Sign(focusSigned.Value))
+        {
+          branch = "overall_overrides_focus_conflict";
+          result = overallAssess;
+        }
+        else
+        {
+          branch = "focus_param";
+          result = focusSigned.Value;
+        }
+      }
+      else if (vitalScore != 0)
+      {
+        branch = "vital_aggregate";
+        result = vitalScore > 0 ? 1 : -1;
+      }
+      else
+      {
+        branch = "overall_fallback";
+        result = overallAssess;
+      }
+
+      Logger.Info(
+          $"[USEFULNESS_EVAL] ComputeOperatorAutomatizmAssessment branch={branch} focusParamId={focusParameterId} " +
+          $"focusSigned={(focusSigned.HasValue ? focusSigned.Value.ToString() : "null")} vitalScore={vitalScore} " +
+          $"overallAssess={overallAssess} overall={overallBefore}->{overallAfter} result={result}");
+      return result;
     }
 
     private static int AssessmentFromOverallStates(AppGlobalState.HomeostasisState before, AppGlobalState.HomeostasisState after)

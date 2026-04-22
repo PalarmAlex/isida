@@ -3,6 +3,7 @@ using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Thinking.Strategies;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Understanding;
 using ISIDA.Reflexes;
 using ISIDA.Sensors;
@@ -132,6 +133,8 @@ namespace ISIDA.Common
       public int? CurrentGeneticReflexID { get; set; }
       public int? CurrentConditionReflexID { get; set; }
       public int? CurrentAutomatizmID { get; set; }
+      /// <summary>Полезность автоматизма на момент снимка (из справочника), если активен автоматизм.</summary>
+      public int? CurrentAutomatizmUsefulness { get; set; }
       public int? HasCriticalChanges { get; set; }
       public int? OrientationReflexType { get; set; }
       public int? OrientationReflexPulse { get; set; }
@@ -768,7 +771,11 @@ namespace ISIDA.Common
         ["ЦиклМ_задача"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
             ? (state.MainThinkingCycleTaskStatus ?? "") : "",
         ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0",
-        ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0"
+        ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0",
+        ["Полезность"] = state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID.Value > 0
+            && state.CurrentAutomatizmUsefulness.HasValue
+            ? state.CurrentAutomatizmUsefulness.Value.ToString()
+            : ""
       };
     }
 
@@ -776,14 +783,13 @@ namespace ISIDA.Common
     /// Стабильный отпечаток содержимого строки лога без «меняющихся каждый раз» колонок (время и номер пульса),
     /// чтобы отсечь подряд идущие дубли, когда <see cref="IsDuplicateState"/> сработал из-за полей,
     /// не попадающих в CSV (например <see cref="SystemState.HasCriticalChanges"/>), а визуально строка совпадает.
-    /// Колонка полезности автоматизма в отпечаток не входит: значение меняется при оценках, иначе дублируются строки с тем же ID автоматизма.
     /// </summary>
     private static string ComputeAgentLogEntryFingerprint(Dictionary<string, object> entry)
     {
       var sb = new StringBuilder(256);
       foreach (var k in entry.Keys.OrderBy(x => x, StringComparer.Ordinal))
       {
-        if (k == "Время" || k == "Пульс" || k == "Полезность" || k == "Usefulness")
+        if (k == "Время" || k == "Пульс")
           continue;
         sb.Append(k).Append('\u001F');
         if (!entry.TryGetValue(k, out var v) || v == null)
@@ -944,6 +950,11 @@ namespace ISIDA.Common
       int? autoId = logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString())
           ? int.Parse(logEntry["Автоматизм"].ToString())
           : (int?)null;
+      int? autoUsefulnessSnap = null;
+      if (logEntry.TryGetValue("Полезность", out var puObj) && puObj != null &&
+          !string.IsNullOrWhiteSpace(puObj.ToString()) &&
+          int.TryParse(puObj.ToString(), out int puParsed))
+        autoUsefulnessSnap = puParsed;
 
       void WriteBoth()
       {
@@ -974,7 +985,8 @@ namespace ISIDA.Common
               mainThinkingCycleTooltip,
               mainThinkingCycleTaskStatus,
               dangerForWriter,
-              veryActualForWriter);
+              veryActualForWriter,
+              autoUsefulnessSnap);
         }
 
         _displayLogWriter?.WriteLog(
@@ -998,7 +1010,8 @@ namespace ISIDA.Common
             mainThinkingCycleTooltip,
             mainThinkingCycleTaskStatus,
             dangerForWriter,
-            veryActualForWriter);
+            veryActualForWriter,
+            autoUsefulnessSnap);
       }
 
       WriteBoth();
@@ -1171,6 +1184,15 @@ namespace ISIDA.Common
       }
     }
 
+    /// <summary>Полезность из справочника на момент снимка (для колонки «Полезность» в логе).</summary>
+    private static int? TrySnapshotAutomatizmUsefulness(int automatizmId)
+    {
+      if (automatizmId <= 0 || !AutomatizmSystem.IsInitialized)
+        return null;
+      var atmz = AutomatizmSystem.Instance.GetAutomatizmById(automatizmId);
+      return atmz?.Usefulness;
+    }
+
     /// <summary>
     /// Собирает текущее состояние системы
     /// </summary>
@@ -1205,6 +1227,7 @@ namespace ISIDA.Common
         CurrentGeneticReflexID = finalGeneticReflexId,
         CurrentConditionReflexID = finalConditionedReflexId,
         CurrentAutomatizmID = atmInfo.Id != 0 ? (int?)atmInfo.Id : null,
+        CurrentAutomatizmUsefulness = TrySnapshotAutomatizmUsefulness(atmInfo.Id),
         HasCriticalChanges = GetHasCriticalChanges(),
         OrientationReflexType = orInfo.Type != 0 ? (int?)orInfo.Type : null,
         OrientationReflexPulse = orInfo.Pulse != 0 ? (int?)orInfo.Pulse : null
@@ -1299,6 +1322,7 @@ namespace ISIDA.Common
     /// <see cref="SystemState.HasCriticalChanges"/> в сравнении не участвует: в UI (например, таблица LiveLogsView)
     /// это поле не выводится, а колонка «Актуально» идёт от <see cref="SystemState.InformationEnvironmentVeryActual"/>;
     /// учёт дельты в фильтре дублей давал бы новые строки при невидимом в таблице отличии.
+    /// <see cref="SystemState.CurrentAutomatizmUsefulness"/> участвует: при смене полезности по оценке нужна новая строка лога.
     /// </remarks>
     private bool IsDuplicateState(SystemState current)
     {
@@ -1323,7 +1347,8 @@ namespace ISIDA.Common
              _lastState.MainThinkingCyclePurposeId != current.MainThinkingCyclePurposeId ||
              _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus ||
              _lastState.InformationEnvironmentDanger != current.InformationEnvironmentDanger ||
-             _lastState.InformationEnvironmentVeryActual != current.InformationEnvironmentVeryActual;
+             _lastState.InformationEnvironmentVeryActual != current.InformationEnvironmentVeryActual ||
+             _lastState.CurrentAutomatizmUsefulness != current.CurrentAutomatizmUsefulness;
     }
 
     /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>

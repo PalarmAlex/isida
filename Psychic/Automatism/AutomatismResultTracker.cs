@@ -851,10 +851,16 @@ namespace ISIDA.Psychic
         var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
         if (automatizm != null)
         {
+          int before = automatizm.Usefulness;
           automatizm.Usefulness += assessment;
           automatizm.Usefulness = AddUtils.Clamp(automatizm.Usefulness, -10, 10);
+          Logger.Info(
+              $"[USEFULNESS_EVAL] UpdateAutomatizmUsefulness atmzId={automatizmId} branchId={automatizm.BranchID} " +
+              $"assessmentDelta={assessment} usefulness {before}->{automatizm.Usefulness} (after clamp)");
           _automatizmSystem.AfterAutomatizmUsefulnessUpdated(automatizmId);
         }
+        else
+          Logger.Warning($"[USEFULNESS_EVAL] UpdateAutomatizmUsefulness automatizm not found id={automatizmId} assessment={assessment}");
       }
       catch (Exception ex)
       {

@@ -37,6 +37,7 @@ namespace ISIDA.Psychic
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
     private readonly InfluenceActionsImagesSystem _influenceActionsImagesSystem;
+    private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly ActionsImagesSystem _actionsImagesSystem;
     private readonly EmotionsImageSystem _emotionsImageSystem;
     private readonly SensorySystem _sensorySystem;
@@ -74,6 +75,7 @@ namespace ISIDA.Psychic
         AutomatizmSystem automatizmSystem,
         AutomatizmTreeSystem automatizmTreeSystem,
         InfluenceActionsImagesSystem influenceActionsImagesSystem,
+        InfluenceActionSystem influenceActionSystem,
         ActionsImagesSystem actionsImagesSystem,
         EmotionsImageSystem emotionsImageSystem,
         SensorySystem sensorySystem,
@@ -87,6 +89,7 @@ namespace ISIDA.Psychic
         automatizmSystem,
         automatizmTreeSystem,
         influenceActionsImagesSystem,
+        influenceActionSystem,
         actionsImagesSystem,
         emotionsImageSystem,
         sensorySystem,
@@ -98,6 +101,7 @@ namespace ISIDA.Psychic
       AutomatizmSystem automatizmSystem,
       AutomatizmTreeSystem automatizmTreeSystem,
       InfluenceActionsImagesSystem influenceActionsImagesSystem,
+      InfluenceActionSystem influenceActionSystem,
       ActionsImagesSystem actionsImagesSystem,
       EmotionsImageSystem emotionsImageSystem,
       SensorySystem sensorySystem,
@@ -107,6 +111,7 @@ namespace ISIDA.Psychic
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
       _influenceActionsImagesSystem = influenceActionsImagesSystem ?? throw new ArgumentNullException(nameof(influenceActionsImagesSystem));
+      _influenceActionSystem = influenceActionSystem ?? throw new ArgumentNullException(nameof(influenceActionSystem));
       _actionsImagesSystem = actionsImagesSystem ?? throw new ArgumentNullException(nameof(actionsImagesSystem));
       _emotionsImageSystem = emotionsImageSystem ?? throw new ArgumentNullException(nameof(emotionsImageSystem));
       _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
@@ -1571,18 +1576,24 @@ namespace ISIDA.Psychic
       var stateAfter = AppGlobalState.CurrentOverallState;
 
       int assessment;
+      string assessmentSource;
       if (GomeostasSystem.IsInitialized &&
           AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId) &&
           snapshotBefore != null)
       {
         var gh = GomeostasSystem.Instance;
         var currentParams = gh.GetAllParameters();
+        assessmentSource = "gomeo_calculator";
         assessment = gh.Calculator.ComputeOperatorAutomatizmAssessment(
             snapshotBefore,
             currentParams,
             focusParamId,
             stateBefore,
             stateAfter);
+        Logger.Info(
+            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm rawAssessment source={assessmentSource} atmzId={automatizmIdToEvaluate} " +
+            $"pulse={GlobalTimer.GlobalPulsCount} focusParamId={focusParamId} snapshotKeys={snapshotBefore.Count} " +
+            $"stateBefore={stateBefore} stateAfter={stateAfter} assessment={assessment}");
       }
       else
       {
@@ -1591,12 +1602,22 @@ namespace ISIDA.Psychic
           assessment = 1;
         else if (stateAfter < stateBefore)
           assessment = -1;
+        assessmentSource = "integral_state_only";
+        Logger.Info(
+            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm rawAssessment source={assessmentSource} atmzId={automatizmIdToEvaluate} " +
+            $"pulse={GlobalTimer.GlobalPulsCount} gomeoInit={GomeostasSystem.IsInitialized} " +
+            $"stateBefore={stateBefore} stateAfter={stateAfter} assessment={assessment}");
       }
 
       int responseTime = PulseCount - lastRunPulseForResponseTime;
 
       int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
+      int assessmentBeforeMerge = assessment;
       assessment = MergeOperatorAssessmentWithPultInfluence(assessment, operatorResponseImageId);
+      if (assessmentBeforeMerge != assessment)
+        Logger.Info(
+            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm mergeChanged assessment {assessmentBeforeMerge}->{assessment} " +
+            $"operatorResponseActionsImageId={operatorResponseImageId}");
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
           true, // распознано оператором
@@ -1613,27 +1634,59 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// При конфликте дельты параметров и явного знака воздействий с пульта приоритет у намерения оператора (сумма влияний по параметрам).
+    /// При конфликте дельты параметров и явного знака воздействий с пульта приоритет у намерения оператора
+    /// (<see cref="InfluenceActionSystem.GetSignedOperatorValenceSumForActions"/> — знак воздействия с учётом типа параметра по Speed).
     /// </summary>
-    private static int MergeOperatorAssessmentWithPultInfluence(int assessment, int operatorResponseActionsImageId)
+    private int MergeOperatorAssessmentWithPultInfluence(int assessment, int operatorResponseActionsImageId)
     {
-      if (operatorResponseActionsImageId <= 0 || !InfluenceActionSystem.IsInitialized || !InfluenceActionsImagesSystem.IsInitialized)
+      if (operatorResponseActionsImageId <= 0 || _influenceActionSystem == null || _influenceActionsImagesSystem == null)
+      {
+        Logger.Info(
+            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence skip imageId={operatorResponseActionsImageId} " +
+            $"influenceActionSystem={_influenceActionSystem != null} influenceImagesSystem={_influenceActionsImagesSystem != null} " +
+            $"assessment={assessment}");
         return assessment;
+      }
 
-      var ids = InfluenceActionsImagesSystem.Instance.GetInfluenceActionIds(operatorResponseActionsImageId);
+      // Pending — это ID образа из ActionsImagesSystem (SensorActivation → CreateActionsImage), а не из InfluenceActionsImagesSystem.
+      IReadOnlyList<int> ids;
+      var actionsImg = _actionsImagesSystem.GetActionsImage(operatorResponseActionsImageId);
+      if (actionsImg != null)
+        ids = actionsImg.ActIdList ?? new List<int>();
+      else
+        ids = _influenceActionsImagesSystem.GetInfluenceActionIds(operatorResponseActionsImageId);
+
       if (ids == null || ids.Count == 0)
+      {
+        Logger.Info(
+            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence no_action_ids imageId={operatorResponseActionsImageId} assessment={assessment}");
         return assessment;
+      }
 
-      int sum = InfluenceActionSystem.Instance.GetSignedInfluenceSumForActions(ids);
+      int sum = _influenceActionSystem.GetSignedOperatorValenceSumForActions(ids);
       if (sum == 0)
+      {
+        Logger.Info(
+            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence valence_sum_zero imageId={operatorResponseActionsImageId} " +
+            $"actionIdsCount={ids.Count} assessment={assessment}");
         return assessment;
+      }
 
       int pSign = sum > 0 ? 1 : -1;
+      int merged;
       if (assessment == 0)
-        return pSign;
-      if ((assessment > 0 && pSign < 0) || (assessment < 0 && pSign > 0))
-        return pSign;
-      return assessment;
+        merged = pSign;
+      else if ((assessment > 0 && pSign < 0) || (assessment < 0 && pSign > 0))
+        merged = pSign;
+      else
+        merged = assessment;
+
+      if (merged != assessment || assessment == 0)
+        Logger.Info(
+            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence imageId={operatorResponseActionsImageId} " +
+            $"actionIdsCount={ids.Count} operatorValenceSum={sum} pSign={pSign} assessmentIn={assessment} mergedOut={merged}");
+
+      return merged;
     }
 
     /// <summary>

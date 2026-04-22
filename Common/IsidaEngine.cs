@@ -840,6 +840,7 @@ namespace ISIDA.Common
           context.AutomatizmSystem, 
           context.AutomatizmTree, 
           context.InfluenceActionsImages,
+          context.InfluenceActions,
           context.ActionsImages,
           context.EmotionsImageSystem,
           context.SensorySystem,

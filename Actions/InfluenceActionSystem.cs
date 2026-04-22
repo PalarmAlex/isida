@@ -660,6 +660,41 @@ namespace ISIDA.Actions
       return s;
     }
 
+    /// <summary>
+    /// Сумма «полезности намерения оператора» по списку воздействий с пульта: для каждого слагаемого effect на параметр
+    /// учитывается <see cref="GomeostasSystem.ParameterData.Speed"/> — дефицит-ориентированные (Speed &lt; 0): положительный effect
+    /// к значению параметра — улучшение; избыток-ориентированные (Speed &gt; 0) — наоборот.
+    /// </summary>
+    public int GetSignedOperatorValenceSumForActions(IEnumerable<int> actionIds)
+    {
+      if (actionIds == null || !GomeostasSystem.IsInitialized)
+        return 0;
+
+      int total = 0;
+      foreach (var actionId in actionIds)
+      {
+        if (!_influenceActions.TryGetValue(actionId, out var a) || a?.Influences == null || a.Influences.Count == 0)
+          continue;
+
+        foreach (var kvp in a.Influences)
+        {
+          var param = _gomeostas.GetParameter(kvp.Key);
+          if (param == null)
+            continue;
+
+          int speed = param.Speed;
+          if (speed == 0)
+            continue;
+
+          // Дефицит (Speed < 0): +effect → к лучшему; избыток (Speed > 0): +effect → к худшему.
+          int orientation = speed < 0 ? 1 : -1;
+          total += kvp.Value * orientation;
+        }
+      }
+
+      return total;
+    }
+
     #endregion
 
     #region Валидация и коррекция антагонистов

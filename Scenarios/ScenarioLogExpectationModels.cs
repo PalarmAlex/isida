@@ -16,6 +16,7 @@ namespace ISIDA.Scenarios
     private bool _skipGeneticReflex;
     private bool _skipConditionReflex;
     private bool _skipAutomatizm;
+    private bool _skipAutomatizmUsefulness;
     private bool _skipReflexChain;
     private bool _skipAutomatizmChain;
     private bool _skipMainCycle;
@@ -90,6 +91,13 @@ namespace ISIDA.Scenarios
       set { if (_skipAutomatizm == value) return; _skipAutomatizm = value; OnPropertyChanged(); }
     }
 
+    /// <summary>Не сравнивать столбец «Успешность» (полезность автоматизма).</summary>
+    public bool SkipAutomatizmUsefulness
+    {
+      get => _skipAutomatizmUsefulness;
+      set { if (_skipAutomatizmUsefulness == value) return; _skipAutomatizmUsefulness = value; OnPropertyChanged(); }
+    }
+
     /// <summary>Не сравнивать столбец «Цепочка РФ» (цепочка рефлекса).</summary>
     public bool SkipReflexChain
     {
@@ -127,6 +135,7 @@ namespace ISIDA.Scenarios
         SkipGeneticReflex = SkipGeneticReflex,
         SkipConditionReflex = SkipConditionReflex,
         SkipAutomatizm = SkipAutomatizm,
+        SkipAutomatizmUsefulness = SkipAutomatizmUsefulness,
         SkipReflexChain = SkipReflexChain,
         SkipAutomatizmChain = SkipAutomatizmChain,
         SkipMainCycle = SkipMainCycle
@@ -155,6 +164,7 @@ namespace ISIDA.Scenarios
     private string _geneticReflexText = "-";
     private string _conditionReflexText = "-";
     private string _automatizmText = "-";
+    private string _automatizmUsefulnessText = "-";
     private string _reflexChainText = "-";
     private string _automatizmChainText = "-";
     private string _mainCycleText = "-";
@@ -243,6 +253,13 @@ namespace ISIDA.Scenarios
       set { if (_automatizmText == value) return; _automatizmText = value ?? ""; OnPropertyChanged(); }
     }
 
+    /// <summary>Ожидаемое значение полезности автоматизма (число в логе); «-» — в логе прочерк.</summary>
+    public string AutomatizmUsefulnessText
+    {
+      get => _automatizmUsefulnessText;
+      set { if (_automatizmUsefulnessText == value) return; _automatizmUsefulnessText = value ?? ""; OnPropertyChanged(); }
+    }
+
     /// <summary>Ожидаемое значение столбца «Цепочка РФ».</summary>
     public string ReflexChainText
     {
@@ -282,6 +299,7 @@ namespace ISIDA.Scenarios
         GeneticReflexText = GeneticReflexText ?? "",
         ConditionReflexText = ConditionReflexText ?? "",
         AutomatizmText = AutomatizmText ?? "",
+        AutomatizmUsefulnessText = AutomatizmUsefulnessText ?? "",
         ReflexChainText = ReflexChainText ?? "",
         AutomatizmChainText = AutomatizmChainText ?? "",
         MainCycleText = MainCycleText ?? ""
