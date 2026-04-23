@@ -485,7 +485,7 @@ namespace ISIDA.Psychic
 
         _lastAutomatizmResults[automatizmId] = trackingResult;
         AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
-        if (AppGlobalState.EvolutionStage >= 4)
+        if (AppGlobalState.EvolutionStage >= 2)
           CaptureOperatorEvaluationParameterSnapshot();
         else
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);

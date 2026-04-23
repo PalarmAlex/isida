@@ -201,7 +201,7 @@ namespace ISIDA.Scenarios
         }
         else
         {
-          if (line.ResetWaitingPeriod && AppGlobalState.EvolutionStage >= 3
+          if (line.ResetWaitingPeriod && AppGlobalState.EvolutionStage >= 2
               && AppGlobalState.WaitingForOperatorEvaluation)
             _cancelWaitingPeriod?.Invoke();
 

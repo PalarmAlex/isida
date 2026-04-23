@@ -149,13 +149,13 @@ namespace ISIDA.Psychic.Automatism
     {
       if (actionsImageId <= 0 || detectedNodeId <= 0)
         return;
-      if (AppGlobalState.EvolutionStage != 3 && AppGlobalState.EvolutionStage < 4)
+      if (AppGlobalState.EvolutionStage < 2)
         return;
 
       _lock.EnterWriteLock();
       try
       {
-        if (AppGlobalState.EvolutionStage >= 4)
+        if (AppGlobalState.EvolutionStage >= 4 || AppGlobalState.EvolutionStage == 2)
         {
           _pendingResponseActionsImageId = actionsImageId;
           _pendingResponseNodeId = detectedNodeId;

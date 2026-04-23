@@ -588,7 +588,7 @@ namespace ISIDA.Psychic
           if (_informationEnvironmentSystem != null)
             _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
 
-          // Стадия 3–4+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId). Полезность по оценке — только со стадии 4.
+          // Стадия 2+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId). Полезность по ответу оператора — со стадии 2.
           TryScheduleDeferredOperatorEvaluationOnStimulus(
               activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasNonVerbalPart);
           deferredOperatorEvalScheduledThisStimulus = _deferredOperatorEvaluationAutomatizmId > 0;
@@ -1396,7 +1396,7 @@ namespace ISIDA.Psychic
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
           // Период ожидания оценки оператора: только после фактической активации автоматизма (сброс таймера при каждом успешном запуске)
-          if (AppGlobalState.EvolutionStage >= 3)
+          if (AppGlobalState.EvolutionStage >= 2)
             AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
           _currentAutomatizmId = automatizm.ID;
         }
@@ -1493,7 +1493,7 @@ namespace ISIDA.Psychic
       // SensorActivation после эхо) timeSince==0 — ответ оператора всё равно валиден, иначе сбрасывается зеркало и не создаётся сдвиг.
       if (!AppGlobalState.IsOperatorResponseWithinWaitingWindow())
       {
-        if (AppGlobalState.EvolutionStage == 3)
+        if (AppGlobalState.EvolutionStage == 2 || AppGlobalState.EvolutionStage == 3)
           ResetAutomatizmWaitingState();
         return;
       }
@@ -1533,40 +1533,11 @@ namespace ISIDA.Psychic
       if (lastRunPulseForResponseTime <= 0)
         lastRunPulseForResponseTime = AppGlobalState.LastRunAutomatizmPulsCount;
 
-      // Стадия 3: только зеркало без изменения полезности по ответу оператора; оценка — со стадии 4.
-      if (AppGlobalState.EvolutionStage < 4)
+      if (AppGlobalState.EvolutionStage < 2)
       {
-        int mirrorAutomatizmIdEarly = 0;
-        if (AppGlobalState.EvolutionStage == 3)
-        {
-          if (_skipStage3MirrorLearningOnNextEval)
-          {
-            _skipStage3MirrorLearningOnNextEval = false;
-            _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
-          }
-          else
-          {
-            int pendingOperatorPhraseNodeId = _mirrorAutomatizmService.GetPendingResponseTreeNodeId();
-            mirrorAutomatizmIdEarly = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
-            if (mirrorAutomatizmIdEarly > 0 &&
-                pendingOperatorPhraseNodeId > 0 &&
-                _automatizmSystem != null)
-            {
-              var staffOnOperatorPhrase =
-                  _automatizmSystem.GetBelief2AutomatizmFromTreeId(pendingOperatorPhraseNodeId);
-              if (staffOnOperatorPhrase != null &&
-                  staffOnOperatorPhrase.Usefulness >= 0 &&
-                  staffOnOperatorPhrase.ID != mirrorAutomatizmIdEarly)
-              {
-                mirrorAutomatizmIdEarly = staffOnOperatorPhrase.ID;
-              }
-            }
-          }
-        }
-
         Logger.Info(
             $"Стадия {AppGlobalState.EvolutionStage}: ответ оператора без оценки полезности для автоматизма ID={automatizmIdToEvaluate}");
-        return mirrorAutomatizmIdEarly;
+        return 0;
       }
 
       // Состояние до ответа оператора (интегральное — для запасной ветки и смешивания)
@@ -1630,6 +1601,38 @@ namespace ISIDA.Psychic
         _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 
       Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
+
+      // Стадия 3: после оценки полезности — зеркальная пара по ответу оператора (сдвиг + эхо), как раньше до объединения со стадией 4.
+      if (AppGlobalState.EvolutionStage == 3)
+      {
+        int mirrorAutomatizmIdEarly = 0;
+        if (_skipStage3MirrorLearningOnNextEval)
+        {
+          _skipStage3MirrorLearningOnNextEval = false;
+          _mirrorAutomatizmService.DiscardPendingOperatorResponseWithoutMirror();
+        }
+        else
+        {
+          int pendingOperatorPhraseNodeId = _mirrorAutomatizmService.GetPendingResponseTreeNodeId();
+          mirrorAutomatizmIdEarly = _mirrorAutomatizmService.TryCreateMirrorFromPendingOperatorResponse();
+          if (mirrorAutomatizmIdEarly > 0 &&
+              pendingOperatorPhraseNodeId > 0 &&
+              _automatizmSystem != null)
+          {
+            var staffOnOperatorPhrase =
+                _automatizmSystem.GetBelief2AutomatizmFromTreeId(pendingOperatorPhraseNodeId);
+            if (staffOnOperatorPhrase != null &&
+                staffOnOperatorPhrase.Usefulness >= 0 &&
+                staffOnOperatorPhrase.ID != mirrorAutomatizmIdEarly)
+            {
+              mirrorAutomatizmIdEarly = staffOnOperatorPhrase.ID;
+            }
+          }
+        }
+
+        return mirrorAutomatizmIdEarly;
+      }
+
       return 0;
     }
 
