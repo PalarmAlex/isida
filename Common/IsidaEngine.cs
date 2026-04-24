@@ -414,6 +414,8 @@ namespace ISIDA.Common
     public void CancelWaitingPeriodAndResetMirror()
     {
       AppGlobalState.ForceStopWaitingForOperatorEvaluation();
+      // Иначе в логе остаётся «активный» автоматизм и полезность после ручного сброса ожидания (шаг сценария без стимула).
+      AppGlobalState.ResetAutomatizmInfo();
       MirrorAutomatizmService?.ResetDialogMirror();
       EpisodicMemory?.SetInterruption();
     }

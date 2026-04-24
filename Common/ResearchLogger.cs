@@ -727,6 +727,10 @@ namespace ISIDA.Common
       if (reflexSuppressedByAutomatizm)
         reflexChainInfo = string.Empty;
 
+      bool logAutomatizmId = state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID.Value > 0
+          && (state.CurrentAutomatizmID != _lastState.CurrentAutomatizmID
+              || state.CurrentAutomatizmUsefulness != _lastState.CurrentAutomatizmUsefulness);
+
       return new Dictionary<string, object>
       {
         ["Время"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -748,9 +752,8 @@ namespace ISIDA.Common
             ? ""
             : (!AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
                 ? (state.CurrentConditionReflexID?.ToString() ?? "") : ""),
-        // Автоматизм — только при изменении (фиксация запуска), не дублировать на следующих пульсах
-        ["Автоматизм"] = (state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID != _lastState.CurrentAutomatizmID)
-            ? state.CurrentAutomatizmID.ToString() : "",
+        // Автоматизм — при смене ID или при смене полезности того же ID (иначе в строке была бы «Полезность» без номера).
+        ["Автоматизм"] = logAutomatizmId ? state.CurrentAutomatizmID.ToString() : "",
         ["Цепочка РФ"] = reflexChainInfo,
         ["Цепочка АВ"] = automatizmChainInfo,
         ["УМ"] = umString,
@@ -772,8 +775,7 @@ namespace ISIDA.Common
             ? (state.MainThinkingCycleTaskStatus ?? "") : "",
         ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0",
         ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0",
-        ["Полезность"] = state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID.Value > 0
-            && state.CurrentAutomatizmUsefulness.HasValue
+        ["Полезность"] = logAutomatizmId && state.CurrentAutomatizmUsefulness.HasValue
             ? state.CurrentAutomatizmUsefulness.Value.ToString()
             : ""
       };
