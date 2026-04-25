@@ -249,6 +249,12 @@ namespace ISIDA.Scenarios
     /// <summary>Ускорение пульса по календарю при прогоне (1, 10, 50, 100). 1 — обычная скорость.</summary>
     public int RunPulseTimingCoefficient { get; set; } = 1;
 
+    /// <summary>В HTML-отчёте сравнения с логом: не выводить пары колонок, где и ожидание, и факт везде визуально «-».</summary>
+    public bool ReportHideEmptyComparisonColumns { get; set; } = true;
+
+    /// <summary>В HTML-отчёте: если по колонке нет расхождений ожидание/факт, не дублировать столбец «ожид.», оставить только факт.</summary>
+    public bool ReportHideExpectedWhenNoMismatch { get; set; } = true;
+
     /// <summary>Копия записи реестра.</summary>
     public ScenarioHeader Clone()
     {
@@ -264,7 +270,9 @@ namespace ISIDA.Scenarios
         ScenarioObservationMode = ScenarioObservationMode,
         ScenarioAuthoritativeRecording = ScenarioAuthoritativeRecording,
         PulseStepIncrement = PulseStepIncrement,
-        RunPulseTimingCoefficient = RunPulseTimingCoefficient
+        RunPulseTimingCoefficient = RunPulseTimingCoefficient,
+        ReportHideEmptyComparisonColumns = ReportHideEmptyComparisonColumns,
+        ReportHideExpectedWhenNoMismatch = ReportHideExpectedWhenNoMismatch
       };
     }
   }
