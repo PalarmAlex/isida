@@ -13,7 +13,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
   internal sealed class InfoFunctionsStrategy : IThinkingStrategy
   {
     private readonly ThinkingExperienceMemory _experienceMemory;
-    private readonly Random _rng = new Random();
+    private Random _rng = new Random();
     private int _episodicHistoryCursor = -1;
 
     /// <summary>Id стратегии для регистрации в диспетчере</summary>
@@ -22,6 +22,16 @@ namespace ISIDA.Psychic.Thinking.Strategies
     public InfoFunctionsStrategy(ThinkingExperienceMemory experienceMemory)
     {
       _experienceMemory = experienceMemory ?? throw new ArgumentNullException(nameof(experienceMemory));
+    }
+
+    /// <summary>
+    /// Сброс временного состояния (курсор эпизодической истории, RNG) при очистке данных стадии 4
+    /// или предзапуске сценария без полного сброса циклов — чтобы не тянуть «хвост» вышестоящей стадии в тестах.
+    /// </summary>
+    internal void ResetTransientStateAfterHigherStageCleared()
+    {
+      _episodicHistoryCursor = -1;
+      _rng = new Random();
     }
 
     /// <summary>Название инфо-функции по Id из фиксированного справочника (канон — <see cref="InfoFunctionsCatalog"/>).</summary>

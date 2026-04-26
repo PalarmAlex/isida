@@ -190,6 +190,17 @@ namespace ISIDA.Psychic
       PublishMainThinkingCycleToAppGlobalState();
     }
 
+    /// <summary>
+    /// Сброс накопленных рекомендаций «памяти опыта» циклов мышления (ключ: проблема, тема, цель)
+    /// и временного состояния стратегий циклов (курсоры эпизодической истории, RNG и т.п.).
+    /// Вызывается при предзапуске сценария, если очистка стадий не заходила в стадию 4
+    /// (тогда <see cref="ClearThinkingCyclesWhenStageFourDataCleared"/> не вызывается).
+    /// </summary>
+    public void ClearThinkingCyclesExperienceMemory()
+    {
+      _thinkingCyclesSystem?.ClearThinkingExperienceMemory();
+    }
+
     /// <summary>Подключает <see cref="ResearchLogger"/> к уведомлению о снятии цикла с подтверждённым решением (отдельная строка лога).</summary>
     /// <param name="researchLogger">Логгер исследований или null для отключения.</param>
     public void AttachResearchLoggerForThinkingCycleClosure(ResearchLogger researchLogger)
@@ -1968,6 +1979,20 @@ namespace ISIDA.Psychic
         AppGlobalState.UpdateMainThinkingCycleSnapshot(
           snap.Id, snap.Weight, snap.ProblemNodeId, snap.ThemeId, snap.PurposeId, snap.LastStrategyId,
           snap.AwaitingEvaluation, snap.PendingSolutionAutomatizmId);
+
+      // Фоновые циклы публикуются даже при отсутствии главного (только фон в диспетчере).
+      var all = _thinkingCyclesSystem.GetAllCyclesLightweightSnapshot();
+      var bg = new List<PublishedBackgroundThinkingCycleSnapshot>();
+      foreach (var c in all)
+      {
+        if (c == null || c.IsMainCycle || c.Id <= 0 || c.Weight <= 0)
+          continue;
+        bg.Add(new PublishedBackgroundThinkingCycleSnapshot(
+            c.Id, c.Weight, c.ThemeId, c.PurposeId, c.ProblemNodeId, c.LastStrategyId ?? string.Empty,
+            c.AwaitingEvaluation, c.PendingSolutionAutomatizmId));
+      }
+      bg.Sort((a, b) => b.Weight.CompareTo(a.Weight));
+      AppGlobalState.UpdatePublishedBackgroundThinkingCycles(bg);
     }
 
     #region Диагностика циклов осмысления (3-й уровень)

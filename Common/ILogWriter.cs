@@ -20,7 +20,8 @@ namespace ISIDA.Common
                  string mainThinkingCycleTaskStatus = null,
                  bool informationEnvironmentDanger = false,
                  bool informationEnvironmentVeryActual = false,
-                 int? automatizmUsefulnessAtSnapshot = null);
+                 int? automatizmUsefulnessAtSnapshot = null,
+                 string backgroundThinkingCyclesJson = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза

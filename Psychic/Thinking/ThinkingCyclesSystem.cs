@@ -207,7 +207,11 @@ namespace ISIDA.Psychic.Thinking
             PendingSolutionAutomatizmId = c.PendingSolutionAutomatizmId,
             StepCount = c.StepCount,
             ShowAwaitingEvaluationBorder = awaiting,
-            ShowNoSolutionBorder = noSol
+            ShowNoSolutionBorder = noSol,
+            ThemeId = c.ThemeId,
+            PurposeId = c.PurposeId,
+            ProblemNodeId = c.ProblemNodeId,
+            LastStrategyId = c.LastStrategyId
           });
         }
         return list;
@@ -297,6 +301,21 @@ namespace ISIDA.Psychic.Thinking
     }
 
     /// <summary>
+    /// Сбрасывает «память опыта» циклов (рекомендации по ключу проблема/тема/цель) и временное состояние
+    /// зарегистрированных стратегий (курсоры, RNG). Не трогает список активных циклов; для полного сброса см. <see cref="ClearAllCycles"/>.
+    /// </summary>
+    public void ClearThinkingExperienceMemory()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _experienceMemory.Clear();
+        ResetRegisteredStrategiesTransientStateUnsynchronized();
+      }
+      finally { _lock.ExitWriteLock(); }
+    }
+
+    /// <summary>
     /// Удаляет все циклы и связанное состояние диспетчера. Вызывается на стадиях &lt; 4,
     /// где циклы мышления не используются (иначе остаток после стадии 4 продолжал бы шагать по пульсу).
     /// </summary>
@@ -305,6 +324,12 @@ namespace ISIDA.Psychic.Thinking
       _lock.EnterWriteLock();
       try
       {
+        // Опыт циклов живёт в ОЗУ вне списка _cycles; при пустых циклах ранний return иначе оставлял бы «хвост»
+        // после стадии 4 / сценария и ломал бы воспроизводимость (случайная ветка vs рекомендация).
+        _experienceMemory.Clear();
+        ResetRegisteredStrategiesTransientStateUnsynchronized();
+        _lastStimulusPulse = 0;
+
         if (_cycles.Count == 0 && _interruptMemory.Count == 0 && _lastCondensedLogDigestByCycleId.Count == 0)
           return;
         _cycles.Clear();
@@ -312,9 +337,18 @@ namespace ISIDA.Psychic.Thinking
         _lastCondensedLogDigestByCycleId.Clear();
         _nextId = 1;
         _nextOrder = 1;
-        _lastStimulusPulse = 0;
       }
       finally { _lock.ExitWriteLock(); }
+    }
+
+    /// <summary>Курсоры и RNG стратегий — не часть файлов стадии 4, но должны сбрасываться вместе с очисткой вышестоящей стадии.</summary>
+    private void ResetRegisteredStrategiesTransientStateUnsynchronized()
+    {
+      foreach (var s in _strategies)
+      {
+        if (s is InfoFunctionsStrategy info)
+          info.ResetTransientStateAfterHigherStageCleared();
+      }
     }
 
     /// <summary>
@@ -760,7 +794,7 @@ namespace ISIDA.Psychic.Thinking
         return ThinkingDecision.None("no_allowed_infoFuncs");
       }
 
-      var idsToTry = allowedInfoFuncIds.ToList();
+      var idsToTry = allowedInfoFuncIds.OrderBy(x => x).ToList();
 
       var batchAttempts = new List<(int FuncId, string DebugNote)>();
       foreach (var infoFuncId in idsToTry)

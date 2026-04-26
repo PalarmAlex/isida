@@ -20,6 +20,7 @@ namespace ISIDA.Scenarios
     private bool _skipReflexChain;
     private bool _skipAutomatizmChain;
     private bool _skipMainCycle;
+    private bool _skipBackgroundCycles;
 
     /// <summary>Не сравнивать столбец «Состояние» (ID базового состояния гомеостаза).</summary>
     public bool SkipState
@@ -119,6 +120,13 @@ namespace ISIDA.Scenarios
       set { if (_skipMainCycle == value) return; _skipMainCycle = value; OnPropertyChanged(); }
     }
 
+    /// <summary>Не сравнивать столбец «Циклы Ф» (фоновые циклы мышления).</summary>
+    public bool SkipBackgroundCycles
+    {
+      get => _skipBackgroundCycles;
+      set { if (_skipBackgroundCycles == value) return; _skipBackgroundCycles = value; OnPropertyChanged(); }
+    }
+
     /// <summary>Создаёт независимую копию флагов столбцов.</summary>
     /// <returns>Новый экземпляр с теми же значениями галок.</returns>
     public ScenarioLogExpectationColumnSkips Clone()
@@ -138,7 +146,8 @@ namespace ISIDA.Scenarios
         SkipAutomatizmUsefulness = SkipAutomatizmUsefulness,
         SkipReflexChain = SkipReflexChain,
         SkipAutomatizmChain = SkipAutomatizmChain,
-        SkipMainCycle = SkipMainCycle
+        SkipMainCycle = SkipMainCycle,
+        SkipBackgroundCycles = SkipBackgroundCycles
       };
     }
 
@@ -168,6 +177,7 @@ namespace ISIDA.Scenarios
     private string _reflexChainText = "-";
     private string _automatizmChainText = "-";
     private string _mainCycleText = "-";
+    private string _backgroundCyclesText = "-";
 
     /// <summary>Порядковый номер шага сценария (синхронизируется со строкой шагов).</summary>
     public int StepIndex
@@ -281,6 +291,13 @@ namespace ISIDA.Scenarios
       set { if (_mainCycleText == value) return; _mainCycleText = value ?? ""; OnPropertyChanged(); }
     }
 
+    /// <summary>Ожидаемое значение столбца «Циклы Ф» (фоновые циклы).</summary>
+    public string BackgroundCyclesText
+    {
+      get => _backgroundCyclesText;
+      set { if (_backgroundCyclesText == value) return; _backgroundCyclesText = value ?? ""; OnPropertyChanged(); }
+    }
+
     /// <summary>Глубокая копия строки ожиданий.</summary>
     /// <returns>Новый экземпляр с теми же текстовыми полями и номерами шага/пульса.</returns>
     public ScenarioLogExpectationRow Clone()
@@ -302,7 +319,8 @@ namespace ISIDA.Scenarios
         AutomatizmUsefulnessText = AutomatizmUsefulnessText ?? "",
         ReflexChainText = ReflexChainText ?? "",
         AutomatizmChainText = AutomatizmChainText ?? "",
-        MainCycleText = MainCycleText ?? ""
+        MainCycleText = MainCycleText ?? "",
+        BackgroundCyclesText = BackgroundCyclesText ?? ""
       };
     }
 

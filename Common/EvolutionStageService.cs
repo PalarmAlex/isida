@@ -213,6 +213,11 @@ namespace ISIDA.Common
         int clearThrough = Math.Max(stage, 2);
         Logger.Info($"Предзапуск сценария: очистка данных стадий 1..{clearThrough} (текущая стадия агента {stage}; как при переходе на стадию 0, без смены номера)");
         ClearSubsequentStagesData(0, clearThrough);
+
+        // Память опыта и временное состояние стратегий циклов не привязаны к файлам стадии 4 и при clearThrough &lt; 4
+        // не очищались бы (ClearThinkingCyclesWhenStageFourDataCleared не зовётся).
+        // Дублирующий вызов при clearThrough == 4 безвреден: ClearAllCycles уже делает тот же сброс в начале.
+        _psychicSystem?.ClearThinkingCyclesExperienceMemory();
       }
       finally
       {

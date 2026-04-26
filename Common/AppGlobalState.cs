@@ -43,6 +43,10 @@ public static class AppGlobalState
   private static bool _mainThinkingCycleAwaitingEvaluation = false;
   private static int _mainThinkingCyclePendingSolutionAutomatizmId = 0;
 
+  /// <summary>Фоновые циклы мышления (снимок после шага диспетчера), упорядочены по убыванию веса.</summary>
+  private static PublishedBackgroundThinkingCycleSnapshot[] _publishedBackgroundThinkingCycles =
+      Array.Empty<PublishedBackgroundThinkingCycleSnapshot>();
+
   private static bool _flgConditionReflexes = false;
   private static bool _isReflexChainActive = false;
   private static List<int> _geneticReflexesActions = new List<int>();
@@ -529,6 +533,34 @@ public static class AppGlobalState
     _mainThinkingCycleLastStrategyId = null;
     _mainThinkingCycleAwaitingEvaluation = false;
     _mainThinkingCyclePendingSolutionAutomatizmId = 0;
+    _publishedBackgroundThinkingCycles = Array.Empty<PublishedBackgroundThinkingCycleSnapshot>();
+  }
+
+  /// <summary>Публикует список фоновых циклов (после обновления главного).</summary>
+  /// <param name="cycles">Снимки без главного цикла, обычно уже отсортированы по убыванию веса.</param>
+  public static void UpdatePublishedBackgroundThinkingCycles(IReadOnlyList<PublishedBackgroundThinkingCycleSnapshot> cycles)
+  {
+    if (cycles == null || cycles.Count == 0)
+    {
+      _publishedBackgroundThinkingCycles = Array.Empty<PublishedBackgroundThinkingCycleSnapshot>();
+      return;
+    }
+    var arr = new PublishedBackgroundThinkingCycleSnapshot[cycles.Count];
+    for (int i = 0; i < cycles.Count; i++)
+      arr[i] = cycles[i];
+    _publishedBackgroundThinkingCycles = arr;
+  }
+
+  /// <summary>Копия снимка фоновых циклов для логирования.</summary>
+  /// <returns>Массив снимков (может быть пустым).</returns>
+  public static PublishedBackgroundThinkingCycleSnapshot[] GetPublishedBackgroundThinkingCycles()
+  {
+    var a = _publishedBackgroundThinkingCycles;
+    if (a == null || a.Length == 0)
+      return Array.Empty<PublishedBackgroundThinkingCycleSnapshot>();
+    var copy = new PublishedBackgroundThinkingCycleSnapshot[a.Length];
+    Array.Copy(a, copy, a.Length);
+    return copy;
   }
 
   /// <summary>Текущий снимок главного цикла мышления для логирования.</summary>

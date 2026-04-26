@@ -37,5 +37,17 @@ namespace ISIDA.Psychic.Thinking
 
     /// <summary>Красная обводка «решение ещё не найдено».</summary>
     public bool ShowNoSolutionBorder { get; set; }
+
+    /// <summary>Образ темы (для подсказки в логе).</summary>
+    public int ThemeId { get; set; }
+
+    /// <summary>Образ цели.</summary>
+    public int PurposeId { get; set; }
+
+    /// <summary>Узел дерева проблем.</summary>
+    public int ProblemNodeId { get; set; }
+
+    /// <summary>Последняя стратегия (инфо-функция).</summary>
+    public string LastStrategyId { get; set; }
   }
 }

@@ -156,6 +156,10 @@ namespace ISIDA.Common
       public string MainThinkingCycleLastStrategyId { get; set; }
       /// <summary>Статус задачи главного цикла для UI: Awaiting / NoSolution / Solved (как обводки матрицы циклов).</summary>
       public string MainThinkingCycleTaskStatus { get; set; }
+
+      /// <summary>JSON массива фоновых циклов (Id, Weight, TaskStatus, Tooltip) для колонки «Циклы Ф» и отчётов.</summary>
+      public string BackgroundThinkingCyclesJson { get; set; }
+
       /// <summary>Признак опасной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.Danger"/>).</summary>
       public bool InformationEnvironmentDanger { get; set; }
       /// <summary>Признак актуальной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.VeryActualSituation"/>).</summary>
@@ -669,7 +673,8 @@ namespace ISIDA.Common
                   "Completed",
                   state.InformationEnvironmentDanger,
                   state.InformationEnvironmentVeryActual,
-                  state.CurrentAutomatizmUsefulness);
+                  state.CurrentAutomatizmUsefulness,
+                  state.BackgroundThinkingCyclesJson);
             }
 
             _displayLogWriter?.WriteLog(
@@ -694,7 +699,8 @@ namespace ISIDA.Common
                 "Completed",
                 state.InformationEnvironmentDanger,
                 state.InformationEnvironmentVeryActual,
-                state.CurrentAutomatizmUsefulness);
+                state.CurrentAutomatizmUsefulness,
+                state.BackgroundThinkingCyclesJson);
           }
 
           WriteBoth();
@@ -873,6 +879,8 @@ namespace ISIDA.Common
             ? (state.MainThinkingCycleLastStrategyId ?? "") : "",
         ["ЦиклМ_задача"] = state.MainThinkingCycleId.HasValue && state.MainThinkingCycleId.Value > 0
             ? (state.MainThinkingCycleTaskStatus ?? "") : "",
+        ["Циклы Ф"] = FormatBackgroundCycleIdsCell(state.BackgroundThinkingCyclesJson),
+        ["ЦиклыФ_json"] = state.BackgroundThinkingCyclesJson ?? "",
         ["Опасно"] = state.InformationEnvironmentDanger ? "1" : "0",
         ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0",
         ["Полезность"] = logAutomatizmId && state.CurrentAutomatizmUsefulness.HasValue
@@ -1034,6 +1042,14 @@ namespace ISIDA.Common
           ? BuildMainThinkingCycleTooltip(mcWeight, mcThemeId, mcPurposeId, mcProblem, mcLastStrat, mainThinkingCycleTaskStatus, mainThinkingCycleId)
           : null;
 
+      string backgroundThinkingCyclesJson = null;
+      if (logEntry.TryGetValue("ЦиклыФ_json", out var bgJsonObj) && bgJsonObj != null)
+      {
+        var bgS = bgJsonObj.ToString();
+        if (!string.IsNullOrWhiteSpace(bgS))
+          backgroundThinkingCyclesJson = bgS;
+      }
+
       int? baseId = logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString())
           ? int.Parse(logEntry["Состояние"].ToString())
           : (int?)null;
@@ -1088,7 +1104,8 @@ namespace ISIDA.Common
               mainThinkingCycleTaskStatus,
               dangerForWriter,
               veryActualForWriter,
-              autoUsefulnessSnap);
+              autoUsefulnessSnap,
+              backgroundThinkingCyclesJson);
         }
 
         _displayLogWriter?.WriteLog(
@@ -1113,7 +1130,8 @@ namespace ISIDA.Common
             mainThinkingCycleTaskStatus,
             dangerForWriter,
             veryActualForWriter,
-            autoUsefulnessSnap);
+            autoUsefulnessSnap,
+            backgroundThinkingCyclesJson);
       }
 
       WriteBoth();
@@ -1355,6 +1373,8 @@ namespace ISIDA.Common
           ? ComputeMainThinkingCycleTaskStatus(mc.AwaitingEvaluation, mc.PendingSolutionAutomatizmId)
           : null;
 
+      state.BackgroundThinkingCyclesJson = BuildBackgroundThinkingCyclesLogJson(AppGlobalState.GetPublishedBackgroundThinkingCycles());
+
       if (InformationEnvironmentSystem.IsInitialized)
       {
         state.InformationEnvironmentDanger = InformationEnvironmentSystem.Instance.CurrentInformationEnvironment.Danger;
@@ -1454,7 +1474,9 @@ namespace ISIDA.Common
              _lastState.MainThinkingCycleTaskStatus != current.MainThinkingCycleTaskStatus ||
              _lastState.InformationEnvironmentDanger != current.InformationEnvironmentDanger ||
              _lastState.InformationEnvironmentVeryActual != current.InformationEnvironmentVeryActual ||
-             _lastState.CurrentAutomatizmUsefulness != current.CurrentAutomatizmUsefulness;
+             _lastState.CurrentAutomatizmUsefulness != current.CurrentAutomatizmUsefulness ||
+             !string.Equals(_lastState.BackgroundThinkingCyclesJson ?? "", current.BackgroundThinkingCyclesJson ?? "",
+                 StringComparison.Ordinal);
     }
 
     /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>
@@ -1465,6 +1487,57 @@ namespace ISIDA.Common
       if (pendingSolutionAutomatizmId <= 0)
         return "NoSolution";
       return "Solved";
+    }
+
+    private sealed class BackgroundCycleLogItem
+    {
+      public int Id { get; set; }
+      public int Weight { get; set; }
+      public string TaskStatus { get; set; }
+      public string Tooltip { get; set; }
+    }
+
+    /// <summary>Формирует JSON для колонки «Циклы Ф» (порядок — по убыванию веса, как в диспетчере).</summary>
+    private static string BuildBackgroundThinkingCyclesLogJson(PublishedBackgroundThinkingCycleSnapshot[] items)
+    {
+      if (items == null || items.Length == 0)
+        return "";
+      var list = new List<BackgroundCycleLogItem>(items.Length);
+      foreach (var it in items)
+      {
+        if (it == null || it.Id <= 0)
+          continue;
+        string task = ComputeMainThinkingCycleTaskStatus(it.AwaitingEvaluation, it.PendingSolutionAutomatizmId);
+        string tip = BuildMainThinkingCycleTooltip(
+            it.Weight, it.ThemeId, it.PurposeId, it.ProblemNodeId, it.LastStrategyId, task, it.Id);
+        list.Add(new BackgroundCycleLogItem
+        {
+          Id = it.Id,
+          Weight = it.Weight,
+          TaskStatus = task,
+          Tooltip = tip
+        });
+      }
+      if (list.Count == 0)
+        return "";
+      return JsonConvert.SerializeObject(list);
+    }
+
+    private static string FormatBackgroundCycleIdsCell(string json)
+    {
+      if (string.IsNullOrWhiteSpace(json))
+        return "";
+      try
+      {
+        var items = JsonConvert.DeserializeObject<List<BackgroundCycleLogItem>>(json);
+        if (items == null || items.Count == 0)
+          return "";
+        return string.Join(", ", items.Select(i => i.Id.ToString()));
+      }
+      catch
+      {
+        return "";
+      }
     }
 
     /// <summary>

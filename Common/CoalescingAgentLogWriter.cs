@@ -51,7 +51,8 @@ namespace ISIDA.Common
         string mainThinkingCycleTaskStatus = null,
         bool informationEnvironmentDanger = false,
         bool informationEnvironmentVeryActual = false,
-        int? automatizmUsefulnessAtSnapshot = null)
+        int? automatizmUsefulnessAtSnapshot = null,
+        string backgroundThinkingCyclesJson = null)
     {
       lock (_lock)
       {
@@ -65,7 +66,8 @@ namespace ISIDA.Common
               reflexChainInfo, automatizmChainInfo, thinkingLevel, thinkingLevelSuccess,
               thinkingThemeTypeId, thinkingThemeTooltip, mainThinkingCycleId,
               mainThinkingCycleTooltip, mainThinkingCycleTaskStatus, informationEnvironmentDanger,
-              informationEnvironmentVeryActual, automatizmUsefulnessAtSnapshot);
+              informationEnvironmentVeryActual, automatizmUsefulnessAtSnapshot,
+              backgroundThinkingCyclesJson);
           return;
         }
 
@@ -76,14 +78,15 @@ namespace ISIDA.Common
               automatizmId, reflexChainInfo, automatizmChainInfo, thinkingLevel,
               thinkingLevelSuccess, thinkingThemeTypeId, thinkingThemeTooltip,
               mainThinkingCycleId, mainThinkingCycleTooltip, mainThinkingCycleTaskStatus,
-              informationEnvironmentDanger, informationEnvironmentVeryActual, automatizmUsefulnessAtSnapshot);
+              informationEnvironmentDanger, informationEnvironmentVeryActual, automatizmUsefulnessAtSnapshot,
+              backgroundThinkingCyclesJson);
         else
           _pending.Merge(baseId, baseStyleId, triggerStimulusId, orientationReflexType,
               geneticReflexId, conditionedReflexId, automatizmId, reflexChainInfo,
               automatizmChainInfo, thinkingLevel, thinkingLevelSuccess, thinkingThemeTypeId,
               thinkingThemeTooltip, mainThinkingCycleId, mainThinkingCycleTooltip,
               mainThinkingCycleTaskStatus, informationEnvironmentDanger, informationEnvironmentVeryActual,
-              automatizmUsefulnessAtSnapshot);
+              automatizmUsefulnessAtSnapshot, backgroundThinkingCyclesJson);
 
         _pending.WriteTo(_inner);
       }
@@ -132,6 +135,7 @@ namespace ISIDA.Common
       public bool InformationEnvironmentDanger;
       public bool InformationEnvironmentVeryActual;
       public int? AutomatizmUsefulnessAtSnapshot;
+      public string BackgroundThinkingCyclesJson;
 
       public static PendingRow FromSnapshot(string className, string method, int pulse,
           int? baseId, int? baseStyleId, int? triggerStimulusId, int? orientationReflexType,
@@ -140,7 +144,8 @@ namespace ISIDA.Common
           bool? thinkingLevelSuccess, int? thinkingThemeTypeId, string thinkingThemeTooltip,
           int? mainThinkingCycleId, string mainThinkingCycleTooltip,
           string mainThinkingCycleTaskStatus, bool informationEnvironmentDanger,
-          bool informationEnvironmentVeryActual, int? automatizmUsefulnessAtSnapshot)
+          bool informationEnvironmentVeryActual, int? automatizmUsefulnessAtSnapshot,
+          string backgroundThinkingCyclesJson)
       {
         return new PendingRow
         {
@@ -165,7 +170,10 @@ namespace ISIDA.Common
           MainThinkingCycleTaskStatus = string.IsNullOrEmpty(mainThinkingCycleTaskStatus) ? null : mainThinkingCycleTaskStatus,
           InformationEnvironmentDanger = informationEnvironmentDanger,
           InformationEnvironmentVeryActual = informationEnvironmentVeryActual,
-          AutomatizmUsefulnessAtSnapshot = automatizmUsefulnessAtSnapshot
+          AutomatizmUsefulnessAtSnapshot = automatizmUsefulnessAtSnapshot,
+          BackgroundThinkingCyclesJson = string.IsNullOrWhiteSpace(backgroundThinkingCyclesJson)
+              ? null
+              : backgroundThinkingCyclesJson
         };
       }
 
@@ -175,7 +183,8 @@ namespace ISIDA.Common
           int? thinkingLevel, bool? thinkingLevelSuccess, int? thinkingThemeTypeId,
           string thinkingThemeTooltip, int? mainThinkingCycleId, string mainThinkingCycleTooltip,
           string mainThinkingCycleTaskStatus, bool informationEnvironmentDanger,
-          bool informationEnvironmentVeryActual, int? automatizmUsefulnessAtSnapshot)
+          bool informationEnvironmentVeryActual, int? automatizmUsefulnessAtSnapshot,
+          string backgroundThinkingCyclesJson)
       {
         if (baseId.HasValue)
           BaseId = baseId;
@@ -200,6 +209,7 @@ namespace ISIDA.Common
         InformationEnvironmentVeryActual = informationEnvironmentVeryActual;
         if (automatizmUsefulnessAtSnapshot.HasValue)
           AutomatizmUsefulnessAtSnapshot = automatizmUsefulnessAtSnapshot;
+        BackgroundThinkingCyclesJson = MergeTooltip(BackgroundThinkingCyclesJson, backgroundThinkingCyclesJson);
       }
 
       public void WriteTo(ILogWriter inner)
@@ -209,7 +219,7 @@ namespace ISIDA.Common
             ReflexChainInfo, AutomatizmChainInfo, ThinkingLevel, ThinkingLevelSuccess,
             ThinkingThemeTypeId, ThinkingThemeTooltip, MainThinkingCycleId,
             MainThinkingCycleTooltip, MainThinkingCycleTaskStatus, InformationEnvironmentDanger,
-            InformationEnvironmentVeryActual, AutomatizmUsefulnessAtSnapshot);
+            InformationEnvironmentVeryActual, AutomatizmUsefulnessAtSnapshot, BackgroundThinkingCyclesJson);
       }
 
       private static int? ZeroToNull(int? v) => v == 0 ? null : v;

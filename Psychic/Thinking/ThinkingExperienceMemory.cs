@@ -53,6 +53,12 @@ namespace ISIDA.Psychic.Thinking
       var key = new ThinkingExperienceKey(problemNodeId, themeId, purposeId);
       _bestActionByKey[key] = actionsImageId;
     }
+
+    /// <summary>Сброс рекомендаций (предзапуск сценария, очистка стадии 4 и т.п.).</summary>
+    public void Clear()
+    {
+      _bestActionByKey.Clear();
+    }
   }
 }
 
