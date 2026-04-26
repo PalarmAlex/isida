@@ -43,6 +43,9 @@ namespace ISIDA.Psychic.Thinking
     /// <summary>Сигнатура последней «типовой» строки лога по циклу — не дублировать при неизменном исходе.</summary>
     private readonly Dictionary<int, string> _lastCondensedLogDigestByCycleId = new Dictionary<int, string>();
 
+    /// <summary>Уведомление перед снятием цикла с подтверждённым решением (полезность ≥ 1): для агентного лога/UI до удаления экземпляра.</summary>
+    private Action<int, MainThinkingCycleClosedLogPayload> _onMainCycleClosedAfterConfirmedSolution;
+
     /// <summary>Базовый вес главного цикла при создании (фоновый наследует его после демоута).</summary>
     private const int MainCycleWeightBase = 100;
 
@@ -120,6 +123,18 @@ namespace ISIDA.Psychic.Thinking
       {
         if (_strategies.Any(s => s.Id == strategy.Id)) return;
         _strategies.Add(strategy);
+      }
+      finally { _lock.ExitWriteLock(); }
+    }
+
+    /// <summary>Регистрирует обработчик снятия цикла после подтверждения полезности решения (для <see cref="ISIDA.Common.ResearchLogger"/>).</summary>
+    /// <param name="handler">Пульс и снимок полей цикла до удаления; вызывается под внутренним lock диспетчера.</param>
+    public void SetMainCycleClosedAfterConfirmedSolutionLogger(Action<int, MainThinkingCycleClosedLogPayload> handler)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _onMainCycleClosedAfterConfirmedSolution = handler;
       }
       finally { _lock.ExitWriteLock(); }
     }
@@ -518,7 +533,23 @@ namespace ISIDA.Psychic.Thinking
         }
       }
       foreach (var id in toRemove)
+      {
+        var c = _cycles.FirstOrDefault(x => x != null && x.Id == id);
+        if (c != null)
+        {
+          var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
+          int usefulness = atmz?.Usefulness ?? 0;
+          var handler = _onMainCycleClosedAfterConfirmedSolution;
+          if (handler != null)
+          {
+            var payload = new MainThinkingCycleClosedLogPayload(
+              c.Id, c.Weight, c.ThemeId, c.PurposeId, c.ProblemNodeId, c.LastStrategyId ?? "",
+              c.PendingSolutionAutomatizmId, usefulness);
+            handler(pulseCount, payload);
+          }
+        }
         RemoveCycleById(id, "EvaluatePendingCycleSolutions usefulness>=1", pulseCount);
+      }
     }
 
     private void EnforceMainCycleMaxAge(int pulseCount)

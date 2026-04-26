@@ -606,6 +606,106 @@ namespace ISIDA.Common
       _displayLogWriter = logWriter;
     }
 
+    /// <summary>
+    /// Отдельная строка агентного лога: цикл снят после подтверждения полезности решения (до смены главного в <see cref="AppGlobalState"/>).
+    /// Метод <c>ThinkingCycleClosed</c> обходит <see cref="CoalescingAgentLogWriter"/>-слияние с обычным <c>LogSystemState</c> на том же пульсе.
+    /// </summary>
+    /// <param name="globalPulse">Глобальный номер пульса.</param>
+    /// <param name="p">Снимок полей цикла до удаления.</param>
+    public void LogMainThinkingCycleClosedAfterConfirmedSolution(int globalPulse, MainThinkingCycleClosedLogPayload p)
+    {
+      if (!_enabled || _disposed || p == null || p.CycleId <= 0)
+        return;
+      if (_memoryLogWriter == null && _displayLogWriter == null)
+        return;
+
+      lock (_lock)
+      {
+        try
+        {
+          var state = CollectSystemState(globalPulse);
+          int? baseId = state.CurrentBaseID;
+          int? styleId = state.CurrentBaseStyleID;
+          int? triggerId = state.CurrentTriggerStimulusID;
+          int? orType = state.OrientationReflexType;
+          int? genRef = state.CurrentGeneticReflexID;
+          int? condRef = state.CurrentConditionReflexID;
+          int? autoId = state.CurrentAutomatizmID;
+          int? thinkingLevel = state.ThinkingLevel;
+          bool? thinkingLevelSuccess = state.ThinkingLevelSuccess;
+          int? thinkingThemeTypeId = state.ThinkingThemeTypeId > 0 ? state.ThinkingThemeTypeId : (int?)null;
+          string thinkingThemeTooltip = thinkingThemeTypeId.HasValue
+              ? BuildThinkingThemeTooltip(thinkingThemeTypeId.Value)
+              : null;
+
+          string tip = BuildMainThinkingCycleTooltip(
+              p.Weight, p.ThemeId, p.PurposeId, p.ProblemNodeId, p.LastStrategyId, "Completed", p.CycleId);
+          tip += Environment.NewLine + "Решение подтверждено по полезности; цикл снят с диспетчера."
+              + Environment.NewLine + $"Автоматизм id={p.PendingSolutionAutomatizmId}, полезность={p.ConfirmedUsefulness}.";
+
+          void WriteBoth()
+          {
+            if (_memoryLogWriter != null)
+            {
+              _memoryLogWriter.WriteLog(
+                  "ResearchLogger",
+                  "ThinkingCycleClosed",
+                  globalPulse,
+                  baseId,
+                  styleId,
+                  triggerId,
+                  orType,
+                  genRef,
+                  condRef,
+                  autoId,
+                  "",
+                  "",
+                  thinkingLevel,
+                  thinkingLevelSuccess,
+                  thinkingThemeTypeId,
+                  thinkingThemeTooltip,
+                  p.CycleId,
+                  tip,
+                  "Completed",
+                  state.InformationEnvironmentDanger,
+                  state.InformationEnvironmentVeryActual,
+                  state.CurrentAutomatizmUsefulness);
+            }
+
+            _displayLogWriter?.WriteLog(
+                "ResearchLogger",
+                "ThinkingCycleClosed",
+                globalPulse,
+                baseId,
+                styleId,
+                triggerId,
+                orType,
+                genRef,
+                condRef,
+                autoId,
+                "",
+                "",
+                thinkingLevel,
+                thinkingLevelSuccess,
+                thinkingThemeTypeId,
+                thinkingThemeTooltip,
+                p.CycleId,
+                tip,
+                "Completed",
+                state.InformationEnvironmentDanger,
+                state.InformationEnvironmentVeryActual,
+                state.CurrentAutomatizmUsefulness);
+          }
+
+          WriteBoth();
+        }
+        catch (Exception ex)
+        {
+          Logger.Error(ex.Message);
+        }
+      }
+    }
+
     #endregion
 
     #region Основной метод логирования
@@ -1026,7 +1126,10 @@ namespace ISIDA.Common
         return null;
       var name = ThemeImageSystem.Instance.GetThemeTypeDescription(themeTypeId) ?? "";
       int w = ThemeImageSystem.Instance.GetDefaultWeightForThemeType(themeTypeId);
-      return string.IsNullOrEmpty(name) ? $"({w})" : $"{name} ({w})";
+      // Вес — из theme_types.dat (DefaultWeight), отдельно от веса экземпляра цикла в колонке «Цикл М».
+      return string.IsNullOrEmpty(name)
+          ? $"вес типа темы по справочнику: {w}"
+          : $"{name} — вес типа темы по справочнику: {w}";
     }
 
     /// <summary>Подсказка для колонки «Цикл М»: Id экземпляра цикла, инфо-функция (справочник), вес, образ темы, …</summary>
@@ -1050,7 +1153,7 @@ namespace ISIDA.Common
       if (cycleInstanceId.HasValue && cycleInstanceId.Value > 0)
         sb.AppendLine($"Экземпляр цикла: id={cycleInstanceId.Value}");
       sb.AppendLine($"Инфо-функция: №{infoFuncId} — «{infoName}»");
-      sb.AppendLine($"Вес: {weight}");
+      sb.AppendLine($"Вес цикла в диспетчере: {weight} (база 100; при создании цикла возможны +5 за «опасно» и +2 за «актуально» в ИС).");
 
       string themePart = "—";
       if (themeId > 0 && ThemeImageSystem.IsInitialized)
@@ -1067,6 +1170,7 @@ namespace ISIDA.Common
         string taskLine = taskStatus == "Awaiting" ? "Задача: ожидается оценка решения"
             : taskStatus == "NoSolution" ? "Задача: решение не найдено"
             : taskStatus == "Solved" ? "Задача: найден автоматизм решения (ожидается оценка полезности)"
+            : taskStatus == "Completed" ? "Задача: решение подтверждено по полезности (цикл снят)"
             : taskStatus;
         sb.AppendLine();
         sb.Append(taskLine);

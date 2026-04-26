@@ -275,8 +275,48 @@ namespace ISIDA.Gomeostas
       }
     }
 
+    /// <summary>
+    /// Вызывается после изменения значений параметров внешним воздействием (пульт и т.д.).
+    /// Повторно оценивает «Актуально»/опасность/настроение: иначе они останутся от среза
+    /// <see cref="UpdateStateOnly"/>, сделанного в начале пульса <em>до</em> стимула.
+    /// </summary>
     internal void OnExternalInfluenceApplied(bool isCriticalImpact = false)
     {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_agentState.IsDead)
+        {
+          UpdateActiveStyles(true);
+          return;
+        }
+
+        int? lastWellStatePulse = _agentState.LastWellStatePulse;
+        var currentAgentState = _calculator.CalculateAgentState(
+            _agentState.Parameters, _dynamicTime, _difSensorPar, ref lastWellStatePulse, _compareLevel);
+        _agentState.LastWellStatePulse = lastWellStatePulse;
+        _currentOverallState = currentAgentState.OverallState;
+
+        bool veryActualSituation = currentAgentState.ParametersState != null
+            && currentAgentState.ParametersState.Any(ps =>
+                ps.State == ParameterState.Bad
+                && _agentState.Parameters.FirstOrDefault(p => p.Id == ps.ParameterId)?.IsVital == true);
+
+        _informationEnvironmentSystem.SetVeryActualSituation(veryActualSituation, currentAgentState.BadParameterTargetIds);
+
+        bool danger = _calculator.AnyVitalParameterInHarmfulZone(_agentState.Parameters);
+        int mood = HomeostasisMoodPerception.EstimateMood(
+            currentAgentState,
+            _agentState.PainValue,
+            _agentState.JoyValue,
+            AppGlobalState.CurrentOverallState);
+        _informationEnvironmentSystem.SetDangerAndIntegratedMood(danger, mood);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
       UpdateActiveStyles(true);
     }
 

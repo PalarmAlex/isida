@@ -971,6 +971,7 @@ namespace ISIDA.Common
 
         if (config.MemoryLogWriter != null)
           context.ResearchLogger.SetMemoryLogWriter(config.MemoryLogWriter);
+        context.PsychicSystem.AttachResearchLoggerForThinkingCycleClosure(context.ResearchLogger);
 
         GlobalTimer.InitializeSystems(
             context.Gomeostas,

@@ -80,10 +80,6 @@ namespace ISIDA.Gomeostas
       if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
       {
         int r = AssessmentFromOverallStates(overallBefore, overallAfter);
-        Logger.Info(
-            $"[USEFULNESS_EVAL] ComputeOperatorAutomatizmAssessment branch=empty_snapshot_or_params " +
-            $"snapshotCount={(valuesBefore?.Count ?? 0)} currentParamsCount={(currentParameters?.Count ?? 0)} " +
-            $"focusParamId={focusParameterId} overall={overallBefore}->{overallAfter} result={r}");
         return r;
       }
 
@@ -111,7 +107,6 @@ namespace ISIDA.Gomeostas
 
       int overallAssess = AssessmentFromOverallStates(overallBefore, overallAfter);
 
-      string branch;
       int result;
       // Фокусный параметр может дать заметную дельту по одному каналу (шум/доминанта),
       // тогда как интегральное состояние уже отражает суммарный эффект ответа оператора.
@@ -121,31 +116,16 @@ namespace ISIDA.Gomeostas
       {
         if (vitalScore == 0 && overallAssess != 0 &&
             Math.Sign(overallAssess) != Math.Sign(focusSigned.Value))
-        {
-          branch = "overall_overrides_focus_conflict";
+
           result = overallAssess;
-        }
         else
-        {
-          branch = "focus_param";
           result = focusSigned.Value;
-        }
       }
       else if (vitalScore != 0)
-      {
-        branch = "vital_aggregate";
         result = vitalScore > 0 ? 1 : -1;
-      }
       else
-      {
-        branch = "overall_fallback";
         result = overallAssess;
-      }
-
-      Logger.Info(
-          $"[USEFULNESS_EVAL] ComputeOperatorAutomatizmAssessment branch={branch} focusParamId={focusParameterId} " +
-          $"focusSigned={(focusSigned.HasValue ? focusSigned.Value.ToString() : "null")} vitalScore={vitalScore} " +
-          $"overallAssess={overallAssess} overall={overallBefore}->{overallAfter} result={result}");
+ 
       return result;
     }
 

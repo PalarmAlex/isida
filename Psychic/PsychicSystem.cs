@@ -190,6 +190,16 @@ namespace ISIDA.Psychic
       PublishMainThinkingCycleToAppGlobalState();
     }
 
+    /// <summary>Подключает <see cref="ResearchLogger"/> к уведомлению о снятии цикла с подтверждённым решением (отдельная строка лога).</summary>
+    /// <param name="researchLogger">Логгер исследований или null для отключения.</param>
+    public void AttachResearchLoggerForThinkingCycleClosure(ResearchLogger researchLogger)
+    {
+      _thinkingCyclesSystem?.SetMainCycleClosedAfterConfirmedSolutionLogger((pulse, payload) =>
+      {
+        researchLogger?.LogMainThinkingCycleClosedAfterConfirmedSolution(pulse, payload);
+      });
+    }
+
     /// <summary>
     /// Инициализирует базовое дерево автоматизмов
     /// </summary>
@@ -424,7 +434,9 @@ namespace ISIDA.Psychic
       // 1) Готовый автоматизм
       if (decision.AutomatizmToExecute != null)
       {
-        Logger.Info($"Решение цикла мышления: выполнить автоматизм id={decision.AutomatizmToExecute.ID}, образ действий={decision.AutomatizmToExecute.ActionsImageID}");
+        var note = string.IsNullOrEmpty(decision.DebugNote) ? "" : $", примечание: {decision.DebugNote}";
+        Logger.Info(
+            $"Решение цикла мышления: цикл id={decision.CycleId}{note}; выполнить автоматизм id={decision.AutomatizmToExecute.ID}, образ действий={decision.AutomatizmToExecute.ActionsImageID} (после УМ1/УМ2: циклы — отдельный механизм, см. «Цикл М» в отчёте)");
         var ok = ExecuteAutomatizm(decision.AutomatizmToExecute);
         if (ok && decision.CycleId > 0 && _thinkingCyclesSystem != null && decision.AutomatizmToExecute.ID > 0)
           _thinkingCyclesSystem.NotifySolutionExecutedAfterDispatch(decision.CycleId, decision.AutomatizmToExecute.ID, PulseCount);
@@ -1547,24 +1559,18 @@ namespace ISIDA.Psychic
       var stateAfter = AppGlobalState.CurrentOverallState;
 
       int assessment;
-      string assessmentSource;
       if (GomeostasSystem.IsInitialized &&
           AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId) &&
           snapshotBefore != null)
       {
         var gh = GomeostasSystem.Instance;
         var currentParams = gh.GetAllParameters();
-        assessmentSource = "gomeo_calculator";
         assessment = gh.Calculator.ComputeOperatorAutomatizmAssessment(
             snapshotBefore,
             currentParams,
             focusParamId,
             stateBefore,
             stateAfter);
-        Logger.Info(
-            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm rawAssessment source={assessmentSource} atmzId={automatizmIdToEvaluate} " +
-            $"pulse={GlobalTimer.GlobalPulsCount} focusParamId={focusParamId} snapshotKeys={snapshotBefore.Count} " +
-            $"stateBefore={stateBefore} stateAfter={stateAfter} assessment={assessment}");
       }
       else
       {
@@ -1573,11 +1579,6 @@ namespace ISIDA.Psychic
           assessment = 1;
         else if (stateAfter < stateBefore)
           assessment = -1;
-        assessmentSource = "integral_state_only";
-        Logger.Info(
-            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm rawAssessment source={assessmentSource} atmzId={automatizmIdToEvaluate} " +
-            $"pulse={GlobalTimer.GlobalPulsCount} gomeoInit={GomeostasSystem.IsInitialized} " +
-            $"stateBefore={stateBefore} stateAfter={stateAfter} assessment={assessment}");
       }
 
       int responseTime = PulseCount - lastRunPulseForResponseTime;
@@ -1585,10 +1586,6 @@ namespace ISIDA.Psychic
       int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
       int assessmentBeforeMerge = assessment;
       assessment = MergeOperatorAssessmentWithPultInfluence(assessment, operatorResponseImageId);
-      if (assessmentBeforeMerge != assessment)
-        Logger.Info(
-            $"[USEFULNESS_EVAL] EvaluatePreviousAutomatizm mergeChanged assessment {assessmentBeforeMerge}->{assessment} " +
-            $"operatorResponseActionsImageId={operatorResponseImageId}");
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
           true, // распознано оператором
@@ -1599,8 +1596,6 @@ namespace ISIDA.Psychic
       // Триггер «Игнор агента»: негативный эффект при отрицательной оценке оператора
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)
         _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
-
-      Logger.Info($"Оценен автоматизм ID={automatizmIdToEvaluate}: оценка={assessment}, время реакции={responseTime}");
 
       // Стадия 3: после оценки полезности — зеркальная пара по ответу оператора (сдвиг + эхо), как раньше до объединения со стадией 4.
       if (AppGlobalState.EvolutionStage == 3)
@@ -1643,13 +1638,7 @@ namespace ISIDA.Psychic
     private int MergeOperatorAssessmentWithPultInfluence(int assessment, int operatorResponseActionsImageId)
     {
       if (operatorResponseActionsImageId <= 0 || _influenceActionSystem == null || _influenceActionsImagesSystem == null)
-      {
-        Logger.Info(
-            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence skip imageId={operatorResponseActionsImageId} " +
-            $"influenceActionSystem={_influenceActionSystem != null} influenceImagesSystem={_influenceActionsImagesSystem != null} " +
-            $"assessment={assessment}");
         return assessment;
-      }
 
       // Pending — это ID образа из ActionsImagesSystem (SensorActivation → CreateActionsImage), а не из InfluenceActionsImagesSystem.
       IReadOnlyList<int> ids;
@@ -1660,20 +1649,11 @@ namespace ISIDA.Psychic
         ids = _influenceActionsImagesSystem.GetInfluenceActionIds(operatorResponseActionsImageId);
 
       if (ids == null || ids.Count == 0)
-      {
-        Logger.Info(
-            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence no_action_ids imageId={operatorResponseActionsImageId} assessment={assessment}");
         return assessment;
-      }
 
       int sum = _influenceActionSystem.GetSignedOperatorValenceSumForActions(ids);
       if (sum == 0)
-      {
-        Logger.Info(
-            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence valence_sum_zero imageId={operatorResponseActionsImageId} " +
-            $"actionIdsCount={ids.Count} assessment={assessment}");
         return assessment;
-      }
 
       int pSign = sum > 0 ? 1 : -1;
       int merged;
@@ -1683,11 +1663,6 @@ namespace ISIDA.Psychic
         merged = pSign;
       else
         merged = assessment;
-
-      if (merged != assessment || assessment == 0)
-        Logger.Info(
-            $"[USEFULNESS_EVAL] MergeOperatorAssessmentWithPultInfluence imageId={operatorResponseActionsImageId} " +
-            $"actionIdsCount={ids.Count} operatorValenceSum={sum} pSign={pSign} assessmentIn={assessment} mergedOut={merged}");
 
       return merged;
     }
