@@ -379,6 +379,11 @@ namespace ISIDA.Common
     public Psychic.Understanding.UnderstandingTreeSystem UnderstandingTreeSystem { get; internal set; }
 
     /// <summary>
+    /// Ментальная эпизодическая память (цепочки инфо-функций по контексту узла проблемы, темы и цели).
+    /// </summary>
+    public Psychic.Understanding.MentalEpisodicTreeSystem MentalEpisodicTreeSystem { get; internal set; }
+
+    /// <summary>
     /// Дерево проблем (для эпизодической памяти)
     /// </summary>
     public Psychic.Understanding.ProblemTreeSystem ProblemTree { get; internal set; }
@@ -458,6 +463,7 @@ namespace ISIDA.Common
       SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");
       SafeDispose(EpisodicMemory, "EpisodicMemory");
       SafeDispose(UnderstandingTreeSystem, "UnderstandingTreeSystem");
+      SafeDispose(MentalEpisodicTreeSystem, "MentalEpisodicTreeSystem");
       if (Psychic.Understanding.ThemeImageSystem.IsInitialized)
         SafeDispose(Psychic.Understanding.ThemeImageSystem.Instance, "ThemeImageSystem");
       if (Psychic.Understanding.PurposeImageSystem.IsInitialized)
@@ -563,6 +569,7 @@ namespace ISIDA.Common
 
         // Системы психики
         ProblemTree != null &&
+        MentalEpisodicTreeSystem != null &&
         EpisodicMemory != null &&
         EpisodicMemoryRulesService != null &&
         PsychicSystem != null &&
@@ -803,6 +810,9 @@ namespace ISIDA.Common
           Psychic.Understanding.ThemeImageSystem.Instance,
           Psychic.Understanding.PurposeImageSystem.Instance);
 
+        Psychic.Understanding.MentalEpisodicTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        context.MentalEpisodicTreeSystem = Psychic.Understanding.MentalEpisodicTreeSystem.Instance;
+
         // Шаг 24: Система автоматизмов
         initializationStep = 24;
         AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
@@ -829,6 +839,7 @@ namespace ISIDA.Common
           config.PsychicDataFolder,
           context.AutomatizmTree,
           context.ProblemTree,
+          context.UnderstandingTreeSystem,
           context.InformationEnvironmentSystem,
           context.Gomeostas,
           context.ActionsImages);
@@ -900,7 +911,8 @@ namespace ISIDA.Common
           context.EpisodicMemory,
           context.UnderstandingTreeSystem,
           context.ProblemTree,
-          context.InformationEnvironmentSystem);
+          context.InformationEnvironmentSystem,
+          context.MentalEpisodicTreeSystem);
         if (context.EpisodicMemory != null)
           context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
         context.OrientationReflex.SetUnderstandingTreeSystem(context.UnderstandingTreeSystem);
@@ -1007,12 +1019,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Версия проекта
     /// </summary>
-    public const string ProjectVersion = "V3.1";
+    public const string ProjectVersion = "V3.2";
 
     /// <summary>
     /// Дата сборки
     /// </summary>
-    public const string BuildDate = "2026.04.08";
+    public const string BuildDate = "2026.04.26";
 
     /// <summary>
     /// Краткое описание концепции проекта

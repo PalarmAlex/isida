@@ -1,16 +1,20 @@
 using ISIDA.Common;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ISIDA.Psychic.Memory.Episodic
 {
   /// <summary>
   /// Логика дерева эпизодической памяти: поиск, доращивание веток, усреднение.
+  /// Ключ ветки: BaseID, EmotionID, UnderstandingNodeId, NodePID, TriggerId, ActionId (6 уровней; лист с Params на последнем).
   /// Правило проекта: Состояние (BaseID), Тон, Настроение (EmotionID) имеют рабочий код 0 — не считать 0 отсутствием параметра (см. .cursor/rules/isida-tree-zero-valid-params.mdc).
   /// </summary>
   public class EpisodicMemoryTree
   {
+    /// <summary>Число полей условия в пути от корня к листу (без учёта Params)</summary>
+    public const int BranchKeyLength = 6;
+
+    /// <summary>Индекс уровня листа с Params (0-based)</summary>
+    public const int LeafLevelIndex = BranchKeyLength - 1;
+
     private int _lastNodeId = 1;
 
     /// <summary>Проверить наличие ветки по условиям, вернуть (id, node) или (0, null)</summary>
@@ -18,11 +22,12 @@ namespace ISIDA.Psychic.Memory.Episodic
         EpisodicMemoryNode root,
         int baseId,
         int emotionId,
+        int understandingNodeId,
         int nodePid,
         int triggerId,
         int actionId)
     {
-      var cond = new[] { baseId, emotionId, nodePid, triggerId, actionId };
+      var cond = new[] { baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId };
       var (id, level) = FindBranch(0, cond, root);
       if (id <= 0) return (0, null);
 
@@ -53,7 +58,15 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     private static bool IsEquivalentCondition(int level, EpisodicMemoryNode node, int[] cond)
     {
-      var arr = new[] { node.BaseID, node.EmotionID, node.NodePID, node.TriggerId, node.ActionId };
+      var arr = new[]
+      {
+        node.BaseID,
+        node.EmotionID,
+        node.UnderstandingNodeId,
+        node.NodePID,
+        node.TriggerId,
+        node.ActionId
+      };
       for (int i = 0; i < cond.Length && i <= level; i++)
       {
         if (cond[i] != arr[i])
@@ -86,9 +99,10 @@ namespace ISIDA.Psychic.Memory.Episodic
         {
           case 0: nodeKey = c.BaseID; break;
           case 1: nodeKey = c.EmotionID; break;
-          case 2: nodeKey = c.NodePID; break;
-          case 3: nodeKey = c.TriggerId; break;
-          case 4: nodeKey = c.ActionId; break;
+          case 2: nodeKey = c.UnderstandingNodeId; break;
+          case 3: nodeKey = c.NodePID; break;
+          case 4: nodeKey = c.TriggerId; break;
+          case 5: nodeKey = c.ActionId; break;
           default: nodeKey = 0; break;
         }
         if (nodeKey == key) return c;
@@ -106,33 +120,31 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (fromNode == null || level >= condArr.Length)
         return fromNode?.ID ?? 0;
 
-      var vArr = new int[5];
-      for (int i = 0; i <= level && i < 5; i++)
+      var vArr = new int[BranchKeyLength];
+      for (int i = 0; i <= level && i < BranchKeyLength; i++)
         vArr[i] = condArr[i];
 
       var (idOld, nodeOld) = CheckBranchFromCondition(
-          fromNode, vArr[0], vArr[1], vArr[2], vArr[3], vArr[4]);
+          fromNode,
+          vArr[0], vArr[1], vArr[2], vArr[3], vArr[4], vArr[5]);
 
-      // Использовать найденный узел только если он совпадает с условием текущего уровня (vArr).
-      // Иначе FindBranch мог вернуть «родителя» по частичному пути — тогда ищем по ключу уровня.
       bool nodeMatchesLevel = nodeOld != null &&
-          nodeOld.BaseID == vArr[0] && nodeOld.EmotionID == vArr[1] && nodeOld.NodePID == vArr[2] &&
-          nodeOld.TriggerId == vArr[3] && nodeOld.ActionId == vArr[4];
+          nodeOld.BaseID == vArr[0] && nodeOld.EmotionID == vArr[1] && nodeOld.UnderstandingNodeId == vArr[2] &&
+          nodeOld.NodePID == vArr[3] && nodeOld.TriggerId == vArr[4] && nodeOld.ActionId == vArr[5];
 
       EpisodicMemoryNode node;
       if (idOld > 0 && nodeOld != null && nodeMatchesLevel)
       {
         node = nodeOld;
-        if (level == 4 && newParams != null)
+        if (level == LeafLevelIndex && newParams != null)
           AverageEffect(node, newParams.Effect, newParams.StimulsEffect, newParams.IsTeacher);
       }
       else
       {
-        // Перед созданием нового узла проверить: нет ли уже дочернего с тем же ключом уровня (избегаем дубликатов «Эмоция», «NodePID»).
         node = FindChildByLevelKey(fromNode, level, condArr);
         if (node == null)
         {
-          EpisodicParams pars = level == 4 ? newParams : null;
+          EpisodicParams pars = level == LeafLevelIndex ? newParams : null;
           if (pars != null && !pars.IsTeacher)
             pars.Effect = AddUtils.Clamp(pars.Effect, -10, 10);
 
@@ -144,14 +156,15 @@ namespace ISIDA.Psychic.Memory.Episodic
             ParentNode = fromNode,
             BaseID = vArr[0],
             EmotionID = vArr[1],
-            NodePID = vArr[2],
-            TriggerId = vArr[3],
-            ActionId = vArr[4],
+            UnderstandingNodeId = vArr[2],
+            NodePID = vArr[3],
+            TriggerId = vArr[4],
+            ActionId = vArr[5],
             Params = pars
           };
           fromNode.Children.Add(node);
         }
-        else if (level == 4 && newParams != null)
+        else if (level == LeafLevelIndex && newParams != null)
         {
           AverageEffect(node, newParams.Effect, newParams.StimulsEffect, newParams.IsTeacher);
         }

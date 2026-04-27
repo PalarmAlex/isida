@@ -29,6 +29,8 @@ namespace ISIDA.Psychic.Thinking
     private readonly UnderstandingTreeSystem _understandingTreeSystem;
     private readonly ProblemTreeSystem _problemTreeSystem;
     private readonly AutomatizmSystem _automatizmSystem;
+    private readonly MentalEpisodicTreeSystem _mentalEpisodicTreeSystem;
+    private readonly MentalAutomatizmSession _mentalAutomatizmSession;
 
     private readonly List<IThinkingStrategy> _strategies = new List<IThinkingStrategy>();
     private readonly ThinkingExperienceMemory _experienceMemory = new ThinkingExperienceMemory();
@@ -91,18 +93,24 @@ namespace ISIDA.Psychic.Thinking
     /// <param name="understandingTreeSystem">Дерево понимания.</param>
     /// <param name="problemTreeSystem">Дерево проблем.</param>
     /// <param name="automatizmSystem">Система автоматизмов.</param>
+    /// <param name="mentalEpisodicTreeSystem">Ментальная эпизодическая память (цепочки ИФ) или null.</param>
+    /// <param name="mentalAutomatizmSession">Общий буфер текущей цепочки инфо-функций или null.</param>
     public ThinkingCyclesSystem(
       InformationEnvironmentSystem informationEnvironmentSystem,
       EpisodicMemorySystem episodicMemorySystem,
       UnderstandingTreeSystem understandingTreeSystem,
       ProblemTreeSystem problemTreeSystem,
-      AutomatizmSystem automatizmSystem)
+      AutomatizmSystem automatizmSystem,
+      MentalEpisodicTreeSystem mentalEpisodicTreeSystem = null,
+      MentalAutomatizmSession mentalAutomatizmSession = null)
     {
       _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
       _episodicMemorySystem = episodicMemorySystem; // может быть null на ранних стадиях
       _understandingTreeSystem = understandingTreeSystem;
       _problemTreeSystem = problemTreeSystem;
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
+      _mentalEpisodicTreeSystem = mentalEpisodicTreeSystem;
+      _mentalAutomatizmSession = mentalAutomatizmSession;
     }
 
     /// <summary>Освобождает ресурсы диспетчера циклов.</summary>
@@ -311,6 +319,7 @@ namespace ISIDA.Psychic.Thinking
       {
         _experienceMemory.Clear();
         ResetRegisteredStrategiesTransientStateUnsynchronized();
+        _mentalAutomatizmSession?.Clear();
       }
       finally { _lock.ExitWriteLock(); }
     }
@@ -328,6 +337,7 @@ namespace ISIDA.Psychic.Thinking
         // после стадии 4 / сценария и ломал бы воспроизводимость (случайная ветка vs рекомендация).
         _experienceMemory.Clear();
         ResetRegisteredStrategiesTransientStateUnsynchronized();
+        _mentalAutomatizmSession?.Clear();
         _lastStimulusPulse = 0;
 
         if (_cycles.Count == 0 && _interruptMemory.Count == 0 && _lastCondensedLogDigestByCycleId.Count == 0)
@@ -553,26 +563,36 @@ namespace ISIDA.Psychic.Thinking
     /// </summary>
     private void EvaluatePendingCycleSolutions(int pulseCount)
     {
-      var toRemove = new List<int>();
+      var toRemoveSuccess = new List<int>();
+      var toRemoveFail = new List<int>();
       foreach (var c in _cycles)
       {
         if (c == null || c.PendingSolutionAutomatizmId <= 0) continue;
         if (pulseCount <= c.PendingSolutionBindPulse) continue;
 
         var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
-        if (atmz != null && atmz.Usefulness >= 1)
+        if (atmz == null) continue;
+
+        if (atmz.Usefulness >= 1)
         {
           c.Log.Add($"[p{pulseCount}] Решение подтверждено: автоматизм id={c.PendingSolutionAutomatizmId}, полезность={atmz.Usefulness}");
-          toRemove.Add(c.Id);
+          toRemoveSuccess.Add(c.Id);
+        }
+        else if (atmz.Usefulness < 0)
+        {
+          c.Log.Add($"[p{pulseCount}] Решение отвергнуто: автоматизм id={c.PendingSolutionAutomatizmId}, полезность={atmz.Usefulness}");
+          toRemoveFail.Add(c.Id);
         }
       }
-      foreach (var id in toRemove)
+
+      foreach (var id in toRemoveSuccess)
       {
         var c = _cycles.FirstOrDefault(x => x != null && x.Id == id);
         if (c != null)
         {
           var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
           int usefulness = atmz?.Usefulness ?? 0;
+          FinalizeMentalAutomatizmForCycle(c, usefulness);
           var handler = _onMainCycleClosedAfterConfirmedSolution;
           if (handler != null)
           {
@@ -584,6 +604,34 @@ namespace ISIDA.Psychic.Thinking
         }
         RemoveCycleById(id, "EvaluatePendingCycleSolutions usefulness>=1", pulseCount);
       }
+
+      foreach (var id in toRemoveFail)
+      {
+        var c = _cycles.FirstOrDefault(x => x != null && x.Id == id);
+        if (c != null)
+        {
+          var atmz = _automatizmSystem.GetAutomatizmById(c.PendingSolutionAutomatizmId);
+          int usefulness = atmz?.Usefulness ?? 0;
+          FinalizeMentalAutomatizmForCycle(c, usefulness);
+        }
+        RemoveCycleById(id, "EvaluatePendingCycleSolutions usefulness<0", pulseCount);
+      }
+    }
+
+    /// <summary>
+    /// Запись цепочки инфо-функций в ментальное дерево и сброс буфера (после оценки полезности решения).
+    /// </summary>
+    /// <param name="cycle">Цикл мышления с контекстом проблема/тема/цель.</param>
+    /// <param name="effect">Полезность автоматизма (в т.ч. отрицательная).</param>
+    private void FinalizeMentalAutomatizmForCycle(ThinkingCycleInfo cycle, int effect)
+    {
+      if (_mentalEpisodicTreeSystem == null || _mentalAutomatizmSession == null || cycle == null)
+        return;
+
+      int nodePid = cycle.ProblemNodeId > 0 ? cycle.ProblemNodeId : cycle.UnresolvedNodeId;
+      var chain = _mentalAutomatizmSession.GetExecutedSnapshot();
+      _mentalEpisodicTreeSystem.SaveOrUpdate(nodePid, cycle.ThemeId, cycle.PurposeId, chain, effect);
+      _mentalAutomatizmSession.Clear();
     }
 
     private void EnforceMainCycleMaxAge(int pulseCount)
@@ -781,6 +829,7 @@ namespace ISIDA.Psychic.Thinking
         UnderstandingTreeSystem = _understandingTreeSystem,
         ProblemTreeSystem = _problemTreeSystem,
         AutomatizmSystem = _automatizmSystem,
+        MentalAutomatizmSession = _mentalAutomatizmSession,
         CurrentStaffAutomatizm = cycle.UnresolvedNodeId > 0 ? _automatizmSystem.GetMotorsAutomatizmListFromTreeId(cycle.UnresolvedNodeId).FirstOrDefault() : null
       };
 
@@ -794,7 +843,21 @@ namespace ISIDA.Psychic.Thinking
         return ThinkingDecision.None("no_allowed_infoFuncs");
       }
 
+      var allowedSet = new HashSet<int>(allowedInfoFuncIds);
       var idsToTry = allowedInfoFuncIds.OrderBy(x => x).ToList();
+      if (_mentalEpisodicTreeSystem != null && _mentalAutomatizmSession != null)
+      {
+        int nodePid = cycle.ProblemNodeId > 0 ? cycle.ProblemNodeId : cycle.UnresolvedNodeId;
+        var prefix = _mentalAutomatizmSession.GetExecutedSnapshot();
+        var mentalNext = _mentalEpisodicTreeSystem.TryResolveNextInfoFunc(
+          nodePid, cycle.ThemeId, cycle.PurposeId, prefix, exactOnly: false);
+        if (mentalNext.HasValue && mentalNext.Value > 0
+            && allowedSet.Contains(mentalNext.Value) && InfoFunctionsCatalog.Exists(mentalNext.Value))
+        {
+          idsToTry = idsToTry.Where(id => id != mentalNext.Value).ToList();
+          idsToTry.Insert(0, mentalNext.Value);
+        }
+      }
 
       var batchAttempts = new List<(int FuncId, string DebugNote)>();
       foreach (var infoFuncId in idsToTry)

@@ -160,6 +160,10 @@ namespace ISIDA.Common
       public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
+      // Ментальная эпизодическая память (цепочки инфо-функций)
+      public const string MentalEpisodicTreeFormat = "# Формат: Id|NodePID|ThemeID|PurposeID|info1,info2#Effect|Count";
+      public const string MentalEpisodicTreeDesc = "# Ментальная эпизодическая память; info — список Id инфо-функций через запятую; после # — Effect и Count";
+
       // Справочник типов ситуаций
       public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|EventAgentCode";
       public const string SituationTypesDesc = "# Id 1-20: события (ThemeTypeId, EventAgentCode). Id 21-40: настроение (MoodId, ThemeTypeId). Id 41-60: воздействие (InfluenceId, ThemeTypeId). ThemeTypeId: уникален внутри каждого из трёх диапазонов; между диапазонами одна тема может повторяться. EventAgentCode: -1=нет; для 1-20 — код из AgentEventsCatalog.";
@@ -169,11 +173,12 @@ namespace ISIDA.Common
       public const string SituationImagesDesc = "# Образы ситуаций";
 
       // Эпизодическая память
-      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect|IsTeacher (в каждой строке 11 полей после #; порядок: обход в глубину, родитель перед детьми)";
+      public const string EpisodicTreeFormat = "# Формат: ID|ParentID|BaseID|EmotionID|UnderstandingNodeId|NodePID|TriggerId|ActionId#Effect|Count|StimulsEffect|IsTeacher (после # 4 поля; порядок: обход в глубину, родитель перед детьми)";
       public const string EpisodicTreeId = "# ID: уникальный идентификатор узла";
       public const string EpisodicTreeParentId = "# ParentID: ID родительского узла (0 для корня)";
       public const string EpisodicTreeBaseId = "# BaseID: Базовое состояние. -1: Плохо 0: Норма 1: Хорошо";
       public const string EpisodicTreeEmotionId = "# EmotionID: Образ эмоции";
+      public const string EpisodicTreeUnderstandingNodeId = "# UnderstandingNodeId: ID активного узла дерева понимания ситуации";
       public const string EpisodicTreeNodePid = "# NodePID: ID узла дерева проблем";
       public const string EpisodicTreeTriggerId = "# TriggerId: ID образа стимула";
       public const string EpisodicTreeActionId = "# ActionId: ID образа ответа";
@@ -1416,7 +1421,7 @@ namespace ISIDA.Common
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
         var main = t.Split('#');
         var p = main[0].Split('|');
-        if (p.Length < 7) return false;
+        if (p.Length < 8) return false;
         if (!int.TryParse(p[0], out int id) || id <= 0) return false;
         if (!int.TryParse(p[1], out _)) return false;
         return true;
@@ -1458,6 +1463,58 @@ namespace ISIDA.Common
         if (p.Length < 2) continue; // пропускаем части без формата id,time (напр. "..." в шапке)
         if (!int.TryParse(p[0], out _)) continue; // шапка или нечисловое — пропустить
         if (!int.TryParse(p[1], out _)) return false; // число,xxx но xxx не число — ошибка
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidMentalEpisodicTreeFile
+
+    /// <summary>Проверяет валидность файла ментальной эпизодической памяти по пути.</summary>
+    /// <param name="filePath">Путь к файлу.</param>
+    /// <returns>True, если файл проходит базовую проверку формата.</returns>
+    public static bool IsValidMentalEpisodicTreeFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidMentalEpisodicTreeFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла ментальной эпизодической памяти.</summary>
+    /// <param name="lines">Строки файла.</param>
+    /// <returns>True, если формат строк данных допустим.</returns>
+    public static bool IsValidMentalEpisodicTreeFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var hashIdx = t.IndexOf("#", StringComparison.Ordinal);
+        if (hashIdx < 0) return false;
+        var head = t.Substring(0, hashIdx);
+        var tail = t.Substring(hashIdx + 1);
+        var hp = head.Split('|');
+        if (hp.Length < 5) return false;
+        if (!int.TryParse(hp[0], out int id) || id < 0) return false;
+        if (!int.TryParse(hp[1], out _)) return false;
+        if (!int.TryParse(hp[2], out _)) return false;
+        if (!int.TryParse(hp[3], out _)) return false;
+        var tp = tail.Split('|');
+        if (tp.Length < 2) return false;
+        if (!int.TryParse(tp[0], out _)) return false;
+        if (!int.TryParse(tp[1], out _)) return false;
       }
       return true;
     }

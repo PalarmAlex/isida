@@ -52,6 +52,7 @@ namespace ISIDA.Psychic
     private InformationEnvironmentSystem _informationEnvironmentSystem;
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
     private ThinkingCyclesSystem _thinkingCyclesSystem;
+    private MentalAutomatizmSession _mentalAutomatizmSession;
 
     #region Инициализация
 
@@ -125,6 +126,14 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Установка сервиса выполнения автоматизмов и дополнительных зависимостей (в т.ч. эпизодическая память, дерево понимания, информационная среда)
     /// </summary>
+    /// <param name="executionService">Сервис выполнения автоматизмов.</param>
+    /// <param name="orientationReflexSystem">Система ориентировочного рефлекса.</param>
+    /// <param name="perceptionImagesSystem">Система образов восприятия.</param>
+    /// <param name="episodicMemorySystem">Эпизодическая память или null.</param>
+    /// <param name="understandingTreeSystem">Дерево понимания или null.</param>
+    /// <param name="problemTreeSystem">Дерево проблем или null.</param>
+    /// <param name="informationEnvironmentSystem">Информационная среда или null.</param>
+    /// <param name="mentalEpisodicTreeSystem">Ментальная эпизодическая память (передаётся из <see cref="Common.IsidaEngine"/>) или null.</param>
     public void SetPsychicSystemDop(
       AutomatismExecutionService executionService,
       OrientationReflexSystem orientationReflexSystem,
@@ -132,7 +141,8 @@ namespace ISIDA.Psychic
       EpisodicMemorySystem episodicMemorySystem = null,
       UnderstandingTreeSystem understandingTreeSystem = null,
       ProblemTreeSystem problemTreeSystem = null,
-      InformationEnvironmentSystem informationEnvironmentSystem = null)
+      InformationEnvironmentSystem informationEnvironmentSystem = null,
+      MentalEpisodicTreeSystem mentalEpisodicTreeSystem = null)
     {
       _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
       _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
@@ -145,15 +155,18 @@ namespace ISIDA.Psychic
       // Циклы мышления (3-й уровень) — инициализируются при наличии IE.
       if (_informationEnvironmentSystem != null)
       {
+        _mentalAutomatizmSession = new MentalAutomatizmSession();
         _thinkingCyclesSystem = new ThinkingCyclesSystem(
           _informationEnvironmentSystem,
           _episodicMemorySystem,
           _understandingTreeSystem,
           _problemTreeSystem,
-          _automatizmSystem);
+          _automatizmSystem,
+          mentalEpisodicTreeSystem,
+          _mentalAutomatizmSession);
 
         // Инфо-функции 3-го уровня (один класс с switch по Id)
-        _thinkingCyclesSystem.RegisterStrategy(new InfoFunctionsStrategy(_thinkingCyclesSystem.ExperienceMemory));
+        _thinkingCyclesSystem.RegisterStrategy(new InfoFunctionsStrategy(_thinkingCyclesSystem.ExperienceMemory, _mentalAutomatizmSession));
       }
     }
 
@@ -2062,6 +2075,15 @@ namespace ISIDA.Psychic
     public string GetThinkingCyclesDebugSnapshot(int maxLogLinesPerCycle = 5)
     {
       return _thinkingCyclesSystem?.GetDebugSnapshot(maxLogLinesPerCycle) ?? "ThinkingCycles: none";
+    }
+
+    /// <summary>
+    /// Текущая цепочка номеров инфо-функций в буфере ментальных автоматизмов (общая для диспетчера циклов).
+    /// </summary>
+    /// <returns>Строка вида «12,3,15» или пустая строка.</returns>
+    public string GetMentalAutomatizmSessionTrace()
+    {
+      return _mentalAutomatizmSession?.FormatTraceLine() ?? string.Empty;
     }
 
     #endregion

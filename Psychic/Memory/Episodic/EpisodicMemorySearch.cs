@@ -50,19 +50,26 @@ namespace ISIDA.Psychic.Memory.Episodic
       }
     }
 
-    /// <summary>Найти узел по частичным условиям (level 0-2). Поиск по 3 уровням: BaseID, EmotionID, NodePID. Trigger/Action — в фильтрации потомков.</summary>
+    /// <summary>Найти узел по частичным условиям ветки. partialTier: 0 — Base+Emotion+Understanding+Problem, 1 — без Problem, 2 — Base+Emotion, 3 — только Base.</summary>
     private static EpisodicMemoryNode FindNodeByPartialConditions(
         EpisodicMemoryNode root,
         int baseId,
         int emotionId,
+        int understandingNodeId,
         int nodePid,
-        int level)
+        int partialTier)
     {
       if (root == null) return null;
-      int[] cond = level == 0 ? new[] { baseId, emotionId, nodePid } :
-                   level == 1 ? new[] { baseId, emotionId } :
-                   new[] { baseId };
-      var (id, lev) = new EpisodicMemoryTree().FindBranch(0, cond, root);
+      int[] cond;
+      if (partialTier == 0)
+        cond = new[] { baseId, emotionId, understandingNodeId, nodePid };
+      else if (partialTier == 1)
+        cond = new[] { baseId, emotionId, understandingNodeId };
+      else if (partialTier == 2)
+        cond = new[] { baseId, emotionId };
+      else
+        cond = new[] { baseId };
+      var (id, _) = new EpisodicMemoryTree().FindBranch(0, cond, root);
       if (id <= 0) return null;
       return new EpisodicMemoryTree().FindNodeById(root, id);
     }
@@ -97,11 +104,12 @@ namespace ISIDA.Psychic.Memory.Episodic
       return result;
     }
 
-    /// <summary>Найти узлы по условиям. level: 0 — BaseID+EmotionID+NodePID, 1 — BaseID+EmotionID, 2 — BaseID</summary>
+    /// <summary>Найти узлы по условиям. level: 0 — полный контекст ветки (4 ключа), далее релаксация по одному ключу с конца.</summary>
     public static List<int> GetEpisodeNodeIdsFromConditions(
         EpisodicMemoryNode root,
         int baseId,
         int emotionId,
+        int understandingNodeId,
         int nodePid,
         int typeRule,
         int level,
@@ -111,24 +119,30 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (root == null || triggerId == 0) return new List<int>();
       var list = new List<int>();
       EpisodicMemoryNode startNode = null;
-      var tree = new EpisodicMemoryTree();
 
       switch (level)
       {
         case 0:
           if (nodePid == 0) return list;
-          startNode = FindNodeByPartialConditions(root, baseId, emotionId, nodePid, 0);
+          startNode = FindNodeByPartialConditions(root, baseId, emotionId, understandingNodeId, nodePid, 0);
           if (startNode == null) return list;
-          if (startNode.BaseID != baseId || startNode.EmotionID != emotionId || startNode.NodePID != nodePid)
+          if (startNode.BaseID != baseId || startNode.EmotionID != emotionId ||
+              startNode.UnderstandingNodeId != understandingNodeId || startNode.NodePID != nodePid)
             return list;
           break;
         case 1:
-          startNode = FindNodeByPartialConditions(root, baseId, emotionId, 0, 1);
+          startNode = FindNodeByPartialConditions(root, baseId, emotionId, understandingNodeId, 0, 1);
+          if (startNode == null) return list;
+          if (startNode.BaseID != baseId || startNode.EmotionID != emotionId || startNode.UnderstandingNodeId != understandingNodeId)
+            return list;
+          break;
+        case 2:
+          startNode = FindNodeByPartialConditions(root, baseId, emotionId, 0, 0, 2);
           if (startNode == null) return list;
           if (startNode.BaseID != baseId || startNode.EmotionID != emotionId) return list;
           break;
-        case 2:
-          startNode = FindNodeByPartialConditions(root, baseId, 0, 0, 2);
+        case 3:
+          startNode = FindNodeByPartialConditions(root, baseId, 0, 0, 0, 3);
           if (startNode == null) return list;
           if (startNode.BaseID != baseId) startNode = root;
           break;
@@ -150,26 +164,11 @@ namespace ISIDA.Psychic.Memory.Episodic
     {
       if (system == null || !EpisodicMemorySystem.IsInitialized || AppGlobalState.EvolutionStage < 4)
         return new List<EpisodicRule>();
-      var (baseId, emotionId, nodePid) = system.GetCurrentConditions(false);
+      var (baseId, emotionId, understandingNodeId, nodePid) = system.GetCurrentConditions(false);
       var nodeIds = GetEpisodeNodeIdsFromConditions(
-          system.Tree, baseId, emotionId, nodePid, typeRule, level, triggerId, actionId);
+          system.Tree, baseId, emotionId, understandingNodeId, nodePid, typeRule, level, triggerId, actionId);
       var tree = system.TreeLogic;
       return NodesToRules(system.Tree, nodeIds, 0, tree, system);
-    }
-
-    private static Dictionary<int, EpisodicMemoryNode> GetNodesById(EpisodicMemoryNode root)
-    {
-      var d = new Dictionary<int, EpisodicMemoryNode>();
-      CollectNodes(root, d);
-      return d;
-    }
-
-    private static void CollectNodes(EpisodicMemoryNode node, Dictionary<int, EpisodicMemoryNode> dict)
-    {
-      if (node == null) return;
-      dict[node.ID] = node;
-      foreach (var c in node.Children)
-        CollectNodes(c, dict);
     }
 
     /// <summary>Найти цепочки в истории, начинающиеся с nodeIds, заканчивающиеся позитивом</summary>
@@ -257,10 +256,10 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (limit <= 0) limit = GetLimitCount();
       List<int> nodeIds = null;
 
-      for (int lev = 0; lev <= 2; lev++)
+      for (int lev = 0; lev <= 3; lev++)
       {
-        var (baseId, emotionId, nodePid) = system.GetCurrentConditions(false);
-        nodeIds = GetEpisodeNodeIdsFromConditions(system.Tree, baseId, emotionId, nodePid, 1, lev, triggerId, 0);
+        var (baseId, emotionId, understandingNodeId, nodePid) = system.GetCurrentConditions(false);
+        nodeIds = GetEpisodeNodeIdsFromConditions(system.Tree, baseId, emotionId, understandingNodeId, nodePid, 1, lev, triggerId, 0);
         if (nodeIds != null && nodeIds.Count > 0) break;
       }
 
@@ -279,7 +278,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       if (system == null || !EpisodicMemorySystem.IsInitialized || AppGlobalState.EvolutionStage < 4)
         return null;
       List<EpisodicRule> rules = null;
-      for (int lev = 0; lev <= 2; lev++)
+      for (int lev = 0; lev <= 3; lev++)
       {
         rules = GetEpisodesFromConditions(system, typeRule, lev, triggerId, 0);
         if (rules != null && rules.Count > 0) break;
@@ -292,7 +291,7 @@ namespace ISIDA.Psychic.Memory.Episodic
 
     /// <summary>
     /// Прогноз последствий выполнения планируемого ответа после данного стимула: только прямые правила с совпадением Trigger и Action.
-    /// Возвращает (0,0) при отсутствии данных; иначе accuracy 1..3 (см. уровень условий в дереве) и суммарную оценку эффекта.
+    /// Возвращает (0,0) при отсутствии данных; иначе accuracy 1..4 (уровень совпадения контекста ветки) и суммарную оценку эффекта.
     /// </summary>
     public static (int accuracy, int effect) GetAutomatizmActionPrognosis(
       EpisodicMemorySystem system,
@@ -344,7 +343,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       int actionId)
     {
       const int directOnly = 1;
-      for (int lev = 0; lev <= 2; lev++)
+      for (int lev = 0; lev <= 3; lev++)
       {
         var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
         if (rules != null && rules.Count > 0)
@@ -357,7 +356,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     {
       const int directOnly = 1;
       int best = 0;
-      for (int lev = 0; lev <= 2; lev++)
+      for (int lev = 0; lev <= 3; lev++)
       {
         var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
         if (rules == null || rules.Count == 0) continue;
@@ -378,7 +377,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       const int directOnly = 1;
       int worst = 0;
       bool any = false;
-      for (int lev = 0; lev <= 2; lev++)
+      for (int lev = 0; lev <= 3; lev++)
       {
         var rules = GetEpisodesFromConditions(system, directOnly, lev, triggerId, actionId);
         if (rules == null || rules.Count == 0) continue;

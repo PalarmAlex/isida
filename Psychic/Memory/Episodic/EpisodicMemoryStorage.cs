@@ -54,21 +54,22 @@ namespace ISIDA.Psychic.Memory.Episodic
       foreach (var line in File.ReadLines(filePath))
       {
         lineNum++;
-        if (lineNum <= 12) continue;
+        if (lineNum <= 13) continue;
         var t = line?.Trim();
         if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
 
         var sharp = t.Split('#');
         var p = sharp[0].Split('|');
-        if (p.Length < 7) continue;
+        if (p.Length < 8) continue;
 
         if (!int.TryParse(p[0], out int id)) continue;
         if (!int.TryParse(p[1], out int parentId)) continue;
         if (!int.TryParse(p[2], out int baseId)) continue;
         if (!int.TryParse(p[3], out int emotionId)) continue;
-        if (!int.TryParse(p[4], out int nodePid)) continue;
-        if (!int.TryParse(p[5], out int triggerId)) continue;
-        if (!int.TryParse(p[6], out int actionId)) continue;
+        if (!int.TryParse(p[4], out int understandingNodeId)) continue;
+        if (!int.TryParse(p[5], out int nodePid)) continue;
+        if (!int.TryParse(p[6], out int triggerId)) continue;
+        if (!int.TryParse(p[7], out int actionId)) continue;
 
         EpisodicParams pars = null;
         if (actionId > 0 && sharp.Length > 1)
@@ -95,10 +96,10 @@ namespace ISIDA.Psychic.Memory.Episodic
         EpisodicMemoryNode parent = null;
         if (parentId == 0)
         {
-          if (IsRootLevelEpisodicNode(baseId, emotionId, nodePid, triggerId, actionId))
+          if (IsRootLevelEpisodicNode(baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId))
             parent = root;
           else
-            parent = FindEpisodicParentByCondition(nodesById, baseId, emotionId, nodePid, triggerId, actionId);
+            parent = FindEpisodicParentByCondition(nodesById, baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId);
         }
         else if (nodesById.TryGetValue(parentId, out var pn))
         {
@@ -114,6 +115,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           ParentNode = parent,
           BaseID = baseId,
           EmotionID = emotionId,
+          UnderstandingNodeId = understandingNodeId,
           NodePID = nodePid,
           TriggerId = triggerId,
           ActionId = actionId,
@@ -177,6 +179,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           FileValidator.FileHeaders.EpisodicTreeParentId,
           FileValidator.FileHeaders.EpisodicTreeBaseId,
           FileValidator.FileHeaders.EpisodicTreeEmotionId,
+          FileValidator.FileHeaders.EpisodicTreeUnderstandingNodeId,
           FileValidator.FileHeaders.EpisodicTreeNodePid,
           FileValidator.FileHeaders.EpisodicTreeTriggerId,
           FileValidator.FileHeaders.EpisodicTreeActionId,
@@ -192,7 +195,7 @@ namespace ISIDA.Psychic.Memory.Episodic
             path,
             lines,
             FileValidator.IsValidEpisodicTreeFile,
-            minLinesCount: 12,
+            minLinesCount: 13,
             fileDescription: "дерева эпизодической памяти");
 
         return (result.Success, result.ErrorMessage);
@@ -208,7 +211,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     {
       foreach (var c in n.Children)
       {
-        var line = $"{c.ID}|{c.ParentID}|{c.BaseID}|{c.EmotionID}|{c.NodePID}|{c.TriggerId}|{c.ActionId}";
+        var line = $"{c.ID}|{c.ParentID}|{c.BaseID}|{c.EmotionID}|{c.UnderstandingNodeId}|{c.NodePID}|{c.TriggerId}|{c.ActionId}";
         // Всегда одна структура строки: 7 полей + # + Effect|Count|StimulsEffect|IsTeacher (у промежуточных 0|0|0|0)
         int eff = 0, count = 0, stimEff = 0, isTeacher = 0;
         if (c.Params != null && c.ActionId > 0)
@@ -225,33 +228,34 @@ namespace ISIDA.Psychic.Memory.Episodic
     }
 
     /// <summary>Узел корневого уровня: задан только BaseID (остальные 0)</summary>
-    private static bool IsRootLevelEpisodicNode(int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+    private static bool IsRootLevelEpisodicNode(int baseId, int emotionId, int understandingNodeId, int nodePid, int triggerId, int actionId)
     {
-      return emotionId == 0 && nodePid == 0 && triggerId == 0 && actionId == 0;
+      return emotionId == 0 && understandingNodeId == 0 && nodePid == 0 && triggerId == 0 && actionId == 0;
     }
 
     /// <summary>Родительский узел по условиям (на один уровень иерархии выше)</summary>
     private static EpisodicMemoryNode FindEpisodicParentByCondition(
         Dictionary<int, EpisodicMemoryNode> nodesById,
-        int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+        int baseId, int emotionId, int understandingNodeId, int nodePid, int triggerId, int actionId)
     {
-      var (pBase, pEmo, pPid, pTrig, pAct) = GetEpisodicParentCondition(baseId, emotionId, nodePid, triggerId, actionId);
+      var (pBase, pEmo, pUnd, pPid, pTrig, pAct) = GetEpisodicParentCondition(baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId);
       foreach (var node in nodesById.Values)
       {
-        if (node.BaseID == pBase && node.EmotionID == pEmo && node.NodePID == pPid && node.TriggerId == pTrig && node.ActionId == pAct)
+        if (node.BaseID == pBase && node.EmotionID == pEmo && node.UnderstandingNodeId == pUnd && node.NodePID == pPid && node.TriggerId == pTrig && node.ActionId == pAct)
           return node;
       }
       return null;
     }
 
-    private static (int BaseID, int EmotionID, int NodePID, int TriggerId, int ActionId) GetEpisodicParentCondition(
-        int baseId, int emotionId, int nodePid, int triggerId, int actionId)
+    private static (int BaseID, int EmotionID, int UnderstandingNodeId, int NodePID, int TriggerId, int ActionId) GetEpisodicParentCondition(
+        int baseId, int emotionId, int understandingNodeId, int nodePid, int triggerId, int actionId)
     {
-      if (actionId != 0) return (baseId, emotionId, nodePid, triggerId, 0);
-      if (triggerId != 0) return (baseId, emotionId, nodePid, 0, 0);
-      if (nodePid != 0) return (baseId, emotionId, 0, 0, 0);
-      if (emotionId != 0) return (baseId, 0, 0, 0, 0);
-      return (baseId, 0, 0, 0, 0);
+      if (actionId != 0) return (baseId, emotionId, understandingNodeId, nodePid, triggerId, 0);
+      if (triggerId != 0) return (baseId, emotionId, understandingNodeId, nodePid, 0, 0);
+      if (nodePid != 0) return (baseId, emotionId, understandingNodeId, 0, 0, 0);
+      if (understandingNodeId != 0) return (baseId, emotionId, 0, 0, 0, 0);
+      if (emotionId != 0) return (baseId, 0, 0, 0, 0, 0);
+      return (baseId, 0, 0, 0, 0, 0);
     }
 
     /// <summary>Сохранить историю эпизодов в файл</summary>

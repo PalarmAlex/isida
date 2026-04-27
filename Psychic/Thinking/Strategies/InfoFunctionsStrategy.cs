@@ -13,15 +13,20 @@ namespace ISIDA.Psychic.Thinking.Strategies
   internal sealed class InfoFunctionsStrategy : IThinkingStrategy
   {
     private readonly ThinkingExperienceMemory _experienceMemory;
+    private readonly MentalAutomatizmSession _mentalAutomatizmSession;
     private Random _rng = new Random();
     private int _episodicHistoryCursor = -1;
 
     /// <summary>Id стратегии для регистрации в диспетчере</summary>
     public string Id => "infoFunc";
 
-    public InfoFunctionsStrategy(ThinkingExperienceMemory experienceMemory)
+    /// <summary>Создаёт стратегию инфо-функций.</summary>
+    /// <param name="experienceMemory">Память рекомендаций по ключу проблема/тема/цель.</param>
+    /// <param name="mentalAutomatizmSession">Буфер цепочки инфо-функций или null на ранних стадиях.</param>
+    public InfoFunctionsStrategy(ThinkingExperienceMemory experienceMemory, MentalAutomatizmSession mentalAutomatizmSession)
     {
       _experienceMemory = experienceMemory ?? throw new ArgumentNullException(nameof(experienceMemory));
+      _mentalAutomatizmSession = mentalAutomatizmSession;
     }
 
     /// <summary>
@@ -83,11 +88,17 @@ namespace ISIDA.Psychic.Thinking.Strategies
     }
 
     /// <summary>TryStep вызывается диспетчером с OptionalInfoFuncId в контексте</summary>
+    /// <param name="ctx">Контекст стратегии.</param>
+    /// <returns>Решение или отсутствие решения.</returns>
     public ThinkingDecision TryStep(ThinkingStrategyContext ctx)
     {
       if (ctx?.OptionalInfoFuncId == null || ctx.OptionalInfoFuncId <= 0)
         return ThinkingDecision.None("no_infoFunc_id");
-      return Execute(ctx.OptionalInfoFuncId.Value, ctx);
+      var id = ctx.OptionalInfoFuncId.Value;
+      var decision = Execute(id, ctx);
+      if (_mentalAutomatizmSession != null)
+        _mentalAutomatizmSession.RecordIfApplicable(id);
+      return decision;
     }
 
     private static ThinkingDecision ExecuteCycleContinuation(ThinkingStrategyContext ctx)
@@ -101,6 +112,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
       var d = ExecuteExperienceRecommendation(ctx);
       if (d != null && (d.AutomatizmToExecute != null || d.ActionsImageIdToAutomatize > 0 || d.RequestParrotFromOperator))
         return d;
+      var ext = TryDecisionFromExtremeObjectModel(ctx);
+      if (ext != null && (ext.AutomatizmToExecute != null || ext.ActionsImageIdToAutomatize > 0 || ext.RequestParrotFromOperator))
+        return ext;
       return ExecuteEpisodicRule(ctx);
     }
 
@@ -114,7 +128,11 @@ namespace ISIDA.Psychic.Thinking.Strategies
 
     private ThinkingDecision ExecuteExtremeObjectImportance(ThinkingStrategyContext ctx)
     {
-      return ApplyThemeByAgentCode(ctx, AgentEventsCatalog.Codes.HighObjectImportance);
+      var themeDecision = ApplyThemeByAgentCode(ctx, AgentEventsCatalog.Codes.HighObjectImportance);
+      var ext = TryDecisionFromExtremeObjectModel(ctx);
+      if (ext != null && (ext.AutomatizmToExecute != null || ext.ActionsImageIdToAutomatize > 0 || ext.RequestParrotFromOperator))
+        return ext;
+      return themeDecision;
     }
 
     private ThinkingDecision ExecuteReinforceObjectImportance(ThinkingStrategyContext ctx)
@@ -156,7 +174,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
 
     private ThinkingDecision ExecuteMentalGoal(ThinkingStrategyContext ctx)
     {
-      return ApplyThemeByAgentCode(ctx, AgentEventsCatalog.Codes.NeedThinking);
+      var d = ApplyThemeByAgentCode(ctx, AgentEventsCatalog.Codes.NeedThinking);
+      ctx.MentalAutomatizmSession?.Clear();
+      return d;
     }
 
     private ThinkingDecision ExecuteReactivateUnderstandingTree(ThinkingStrategyContext ctx)
@@ -279,6 +299,17 @@ namespace ISIDA.Psychic.Thinking.Strategies
       return ExecuteRandomBranchAutomatizm(ctx);
     }
 
+    private ThinkingDecision TryDecisionFromExtremeObjectModel(ThinkingStrategyContext ctx)
+    {
+      if (ctx?.EpisodicMemorySystem == null || ctx.InformationEnvironmentSystem?.CurrentInformationEnvironment == null)
+        return null;
+      int extId = ctx.InformationEnvironmentSystem.CurrentInformationEnvironment.ExtremImportanceObjectID;
+      if (extId <= 0) return null;
+      var rule = EpisodicUnderstandingModelService.TryBestAnswerForExtremeObjectTrigger(ctx.EpisodicMemorySystem, extId);
+      if (rule == null || rule.ActionId <= 0) return null;
+      return EpisodicUnderstandingModelService.BuildDecisionFromRule(ctx, rule, "extreme_model");
+    }
+
     private ThinkingDecision ExecuteEpisodicRule(ThinkingStrategyContext ctx)
     {
       if (ctx?.Cycle == null) return ThinkingDecision.None("no_ctx");
@@ -287,31 +318,8 @@ namespace ISIDA.Psychic.Thinking.Strategies
       var triggerId = ctx.Cycle.UnresolvedActionsImageId;
       if (triggerId <= 0) return ThinkingDecision.None("no_trigger");
 
-      var chain = ctx.EpisodicMemorySystem.GetTargetChain(triggerId);
-      var rule = (chain != null && chain.Count > 0) ? chain[0] : ctx.EpisodicMemorySystem.GetSingleBestRule(3, triggerId);
-      if (rule == null || rule.ActionId <= 0) return ThinkingDecision.None("no_rule");
-
-      if (ctx.Cycle.UnresolvedNodeId > 0 && ctx.AutomatizmSystem != null)
-      {
-        var existing = ctx.AutomatizmSystem
-          .GetMotorsAutomatizmListFromTreeId(ctx.Cycle.UnresolvedNodeId)
-          .FirstOrDefault(a => a != null && a.ActionsImageID == rule.ActionId && a.Usefulness >= 0);
-        if (existing != null)
-        {
-          return new ThinkingDecision
-          {
-            AutomatizmToExecute = existing,
-            CloseCycleImmediately = existing.Usefulness >= 1,
-            DebugNote = $"existing_atmz_by_rule actionImg={rule.ActionId}"
-          };
-        }
-      }
-
-      return new ThinkingDecision
-      {
-        ActionsImageIdToAutomatize = rule.ActionId,
-        DebugNote = $"rule_actionImg={rule.ActionId}"
-      };
+      var rule = EpisodicUnderstandingModelService.ResolveBestRuleForStimulus(ctx.EpisodicMemorySystem, 3, triggerId);
+      return EpisodicUnderstandingModelService.BuildDecisionFromRule(ctx, rule, "episodic");
     }
 
     private ThinkingDecision ExecuteExperienceRecommendation(ThinkingStrategyContext ctx)

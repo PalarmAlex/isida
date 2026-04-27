@@ -58,6 +58,8 @@ namespace ISIDA.Psychic.Memory.Episodic
     public int BaseID { get; set; }
     /// <summary>ID эмоции</summary>
     public int EmotionID { get; set; }
+    /// <summary>ID активного узла дерева понимания ситуации (Understanding)</summary>
+    public int UnderstandingNodeId { get; set; }
     /// <summary>ID узла дерева проблем</summary>
     public int NodePID { get; set; }
     /// <summary>ID стимула</summary>

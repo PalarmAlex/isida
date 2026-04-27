@@ -1,5 +1,6 @@
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
+using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Understanding;
 
 namespace ISIDA.Psychic.Thinking.Strategies
@@ -33,6 +34,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
 
     /// <summary>Id инфо-функции для вызова (если диспетчер передаёт конкретный id).</summary>
     public int? OptionalInfoFuncId { get; set; }
+
+    /// <summary>Буфер текущей цепочки инфо-функций (смена цели очищает буфер).</summary>
+    public MentalAutomatizmSession MentalAutomatizmSession { get; set; }
   }
 }
 

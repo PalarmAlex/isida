@@ -5,7 +5,6 @@ using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Understanding;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 
 namespace ISIDA.Psychic.Memory.Episodic
@@ -20,6 +19,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     private readonly string _dataPath;
 
     private readonly AutomatizmTreeSystem _automatizmTree;
+    private readonly UnderstandingTreeSystem _understandingTree;
     private readonly ProblemTreeSystem _problemTree;
     private readonly InformationEnvironmentSystem _infoEnv;
     private readonly GomeostasSystem _gomeostas;
@@ -48,6 +48,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     /// <param name="psychicDataPath">Путь к данным психики (или null для стандартного)</param>
     /// <param name="automatizmTree">Система дерева автоматизмов</param>
     /// <param name="problemTree">Система дерева проблем</param>
+    /// <param name="understandingTree">Дерево понимания ситуации (ключ ветки эпизодов)</param>
     /// <param name="infoEnv">Информационная среда</param>
     /// <param name="gomeostas">Система гомеостаза</param>
     /// <param name="actionsImages">Система образов действий</param>
@@ -55,6 +56,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         string psychicDataPath,
         AutomatizmTreeSystem automatizmTree,
         ProblemTreeSystem problemTree,
+        UnderstandingTreeSystem understandingTree,
         InformationEnvironmentSystem infoEnv,
         GomeostasSystem gomeostas,
         ActionsImagesSystem actionsImages)
@@ -66,6 +68,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           psychicDataPath,
           automatizmTree,
           problemTree,
+          understandingTree,
           infoEnv,
           gomeostas,
           actionsImages);
@@ -75,6 +78,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         string psychicDataPath,
         AutomatizmTreeSystem automatizmTree,
         ProblemTreeSystem problemTree,
+        UnderstandingTreeSystem understandingTree,
         InformationEnvironmentSystem infoEnv,
         GomeostasSystem gomeostas,
         ActionsImagesSystem actionsImages)
@@ -86,6 +90,7 @@ namespace ISIDA.Psychic.Memory.Episodic
           : System.IO.Path.Combine(psychicDataPath, "Memory", "Episodic");
 
       _automatizmTree = automatizmTree ?? throw new ArgumentNullException(nameof(automatizmTree));
+      _understandingTree = understandingTree;
       _problemTree = problemTree;
       _infoEnv = infoEnv ?? throw new ArgumentNullException(nameof(infoEnv));
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
@@ -130,18 +135,24 @@ namespace ISIDA.Psychic.Memory.Episodic
       return useOld ? _problemTree.OldDetectedActiveLastProblemNodeId : _problemTree.DetectedActiveLastProblemNodeId;
     }
 
-    /// <summary>Получить текущие условия (базовое состояние, эмоция, узел проблем)</summary>
-    /// <param name="useOldCondition">Использовать предыдущее состояние (для учительских правил)</param>
-    /// <returns>Кортеж (BaseId, EmotionId, NodePid). При стадии &lt; 4 возвращает (0, 0, 0)</returns>
+    /// <summary>ID активного узла дерева понимания (Understanding)</summary>
+    private int GetUnderstandingNodeId()
+    {
+      return _understandingTree?.DetectedActiveLastUnderstandingNodeId ?? 0;
+    }
+
+    /// <summary>Получить текущие условия ветки эпизодов (база, эмоция, узел понимания, узел проблем)</summary>
+    /// <param name="useOldCondition">Использовать предыдущее состояние проблемы (для учительских правил)</param>
+    /// <returns>При стадии &lt; 4 возвращает (0, 0, 0, 0)</returns>
     /// <remarks>Доступно с 4 стадии развития</remarks>
-    public (int BaseId, int EmotionId, int NodePid) GetCurrentConditions(bool useOldCondition = false)
+    public (int BaseId, int EmotionId, int UnderstandingNodeId, int NodePid) GetCurrentConditions(bool useOldCondition = false)
     {
       if (AppGlobalState.EvolutionStage < 4)
       {
         Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для эпизодической памяти");
-        return (0, 0, 0);
+        return (0, 0, 0, 0);
       }
-      return (GetBaseId(), GetEmotionId(), GetNodePid(useOldCondition));
+      return (GetBaseId(), GetEmotionId(), GetUnderstandingNodeId(), GetNodePid(useOldCondition));
     }
 
     #endregion
@@ -160,7 +171,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       _lock.EnterWriteLock();
       try
       {
-        var (baseId, emotionId, nodePid) = GetCurrentConditions(useOldCondition);
+        var (baseId, emotionId, understandingNodeId, nodePid) = GetCurrentConditions(useOldCondition);
 
         var pars = new EpisodicParams
         {
@@ -174,8 +185,9 @@ namespace ISIDA.Psychic.Memory.Episodic
         else
           pars.StimulsEffect = AddUtils.Clamp(pars.StimulsEffect, -10, 10);
 
-        var condArr = new[] { baseId, emotionId, nodePid, triggerId, actionId };
-        var (idOld, nodeOld) = _treeLogic.CheckBranchFromCondition(Tree, baseId, emotionId, nodePid, triggerId, actionId);
+        var condArr = new[] { baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId };
+        var (idOld, nodeOld) = _treeLogic.CheckBranchFromCondition(
+            Tree, baseId, emotionId, understandingNodeId, nodePid, triggerId, actionId);
 
         // Обновлять существующий узел (AverageEffect) и выходить — только если нашли именно листовой узел с тем же Trigger+Action.
         // Иначе CheckBranchFromCondition мог вернуть родительский узел (при частичном совпадении по GetTrueLevel), и мы бы никогда не доращивали ветку.

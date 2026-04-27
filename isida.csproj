@@ -142,6 +142,7 @@
     <Compile Include="Psychic\Understanding\PurposeImageSystem.cs" />
     <Compile Include="Psychic\Understanding\UnderstandingTreeNode.cs" />
     <Compile Include="Psychic\Understanding\UnderstandingTreeSystem.cs" />
+    <Compile Include="Psychic\Understanding\MentalEpisodicTreeSystem.cs" />
     <Compile Include="Psychic\Understanding\ThinkingThemePulseResolver.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryNode.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryTree.cs" />
@@ -151,6 +152,7 @@
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRulesService.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemoryRules.cs" />
     <Compile Include="Psychic\Memory\Episodic\EpisodicMemorySearch.cs" />
+    <Compile Include="Psychic\Memory\Episodic\EpisodicUnderstandingModelService.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\HomeostasisMoodPerception.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
@@ -163,6 +165,7 @@
     <Compile Include="Psychic\Thinking\ThinkingCycleListItem.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCycleLogMessages.cs" />
     <Compile Include="Psychic\Thinking\MainThinkingCycleClosedLogPayload.cs" />
+    <Compile Include="Psychic\Thinking\MentalAutomatizmSession.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCyclesSystem.cs" />
     <Compile Include="Psychic\InformationEnvironmentViewSnapshot.cs" />
     <Compile Include="Psychic\Thinking\ThinkingExperienceMemory.cs" />
