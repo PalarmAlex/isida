@@ -155,6 +155,7 @@
     <Compile Include="Psychic\Memory\Episodic\EpisodicUnderstandingModelService.cs" />
     <Compile Include="Psychic\EmotionsImageSystem.cs" />
     <Compile Include="Psychic\HomeostasisMoodPerception.cs" />
+    <Compile Include="Psychic\AgentSleepOrchestrator.cs" />
     <Compile Include="Psychic\InformationEnvironmentSystem.cs" />
     <Compile Include="Psychic\Importance\ExtremImportance.cs" />
     <Compile Include="Psychic\Importance\ObjectImportanceService.cs" />

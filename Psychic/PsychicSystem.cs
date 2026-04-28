@@ -334,15 +334,31 @@ namespace ISIDA.Psychic
         if (pulseCount == 2 && AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
           _episodicMemorySystem.SetInterruption();
 
-        if (sleepingType > 0)
+        if (AgentSleepOrchestrator.IsInitialized)
         {
-          IsSleeping = true;
-          IsSleepingDream = (sleepingType == 2);
+          AgentSleepOrchestrator.Instance.ResolvePulse(pulseCount, sleepingType);
+          IsSleeping = AppGlobalState.IsSleeping;
+          IsSleepingDream = AgentSleepOrchestrator.Instance.IsDreamReprocessingPhase;
         }
         else
         {
-          IsSleeping = false;
-          IsSleepingDream = false;
+          if (sleepingType > 0)
+          {
+            IsSleeping = true;
+            IsSleepingDream = (sleepingType == 2);
+          }
+          else
+          {
+            IsSleeping = false;
+            IsSleepingDream = false;
+          }
+        }
+
+        if (_informationEnvironmentSystem != null)
+        {
+          _informationEnvironmentSystem.IsSleeping = IsSleeping;
+          if (_informationEnvironmentSystem.CurrentInformationEnvironment != null)
+            _informationEnvironmentSystem.CurrentInformationEnvironment.IsSleep = IsSleeping;
         }
 
         // Обработка тиков при бодрствовании
@@ -413,9 +429,19 @@ namespace ISIDA.Psychic
           ProcessSleep();
           if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
           {
-            thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(pulseCount, isSleeping: true);
-            PublishMainThinkingCycleToAppGlobalState();
+            bool runSleepThinking = !AgentSleepOrchestrator.IsInitialized
+                || AgentSleepOrchestrator.Instance.ShouldRunSleepThinkingCycles;
+            if (runSleepThinking)
+            {
+              thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(pulseCount, isSleeping: true);
+              PublishMainThinkingCycleToAppGlobalState();
+            }
+            else
+              PublishMainThinkingCycleToAppGlobalState();
           }
+
+          if (AgentSleepOrchestrator.IsInitialized)
+            AgentSleepOrchestrator.Instance.RunEpisodicConsolidationIfConfigured();
         }
       }
       finally
@@ -425,6 +451,12 @@ namespace ISIDA.Psychic
 
       if (mirrorAutomatizmToExecute > 0)
       {
+        if (AgentSleepOrchestrator.IsInitialized && AgentSleepOrchestrator.Instance.SuppressExternalMotor)
+        {
+          Logger.Info($"Отложенный зеркальный автоматизм id={mirrorAutomatizmToExecute} пропущен: сон (подавление моторики).");
+        }
+        else
+        {
         var mirrorAutomatizm = _automatizmSystem.GetAutomatizmById(mirrorAutomatizmToExecute);
         if (mirrorAutomatizm != null)
         {
@@ -453,6 +485,7 @@ namespace ISIDA.Psychic
 
           ExecuteAutomatizm(mirrorAutomatizm);
         }
+        }
       }
 
       if (thinkingDecisionToExecute != null)
@@ -464,6 +497,12 @@ namespace ISIDA.Psychic
     private void ExecuteThinkingDecision(ThinkingDecision decision)
     {
       if (decision == null) return;
+
+      if (AgentSleepOrchestrator.IsInitialized && AgentSleepOrchestrator.Instance.SuppressExternalMotor)
+      {
+        Logger.Info("Решение цикла мышления не исполнено моторно: сон (подавление внешних действий).");
+        return;
+      }
 
       // 1) Готовый автоматизм
       if (decision.AutomatizmToExecute != null)
@@ -1410,6 +1449,12 @@ namespace ISIDA.Psychic
     {
       if (automatizm == null)
         return false;
+
+      if (AgentSleepOrchestrator.IsInitialized && AgentSleepOrchestrator.Instance.SuppressExternalMotor)
+      {
+        Logger.Info($"Автоматизм ID={automatizm.ID} не выполнен: сон (подавление моторики).");
+        return false;
+      }
 
       if (_automatismExecutionService == null)
       {

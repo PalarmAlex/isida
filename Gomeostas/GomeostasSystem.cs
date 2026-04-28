@@ -2077,6 +2077,24 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// Установить флаг сна без проверки «агент не спит» (для пробуждения и оркестратора фаз сна).
+    /// </summary>
+    public void ApplySleepState(bool isSleeping)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        EnsureAgentState(AgentCheck.NotDead);
+        _agentState.IsSleeping = isSleeping;
+        AppGlobalState.IsSleeping = isSleeping;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Установить время жизни агента
     /// </summary>
     public void SetLifeTime(int lifeTime)

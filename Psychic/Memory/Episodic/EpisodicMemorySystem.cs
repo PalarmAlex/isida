@@ -32,6 +32,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     private readonly Dictionary<int, EpisodicMemoryNode> _nodesById = new Dictionary<int, EpisodicMemoryNode>();
     private readonly EpisodicMemoryTree _treeLogic = new EpisodicMemoryTree();
     private int _lastNodeId = 1;
+    private bool _sleepConsolidationDirty;
 
     #region Инициализация
 
@@ -303,6 +304,89 @@ namespace ISIDA.Psychic.Memory.Episodic
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    #endregion
+
+    #region Консолидация во сне
+
+    /// <summary>
+    /// Ослабляет «шумовые» листья: мало подтверждений, слабый эффект — шагом уменьшает |StimulsEffect|.
+    /// </summary>
+    /// <param name="maxLeavesToVisit">Верхняя граница числа посещённых листьев за проход.</param>
+    /// <returns>Число просмотренных листьев и число скорректированных.</returns>
+    public (int Visited, int Adjusted) ApplySleepNoiseReductionToWeakLeaves(int maxLeavesToVisit)
+    {
+      if (AppGlobalState.EvolutionStage < 4 || maxLeavesToVisit <= 0)
+        return (0, 0);
+
+      int visited = 0;
+      int adjusted = 0;
+      int budget = maxLeavesToVisit;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        ApplyWeakLeafNoiseWalk(Tree, ref visited, ref adjusted, ref budget);
+        if (adjusted > 0)
+          _sleepConsolidationDirty = true;
+        return (visited, adjusted);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    private static void ApplyWeakLeafNoiseWalk(
+        EpisodicMemoryNode node,
+        ref int visited,
+        ref int adjusted,
+        ref int budget)
+    {
+      if (node == null || budget <= 0)
+        return;
+
+      if (node.Children == null || node.Children.Count == 0)
+      {
+        var p = node.Params;
+        if (p != null && !p.IsTeacher && p.Count <= 2 && Math.Abs(p.Effect) <= 1)
+        {
+          visited++;
+          if (p.StimulsEffect != 0)
+          {
+            if (p.StimulsEffect > 0)
+              p.StimulsEffect = Math.Max(0, p.StimulsEffect - 1);
+            else
+              p.StimulsEffect = Math.Min(0, p.StimulsEffect + 1);
+            adjusted++;
+          }
+        }
+        budget--;
+        return;
+      }
+
+      foreach (var child in node.Children)
+      {
+        ApplyWeakLeafNoiseWalk(child, ref visited, ref adjusted, ref budget);
+        if (budget <= 0)
+          return;
+      }
+    }
+
+    /// <summary>
+    /// Сохраняет эпизодику на диск, если во сне менялись параметры листьев.
+    /// </summary>
+    public void FlushSleepConsolidationSaveIfNeeded(bool saveToDisk)
+    {
+      if (!_sleepConsolidationDirty)
+        return;
+      _sleepConsolidationDirty = false;
+      if (!saveToDisk)
+        return;
+      var (ok, err) = Save();
+      if (!ok)
+        Logger.Warning($"Эпизодика после сна: сохранение не выполнено: {err}");
     }
 
     #endregion

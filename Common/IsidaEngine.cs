@@ -645,6 +645,8 @@ namespace ISIDA.Common
         InformationEnvironmentSystem.InitializeInstance();
         context.InformationEnvironmentSystem = InformationEnvironmentSystem.Instance;
 
+        AgentSleepOrchestrator.Initialize(context.InformationEnvironmentSystem);
+
         // Шаг 3: Гомеостаз
         initializationStep = 3;
         GomeostasSystem.InitializeInstance(context.InformationEnvironmentSystem, config.GomeostasFolder);

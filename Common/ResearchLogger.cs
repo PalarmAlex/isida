@@ -1150,7 +1150,7 @@ namespace ISIDA.Common
           : $"{name} — вес типа темы по справочнику: {w}";
     }
 
-    /// <summary>Подсказка для колонки «Цикл М»: Id экземпляра цикла, инфо-функция  (справочник), вес, образ темы, …</summary>
+    /// <summary>Подсказка для колонки «Цикл М»: Id экземпляра цикла, инфо-функция (справочник), вес, образ темы, …</summary>
     private static string BuildMainThinkingCycleTooltip(
         int weight, int themeId, int purposeId, int problemNodeId, string lastStrategyId, string taskStatus = null,
         int? cycleInstanceId = null)
