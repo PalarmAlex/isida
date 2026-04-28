@@ -912,7 +912,8 @@ namespace ISIDA.Common
           context.UnderstandingTreeSystem,
           context.ProblemTree,
           context.InformationEnvironmentSystem,
-          context.MentalEpisodicTreeSystem);
+          context.MentalEpisodicTreeSystem,
+          context.AutomatizmChainsSystem);
         if (context.EpisodicMemory != null)
           context.OrientationReflex.SetEpisodicMemorySystem(context.EpisodicMemory);
         context.OrientationReflex.SetUnderstandingTreeSystem(context.UnderstandingTreeSystem);

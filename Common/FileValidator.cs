@@ -160,9 +160,12 @@ namespace ISIDA.Common
       public const string UnderstandingTreeFormat = "# ID|ParentID|Mood|EmotionID|SituationID";
       public const string UnderstandingTreeDesc = "# Дерево понимания ситуации";
 
-      // Ментальная эпизодическая память (цепочки инфо-функций)
-      public const string MentalEpisodicTreeFormat = "# Формат: Id|NodePID|ThemeID|PurposeID|info1,info2#Effect|Count";
-      public const string MentalEpisodicTreeDesc = "# Ментальная эпизодическая память; info — список Id инфо-функций через запятую; после # — Effect и Count";
+      // Ментальная эпизодическая память (дерево контекстов + листья-цепочки ИФ)
+      public const string MentalEpisodicTreeFormat = "# Формат: Id|ParentID|NodePID|ThemeID|PurposeID|info1,info2#Effect|Count";
+      public const string MentalEpisodicTreeDesc = "# ParentID=0 — узел под корнем; папка контекста: пустой info, Effect=0, Count=0; лист: список Id инфо-функций; после # — Effect и Count";
+
+      public const string MentalEpisodicHistoryFormat = "# Формат: MentalRuleNodeId|LifeTime|LastEpisodicNodeId";
+      public const string MentalEpisodicHistoryDesc = "# История кадров ментальной эпизодики: узел правила в дереве, пульс жизни, последний узел моторной эпизодики (0 — нет)";
 
       // Справочник типов ситуаций
       public const string SituationTypesFormat = "# Id|MoodId|InfluenceId|ThemeTypeId|EventAgentCode";
@@ -1506,15 +1509,55 @@ namespace ISIDA.Common
         var head = t.Substring(0, hashIdx);
         var tail = t.Substring(hashIdx + 1);
         var hp = head.Split('|');
-        if (hp.Length < 5) return false;
+        if (hp.Length < 6) return false;
         if (!int.TryParse(hp[0], out int id) || id < 0) return false;
         if (!int.TryParse(hp[1], out _)) return false;
         if (!int.TryParse(hp[2], out _)) return false;
         if (!int.TryParse(hp[3], out _)) return false;
+        if (!int.TryParse(hp[4], out _)) return false;
         var tp = tail.Split('|');
         if (tp.Length < 2) return false;
         if (!int.TryParse(tp[0], out _)) return false;
         if (!int.TryParse(tp[1], out _)) return false;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidMentalEpisodicHistoryFile
+
+    /// <summary>Проверяет валидность файла истории ментальной эпизодики по пути.</summary>
+    public static bool IsValidMentalEpisodicHistoryFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidMentalEpisodicHistoryFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>Проверяет валидность содержимого файла истории ментальной эпизодики.</summary>
+    public static bool IsValidMentalEpisodicHistoryFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 3) return false;
+        if (!int.TryParse(p[0], out int mentalId) || mentalId < 0) return false;
+        if (!int.TryParse(p[1], out _)) return false;
+        if (!int.TryParse(p[2], out int motorId) || motorId < 0) return false;
       }
       return true;
     }

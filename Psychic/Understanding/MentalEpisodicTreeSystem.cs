@@ -8,18 +8,21 @@ using System.Threading;
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Ментальная эпизодическая память: цепочки инфо-функций по контексту (узел проблемы, тема, цель) и усреднённый эффект (аналог дерева BOT <c>EpisodicMentalTree</c> в уплощённом виде одного листа на контекст).
+  /// Ментальная эпизодическая память: дерево контекстов (проблема / тема / цель) с несколькими листьями-цепочками
+  /// инфо-функций и усреднённым эффектом. История кадров — отдельный файл.
   /// </summary>
   public sealed class MentalEpisodicTreeSystem : IDisposable
   {
+    private const int RootParentId = 0;
+    private const string TreeFileName = "mental_episodic_tree.dat";
+    private const string HistoryFileName = "mental_episodic_history.dat";
+
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private readonly string _dataPath;
-    private readonly Dictionary<MentalTriple, MentalEpisodicLeaf> _leafByTriple = new Dictionary<MentalTriple, MentalEpisodicLeaf>();
-    private readonly List<MentalEpisodicLeaf> _leaves = new List<MentalEpisodicLeaf>();
-    private int _lastId;
+    private readonly Dictionary<int, MentalEpisodicNode> _nodes = new Dictionary<int, MentalEpisodicNode>();
+    private readonly List<int> _rootChildIds = new List<int>();
+    private int _nextId;
     private bool _disposed;
-
-    private const string FileName = "mental_episodic_tree.dat";
 
     private static MentalEpisodicTreeSystem _instance;
 
@@ -27,14 +30,11 @@ namespace ISIDA.Psychic.Understanding
     public static bool IsInitialized => _instance != null;
 
     /// <summary>Глобальный экземпляр.</summary>
-    /// <returns>Система ментальной эпизодики.</returns>
-    /// <exception cref="InvalidOperationException">Синглтон не создан.</exception>
     public static MentalEpisodicTreeSystem Instance => _instance ??
         throw new InvalidOperationException("MentalEpisodicTreeSystem не инициализирован.");
 
     /// <summary>Инициализирует систему загрузкой из каталога данных психики.</summary>
     /// <param name="psychicDataFolder">Корень данных психики (родитель каталога Understanding).</param>
-    /// <exception cref="InvalidOperationException">Повторная инициализация.</exception>
     public static void InitializeInstance(string psychicDataFolder)
     {
       if (_instance != null)
@@ -51,17 +51,22 @@ namespace ISIDA.Psychic.Understanding
           : Path.Combine(psychicDataFolder, "Understanding");
       EnsureDirectory();
       Load();
+      if (_nodes.Count == 0)
+        EnsureEmptyRoot();
     }
 
     /// <summary>
-    /// Сохраняет или обновляет эпизод для полного контекста: усредняет эффект по тем же правилам, что <c>averageMentalEffect</c> в BOT.
+    /// Сохраняет или обновляет эпизод: контекст (NodePID, Theme, Purpose) и цепочка инфо-функций;
+    /// при совпадении цепочки с существующим листом — усреднение эффекта.
     /// </summary>
-    /// <param name="nodePid">Идентификатор узла дерева проблем (активная ветка).</param>
-    /// <param name="themeId">Идентификатор образа темы мышления.</param>
-    /// <param name="purposeId">Идентификатор образа цели.</param>
-    /// <param name="infoChain">Цепочка номеров инфо-функций за эпизод.</param>
-    /// <param name="effect">Оценка эффекта в диапазоне (как правило после оценки полезности автоматизма).</param>
-    public void SaveOrUpdate(int nodePid, int themeId, int purposeId, IReadOnlyList<int> infoChain, int effect)
+    /// <param name="nodePid">Узел дерева проблем.</param>
+    /// <param name="themeId">Образ темы.</param>
+    /// <param name="purposeId">Образ цели.</param>
+    /// <param name="infoChain">Цепочка инфо-функций.</param>
+    /// <param name="effect">Оценка эффекта.</param>
+    /// <param name="lastMotorEpisodicNodeId">Последний узел моторной эпизодики (0 — нет связи).</param>
+    public void SaveOrUpdate(int nodePid, int themeId, int purposeId, IReadOnlyList<int> infoChain, int effect,
+        int lastMotorEpisodicNodeId = 0)
     {
       if (AppGlobalState.EvolutionStage < 4) return;
 
@@ -69,32 +74,41 @@ namespace ISIDA.Psychic.Understanding
       if ((chain == null || chain.Count == 0) && effect == 0)
         return;
 
+      var lifeTime = Math.Max(1, AppGlobalState.Lifetime);
+
       _lock.EnterWriteLock();
       try
       {
-        var key = new MentalTriple(nodePid, themeId, purposeId);
-        if (!_leafByTriple.TryGetValue(key, out var leaf))
+        var ctxId = GetOrCreateContextNodeLocked(nodePid, themeId, purposeId);
+        var existingRuleId = FindRuleChildWithSameChainLocked(ctxId, chain);
+        if (existingRuleId > 0 && _nodes.TryGetValue(existingRuleId, out var ruleNode))
         {
-          _lastId++;
-          leaf = new MentalEpisodicLeaf
-          {
-            Id = _lastId,
-            NodePid = nodePid,
-            ThemeId = themeId,
-            PurposeId = purposeId,
-            InfoArr = new List<int>(),
-            Effect = 0,
-            Count = 0
-          };
-          _leafByTriple[key] = leaf;
-          _leaves.Add(leaf);
+          AverageMentalEffect(ruleNode, AddUtils.Clamp(effect, -10, 10));
+          AppendHistoryLocked(ruleNode.Id, lifeTime, lastMotorEpisodicNodeId);
+          PersistToDiskLocked();
+          return;
         }
 
-        if (leaf.InfoArr.Count == 0 && chain != null && chain.Count > 0)
-          leaf.InfoArr = new List<int>(chain);
+        _nextId++;
+        var newId = _nextId;
+        var newRule = new MentalEpisodicNode
+        {
+          Id = newId,
+          ParentId = ctxId,
+          IsContextFolder = false,
+          NodePid = nodePid,
+          ThemeId = themeId,
+          PurposeId = purposeId,
+          InfoArr = chain != null ? new List<int>(chain) : new List<int>(),
+          Effect = AddUtils.Clamp(effect, -10, 10),
+          Count = 1
+        };
+        _nodes[newId] = newRule;
+        if (_nodes.TryGetValue(ctxId, out var ctx))
+          ctx.ChildIds.Add(newId);
 
-        AverageMentalEffect(leaf, AddUtils.Clamp(effect, -10, 10));
-        PersistToDisk();
+        AppendHistoryLocked(newId, lifeTime, lastMotorEpisodicNodeId);
+        PersistToDiskLocked();
       }
       finally
       {
@@ -102,15 +116,7 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>
-    /// Подбор следующей инфо-функции по опыту: сначала точное продолжение префикса (позитивные эпизоды, тот же контекст), затем первая «привычная» цепочка с Count &gt; 1 (с релаксацией контекста как в BOT).
-    /// </summary>
-    /// <param name="nodePid">Узел дерева проблем.</param>
-    /// <param name="themeId">Образ темы.</param>
-    /// <param name="purposeId">Образ цели.</param>
-    /// <param name="executedPrefix">Уже выполненный префикс цепочки в текущем эпизоде.</param>
-    /// <param name="exactOnly">Если true — не использовать шаг «любимой» цепочки.</param>
-    /// <returns>Следующий номер инфо-функции или null.</returns>
+    /// <summary>Подбор следующей инфо-функции по опыту (GPT-префикс и релаксация контекста).</summary>
     public int? TryResolveNextInfoFunc(int nodePid, int themeId, int purposeId, IReadOnlyList<int> executedPrefix, bool exactOnly)
     {
       if (!IsInitialized || AppGlobalState.EvolutionStage < 4)
@@ -119,13 +125,12 @@ namespace ISIDA.Psychic.Understanding
       _lock.EnterReadLock();
       try
       {
-        var gpt = GetNextGptStep(nodePid, themeId, purposeId, executedPrefix);
+        var gpt = GetNextGptStepLocked(nodePid, themeId, purposeId, executedPrefix);
         if (gpt.HasValue)
           return gpt;
         if (exactOnly)
           return null;
-
-        return GetFavoriteFirstExecutable(nodePid, themeId, purposeId);
+        return GetFavoriteFirstExecutableLocked(nodePid, themeId, purposeId);
       }
       finally
       {
@@ -133,9 +138,21 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>
-    /// Освобождает ресурсы и сохраняет файл.
-    /// </summary>
+    /// <summary>Сохраняет данные на диск.</summary>
+    public (bool Success, string Error) Save()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        return PersistToDiskLocked();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>Освобождает ресурсы и сохраняет файл.</summary>
     public void Dispose()
     {
       if (_disposed) return;
@@ -156,54 +173,11 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
-    /// <summary>Сохраняет данные на диск.</summary>
-    /// <returns>Успех и текст ошибки.</returns>
-    public (bool Success, string Error) Save()
+    private void EnsureEmptyRoot()
     {
-      _lock.EnterReadLock();
-      try
-      {
-        return PersistToDisk();
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-    }
-
-    /// <summary>Запись файла без захвата блокировки (вызывать под уже удерживаемой блокировкой чтения или записи).</summary>
-    /// <returns>Успех и текст ошибки.</returns>
-    private (bool Success, string Error) PersistToDisk()
-    {
-      try
-      {
-        EnsureDirectory();
-        var path = Path.Combine(_dataPath, FileName);
-        var lines = new List<string>
-        {
-          FileValidator.FileHeaders.MentalEpisodicTreeFormat,
-          FileValidator.FileHeaders.MentalEpisodicTreeDesc
-        };
-        foreach (var leaf in _leaves.OrderBy(l => l.Id))
-        {
-          var infos = leaf.InfoArr == null || leaf.InfoArr.Count == 0
-              ? string.Empty
-              : string.Join(",", leaf.InfoArr);
-          var line = $"{leaf.Id}|{leaf.NodePid}|{leaf.ThemeId}|{leaf.PurposeId}|{infos}#{leaf.Effect}|{leaf.Count}";
-          lines.Add(line);
-        }
-
-        return FileValidator.SafeSaveFile(
-            path,
-            lines,
-            p => FileValidator.IsValidMentalEpisodicTreeFile(p),
-            minLinesCount: 2,
-            fileDescription: "ментальной эпизодической памяти");
-      }
-      catch (Exception ex)
-      {
-        return (false, ex.Message);
-      }
+      if (_rootChildIds.Count > 0 || _nodes.Count > 0)
+        return;
+      _nextId = 1;
     }
 
     private void EnsureDirectory()
@@ -214,37 +188,41 @@ namespace ISIDA.Psychic.Understanding
 
     private void Load()
     {
-      var path = Path.Combine(_dataPath, FileName);
-      _leafByTriple.Clear();
-      _leaves.Clear();
-      _lastId = 0;
-      if (!File.Exists(path) || !FileValidator.IsValidMentalEpisodicTreeFile(path))
-        return;
+      _nodes.Clear();
+      _rootChildIds.Clear();
+      _nextId = 0;
 
-      foreach (var raw in File.ReadAllLines(path))
+      var treePath = Path.Combine(_dataPath, TreeFileName);
+      if (!File.Exists(treePath) || !FileValidator.IsValidMentalEpisodicTreeFile(treePath))
+      {
+        LoadHistory();
+        return;
+      }
+
+      foreach (var raw in File.ReadAllLines(treePath))
       {
         var line = raw?.Trim();
         if (string.IsNullOrEmpty(line) || line.StartsWith("#", StringComparison.Ordinal))
           continue;
 
         var hashIdx = line.IndexOf("#", StringComparison.Ordinal);
-        var head = hashIdx >= 0 ? line.Substring(0, hashIdx) : line;
-        var tail = hashIdx >= 0 && hashIdx + 1 < line.Length ? line.Substring(hashIdx + 1) : string.Empty;
-
+        if (hashIdx < 0) continue;
+        var head = line.Substring(0, hashIdx);
+        var tail = hashIdx + 1 < line.Length ? line.Substring(hashIdx + 1) : string.Empty;
         var hp = head.Split('|');
-        if (hp.Length < 5) continue;
-        if (!int.TryParse(hp[0], out var id)) continue;
-        if (!int.TryParse(hp[1], out var nodePid)) continue;
-        if (!int.TryParse(hp[2], out var themeId)) continue;
-        if (!int.TryParse(hp[3], out var purposeId)) continue;
+        if (hp.Length < 6) continue;
+        if (!int.TryParse(hp[0].Trim(), out var id)) continue;
+        if (!int.TryParse(hp[1].Trim(), out var parentId)) continue;
+        if (!int.TryParse(hp[2].Trim(), out var nodePid)) continue;
+        if (!int.TryParse(hp[3].Trim(), out var themeId)) continue;
+        if (!int.TryParse(hp[4].Trim(), out var purposeId)) continue;
 
+        var infoStr = hp[5].Trim();
         var infoArr = new List<int>();
-        var infoStr = hp[4];
         if (!string.IsNullOrEmpty(infoStr))
         {
           foreach (var s in infoStr.Split(','))
           {
-            if (string.IsNullOrWhiteSpace(s)) continue;
             if (int.TryParse(s.Trim(), out var iid) && iid > 0)
               infoArr.Add(iid);
           }
@@ -259,9 +237,12 @@ namespace ISIDA.Psychic.Understanding
           if (tp.Length >= 2) int.TryParse(tp[1].Trim(), out count);
         }
 
-        var leaf = new MentalEpisodicLeaf
+        var isFolder = infoArr.Count == 0 && count == 0 && effect == 0;
+        var node = new MentalEpisodicNode
         {
           Id = id,
+          ParentId = parentId,
+          IsContextFolder = isFolder,
           NodePid = nodePid,
           ThemeId = themeId,
           PurposeId = purposeId,
@@ -269,10 +250,94 @@ namespace ISIDA.Psychic.Understanding
           Effect = effect,
           Count = count
         };
-        _leaves.Add(leaf);
-        _leafByTriple[new MentalTriple(nodePid, themeId, purposeId)] = leaf;
-        if (id > _lastId) _lastId = id;
+        _nodes[id] = node;
+        if (id > _nextId) _nextId = id;
+
+        if (parentId == RootParentId)
+          _rootChildIds.Add(id);
       }
+
+      // Восстановить дочерние связи у не-корневых
+      foreach (var kv in _nodes.ToList())
+      {
+        var n = kv.Value;
+        if (n.ParentId == RootParentId) continue;
+        if (_nodes.TryGetValue(n.ParentId, out var p) && !p.ChildIds.Contains(n.Id))
+          p.ChildIds.Add(n.Id);
+      }
+
+      LoadHistory();
+    }
+
+    private readonly List<MentalHistoryEntry> _history = new List<MentalHistoryEntry>();
+
+    private void LoadHistory()
+    {
+      _history.Clear();
+      var path = Path.Combine(_dataPath, HistoryFileName);
+      if (!File.Exists(path) || !FileValidator.IsValidMentalEpisodicHistoryFile(path))
+        return;
+      foreach (var raw in File.ReadAllLines(path))
+      {
+        var t = raw?.Trim();
+        if (string.IsNullOrEmpty(t) || t.StartsWith("#", StringComparison.Ordinal)) continue;
+        var p = t.Split('|');
+        if (p.Length < 3) continue;
+        if (!int.TryParse(p[0].Trim(), out var mentalId)) continue;
+        if (!int.TryParse(p[1].Trim(), out var lifeTime)) continue;
+        if (!int.TryParse(p[2].Trim(), out var motorId)) continue;
+        _history.Add(new MentalHistoryEntry { MentalRuleNodeId = mentalId, LifeTime = lifeTime, LastEpisodicNodeId = motorId });
+      }
+    }
+
+    private int GetOrCreateContextNodeLocked(int nodePid, int themeId, int purposeId)
+    {
+      foreach (var cid in _rootChildIds)
+      {
+        if (!_nodes.TryGetValue(cid, out var n)) continue;
+        if (!n.IsContextFolder) continue;
+        if (n.NodePid == nodePid && n.ThemeId == themeId && n.PurposeId == purposeId)
+          return cid;
+      }
+
+      if (_nextId < 1) _nextId = 1;
+      _nextId++;
+      var newId = _nextId;
+      var ctx = new MentalEpisodicNode
+      {
+        Id = newId,
+        ParentId = RootParentId,
+        IsContextFolder = true,
+        NodePid = nodePid,
+        ThemeId = themeId,
+        PurposeId = purposeId,
+        InfoArr = new List<int>(),
+        Effect = 0,
+        Count = 0
+      };
+      _nodes[newId] = ctx;
+      _rootChildIds.Add(newId);
+      return newId;
+    }
+
+    private int FindRuleChildWithSameChainLocked(int contextId, List<int> chain)
+    {
+      if (!_nodes.TryGetValue(contextId, out var ctx) || chain == null)
+        return 0;
+      foreach (var rid in ctx.ChildIds)
+      {
+        if (!_nodes.TryGetValue(rid, out var r) || r.IsContextFolder) continue;
+        if (r.InfoArr != null && r.InfoArr.Count == chain.Count)
+        {
+          var ok = true;
+          for (var i = 0; i < chain.Count; i++)
+          {
+            if (r.InfoArr[i] != chain[i]) { ok = false; break; }
+          }
+          if (ok) return rid;
+        }
+      }
+      return 0;
     }
 
     private static List<int> DeduplicateChain(IReadOnlyList<int> chain)
@@ -289,7 +354,7 @@ namespace ISIDA.Psychic.Understanding
       return result;
     }
 
-    private static void AverageMentalEffect(MentalEpisodicLeaf node, int effect)
+    private static void AverageMentalEffect(MentalEpisodicNode node, int effect)
     {
       var count = node.Count;
       if (count <= 0)
@@ -306,17 +371,41 @@ namespace ISIDA.Psychic.Understanding
       node.Count = count + 1;
     }
 
-    private int? GetNextGptStep(int nodePid, int themeId, int purposeId, IReadOnlyList<int> executedPrefix)
+    private void AppendHistoryLocked(int mentalRuleId, int lifeTime, int lastMotorEpisodicNodeId)
     {
-      MentalEpisodicLeaf leaf;
-      if (!_leafByTriple.TryGetValue(new MentalTriple(nodePid, themeId, purposeId), out leaf))
-        return null;
-      if (leaf.InfoArr == null || leaf.InfoArr.Count == 0)
-        return null;
-      if (leaf.Effect <= 0)
-        return null;
+      _history.Add(new MentalHistoryEntry
+      {
+        MentalRuleNodeId = mentalRuleId,
+        LifeTime = lifeTime,
+        LastEpisodicNodeId = lastMotorEpisodicNodeId
+      });
+    }
 
-      var arr = leaf.InfoArr;
+    private int? GetNextGptStepLocked(int nodePid, int themeId, int purposeId, IReadOnlyList<int> executedPrefix)
+    {
+      var ctxId = FindContextNodeReadOnly(nodePid, themeId, purposeId);
+      if (ctxId <= 0) return null;
+
+      MentalEpisodicNode bestRule = null;
+      var bestScore = -1;
+      foreach (var rid in _nodes[ctxId].ChildIds)
+      {
+        if (!_nodes.TryGetValue(rid, out var r) || r.IsContextFolder) continue;
+        if (r.Effect <= 0) continue;
+        if (r.InfoArr == null || r.InfoArr.Count == 0) continue;
+        if (!PrefixMatches(r.InfoArr, executedPrefix)) continue;
+        var prefLen = executedPrefix?.Count ?? 0;
+        if (prefLen > r.InfoArr.Count) continue;
+        var score = r.InfoArr.Count * 1000 + r.Count * 10 + r.Effect;
+        if (score > bestScore)
+        {
+          bestScore = score;
+          bestRule = r;
+        }
+      }
+      if (bestRule == null) return null;
+
+      var arr = bestRule.InfoArr;
       if (executedPrefix == null || executedPrefix.Count == 0)
       {
         foreach (var id in arr)
@@ -327,28 +416,48 @@ namespace ISIDA.Psychic.Understanding
         return null;
       }
 
-      if (executedPrefix.Count > arr.Count)
-        return null;
+      if (executedPrefix.Count > arr.Count) return null;
       for (var i = 0; i < executedPrefix.Count; i++)
       {
         if (executedPrefix[i] != arr[i])
           return null;
       }
 
-      if (executedPrefix.Count == arr.Count)
-        return null;
-
+      if (executedPrefix.Count == arr.Count) return null;
       var next = arr[executedPrefix.Count];
       return MentalInfoFuncIds.IsAuxiliary(next) ? (int?)null : next;
     }
 
-    private int? GetFavoriteFirstExecutable(int nodePid, int themeId, int purposeId)
+    private static bool PrefixMatches(IReadOnlyList<int> arr, IReadOnlyList<int> prefix)
     {
-      foreach (var leaf in BuildFavoriteCandidates(nodePid, themeId, purposeId))
+      if (prefix == null || prefix.Count == 0) return true;
+      if (arr == null || arr.Count < prefix.Count) return false;
+      for (var i = 0; i < prefix.Count; i++)
       {
-        if (leaf.Count <= 1) continue;
-        if (leaf.InfoArr == null) continue;
-        foreach (var id in leaf.InfoArr)
+        if (arr[i] != prefix[i]) return false;
+      }
+      return true;
+    }
+
+    private int FindContextNodeReadOnly(int nodePid, int themeId, int purposeId)
+    {
+      foreach (var cid in _rootChildIds)
+      {
+        if (!_nodes.TryGetValue(cid, out var n)) continue;
+        if (!n.IsContextFolder) continue;
+        if (n.NodePid == nodePid && n.ThemeId == themeId && n.PurposeId == purposeId)
+          return cid;
+      }
+      return 0;
+    }
+
+    private int? GetFavoriteFirstExecutableLocked(int nodePid, int themeId, int purposeId)
+    {
+      foreach (var rule in BuildFavoriteRulesLocked(nodePid, themeId, purposeId))
+      {
+        if (rule.Count <= 1) continue;
+        if (rule.InfoArr == null) continue;
+        foreach (var id in rule.InfoArr)
         {
           if (!MentalInfoFuncIds.IsAuxiliary(id))
             return id;
@@ -357,80 +466,115 @@ namespace ISIDA.Psychic.Understanding
       return null;
     }
 
-    private IEnumerable<MentalEpisodicLeaf> BuildFavoriteCandidates(int nodePid, int themeId, int purposeId)
+    private List<MentalEpisodicNode> BuildFavoriteRulesLocked(int nodePid, int themeId, int purposeId)
     {
-      bool Pos(MentalEpisodicLeaf l) => l.Effect > 0;
+      bool Pos(MentalEpisodicNode n) => !n.IsContextFolder && n.Effect > 0;
 
-      List<MentalEpisodicLeaf> Pick(Func<MentalEpisodicLeaf, bool> pred)
+      List<MentalEpisodicNode> CollectForContext(int np, int th, int pr)
       {
-        var r = new List<MentalEpisodicLeaf>();
-        foreach (var leaf in _leaves)
+        var ctxId = FindContextNodeReadOnly(np, th, pr);
+        var r = new List<MentalEpisodicNode>();
+        if (ctxId <= 0 || !_nodes.TryGetValue(ctxId, out var ctxNode)) return r;
+        foreach (var rid in ctxNode.ChildIds)
         {
-          if (Pos(leaf) && pred(leaf))
-            r.Add(leaf);
+          if (_nodes.TryGetValue(rid, out var node) && Pos(node))
+            r.Add(node);
         }
         return r;
       }
 
-      var a = Pick(l => l.NodePid == nodePid && l.ThemeId == themeId && l.PurposeId == purposeId);
+      var a = CollectForContext(nodePid, themeId, purposeId);
       if (a.Count > 0) return a;
-      var b = Pick(l => l.NodePid == nodePid && l.ThemeId == themeId);
+      var b = CollectForContext(nodePid, themeId, 0);
       if (b.Count > 0) return b;
-      var c = Pick(l => l.NodePid == nodePid);
-      if (c.Count > 0) return c;
+      var cList = CollectForContext(nodePid, 0, 0);
+      if (cList.Count > 0) return cList;
       if (purposeId > 0)
       {
-        var d = Pick(l => l.PurposeId == purposeId);
-        if (d.Count > 0) return d;
+        var relaxed = new List<MentalEpisodicNode>();
+        foreach (var cid in _rootChildIds)
+        {
+          if (!_nodes.TryGetValue(cid, out var ctx) || !ctx.IsContextFolder) continue;
+          if (ctx.PurposeId != purposeId) continue;
+          foreach (var rid in ctx.ChildIds)
+          {
+            if (_nodes.TryGetValue(rid, out var node) && Pos(node))
+              relaxed.Add(node);
+          }
+        }
+        if (relaxed.Count > 0) return relaxed;
       }
-      return Enumerable.Empty<MentalEpisodicLeaf>();
+      return new List<MentalEpisodicNode>();
     }
 
-    private sealed class MentalEpisodicLeaf
+    private (bool Success, string Error) PersistToDiskLocked()
+    {
+      try
+      {
+        EnsureDirectory();
+        var treePath = Path.Combine(_dataPath, TreeFileName);
+        var lines = new List<string>
+        {
+          FileValidator.FileHeaders.MentalEpisodicTreeFormat,
+          FileValidator.FileHeaders.MentalEpisodicTreeDesc
+        };
+        foreach (var n in _nodes.Values.OrderBy(x => x.Id))
+        {
+          var infos = n.InfoArr == null || n.InfoArr.Count == 0
+              ? string.Empty
+              : string.Join(",", n.InfoArr);
+          lines.Add($"{n.Id}|{n.ParentId}|{n.NodePid}|{n.ThemeId}|{n.PurposeId}|{infos}#{n.Effect}|{n.Count}");
+        }
+
+        var (ok, err) = FileValidator.SafeSaveFile(
+            treePath,
+            lines,
+            p => FileValidator.IsValidMentalEpisodicTreeFile(p),
+            minLinesCount: 2,
+            fileDescription: "ментальной эпизодической памяти (дерево)");
+        if (!ok) return (false, err);
+
+        var hLines = new List<string>
+        {
+          FileValidator.FileHeaders.MentalEpisodicHistoryFormat,
+          FileValidator.FileHeaders.MentalEpisodicHistoryDesc
+        };
+        foreach (var h in _history.OrderBy(x => x.LifeTime).ThenBy(x => x.MentalRuleNodeId))
+          hLines.Add($"{h.MentalRuleNodeId}|{h.LifeTime}|{h.LastEpisodicNodeId}");
+
+        var (ok2, err2) = FileValidator.SafeSaveFile(
+            Path.Combine(_dataPath, HistoryFileName),
+            hLines,
+            p => FileValidator.IsValidMentalEpisodicHistoryFile(p),
+            minLinesCount: 2,
+            fileDescription: "ментальной эпизодической истории");
+        return ok2 ? (true, null) : (false, err2);
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+    }
+
+    private sealed class MentalEpisodicNode
     {
       public int Id { get; set; }
+      public int ParentId { get; set; }
+      public bool IsContextFolder { get; set; }
       public int NodePid { get; set; }
       public int ThemeId { get; set; }
       public int PurposeId { get; set; }
+      public List<int> ChildIds { get; } = new List<int>();
       public List<int> InfoArr { get; set; }
       public int Effect { get; set; }
       public int Count { get; set; }
     }
 
-    private struct MentalTriple : IEquatable<MentalTriple>
+    private sealed class MentalHistoryEntry
     {
-      public MentalTriple(int nodePid, int themeId, int purposeId)
-      {
-        NodePid = nodePid;
-        ThemeId = themeId;
-        PurposeId = purposeId;
-      }
-
-      public int NodePid { get; }
-      public int ThemeId { get; }
-      public int PurposeId { get; }
-
-      public bool Equals(MentalTriple other)
-      {
-        return NodePid == other.NodePid && ThemeId == other.ThemeId && PurposeId == other.PurposeId;
-      }
-
-      public override bool Equals(object obj)
-      {
-        return obj is MentalTriple other && Equals(other);
-      }
-
-      public override int GetHashCode()
-      {
-        unchecked
-        {
-          var h = 17;
-          h = h * 31 + NodePid;
-          h = h * 31 + ThemeId;
-          h = h * 31 + PurposeId;
-          return h;
-        }
-      }
+      public int MentalRuleNodeId { get; set; }
+      public int LifeTime { get; set; }
+      public int LastEpisodicNodeId { get; set; }
     }
 
     private static class MentalInfoFuncIds

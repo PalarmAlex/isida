@@ -31,6 +31,7 @@ namespace ISIDA.Psychic.Thinking
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly MentalEpisodicTreeSystem _mentalEpisodicTreeSystem;
     private readonly MentalAutomatizmSession _mentalAutomatizmSession;
+    private readonly AutomatizmChainsSystem _automatizmChainsSystem;
 
     private readonly List<IThinkingStrategy> _strategies = new List<IThinkingStrategy>();
     private readonly ThinkingExperienceMemory _experienceMemory = new ThinkingExperienceMemory();
@@ -95,6 +96,7 @@ namespace ISIDA.Psychic.Thinking
     /// <param name="automatizmSystem">Система автоматизмов.</param>
     /// <param name="mentalEpisodicTreeSystem">Ментальная эпизодическая память (цепочки ИФ) или null.</param>
     /// <param name="mentalAutomatizmSession">Общий буфер текущей цепочки инфо-функций или null.</param>
+    /// <param name="automatizmChainsSystem">Цепочки автоматизмов по узлу дерева или null.</param>
     public ThinkingCyclesSystem(
       InformationEnvironmentSystem informationEnvironmentSystem,
       EpisodicMemorySystem episodicMemorySystem,
@@ -102,7 +104,8 @@ namespace ISIDA.Psychic.Thinking
       ProblemTreeSystem problemTreeSystem,
       AutomatizmSystem automatizmSystem,
       MentalEpisodicTreeSystem mentalEpisodicTreeSystem = null,
-      MentalAutomatizmSession mentalAutomatizmSession = null)
+      MentalAutomatizmSession mentalAutomatizmSession = null,
+      AutomatizmChainsSystem automatizmChainsSystem = null)
     {
       _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
       _episodicMemorySystem = episodicMemorySystem; // может быть null на ранних стадиях
@@ -111,6 +114,7 @@ namespace ISIDA.Psychic.Thinking
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _mentalEpisodicTreeSystem = mentalEpisodicTreeSystem;
       _mentalAutomatizmSession = mentalAutomatizmSession;
+      _automatizmChainsSystem = automatizmChainsSystem;
     }
 
     /// <summary>Освобождает ресурсы диспетчера циклов.</summary>
@@ -630,7 +634,10 @@ namespace ISIDA.Psychic.Thinking
 
       int nodePid = cycle.ProblemNodeId > 0 ? cycle.ProblemNodeId : cycle.UnresolvedNodeId;
       var chain = _mentalAutomatizmSession.GetExecutedSnapshot();
-      _mentalEpisodicTreeSystem.SaveOrUpdate(nodePid, cycle.ThemeId, cycle.PurposeId, chain, effect);
+      var lastMotorEpisodic = 0;
+      if (_episodicMemorySystem != null && EpisodicMemorySystem.IsInitialized)
+        lastMotorEpisodic = _episodicMemorySystem.GetLastRecordedEpisodeNodeId();
+      _mentalEpisodicTreeSystem.SaveOrUpdate(nodePid, cycle.ThemeId, cycle.PurposeId, chain, effect, lastMotorEpisodic);
       _mentalAutomatizmSession.Clear();
     }
 
@@ -748,10 +755,37 @@ namespace ISIDA.Psychic.Thinking
     private ThinkingDecision RunCycleStep(int pulseCount, ThinkingCycleInfo cycle, bool isSleeping)
     {
       if (cycle == null) return null;
-      if (isSleeping) return null; // пока не реализован сон/сновидения
 
       cycle.StepCount++;
       cycle.LastUpdatedUtc = DateTime.UtcNow;
+
+      if (isSleeping)
+      {
+        if (cycle.IsWaitingPeriod)
+        {
+          cycle.IsIdle = true;
+          return ThinkingDecision.None("sleep_waiting");
+        }
+        if (cycle.AwaitingEvaluation)
+        {
+          cycle.IsIdle = true;
+          return ThinkingDecision.None("sleep_await_eval");
+        }
+        if (cycle.IsMainCycle)
+        {
+          var sleepDream = RunDreamingStep(pulseCount, cycle);
+          if (sleepDream != null && (sleepDream.AutomatizmToExecute != null || sleepDream.ActionsImageIdToAutomatize > 0))
+          {
+            ForgetCondensedLogDigest(cycle.Id);
+            cycle.Log.Add($"[p{pulseCount}] Сон: {ThinkingCycleLogMessages.FormatDreamingDecisionRu(sleepDream)}");
+            sleepDream.CycleId = cycle.Id;
+            cycle.IsIdle = false;
+            return sleepDream;
+          }
+        }
+        cycle.IsIdle = true;
+        return ThinkingDecision.None("sleep_quiet");
+      }
 
       // Режим ожидания — не исполнять действий
       if (cycle.IsWaitingPeriod)
@@ -830,6 +864,7 @@ namespace ISIDA.Psychic.Thinking
         ProblemTreeSystem = _problemTreeSystem,
         AutomatizmSystem = _automatizmSystem,
         MentalAutomatizmSession = _mentalAutomatizmSession,
+        AutomatizmChainsSystem = _automatizmChainsSystem,
         CurrentStaffAutomatizm = cycle.UnresolvedNodeId > 0 ? _automatizmSystem.GetMotorsAutomatizmListFromTreeId(cycle.UnresolvedNodeId).FirstOrDefault() : null
       };
 

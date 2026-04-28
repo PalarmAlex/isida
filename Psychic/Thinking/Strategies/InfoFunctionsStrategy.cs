@@ -1,4 +1,5 @@
 using ISIDA.Common;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking;
 using ISIDA.Psychic.Understanding;
@@ -74,7 +75,7 @@ namespace ISIDA.Psychic.Thinking.Strategies
         case 20:
         case 21:
         case 23:
-        case 24: return ThinkingDecision.None("chain_not_supported");
+        case 24: return ExecuteChainTargetMotor(ctx, infoFuncId);
         case 22: return ExecuteInitiative(ctx);
         case 25: return ExecuteFantasyDominant(ctx);
         case 26: return ExecuteRulesAnalysis(ctx);
@@ -267,6 +268,73 @@ namespace ISIDA.Psychic.Thinking.Strategies
     private ThinkingDecision ExecuteUrgentActionSearch(ThinkingStrategyContext ctx)
     {
       return ExecuteEmergencyMotor(ctx);
+    }
+
+    /// <summary>
+    /// Целевые моторные шаги по цепочке автоматизмов, привязанной к узлу дерева (см. <see cref="AutomatizmChainsSystem.GetChainByTreeNode"/>).
+    /// Варианты: первое / второе / последнее положительное звено, случайное, с максимальной полезностью звена.
+    /// </summary>
+    private ThinkingDecision ExecuteChainTargetMotor(ThinkingStrategyContext ctx, int infoFuncId)
+    {
+      if (ctx?.AutomatizmChainsSystem == null || ctx.AutomatizmSystem == null || ctx.Cycle == null)
+        return ThinkingDecision.None("no_chain_ctx");
+      var treeNode = ctx.Cycle.UnresolvedNodeId > 0 ? ctx.Cycle.UnresolvedNodeId : ctx.Cycle.ProblemNodeId;
+      if (treeNode <= 0) return ThinkingDecision.None("no_tree_node");
+
+      var chainId = ctx.AutomatizmChainsSystem.GetChainByTreeNode(treeNode);
+      if (chainId <= 0) return ThinkingDecision.None("no_chain");
+
+      var chain = ctx.AutomatizmChainsSystem.GetChain(chainId);
+      if (chain?.Links == null || chain.Links.Count == 0) return ThinkingDecision.None("chain_empty");
+
+      var positives = chain.Links.Where(l => l != null && l.ChainUsefulness >= 0).OrderBy(l => l.ID).ToList();
+      if (positives.Count == 0) return ThinkingDecision.None("chain_no_positive_links");
+
+      AutomatizmChainsSystem.ChainLink pick = null;
+      switch (infoFuncId)
+      {
+        case 19:
+          pick = positives[0];
+          break;
+        case 20:
+          pick = positives.Count > 1 ? positives[1] : positives[0];
+          break;
+        case 21:
+          pick = positives[positives.Count - 1];
+          break;
+        case 23:
+          pick = positives[_rng.Next(positives.Count)];
+          break;
+        case 24:
+          {
+            var maxU = positives.Max(l => l.ChainUsefulness);
+            var ties = positives.Where(l => l.ChainUsefulness == maxU).OrderBy(l => l.ID).ToList();
+            pick = ties[0];
+            break;
+          }
+        default:
+          return ThinkingDecision.None("chain_variant");
+      }
+
+      if (pick == null || pick.ActionsImageId <= 0) return ThinkingDecision.None("chain_bad_link");
+
+      var motors = ctx.AutomatizmSystem.GetMotorsAutomatizmListFromTreeId(treeNode);
+      var atmz = motors?.FirstOrDefault(a => a != null && a.ActionsImageID == pick.ActionsImageId && a.Usefulness >= 0)
+          ?? motors?.FirstOrDefault(a => a != null && a.ActionsImageID == pick.ActionsImageId);
+      if (atmz != null)
+      {
+        return new ThinkingDecision
+        {
+          AutomatizmToExecute = atmz,
+          DebugNote = $"chain_if={infoFuncId} chain={chainId} link={pick.ID} atmz={atmz.ID}"
+        };
+      }
+
+      return new ThinkingDecision
+      {
+        ActionsImageIdToAutomatize = pick.ActionsImageId,
+        DebugNote = $"chain_if={infoFuncId} chain={chainId} link={pick.ID} actionImg={pick.ActionsImageId}"
+      };
     }
 
     private ThinkingDecision ExecuteInitiative(ThinkingStrategyContext ctx)

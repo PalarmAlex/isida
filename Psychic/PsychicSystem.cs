@@ -134,6 +134,7 @@ namespace ISIDA.Psychic
     /// <param name="problemTreeSystem">Дерево проблем или null.</param>
     /// <param name="informationEnvironmentSystem">Информационная среда или null.</param>
     /// <param name="mentalEpisodicTreeSystem">Ментальная эпизодическая память (передаётся из <see cref="Common.IsidaEngine"/>) или null.</param>
+    /// <param name="automatizmChainsSystem">Цепочки автоматизмов (инфо-функции 19–24) или null.</param>
     public void SetPsychicSystemDop(
       AutomatismExecutionService executionService,
       OrientationReflexSystem orientationReflexSystem,
@@ -142,7 +143,8 @@ namespace ISIDA.Psychic
       UnderstandingTreeSystem understandingTreeSystem = null,
       ProblemTreeSystem problemTreeSystem = null,
       InformationEnvironmentSystem informationEnvironmentSystem = null,
-      MentalEpisodicTreeSystem mentalEpisodicTreeSystem = null)
+      MentalEpisodicTreeSystem mentalEpisodicTreeSystem = null,
+      AutomatizmChainsSystem automatizmChainsSystem = null)
     {
       _automatismExecutionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
       _orientationReflexSystem = orientationReflexSystem ?? throw new ArgumentNullException(nameof(orientationReflexSystem));
@@ -163,7 +165,8 @@ namespace ISIDA.Psychic
           _problemTreeSystem,
           _automatizmSystem,
           mentalEpisodicTreeSystem,
-          _mentalAutomatizmSession);
+          _mentalAutomatizmSession,
+          automatizmChainsSystem);
 
         // Инфо-функции 3-го уровня (один класс с switch по Id)
         _thinkingCyclesSystem.RegisterStrategy(new InfoFunctionsStrategy(_thinkingCyclesSystem.ExperienceMemory, _mentalAutomatizmSession));
@@ -406,7 +409,14 @@ namespace ISIDA.Psychic
           }
         }
         else
+        {
           ProcessSleep();
+          if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
+          {
+            thinkingDecisionToExecute = _thinkingCyclesSystem.DispatchCycles(pulseCount, isSleeping: true);
+            PublishMainThinkingCycleToAppGlobalState();
+          }
+        }
       }
       finally
       {
@@ -1707,16 +1717,14 @@ namespace ISIDA.Psychic
     /// </summary>
     private void ProcessSleep()
     {
-      // Логика обработки сна
       if (IsSleepingDream)
       {
-        // Фаза сновидений
-        // добавить обработку сновидений
+        AppGlobalState.RecordStimulusAgentEvent(AgentEventsCatalog.Codes.PassiveReprocessing);
+        Logger.Info("Сон (фаза сновидения): фоновая переработка эпизодов через циклы мышления (DispatchCycles с isSleeping).");
       }
       else
       {
-        // Глубокий сон
-        // Минимальная активность психики
+        Logger.Info("Сон (глубокий): минимальная активность, без исполнения цепочек автоматизмов на пульсе.");
       }
     }
 

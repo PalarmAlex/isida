@@ -37,6 +37,9 @@ namespace ISIDA.Psychic.Thinking.Strategies
 
     /// <summary>Буфер текущей цепочки инфо-функций (смена цели очищает буфер).</summary>
     public MentalAutomatizmSession MentalAutomatizmSession { get; set; }
+
+    /// <summary>Цепочки автоматизмов (целевые моторные последовательности по узлу дерева).</summary>
+    public AutomatizmChainsSystem AutomatizmChainsSystem { get; set; }
   }
 }
 

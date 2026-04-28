@@ -155,6 +155,32 @@ namespace ISIDA.Psychic.Memory.Episodic
       return (GetBaseId(), GetEmotionId(), GetUnderstandingNodeId(), GetNodePid(useOldCondition));
     }
 
+    /// <summary>
+    /// Последний узел моторной эпизодики в ленте истории (пропускает разрывы NodeId=-1).
+    /// Для связи ментального эпизода с моторным кадром при фиксации цепочки инфо-функций.
+    /// </summary>
+    public int GetLastRecordedEpisodeNodeId()
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        var entries = History?.Entries;
+        if (entries == null || entries.Count == 0)
+          return 0;
+        for (var i = entries.Count - 1; i >= 0; i--)
+        {
+          var id = entries[i]?.NodeId ?? 0;
+          if (id > 0)
+            return id;
+        }
+        return 0;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     #endregion
 
     #region Сохранение эпизода

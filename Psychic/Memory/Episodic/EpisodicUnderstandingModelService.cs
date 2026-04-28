@@ -25,7 +25,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     }
 
     /// <summary>
-    /// По аналогии с BOT tryModelsLevel: образ объекта высокой значимости как триггер — лучший ответ с неотрицательной валентностью при релаксации контекста.
+    /// Образ объекта высокой значимости как триггер — лучший ответ с неотрицательной валентностью при релаксации контекста.
     /// </summary>
     public static EpisodicRule TryBestAnswerForExtremeObjectTrigger(EpisodicMemorySystem episodic, int objectAsTriggerId)
     {
