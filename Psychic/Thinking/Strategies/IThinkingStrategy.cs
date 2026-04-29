@@ -14,6 +14,13 @@ namespace ISIDA.Psychic.Thinking.Strategies
     /// <summary>Запросить подсказку у оператора (попугайство).</summary>
     public bool RequestParrotFromOperator { get; set; }
 
+    /// <summary>
+    /// Итог шага, который реально двигает поведение (а не ThinkingDecision.None).
+    /// Используется для буфера ментальной цепочки: перебор ИФ без такого исхода не должен раздувать префикс.
+    /// </summary>
+    public bool HasConcreteProposal =>
+      AutomatizmToExecute != null || ActionsImageIdToAutomatize > 0 || RequestParrotFromOperator;
+
     /// <summary>Отладочная заметка о решении.</summary>
     public string DebugNote { get; set; }
 

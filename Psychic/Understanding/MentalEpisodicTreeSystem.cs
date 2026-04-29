@@ -138,6 +138,50 @@ namespace ISIDA.Psychic.Understanding
       }
     }
 
+    /// <summary>
+    /// Снимок дерева для UI: папки контекста (узел проблемы, тема, цель) и дочерние правила с цепочками ИФ.
+    /// Пусто, если система не инициализирована или стадия эволюции ниже 4.
+    /// </summary>
+    public IReadOnlyList<MentalEpisodicContextSnapshot> GetDisplaySnapshot()
+    {
+      if (!IsInitialized || AppGlobalState.EvolutionStage < 4)
+        return Array.Empty<MentalEpisodicContextSnapshot>();
+
+      _lock.EnterReadLock();
+      try
+      {
+        var result = new List<MentalEpisodicContextSnapshot>();
+        foreach (var cid in _rootChildIds)
+        {
+          if (!_nodes.TryGetValue(cid, out var ctx) || !ctx.IsContextFolder) continue;
+          var rules = new List<MentalEpisodicRuleSnapshot>();
+          foreach (var rid in ctx.ChildIds)
+          {
+            if (!_nodes.TryGetValue(rid, out var r) || r.IsContextFolder) continue;
+            var ids = r.InfoArr == null || r.InfoArr.Count == 0
+              ? (IReadOnlyList<int>)Array.Empty<int>()
+              : r.InfoArr.ToList();
+            rules.Add(new MentalEpisodicRuleSnapshot(r.Id, ctx.Id, ids, r.Effect, r.Count));
+          }
+          rules.Sort((a, b) => a.Id.CompareTo(b.Id));
+          result.Add(new MentalEpisodicContextSnapshot(ctx.Id, ctx.NodePid, ctx.ThemeId, ctx.PurposeId, rules));
+        }
+        result.Sort((a, b) =>
+        {
+          int c = a.NodePid.CompareTo(b.NodePid);
+          if (c != 0) return c;
+          c = a.ThemeId.CompareTo(b.ThemeId);
+          if (c != 0) return c;
+          return a.PurposeId.CompareTo(b.PurposeId);
+        });
+        return result;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     /// <summary>Сохраняет данные на диск.</summary>
     public (bool Success, string Error) Save()
     {
@@ -584,5 +628,65 @@ namespace ISIDA.Psychic.Understanding
         return id == 1 || id == 2 || id == 5 || id == 8 || id == 14 || id == 17 || id == 26;
       }
     }
+  }
+
+  /// <summary>Снимок сохранённого правила (листа дерева): цепочка инфо-функций и агрегированный эффект после оценок решения.</summary>
+  public sealed class MentalEpisodicRuleSnapshot
+  {
+    /// <summary>Создаёт снимок правила для UI или сериализации.</summary>
+    /// <param name="id">Идентификатор узла правила в файле mental_episodic_tree.dat.</param>
+    /// <param name="parentContextId">Идентификатор родительской папки контекста.</param>
+    /// <param name="infoFuncIds">Последовательность идентификаторов инфо-функций.</param>
+    /// <param name="effect">Усреднённая оценка полезности (-10…10).</param>
+    /// <param name="count">Число усреднений (накопленных совпадений цепочки).</param>
+    public MentalEpisodicRuleSnapshot(int id, int parentContextId, IReadOnlyList<int> infoFuncIds, int effect, int count)
+    {
+      Id = id;
+      ParentContextId = parentContextId;
+      InfoFuncIds = infoFuncIds ?? Array.Empty<int>();
+      Effect = effect;
+      Count = count;
+    }
+
+    /// <summary>Идентификатор узла правила в дереве ментальной эпизодики.</summary>
+    public int Id { get; }
+    /// <summary>Идентификатор родительского узла-контекста (папка проблема/тема/цель).</summary>
+    public int ParentContextId { get; }
+    /// <summary>Цепочка вызванных инфо-функций (номера по справочнику).</summary>
+    public IReadOnlyList<int> InfoFuncIds { get; }
+    /// <summary>Агрегированная оценка эффекта решения цикла для этой цепочки.</summary>
+    public int Effect { get; }
+    /// <summary>Число записей, участвовавших в усреднении эффекта.</summary>
+    public int Count { get; }
+  }
+
+  /// <summary>Снимок папки контекста (узел дерева проблем + тема + цель) и дочерних правил с цепочками ИФ.</summary>
+  public sealed class MentalEpisodicContextSnapshot
+  {
+    /// <summary>Создаёт снимок контекста и списка правил.</summary>
+    /// <param name="id">Идентификатор узла-контекста в файле.</param>
+    /// <param name="nodePid">Узел дерева проблем (ProblemTree).</param>
+    /// <param name="themeId">Идентификатор образа темы.</param>
+    /// <param name="purposeId">Идентификатор образа цели.</param>
+    /// <param name="rules">Дочерние правила (цепочки ИФ с эффектом).</param>
+    public MentalEpisodicContextSnapshot(int id, int nodePid, int themeId, int purposeId, IReadOnlyList<MentalEpisodicRuleSnapshot> rules)
+    {
+      Id = id;
+      NodePid = nodePid;
+      ThemeId = themeId;
+      PurposeId = purposeId;
+      Rules = rules ?? Array.Empty<MentalEpisodicRuleSnapshot>();
+    }
+
+    /// <summary>Идентификатор узла-контекста в дереве ментальной эпизодики.</summary>
+    public int Id { get; }
+    /// <summary>Узел дерева проблем (NodePID в смысле контекста мышления).</summary>
+    public int NodePid { get; }
+    /// <summary>Идентификатор образа темы.</summary>
+    public int ThemeId { get; }
+    /// <summary>Идентификатор образа цели.</summary>
+    public int PurposeId { get; }
+    /// <summary>Правила, сохранённые под данным контекстом.</summary>
+    public IReadOnlyList<MentalEpisodicRuleSnapshot> Rules { get; }
   }
 }

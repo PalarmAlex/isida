@@ -97,7 +97,8 @@ namespace ISIDA.Psychic.Thinking.Strategies
         return ThinkingDecision.None("no_infoFunc_id");
       var id = ctx.OptionalInfoFuncId.Value;
       var decision = Execute(id, ctx);
-      if (_mentalAutomatizmSession != null)
+      // Только шаги с исполняемым исходом: иначе на каждом пульсе полный перебор allowed-ИФ снова дописывал бы всю последовательность в буфер (шум для UI и префиксного подбора).
+      if (_mentalAutomatizmSession != null && decision != null && decision.HasConcreteProposal)
         _mentalAutomatizmSession.RecordIfApplicable(id);
       return decision;
     }
