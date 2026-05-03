@@ -1,4 +1,4 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
@@ -402,6 +402,7 @@ namespace ISIDA.Reflexes
       if (_disposed) return;
       _lock?.Dispose();
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

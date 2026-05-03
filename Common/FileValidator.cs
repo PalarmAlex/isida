@@ -1873,9 +1873,17 @@ namespace ISIDA.Common
 
         return (true, string.Empty);
       }
-      catch (UnauthorizedAccessException)
+      catch (UnauthorizedAccessException ex)
       {
-        return (false, "Нет прав для сохранения файла. Запустите программу от имени администратора.");
+        string dir = Path.GetDirectoryName(filePath);
+        return (false,
+            "Отказ в доступе при записи файла данных (это тот же каталог, что и целевой файл; создаются .tmp и .bak).\n" +
+            "Файл: " + filePath + "\n" +
+            "Временный: " + tempPath + "\n" +
+            (string.IsNullOrEmpty(dir) ? string.Empty : "Каталог: " + dir + "\n") +
+            "Частые причины: атрибут «только чтение» на файле или каталоге; права NTFS (не та учётная запись); конфиг указывает не на ProgramData.\n" +
+            "Для записи в %ProgramData% обычно не нужен запуск от администратора — проверьте вкладку «Безопасность» у папки.\n" +
+            "Детали: " + ex.Message);
       }
       catch (IOException ex)
       {

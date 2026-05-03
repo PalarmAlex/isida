@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -464,6 +464,7 @@ namespace ISIDA.Psychic.Automatism
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
     }
 

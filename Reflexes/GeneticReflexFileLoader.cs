@@ -485,6 +485,7 @@ namespace ISIDA.Reflexes
     {
       if (_disposed) return;
       _disposed = true;
+      _instance = null;
     }
   }
 }

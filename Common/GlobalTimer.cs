@@ -152,6 +152,13 @@ namespace ISIDA.Common
     #region Публичные методы
 
     /// <summary>
+    /// true, если после <see cref="InitializeSystems"/> статические ссылки на системы ещё не сброшены вызовом <see cref="ClearSystems"/>.
+    /// Используется хостом (например Velum), чтобы не считать контекст ISIDA живым после освобождения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/>.
+    /// </summary>
+    public static bool ArePulseSystemsReady =>
+        _gomeostas != null && _actionsSystem != null;
+
+    /// <summary>
     /// Инициализирует системы, участвующие в пульсации.
     /// Должен быть вызван один раз при старте приложения, до Start().
     /// </summary>

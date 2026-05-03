@@ -1305,6 +1305,7 @@ namespace ISIDA.Reflexes
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
     }
 

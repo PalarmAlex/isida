@@ -455,6 +455,7 @@ namespace ISIDA.Reflexes
       finally
       {
         _disposed = true;
+        _instance = null;
       }
     }
 

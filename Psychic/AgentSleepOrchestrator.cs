@@ -62,6 +62,14 @@ namespace ISIDA.Psychic
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
+    /// Сбрасывает синглтон после завершения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/> (повторный <see cref="IsidaEngine.Create"/> в том же AppDomain, например выгрузка плагина SolidWorks).
+    /// </summary>
+    public static void Reset()
+    {
+      _instance = null;
+    }
+
+    /// <summary>
     /// Создаёт синглтон оркестратора. Вызывать один раз при инициализации движка.
     /// </summary>
     /// <param name="informationEnvironment">Информационная среда (опасность / срочность — для досрочного пробуждения).</param>

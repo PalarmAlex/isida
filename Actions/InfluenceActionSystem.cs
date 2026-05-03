@@ -67,7 +67,7 @@ namespace ISIDA.Actions
         string actionsFolderPath = null)
     {
       if (_instance != null)
-        throw new InvalidOperationException("AdaptiveActionsSystem уже инициализирован.");
+        throw new InvalidOperationException("InfluenceActionSystem уже инициализирован.");
 
       _instance = new InfluenceActionSystem(gomeostas, actionsFolderPath);
     }
@@ -1058,6 +1058,7 @@ namespace ISIDA.Actions
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
     }
 

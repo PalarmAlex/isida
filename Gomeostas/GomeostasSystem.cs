@@ -3466,6 +3466,7 @@ namespace ISIDA.Gomeostas
       {
         _lock?.Dispose();
         _disposed = true;
+        Instance = null;
       }
     }
 

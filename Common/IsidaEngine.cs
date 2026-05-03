@@ -498,6 +498,7 @@ namespace ISIDA.Common
       SafeDispose(AutomatismExecution, "AutomatismExecution");
       SafeDispose(OrientationReflex, "OrientationReflex");
       SafeDispose(InformationEnvironmentSystem, "InformationEnvironmentSystem");
+      AgentSleepOrchestrator.Reset();
 
       _disposed = true;
       Logger.Info($"Освобождение завершено");
@@ -610,8 +611,24 @@ namespace ISIDA.Common
       config.Validate();
 
       var context = new IsidaContext();
-      InitializeEngine(context, config);
-      return context;
+      try
+      {
+        InitializeEngine(context, config);
+        return context;
+      }
+      catch
+      {
+        try
+        {
+          context.Dispose();
+        }
+        catch (Exception disposeEx)
+        {
+          Logger.Warning($"Откат частичной инициализации ISIDA: {disposeEx.Message}");
+        }
+
+        throw;
+      }
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -206,6 +206,7 @@ namespace ISIDA.Sensors
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
     }
 
