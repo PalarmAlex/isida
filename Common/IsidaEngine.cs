@@ -144,6 +144,12 @@ namespace ISIDA.Common
     /// </summary>
     public int NoOperatorStimulusSilencePulses { get; set; } = 30;
 
+    /// <summary>
+    /// Если true — на каждом пульсе значения параметров гомеостаза сдвигаются на величину Speed (со знаком).
+    /// Если false — при пульсации сдвига нет; параметры меняются только при внешнем воздействии и аналогичных событиях.
+    /// </summary>
+    public bool HomeostasisPulseSpeedDriftEnabled { get; set; } = true;
+
     /// <summary>Целевой горизонт (пульсы), за который фоновый цикл с типичным весом (~100 после демоута главного) «естественно» разряжается до нуля.</summary>
     public int ThinkingCycleBackgroundFadeTargetPulses { get; set; } = 1000;
 
@@ -944,6 +950,7 @@ namespace ISIDA.Common
             ? config.WaitingPeriodForActionsVal
             : 30;
         AppGlobalState.NoOperatorStimulusSilencePulses = config.NoOperatorStimulusSilencePulses;
+        AppGlobalState.HomeostasisPulseSpeedDriftEnabled = config.HomeostasisPulseSpeedDriftEnabled;
         context.PsychicSystem.ApplyThinkingCyclesConfig(
             config.ThinkingCycleDecayAgeDivisor,
             config.ThinkingCycleDecayBase,

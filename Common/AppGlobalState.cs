@@ -79,6 +79,7 @@ public static class AppGlobalState
   #region Пульт — режим наблюдения
 
   private static bool _observationMode = false;
+  private static bool _homeostasisPulseSpeedDriftEnabled = true;
 
   #endregion
 
@@ -795,6 +796,25 @@ public static class AppGlobalState
     {
       _lock.EnterWriteLock();
       try { _observationMode = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
+  }
+
+  /// <summary>
+  /// Пульсовый дрейф параметров гомеостаза по полю Speed (задаётся при загрузке движка из конфигурации клиента).
+  /// </summary>
+  public static bool HomeostasisPulseSpeedDriftEnabled
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _homeostasisPulseSpeedDriftEnabled; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _homeostasisPulseSpeedDriftEnabled = value; }
       finally { _lock.ExitWriteLock(); }
     }
   }

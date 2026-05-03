@@ -198,16 +198,17 @@ namespace ISIDA.Gomeostas
         // Снимок конца предыдущего пульса в _previousParametersState; сравнение до шага пульсации в этом пульсе.
         HasCriticalChanges = _calculator.HasCriticalParameterChanges(_agentState.Parameters, _previousParametersState);
 
-        // ритмичное убывание/нарастание параметров в зависимости от типа: дефицит/избыток ориентированные
+        // ритмичное убывание/нарастание параметров по Speed (опционально; при выключении — только внешнее воздействие)
         foreach (var param in _agentState.Parameters)
         {
           try
           {
-            float delta100 = param.Speed / 100f;
-            if (_agentState.IsSleeping) delta100 /= 10f;
-
-            var newValue = ClampFloat(param.Value + delta100, 0f, 100f);
-            param.Value = newValue;
+            if (AppGlobalState.HomeostasisPulseSpeedDriftEnabled)
+            {
+              float delta100 = param.Speed / 100f;
+              if (_agentState.IsSleeping) delta100 /= 10f;
+              param.Value = ClampFloat(param.Value + delta100, 0f, 100f);
+            }
 
             param.UpdateState(_dynamicTime, _difSensorPar, _agentState.IsFirstPulse);
           }
