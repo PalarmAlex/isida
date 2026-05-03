@@ -1660,6 +1660,13 @@ namespace ISIDA.Gomeostas
 
     #region Управление параметрами
 
+    /// <summary>
+    /// Смерть жизненно важного параметра: значение строго вне коридора выживания
+    /// [<see cref="ParameterData.CriticalMinValue"/>, <see cref="ParameterData.CriticalMaxValue"/>] (концы включительно — допустимы,
+    /// см. <see cref="SettingsValidator.ValidateCriticalMinMaxValueParamValue"/> при сохранении).
+    /// Раньше использовались &lt;= и &gt;= на границах — значение ровно на критическом пороге считалось «мёртвым», хотя в файле и UI допустимо;
+    /// при выключенном пульсовом дрейфе значение не «отъезжало» от границы и агент умирал на первом пульсе.
+    /// </summary>
     private void CheckForCriticalState()
     {
       try
@@ -1668,9 +1675,9 @@ namespace ISIDA.Gomeostas
         {
           if (!param.IsVital) continue;
 
-          if (param.Value <= param.CriticalMinValue || param.Value >= param.CriticalMaxValue)
+          if (param.Value < param.CriticalMinValue || param.Value > param.CriticalMaxValue)
           {
-            Logger.Warning($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (min={param.CriticalMinValue}, max={param.CriticalMaxValue})");
+            Logger.Warning($"КРИТИЧЕСКОЕ СОСТОЯНИЕ - параметр '{param.Name}' = {param.Value} (допустимый коридор [{param.CriticalMinValue}; {param.CriticalMaxValue}])");
             _agentState.IsDead = true;
             AppGlobalState.IsDead = true;
             OnAgentDeath(param);
