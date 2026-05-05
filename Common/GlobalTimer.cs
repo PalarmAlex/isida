@@ -57,6 +57,12 @@ namespace ISIDA.Common
     public static event Action<int> OnPulseAfterGomeostasisBeforePsychic;
 
     /// <summary>
+    /// Перед <see cref="Gomeostas.GomeostasSystem.UpdateStateOnly"/> на пульсе — для хоста (Velum): атомарная подстановка
+    /// значений встроенных параметров среды SolidWorks из последнего полного снимка.
+    /// </summary>
+    public static event Action<int> OnPulseBeforeGomeostasis;
+
+    /// <summary>
     /// Событие ошибки пульсации
     /// </summary>
     public static event Action<string> OnPulseError;
@@ -261,6 +267,7 @@ namespace ISIDA.Common
         // Очищаем подписки на события
         OnPulseCompleted = null;
         OnPulseAfterGomeostasisBeforePsychic = null;
+        OnPulseBeforeGomeostasis = null;
         OnPulseError = null;
         OnPulseStateChanged = null;
         OnPulseBrightnessChanged = null;
@@ -318,7 +325,9 @@ namespace ISIDA.Common
           }
         }
 
-        // Фаза 3: Обновление состояния агента
+        // Фаза 3: обновление счётчика под lock; сам обработчик пульса — снаружи lock.
+        // Иначе хост (Velum) в OnPulseBeforeGomeostasis может вызвать Control.Invoke на UI-поток:
+        // поток таймера удерживает _timerLock, UI ждёт lock в GlobalTimer — взаимная блокировка, «зависание» SW.
         lock (_timerLock)
         {
           if (!_isRunning)
@@ -328,8 +337,9 @@ namespace ISIDA.Common
           }
           GlobalPulsCount++;
           _gomeostas.PulseCount = GlobalPulsCount;
-          ProcessAgentPulse();
         }
+
+        ProcessAgentPulse();
 
         // Фаза 4: Пауза и перезапуск таймера
         lock (_timerLock)
@@ -481,6 +491,7 @@ namespace ISIDA.Common
           // ОЧИСТКА ПОДПИСОК НА СОБЫТИЯ
           OnPulseCompleted = null;
           OnPulseAfterGomeostasisBeforePsychic = null;
+          OnPulseBeforeGomeostasis = null;
           OnPulseError = null;
           OnPulseStateChanged = null;
           OnPulseBrightnessChanged = null;
@@ -519,6 +530,15 @@ namespace ISIDA.Common
           catch (Exception themeEx)
           {
             Logger.Warning($"ThinkingThemePulseResolver: {themeEx.Message}");
+          }
+
+          try
+          {
+            OnPulseBeforeGomeostasis?.Invoke(GlobalPulsCount);
+          }
+          catch (Exception hostEx)
+          {
+            Logger.Warning($"OnPulseBeforeGomeostasis: {hostEx.Message}");
           }
 
           _gomeostas.UpdateStateOnly();

@@ -462,8 +462,7 @@ namespace ISIDA.Common
         Logger.Warning($"Ошибка при сохранении свойств агента: {ex.Message}");
       }
 
-      //SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
-      Logger.Info($"ConditionedReflexFormation успешно освобожден");
+      SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
 
       SafeDispose(GeneticReflexFileLoader, "GeneticReflexFileLoader");
       SafeDispose(AutomatizmFileLoader, "AutomatizmFileLoader");

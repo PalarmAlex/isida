@@ -563,7 +563,7 @@ namespace ISIDA.Gomeostas
         return false;
       }
 
-      if (!ValidateParameterStyleConflicts(_agentState.Parameters, out errorMessage))
+      if (!ValidateParameterStyleConflicts(parameters, out errorMessage))
         return false;
 
       return true;
@@ -666,6 +666,77 @@ namespace ISIDA.Gomeostas
       // Проверяем двусторонние антагонистические связи
       return (style1.AntagonistStyles.Contains(styleId2) ||
               style2.AntagonistStyles.Contains(styleId1));
+    }
+
+    /// <summary>
+    /// Устраняет конфликты антагонистов внутри одной зоны активации стилей у каждого параметра:
+    /// для положительных ID стилей оставляется максимальное совместимое подмножество
+    /// (жадный выбор по возрастанию ID — детерминированно, как при ручной правке).
+    /// ID &lt; 0 (деактивации в списке) не участвуют в проверке антагонистов и сохраняются в начале списка.
+    /// </summary>
+    /// <param name="parameters">Параметры для правки; null — все параметры текущего агента из состояния.</param>
+    /// <returns>Число удалённых вхождений положительных ID стилей из зон (с учётом дубликатов).</returns>
+    public int FixParameterStyleActivationConflicts(IEnumerable<ParameterData> parameters = null)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        var paramList = (parameters ?? _agentState.Parameters).Where(p => p != null).ToList();
+        var allStyles = new ReadOnlyDictionary<int, BehaviorStyle>(_agentState.BehaviorStyles);
+        int removed = 0;
+
+        foreach (var param in paramList)
+        {
+          if (param.StyleActivations == null)
+            continue;
+
+          foreach (var zoneKey in param.StyleActivations.Keys.ToList())
+          {
+            if (!param.StyleActivations.TryGetValue(zoneKey, out var zoneStyles) || zoneStyles == null)
+              continue;
+
+            var negatives = zoneStyles.Where(id => id < 0).ToList();
+            var positivesOrdered = zoneStyles.Where(id => id > 0).Distinct().OrderBy(id => id).ToList();
+            if (positivesOrdered.Count == 0)
+              continue;
+
+            var keptPositives = new List<int>();
+            foreach (var sid in positivesOrdered)
+            {
+              if (!allStyles.ContainsKey(sid))
+                continue;
+
+              bool conflict = false;
+              foreach (var k in keptPositives)
+              {
+                if (AreStylesAntagonists(sid, k, allStyles))
+                {
+                  conflict = true;
+                  break;
+                }
+              }
+
+              if (!conflict)
+                keptPositives.Add(sid);
+            }
+
+            var newList = new List<int>(negatives.Count + keptPositives.Count);
+            newList.AddRange(negatives);
+            newList.AddRange(keptPositives);
+
+            int origPositiveCount = zoneStyles.Count(id => id > 0);
+            removed += origPositiveCount - keptPositives.Count;
+            param.StyleActivations[zoneKey] = newList;
+          }
+        }
+
+        BuildStyleIndexes();
+        return removed;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     #endregion
@@ -1991,6 +2062,130 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// Чтение значений параметров под блокировкой (для хоста Velum: снимок перед публикацией в кэш среды).
+    /// </summary>
+    public Dictionary<int, float> HostGetParameterValues(IEnumerable<int> ids)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        var d = new Dictionary<int, float>();
+        foreach (int id in ids)
+        {
+          var p = _agentState.GetParameter(id);
+          if (p != null)
+            d[id] = p.Value;
+        }
+
+        return d;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Атомарное обновление значений нескольких параметров на одном захвате блокировки записи (полный снимок среды SW).
+    /// </summary>
+    public void HostBatchUpdateParameterValues(IReadOnlyDictionary<int, float> values)
+    {
+      if (values == null || values.Count == 0)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        EnsureAgentState(AgentCheck.NotDead);
+        foreach (var kv in values)
+        {
+          var p = _agentState.GetParameter(kv.Key);
+          if (p == null)
+            continue;
+          p.Value = kv.Value;
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Гарантирует наличие параметров с фиксированными Id (встроенный набор Velum). Добавляет только отсутствующие строки.
+    /// </summary>
+    public void HostEnsureFixedParameters(IReadOnlyList<ParameterData> fixedTemplates)
+    {
+      if (fixedTemplates == null || fixedTemplates.Count == 0)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        EnsureAgentState(AgentCheck.NotDead);
+        bool added = false;
+        foreach (var t in fixedTemplates)
+        {
+          if (t == null)
+            continue;
+          if (_agentState.GetParameter(t.Id) != null)
+            continue;
+          _agentState.Parameters.Add(CloneParameterForHostInsert(t));
+          added = true;
+        }
+
+        if (_agentState.Parameters.Count > 0)
+          _agentState.LastParameterId = _agentState.Parameters.Max(p => p.Id);
+        if (added)
+          BuildStyleIndexes();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Пересборка индекса активаций стилей после пакетного изменения параметров хостом.
+    /// </summary>
+    public void HostRebuildStyleActivationIndex()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        BuildStyleIndexes();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    private static ParameterData CloneParameterForHostInsert(ParameterData t)
+    {
+      var p = new ParameterData(
+          t.Id,
+          t.Name,
+          t.Description,
+          t.Value,
+          t.Weight,
+          t.NormaWell,
+          t.Speed,
+          t.IsVital,
+          t.CriticalMinValue,
+          t.CriticalMaxValue);
+      if (t.StyleActivations != null)
+      {
+        foreach (var kv in t.StyleActivations)
+        {
+          p.StyleActivations[kv.Key] = kv.Value != null ? new List<int>(kv.Value) : new List<int>();
+        }
+      }
+
+      return p;
+    }
+
+    /// <summary>
     /// Безопасное значение по умолчанию для старта сценария: дефицит — у верхней границы диапазона, избыток — у нижней (чуть внутри критических пределов).
     /// </summary>
     public static float GetDefaultInitialValueForScenarioParameter(ParameterData p)
@@ -2684,13 +2879,22 @@ namespace ISIDA.Gomeostas
 
     private Dictionary<int, List<int>> ParseStyleActivations(string data)
     {
-      var result = new Dictionary<int, List<int>>()
-    {
-        {0, new List<int>()}, {1, new List<int>()}, {2, new List<int>()},
-        {3, new List<int>()}, {4, new List<int>()}, {5, new List<int>()}, {6, new List<int>()}
-    };
+      return ParseStyleActivationsField(data);
+    }
 
-      if (string.IsNullOrWhiteSpace(data)) return result;
+    /// <summary>
+    /// Парсинг поля активаций стилей из файла <c>VitalParameters</c> (используется хостом Velum при слиянии с реестром).
+    /// </summary>
+    public static Dictionary<int, List<int>> ParseStyleActivationsField(string data)
+    {
+      var result = new Dictionary<int, List<int>>()
+      {
+        { 0, new List<int>() }, { 1, new List<int>() }, { 2, new List<int>() },
+        { 3, new List<int>() }, { 4, new List<int>() }, { 5, new List<int>() }, { 6, new List<int>() }
+      };
+
+      if (string.IsNullOrWhiteSpace(data))
+        return result;
 
       var stateParts = data.Split(';');
       foreach (var statePart in stateParts)

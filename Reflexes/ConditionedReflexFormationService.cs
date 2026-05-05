@@ -449,11 +449,12 @@ namespace ISIDA.Reflexes
 
       try
       {
-        _lock?.Dispose();
+        // Сброс истории под блокировкой до Dispose — иначе EnterWriteLock на уничтоженном ReaderWriterLockSlim.
         ResetHistory();
       }
       finally
       {
+        _lock?.Dispose();
         _disposed = true;
         _instance = null;
       }
