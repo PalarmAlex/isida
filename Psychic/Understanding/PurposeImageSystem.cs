@@ -183,6 +183,7 @@ namespace ISIDA.Psychic.Understanding
       if (!ok && !string.IsNullOrEmpty(err))
         Logger.Warning($"Ошибка сохранения PurposeImage: {err}");
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

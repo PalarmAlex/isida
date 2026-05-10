@@ -434,6 +434,12 @@ namespace ISIDA.Common
     /// <summary>
     /// Освобождает ресурсы, используемые контекстом ISIDA
     /// </summary>
+    /// <remarks>
+    /// Порядок: сначала остановка <see cref="GlobalTimer"/> и сброс его статических ссылок (чтобы пульсы не шли во время выгрузки),
+    /// затем подсистемы сверху вниз по зависимостям: психика и связанные деревья до нижележащих сенсоров/гомеостаза.
+    /// <see cref="Psychic.PsychicSystem"/> освобождается до <see cref="Gomeostas.GomeostasSystem"/>, чтобы логика психики не обращалась к уже обнулённому <c>GomeostasSystem.Instance</c>.
+    /// <see cref="Psychic.Automatism.MirrorAutomatizmService"/> входит в состав <see cref="Psychic.PsychicSystem"/> и не диспозится отдельно.
+    /// </remarks>
     public void Dispose()
     {
       if (_disposed) return;
@@ -477,7 +483,6 @@ namespace ISIDA.Common
       SafeDispose(SituationTypeSystem, "SituationTypeSystem");
       SafeDispose(ProblemTree, "ProblemTree");
       SafeDispose(PsychicSystem, "PsychicSystem");
-      SafeDispose(MirrorAutomatizmService, "MirrorAutomatizmService");
       SafeDispose(ConditionedReflexToAutomatizm, "ConditionedReflexToAutomatizm");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
@@ -882,7 +887,8 @@ namespace ISIDA.Common
           context.EmotionsImageSystem,
           context.SensorySystem,
           context.VerbalBrocaImagesSystem,
-          context.AutomatismResult);
+          context.AutomatismResult,
+          context.Gomeostas);
           context.PsychicSystem = PsychicSystem.Instance;
           context.MirrorAutomatizmService = context.PsychicSystem.MirrorAutomatizmService;        
 

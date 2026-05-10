@@ -881,6 +881,7 @@ namespace ISIDA.Psychic
       finally
       {
         _disposed = true;
+        _instance = null;
       }
     }
 

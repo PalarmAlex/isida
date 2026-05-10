@@ -90,6 +90,7 @@
     <Compile Include="Common\AddUtils.cs" />
     <Compile Include="Common\AntagonistValidator.cs" />
     <Compile Include="Common\AppGlobalState.cs" />
+    <Compile Include="Common\ProjectDirectoryTemplateNode.cs" />
     <Compile Include="Common\PublishedBackgroundThinkingCycleSnapshot.cs" />
     <Compile Include="Common\EvolutionStageService.cs" />
     <Compile Include="Common\FileValidator.cs" />

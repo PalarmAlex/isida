@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -403,6 +404,275 @@ namespace ISIDA.Common
     public static int ClampChainLinkUsefulness(int value)
     {
       return AddUtils.Clamp(value, -10, 10);
+    }
+
+    #endregion
+
+    #region Шаблон каталогов проекта данных ISIDA
+
+    /// <summary>
+    /// Обязательные каталоги непосредственно в корне проекта данных (имена папок без разделителей).
+    /// </summary>
+    public static readonly string[] RequiredProjectRootFolderNames =
+    {
+      "Logs",
+      "Data",
+      "BootData",
+      "Settings"
+    };
+
+    /// <summary>
+    /// Возвращает текстовое описание дерева каталогов по умолчанию для документации и просмотра пользователем.
+    /// </summary>
+    /// <returns>Многострочное описание структуры.</returns>
+    public static string GetProjectDirectoryTemplateText()
+    {
+      var sb = new StringBuilder();
+      sb.AppendLine("Корень проекта данных ISIDA (шаблон каталогов):");
+      sb.AppendLine("");
+      sb.AppendLine("Logs");
+      sb.AppendLine("BootData");
+      sb.AppendLine("Settings");
+      sb.AppendLine("  (рекомендуется размещать копию Settings.xml при переносе настроек между машинами)");
+      sb.AppendLine("Data");
+      sb.AppendLine("  Gomeostas");
+      sb.AppendLine("  Actions");
+      sb.AppendLine("  Sensors");
+      sb.AppendLine("  Reflexes");
+      sb.AppendLine("  Psychic");
+      sb.AppendLine("  Scenarios");
+      sb.AppendLine("    Reports");
+      sb.AppendLine("");
+      sb.AppendLine("Ключи путей в конфигурации студии: SettingsPath, LogsFolderPath, BootDataFolderPath,");
+      sb.AppendLine("DataGomeostasFolderPath, DataActionsFolderPath, SensorsFolderPath, ReflexesFolderPath,");
+      sb.AppendLine("PsychicDataFolderPath, ScenarioReportsFolderPath (относительно корня: Data\\Scenarios\\Reports).");
+      return sb.ToString();
+    }
+
+    /// <summary>
+    /// Возвращает дерево каталогов по умолчанию для отображения в интерфейсе (шаблон задаётся в коде, только просмотр).
+    /// </summary>
+    /// <returns>Корневой узел с заполненными дочерними элементами.</returns>
+    public static ProjectDirectoryTemplateNode GetProjectDirectoryTemplateRoot()
+    {
+      var reports = new ProjectDirectoryTemplateNode("Reports");
+      var scenarios = new ProjectDirectoryTemplateNode("Scenarios", new List<ProjectDirectoryTemplateNode> { reports });
+      var dataChildren = new List<ProjectDirectoryTemplateNode>
+      {
+        new ProjectDirectoryTemplateNode("Gomeostas"),
+        new ProjectDirectoryTemplateNode("Actions"),
+        new ProjectDirectoryTemplateNode("Sensors"),
+        new ProjectDirectoryTemplateNode("Reflexes"),
+        new ProjectDirectoryTemplateNode("Psychic"),
+        scenarios
+      };
+      var data = new ProjectDirectoryTemplateNode("Data", dataChildren);
+      var settingsChildren = new List<ProjectDirectoryTemplateNode>
+      {
+        new ProjectDirectoryTemplateNode("Settings.xml")
+      };
+      var settings = new ProjectDirectoryTemplateNode("Settings", settingsChildren);
+      var rootChildren = new List<ProjectDirectoryTemplateNode>
+      {
+        new ProjectDirectoryTemplateNode("Logs"),
+        new ProjectDirectoryTemplateNode("BootData"),
+        settings,
+        data
+      };
+      return new ProjectDirectoryTemplateNode("Корень проекта данных", rootChildren);
+    }
+
+    /// <summary>
+    /// Определяет корень проекта по пути к каталогу настроек: последний сегмент пути должен называться «Settings».
+    /// </summary>
+    /// <param name="settingsFolderPath">Полный путь к каталогу настроек проекта.</param>
+    /// <param name="projectRoot">При успехе — родительский каталог (корень проекта данных).</param>
+    /// <returns>True, если корень определён.</returns>
+    public static bool TryGetProjectRootFromSettingsPath(string settingsFolderPath, out string projectRoot)
+    {
+      projectRoot = null;
+      if (string.IsNullOrWhiteSpace(settingsFolderPath))
+        return false;
+
+      try
+      {
+        string trimmed = settingsFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string full = Path.GetFullPath(trimmed);
+        string name = Path.GetFileName(full);
+        if (!string.Equals(name, "Settings", StringComparison.OrdinalIgnoreCase))
+          return false;
+
+        projectRoot = Path.GetDirectoryName(full);
+        return !string.IsNullOrEmpty(projectRoot);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Определяет корень проекта по пути к каталогу данных гомеостаза: ожидается «...\Data\Gomeostas».
+    /// </summary>
+    /// <param name="dataGomeostasFolderPath">Полный путь к каталогу Gomeostas.</param>
+    /// <param name="projectRoot">При успехе — корень проекта данных.</param>
+    /// <returns>True, если корень определён.</returns>
+    public static bool TryGetProjectRootFromDataGomeostasPath(string dataGomeostasFolderPath, out string projectRoot)
+    {
+      projectRoot = null;
+      if (string.IsNullOrWhiteSpace(dataGomeostasFolderPath))
+        return false;
+
+      try
+      {
+        string trimmed = dataGomeostasFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string full = Path.GetFullPath(trimmed);
+        if (!string.Equals(Path.GetFileName(full), "Gomeostas", StringComparison.OrdinalIgnoreCase))
+          return false;
+
+        string dataDir = Path.GetDirectoryName(full);
+        if (string.IsNullOrEmpty(dataDir))
+          return false;
+
+        if (!string.Equals(Path.GetFileName(dataDir), "Data", StringComparison.OrdinalIgnoreCase))
+          return false;
+
+        projectRoot = Path.GetDirectoryName(dataDir);
+        return !string.IsNullOrEmpty(projectRoot);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Пытается определить корень проекта сначала по каталогу настроек, затем по пути гомеостаза.
+    /// </summary>
+    /// <param name="settingsFolderPath">Путь к каталогу Settings.</param>
+    /// <param name="dataGomeostasFolderPath">Путь к каталогу Data\Gomeostas.</param>
+    /// <param name="projectRoot">Корень проекта данных.</param>
+    /// <returns>True, если удалось определить корень.</returns>
+    public static bool TryInferProjectRoot(string settingsFolderPath, string dataGomeostasFolderPath, out string projectRoot)
+    {
+      if (TryGetProjectRootFromSettingsPath(settingsFolderPath, out projectRoot))
+        return true;
+      return TryGetProjectRootFromDataGomeostasPath(dataGomeostasFolderPath, out projectRoot);
+    }
+
+    /// <summary>
+    /// Проверяет наличие обязательных каталогов Logs, Data, BootData, Settings в указанном корне.
+    /// </summary>
+    /// <param name="projectRoot">Корень проекта данных.</param>
+    /// <param name="missingFolderNames">Имена отсутствующих каталогов из шаблона.</param>
+    /// <returns>True, если все обязательные каталоги существуют.</returns>
+    public static bool MandatoryProjectRootFoldersExist(string projectRoot, out List<string> missingFolderNames)
+    {
+      missingFolderNames = new List<string>();
+      if (string.IsNullOrWhiteSpace(projectRoot))
+        return false;
+
+      try
+      {
+        string rootFull = Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        for (int i = 0; i < RequiredProjectRootFolderNames.Length; i++)
+        {
+          string name = RequiredProjectRootFolderNames[i];
+          string path = Path.Combine(rootFull, name);
+          if (!Directory.Exists(path))
+            missingFolderNames.Add(name);
+        }
+
+        return missingFolderNames.Count == 0;
+      }
+      catch
+      {
+        missingFolderNames.Add("(ошибка доступа к пути)");
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Возвращает относительные сегменты пути от корня проекта для ключа каталога из конфигурации студии.
+    /// </summary>
+    /// <param name="pathSettingKey">Имя элемента настроек (например SettingsPath).</param>
+    /// <returns>Массив сегментов или null, если ключ не относится к каталогу из шаблона.</returns>
+    public static string[] GetFolderSegmentsForPathSettingKey(string pathSettingKey)
+    {
+      if (pathSettingKey == null)
+        return null;
+
+      switch (pathSettingKey)
+      {
+        case "SettingsPath":
+          return new[] { "Settings" };
+        case "LogsFolderPath":
+          return new[] { "Logs" };
+        case "BootDataFolderPath":
+          return new[] { "BootData" };
+        case "DataGomeostasFolderPath":
+          return new[] { "Data", "Gomeostas" };
+        case "DataActionsFolderPath":
+          return new[] { "Data", "Actions" };
+        case "SensorsFolderPath":
+          return new[] { "Data", "Sensors" };
+        case "ReflexesFolderPath":
+          return new[] { "Data", "Reflexes" };
+        case "PsychicDataFolderPath":
+          return new[] { "Data", "Psychic" };
+        case "ScenarioReportsFolderPath":
+          return new[] { "Data", "Scenarios", "Reports" };
+        default:
+          return null;
+      }
+    }
+
+    /// <summary>
+    /// Собирает полный ожидаемый путь к каталогу по ключу настройки и корню проекта.
+    /// </summary>
+    /// <param name="projectRoot">Корень проекта данных.</param>
+    /// <param name="pathSettingKey">Ключ настройки каталога.</param>
+    /// <returns>Полный путь.</returns>
+    /// <exception cref="ArgumentException">Неизвестный ключ или пустой корень.</exception>
+    public static string GetExpectedFolderPathForSetting(string projectRoot, string pathSettingKey)
+    {
+      if (string.IsNullOrWhiteSpace(projectRoot))
+        throw new ArgumentException("Корень проекта не задан.", nameof(projectRoot));
+
+      string[] segments = GetFolderSegmentsForPathSettingKey(pathSettingKey);
+      if (segments == null)
+        throw new ArgumentException("Ключ не соответствует каталогу из шаблона проекта.", nameof(pathSettingKey));
+
+      string root = Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+      string path = root;
+      for (int i = 0; i < segments.Length; i++)
+        path = Path.Combine(path, segments[i]);
+
+      return Path.GetFullPath(path);
+    }
+
+    /// <summary>
+    /// Проверяет, что абсолютный путь каталога совпадает с шаблонным путём для данного ключа относительно корня проекта.
+    /// </summary>
+    /// <param name="projectRoot">Корень проекта данных.</param>
+    /// <param name="absoluteFolderPath">Текущий абсолютный путь из настроек.</param>
+    /// <param name="pathSettingKey">Ключ настройки каталога.</param>
+    /// <returns>True, если путь соответствует шаблону.</returns>
+    public static bool IsFolderPathMatchingProjectTemplate(string projectRoot, string absoluteFolderPath, string pathSettingKey)
+    {
+      if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(absoluteFolderPath))
+        return false;
+
+      try
+      {
+        string expected = GetExpectedFolderPathForSetting(projectRoot, pathSettingKey);
+        string actual = Path.GetFullPath(absoluteFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
+      }
+      catch
+      {
+        return false;
+      }
     }
 
     #endregion

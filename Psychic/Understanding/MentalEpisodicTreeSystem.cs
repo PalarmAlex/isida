@@ -214,6 +214,7 @@ namespace ISIDA.Psychic.Understanding
       {
         _disposed = true;
         _lock?.Dispose();
+        _instance = null;
       }
     }
 

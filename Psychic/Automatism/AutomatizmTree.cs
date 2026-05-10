@@ -929,6 +929,7 @@ namespace ISIDA.Psychic.Automatism
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
     }
 

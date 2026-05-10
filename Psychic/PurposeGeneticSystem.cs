@@ -448,6 +448,7 @@ namespace ISIDA.Psychic
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
       catch (Exception ex)
       {

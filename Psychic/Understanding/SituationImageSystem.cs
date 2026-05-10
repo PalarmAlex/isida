@@ -298,6 +298,7 @@ namespace ISIDA.Psychic.Understanding
       if (!ok && !string.IsNullOrEmpty(err))
         Logger.Warning($"Ошибка сохранения SituationImage: {err}");
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

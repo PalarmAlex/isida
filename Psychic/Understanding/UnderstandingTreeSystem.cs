@@ -455,6 +455,7 @@ namespace ISIDA.Psychic.Understanding
       finally
       {
         _disposed = true;
+        _instance = null;
       }
     }
 

@@ -43,6 +43,7 @@ namespace ISIDA.Psychic
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
     private readonly AutomatismResultTracker _automatismResultTracker;
+    private readonly GomeostasSystem _gomeostasSystem;
     private OrientationReflexSystem _orientationReflexSystem;
     private AutomatismExecutionService _automatismExecutionService;
     private PerceptionImagesSystem _perceptionImagesSystem;
@@ -81,7 +82,8 @@ namespace ISIDA.Psychic
         EmotionsImageSystem emotionsImageSystem,
         SensorySystem sensorySystem,
         VerbalBrocaImagesSystem verbalBrocaImages,
-        AutomatismResultTracker automatismResultTracker)
+        AutomatismResultTracker automatismResultTracker,
+        GomeostasSystem gomeostasSystem)
     {
       if (_instance != null)
         throw new InvalidOperationException("PsychicSystem уже инициализирован.");
@@ -95,7 +97,8 @@ namespace ISIDA.Psychic
         emotionsImageSystem,
         sensorySystem,
         verbalBrocaImages,
-        automatismResultTracker);
+        automatismResultTracker,
+        gomeostasSystem);
     }
 
     private PsychicSystem(
@@ -107,7 +110,8 @@ namespace ISIDA.Psychic
       EmotionsImageSystem emotionsImageSystem,
       SensorySystem sensorySystem,
       VerbalBrocaImagesSystem verbalBrocaImages,
-      AutomatismResultTracker automatismResultTracker)
+      AutomatismResultTracker automatismResultTracker,
+      GomeostasSystem gomeostasSystem)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _automatizmTreeSystem = automatizmTreeSystem ?? throw new ArgumentNullException(nameof(automatizmTreeSystem));
@@ -118,6 +122,7 @@ namespace ISIDA.Psychic
       _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
       _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
       _automatismResultTracker = automatismResultTracker ?? throw new ArgumentNullException(nameof(automatismResultTracker));
+      _gomeostasSystem = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
       _mirrorAutomatizmService = new MirrorAutomatizmService(_automatizmSystem);
 
       InitializeBasicAutomatizmTree();
@@ -1638,13 +1643,11 @@ namespace ISIDA.Psychic
       var stateAfter = AppGlobalState.CurrentOverallState;
 
       int assessment;
-      if (GomeostasSystem.IsInitialized &&
-          AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId) &&
+      if (AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId) &&
           snapshotBefore != null)
       {
-        var gh = GomeostasSystem.Instance;
-        var currentParams = gh.GetAllParameters();
-        assessment = gh.Calculator.ComputeOperatorAutomatizmAssessment(
+        var currentParams = _gomeostasSystem.GetAllParameters();
+        assessment = _gomeostasSystem.Calculator.ComputeOperatorAutomatizmAssessment(
             snapshotBefore,
             currentParams,
             focusParamId,
@@ -2158,6 +2161,8 @@ namespace ISIDA.Psychic
       finally
       {
         _disposed = true;
+        if (ReferenceEquals(this, _instance))
+          _instance = null;
       }
     }
 

@@ -873,6 +873,7 @@ namespace ISIDA.Psychic
       if (_disposed) return;
       _lock?.Dispose();
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

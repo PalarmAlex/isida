@@ -561,6 +561,7 @@ namespace ISIDA.Psychic.Understanding
       if (!ok && !string.IsNullOrEmpty(err))
         Logger.Warning($"Ошибка сохранения ThemeImage: {err}");
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

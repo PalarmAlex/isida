@@ -458,6 +458,7 @@ namespace ISIDA.Psychic.Memory.Episodic
       finally
       {
         _disposed = true;
+        _instance = null;
       }
     }
 

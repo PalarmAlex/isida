@@ -761,6 +761,7 @@ namespace ISIDA.Psychic.Automatism
         _phraseIdCache.Clear();
       }
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

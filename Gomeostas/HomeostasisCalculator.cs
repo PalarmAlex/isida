@@ -465,7 +465,7 @@ namespace ISIDA.Gomeostas
     /// Использует относительные пороги вместо абсолютных для корректной работы с любым количеством параметров
     /// </summary>
     /// <param name="parameters">Коллекция параметров гомеостаза</param>
-    /// <param name="dynamicTime">Время динамического состояния в секундах</param>
+    /// <param name="dynamicTime">Длительность удержания состояний Well/Bad у параметра в тактах <see cref="GlobalTimer.GlobalPulsCount"/> (не секундах).</param>
     /// <param name="difSensorPar">Порог значимого изменения параметра</param>
     /// <param name="lastWellStatePulse">Время в пульсах последнего перехода в состояние Well (для гистерезиса)</param>
     /// <param name="relativeThreshold">Относительный порог активации состояния (0-1). 
@@ -542,7 +542,7 @@ namespace ISIDA.Gomeostas
       // В противном случае состояние остается Normal
 
       // Обработка гистерезиса для состояния Well
-      // Состояние Well временное и сбрасывается после dynamicTime секунд
+      // Интегральное Well сбрасывается после dynamicTime тактов пульса (и без активных цепочек рефлексов/автоматизма).
       if (overallState == HomeostasisOverallState.Well)
       {
         if (lastWellStatePulse.HasValue)

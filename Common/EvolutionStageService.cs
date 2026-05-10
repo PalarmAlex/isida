@@ -539,6 +539,7 @@ namespace ISIDA.Common
       {
         _lock?.Dispose();
         _disposed = true;
+        _instance = null;
       }
       catch (Exception ex)
       {

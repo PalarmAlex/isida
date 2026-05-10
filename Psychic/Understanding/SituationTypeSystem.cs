@@ -476,6 +476,7 @@ namespace ISIDA.Psychic.Understanding
       }
       catch { }
       _disposed = true;
+      _instance = null;
     }
 
     #endregion

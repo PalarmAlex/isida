@@ -431,6 +431,7 @@ namespace ISIDA.Psychic.Understanding
       {
         _lock.ExitWriteLock();
       }
+      _instance = null;
     }
 
     #endregion
