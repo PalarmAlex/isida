@@ -248,8 +248,13 @@ namespace ISIDA.Common
     public static (bool isValid, string errorMessage) ValidateSpeedParam(int? value)
     {
       const string paramName = "Величина скорости изменения параметра гомеостаза";
-      const string range = "[-20:20] за исключением 0";
-      return ValidateValueCustom(value, paramName, -20, 20, range);
+      const string range = "[-20:-1] или [1:20] (знак задаёт тип: дефицит / избыток; 0 недопустим)";
+      var bounds = ValidateValueCustom(value, paramName, -20, 20, range);
+      if (!bounds.isValid)
+        return bounds;
+      if (value.Value == 0)
+        return (false, $"{paramName} не может быть 0: теряется тип параметра (дефицит vs избыток) и логика дрейфа/зон. Используйте отрицательное значение для дефицит-ориентированных или положительное для избыток-ориентированных параметров.");
+      return (true, string.Empty);
     }
 
     /// <summary>

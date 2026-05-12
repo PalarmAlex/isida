@@ -3156,6 +3156,14 @@ namespace ISIDA.Gomeostas
           var parts = line.Split('|');
           if (parts.Length >= 11 && int.TryParse(parts[0], out int paramId))
           {
+            int speedFromFile = int.Parse(parts[6]);
+            if (speedFromFile == 0)
+            {
+              Logger.Warning(
+                  $"VitalParameters.dat: параметр id={paramId} ({parts[1]}) имел Speed=0; при загрузке установлено -1 (дефицит по умолчанию). Исправьте файл.");
+              speedFromFile = -1;
+            }
+
             var param = new ParameterData(
                 id: paramId,
                 name: parts[1],
@@ -3163,7 +3171,7 @@ namespace ISIDA.Gomeostas
                 value: float.Parse(parts[3], CultureInfo.InvariantCulture),
                 weight: int.Parse(parts[4]),
                 normaWell: int.Parse(parts[5]),
-                speed: int.Parse(parts[6]),
+                speed: speedFromFile,
                 isVital: bool.Parse(parts[8].Trim()),
                 criticalMinValue: float.Parse(parts[9].Trim(), CultureInfo.InvariantCulture),
                 criticalMaxValue: float.Parse(parts[10].Trim(), CultureInfo.InvariantCulture)
@@ -3224,6 +3232,28 @@ namespace ISIDA.Gomeostas
       catch (Exception initEx)
       {
         throw new InvalidOperationException("Ошибка при загрузке стилей реагирования агента", initEx);
+      }
+    }
+
+    /// <summary>
+    /// Снять отметку смерти агента (IsDead = false) и сохранить свойства в AgentProperties.dat.
+    /// </summary>
+    public (bool Success, string ErrorMessage) ReviveAgentSaveProperties()
+    {
+      try
+      {
+        if (!_agentState.IsDead)
+          return (true, string.Empty);
+
+        _agentState.IsDead = false;
+        AppGlobalState.IsDead = false;
+        return SaveAgentProperties();
+      }
+      catch (Exception ex)
+      {
+        string error = ex.Message;
+        Logger.Error(error);
+        return (false, error);
       }
     }
 
