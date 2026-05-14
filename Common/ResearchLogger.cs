@@ -961,9 +961,12 @@ namespace ISIDA.Common
           WriteCsvLine(_currentPulseLogEntry, _csvWriter, ref _csvHeadersWritten, _csvHeaders);
         }
 
-        // В память UI — глобальный пульс (_bufferedRawPulse), как у сценария (якорь + № пульса).
-        // Колонка «Пульс» в logEntry — correctPulse, может быть +1 к глобальному; иначе отчёт сценария не находит строку.
-        WriteToMemoryLog(_currentPulseLogEntry, _bufferedRawPulse, reflexChainInfo, automatizmChainInfo);
+        // В память UI — только глобальный пульс (как у OperatorScenarioRunner и отчёта HTML).
+        // Колонка «Пульс» в logEntry — correctPulse, иногда на +1 к глобальному; её нельзя использовать как ключ Pulse в MemoryLogManager.
+        int memoryPulse = _bufferedRawPulse;
+        if (memoryPulse < 0)
+          return;
+        WriteToMemoryLog(_currentPulseLogEntry, memoryPulse, reflexChainInfo, automatizmChainInfo);
       }
       catch (Exception ex)
       {
@@ -972,8 +975,8 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Записывает в память (UI). <paramref name="globalPulseForMemory"/> — глобальный номер пульса (как в GlobalTimer);
-    /// не путать с колонкой «Пульс» в <paramref name="logEntry"/> (correctPulse, иногда +1).
+    /// Записывает в память (UI). <paramref name="globalPulseForMemory"/> — глобальный номер пульса (как в <see cref="GlobalTimer.GlobalPulsCount"/>);
+    /// не путать с колонкой «Пульс» в <paramref name="logEntry"/> (correctPulse для CSV, иногда +1 к глобальному).
     /// </summary>
     private void WriteToMemoryLog(Dictionary<string, object> logEntry, int globalPulseForMemory,
                                   string reflexChainInfo = "", string automatizmChainInfo = "")
@@ -981,9 +984,11 @@ namespace ISIDA.Common
       if (_disposed || (_memoryLogWriter == null && _displayLogWriter == null))
         return;
 
-      int pulseForWriter = globalPulseForMemory >= 0
-          ? globalPulseForMemory
-          : (int.TryParse(logEntry["Пульс"]?.ToString(), out int p) ? p : 0);
+      // Подстановка из logEntry["Пульс"] ломала отчёты сценария: там ожидается тот же глобальный пульс, что у раннера.
+      if (globalPulseForMemory < 0)
+        return;
+
+      int pulseForWriter = globalPulseForMemory;
 
       int? orType = null;
       if (logEntry.ContainsKey("ОР") && !string.IsNullOrEmpty(logEntry["ОР"].ToString()))

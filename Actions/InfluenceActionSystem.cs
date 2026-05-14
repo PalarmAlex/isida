@@ -154,6 +154,11 @@ namespace ISIDA.Actions
       /// Список ID воздействий-антагонистов, которые несовместимы с данным воздействием
       /// </summary>
       public List<int> AntagonistInfluences { get; set; } = new List<int>();
+
+      /// <summary>
+      /// Ключ пробы метрики среды (хост, например Velum, сопоставляет с сэмплером); пусто — воздействие не от среды.
+      /// </summary>
+      public string EnvironmentMetricProbeKey { get; set; } = string.Empty;
     }
 
     #endregion
@@ -180,6 +185,7 @@ namespace ISIDA.Actions
     /// <param name="description">Описание воздействия</param>
     /// <param name="influences">Словарь влияний на параметры гомеостаза (ID параметра -> величина воздействия). Отражает полезный/вредный эффект воздействия.</param>
     /// <param name="antagonistInfluence">Список ID антагонистических действий, которые несовместимы с данным действием</param>
+    /// <param name="environmentMetricProbeKey">Ключ пробы метрики среды для хоста (например Velum); null или пустая строка — воздействие не привязано к среде</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <returns>ID созданного воздействия и массив предупреждений (если были скорректированы значения)</returns>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени воздействия</exception>
@@ -189,6 +195,7 @@ namespace ISIDA.Actions
         string description,
         Dictionary<int, int> influences,
         List<int> antagonistInfluence = null,
+        string environmentMetricProbeKey = null,
         bool strictValidation = false)
     {
       if (AppGlobalState.EvolutionStage > 0)
@@ -216,6 +223,16 @@ namespace ISIDA.Actions
         }
       }
 
+      string probeKey = environmentMetricProbeKey?.Trim() ?? string.Empty;
+      var probeCheck = SettingsValidator.ValidateEnvironmentMetricProbeKey(probeKey);
+      if (!probeCheck.isValid)
+      {
+        if (strictValidation)
+          throw new ArgumentException(probeCheck.errorMessage, nameof(environmentMetricProbeKey));
+        warnings.Add(probeCheck.errorMessage);
+        probeKey = string.Empty;
+      }
+
       _lock.EnterWriteLock();
       try
       {
@@ -226,7 +243,8 @@ namespace ISIDA.Actions
           Name = name,
           Description = description,
           Influences = influences?.ToDictionary(kvp => kvp.Key, kvp => ClampInt(kvp.Value, -10, 10)) ?? new Dictionary<int, int>(),
-          AntagonistInfluences = antagonistInfluence?.Where(id => id > 0).Distinct().ToList() ?? new List<int>()
+          AntagonistInfluences = antagonistInfluence?.Where(id => id > 0).Distinct().ToList() ?? new List<int>(),
+          EnvironmentMetricProbeKey = probeKey
         };
         _influenceActions.Add(newId, action);
 
@@ -271,6 +289,18 @@ namespace ISIDA.Actions
           action.Influences[influence.Key] = ClampInt(influence.Value, -10, 10);
         }
       }
+
+      string probeTrim = action.EnvironmentMetricProbeKey?.Trim() ?? string.Empty;
+      var probeValidation = SettingsValidator.ValidateEnvironmentMetricProbeKey(probeTrim);
+      if (!probeValidation.isValid)
+      {
+        if (strictValidation)
+          throw new ArgumentException(probeValidation.errorMessage, nameof(action.EnvironmentMetricProbeKey));
+        warnings.Add(probeValidation.errorMessage);
+        probeTrim = string.Empty;
+      }
+
+      action.EnvironmentMetricProbeKey = probeTrim;
 
       _lock.EnterWriteLock();
       try
@@ -825,7 +855,7 @@ namespace ISIDA.Actions
               continue;
 
             var parts = trimmedLine.Split('|');
-            if (parts.Length < 3)
+            if (parts.Length < 4)
             {
               continue;
             }
@@ -843,7 +873,7 @@ namespace ISIDA.Actions
               Influences = ParseInfluences(parts[3])
             };
 
-            if (parts.Length >= 4)
+            if (parts.Length >= 5)
             {
               action.AntagonistInfluences = parts[4]
                   .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -852,6 +882,9 @@ namespace ISIDA.Actions
                   .Where(aid => aid != 0)
                   .ToList();
             }
+
+            if (parts.Length >= 6)
+              action.EnvironmentMetricProbeKey = parts[5].Trim();
 
             _influenceActions[action.Id] = action;
             if (action.Id > _lastGomeoActionId)
@@ -865,7 +898,8 @@ namespace ISIDA.Actions
           {
             FileValidator.FileHeaders.InfluenceActionsFormat,
             FileValidator.FileHeaders.InfluenceActionsBenefit,
-            FileValidator.FileHeaders.InfluenceAntagonists
+            FileValidator.FileHeaders.InfluenceAntagonists,
+            FileValidator.FileHeaders.InfluenceActionsEnvironmentProbeKey
           };
           File.WriteAllLines(path, lines);
           _influenceActions.Clear();
@@ -897,22 +931,24 @@ namespace ISIDA.Actions
       _lock.EnterWriteLock();
       try
       {
-        var lines = new List<string>
-        {
-          FileValidator.FileHeaders.InfluenceActionsFormat,
-          FileValidator.FileHeaders.InfluenceActionsBenefit,
-          FileValidator.FileHeaders.InfluenceAntagonists
-        };
+          var lines = new List<string>
+          {
+            FileValidator.FileHeaders.InfluenceActionsFormat,
+            FileValidator.FileHeaders.InfluenceActionsBenefit,
+            FileValidator.FileHeaders.InfluenceAntagonists,
+            FileValidator.FileHeaders.InfluenceActionsEnvironmentProbeKey
+          };
 
         foreach (var action in _influenceActions.Values.OrderBy(a => a.Id))
         {
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
                    $"{InfluencesToString(action.Influences)}|" +
-                   $"{string.Join(",", action.AntagonistInfluences)}");
+                   $"{string.Join(",", action.AntagonistInfluences)}|" +
+                   $"{(action.EnvironmentMetricProbeKey ?? string.Empty).Trim()}");
         }
-        var linCount = 4;
-        if (lines.Count == 3)
-          linCount = 3; // для случая очистки всего кроме шапки
+        var linCount = 5;
+        if (lines.Count == 4)
+          linCount = 4; // для случая очистки всего кроме шапки
 
         var result = FileValidator.SafeSaveFile(
             GetInfluenceActionsFilePath(),
@@ -994,6 +1030,16 @@ namespace ISIDA.Actions
           var unpairedList = string.Join(", ", unpairedInfluences.Select(s => $"{s.Name} (ID:{s.Id})"));
           errorMessage = $"AsymmetricInfluences: Обнаружены несимметричные антагонистические связи:\n{unpairedList}\n\n";
           return false;
+        }
+
+        foreach (var action in actions)
+        {
+          var pv = SettingsValidator.ValidateEnvironmentMetricProbeKey(action.EnvironmentMetricProbeKey ?? string.Empty);
+          if (!pv.isValid)
+          {
+            errorMessage = $"Гомеостатическое воздействие с ID {action.Id}: {pv.errorMessage}";
+            return false;
+          }
         }
 
         // Проверку в образах делать не надо, потому как эта валидация так же при обновлении используется

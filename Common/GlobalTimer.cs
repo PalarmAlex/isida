@@ -326,7 +326,6 @@ namespace ISIDA.Common
         }
 
         // Фаза 3: обновление счётчика под lock; сам обработчик пульса — снаружи lock.
-        // Иначе хост (Velum) в OnPulseBeforeGomeostasis может вызвать Control.Invoke на UI-поток:
         // поток таймера удерживает _timerLock, UI ждёт lock в GlobalTimer — взаимная блокировка, «зависание» SW.
         lock (_timerLock)
         {

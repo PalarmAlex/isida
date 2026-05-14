@@ -397,6 +397,30 @@ namespace ISIDA.Common
       return ValidateValueCustom(value, paramName, -10, 10, range);
     }
 
+    /// <summary>
+    /// Ключ пробы метрики среды в строке InfluenceActions (пустая строка допустима).
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidateEnvironmentMetricProbeKey(string key)
+    {
+      if (string.IsNullOrWhiteSpace(key))
+        return (true, string.Empty);
+
+      string t = key.Trim();
+      if (t.Length > 128)
+        return (false, "EnvironmentMetricProbeKey: длина не более 128 символов после обрезки пробелов.");
+
+      if (t.IndexOf('|') >= 0)
+        return (false, "EnvironmentMetricProbeKey: символ «|» запрещён (разделитель полей файла).");
+
+      foreach (char c in t)
+      {
+        if (char.IsControl(c))
+          return (false, "EnvironmentMetricProbeKey: управляющие символы запрещены.");
+      }
+
+      return (true, string.Empty);
+    }
+
     #endregion
 
     #region Цепочки автоматизмов и рефлексов
