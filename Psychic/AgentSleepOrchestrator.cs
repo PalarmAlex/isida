@@ -62,7 +62,7 @@ namespace ISIDA.Psychic
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
-    /// Сбрасывает синглтон после завершения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/> (повторный <see cref="IsidaEngine.Create"/> в том же AppDomain, например выгрузка плагина SolidWorks).
+    /// Сбрасывает синглтон после завершения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/> (повторный <see cref="IsidaEngine.Create"/> в том же AppDomain).
     /// </summary>
     public static void Reset()
     {

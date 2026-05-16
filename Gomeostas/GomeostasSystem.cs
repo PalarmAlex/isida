@@ -198,19 +198,25 @@ namespace ISIDA.Gomeostas
         // Снимок конца предыдущего пульса в _previousParametersState; сравнение до шага пульсации в этом пульсе.
         HasCriticalChanges = _calculator.HasCriticalParameterChanges(_agentState.Parameters, _previousParametersState);
 
-        // ритмичное убывание/нарастание параметров по Speed (опционально; при выключении — только внешнее воздействие)
+        // Сначала пересчёт состояния по значению после внешних записей,
+        // затем пульсовый дрейф по Speed. Иначе дрейф перезаписывает Value перед UpdateState, и дельта для
+        // «удара» от среды схлопывается до шага дрейфа.
+        // Без дрейфа Value между пульсами часто не меняется — сеттер Value не обновляет PreviousValue,
+        // дельта остаётся от последнего скачка и ломает ветку удержания/возврата в норму по тактам.
         foreach (var param in _agentState.Parameters)
         {
           try
           {
+            param.UpdateState(_dynamicTime, _difSensorPar, _agentState.IsFirstPulse);
+
             if (AppGlobalState.HomeostasisPulseSpeedDriftEnabled)
             {
               float delta100 = param.Speed / 100f;
               if (_agentState.IsSleeping) delta100 /= 10f;
               param.Value = ClampFloat(param.Value + delta100, 0f, 100f);
             }
-
-            param.UpdateState(_dynamicTime, _difSensorPar, _agentState.IsFirstPulse);
+            else
+              param.SyncPreviousValueToCurrentAfterPulse();
           }
           catch (Exception paramEx)
           {
@@ -911,6 +917,12 @@ namespace ISIDA.Gomeostas
       public ParameterState LastState { get; set; } = ParameterState.Normal;
 
       /// <summary>
+      /// Трассировка удержания Плохо/Хорошо по пульсам (окно Output / отладчик).
+      /// Включить из Immediate Window: <c>GomeostasSystem.ParameterData.TracePulseHold = true</c>.
+      /// </summary>
+      public static volatile bool TracePulseHold;
+
+      /// <summary>
       /// Уникальный идентификатор параметра
       /// </summary>
       public int Id
@@ -1109,14 +1121,47 @@ namespace ISIDA.Gomeostas
       /// </summary>
       public void UpdateState(int dynamicTime, float difSensorPar, bool isFirstPulse = false)
       {
-        if (Math.Abs(_value - _previousValue) < float.Epsilon && !isFirstPulse)
+        bool valueUnchanged = Math.Abs(_value - _previousValue) < float.Epsilon;
+        // Пока идёт временное удержание Well/Bad, каждый пульс нужно прогонять через калькулятор,
+        // иначе отсчёт dynamicTime по GlobalPulsCount никогда не сработает (Value == PreviousValue).
+        bool transientHold = LastState != ParameterState.Normal && LastStateChangePulse.HasValue;
+        if (valueUnchanged && !isFirstPulse && !transientHold)
+        {
+          if (TracePulseHold && CurrentState != ParameterState.Normal)
+          {
+            Trace.WriteLine(
+                $"[ISIDA.PulseHold] SKIP id={Id} name={Name} pulse={GlobalTimer.GlobalPulsCount} " +
+                $"v=prev={_value:F6} CurrentState={CurrentState} LastState={LastState} anchor={LastStateChangePulse?.ToString() ?? "null"}");
+          }
+
           return;
+        }
 
         var newState = Instance.Calculator.CalculateParameterState(
             this, dynamicTime, difSensorPar);
 
+        if (TracePulseHold &&
+            (transientHold || !valueUnchanged || newState.State != ParameterState.Normal ||
+             LastState != ParameterState.Normal))
+        {
+          Trace.WriteLine(
+              $"[ISIDA.PulseHold] CALC id={Id} name={Name} pulse={GlobalTimer.GlobalPulsCount} " +
+              $"v={_value:F6} prev={_previousValue:F6} dT={dynamicTime} difPar={difSensorPar:F6} " +
+              $"→ state={newState.State} LastState={LastState} anchor={LastStateChangePulse?.ToString() ?? "null"}");
+        }
+
         _previousState = CurrentState;
         CurrentState = newState.State;
+      }
+
+      /// <summary>
+      /// В конце пульса при выключенном дрейфе: выровнять базу для дельты следующего пульса.
+      /// Иначе при неизменном <see cref="Value"/> сеттер не трогает <c>_previousValue</c>, и
+      /// <see cref="HomeostasisCalculator.CalculateParameterState"/> видит постоянную большую дельту.
+      /// </summary>
+      internal void SyncPreviousValueToCurrentAfterPulse()
+      {
+        _previousValue = _value;
       }
 
       private ParameterState _currentState;
@@ -2062,7 +2107,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Чтение значений параметров под блокировкой (для хоста Velum: снимок перед публикацией в кэш среды).
+    /// Чтение значений параметров под блокировкой (для хоста: снимок перед публикацией в кэш среды).
     /// </summary>
     public Dictionary<int, float> HostGetParameterValues(IEnumerable<int> ids)
     {
@@ -2112,7 +2157,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Гарантирует наличие параметров с фиксированными Id (встроенный набор Velum). Добавляет только отсутствующие строки.
+    /// Гарантирует наличие параметров с фиксированными Id (встроенный набор). Добавляет только отсутствующие строки.
     /// </summary>
     public void HostEnsureFixedParameters(IReadOnlyList<ParameterData> fixedTemplates)
     {
@@ -2883,7 +2928,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Парсинг поля активаций стилей из файла <c>VitalParameters</c> (используется хостом Velum при слиянии с реестром).
+    /// Парсинг поля активаций стилей из файла <c>VitalParameters</c> (используется хостом при слиянии с реестром).
     /// </summary>
     public static Dictionary<int, List<int>> ParseStyleActivationsField(string data)
     {

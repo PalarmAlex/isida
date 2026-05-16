@@ -57,8 +57,8 @@ namespace ISIDA.Common
     public static event Action<int> OnPulseAfterGomeostasisBeforePsychic;
 
     /// <summary>
-    /// Перед <see cref="Gomeostas.GomeostasSystem.UpdateStateOnly"/> на пульсе — для хоста (Velum): атомарная подстановка
-    /// значений встроенных параметров среды SolidWorks из последнего полного снимка.
+    /// Перед <see cref="Gomeostas.GomeostasSystem.UpdateStateOnly"/> на пульсе — для хоста: атомарная подстановка
+    /// значений встроенных параметров среды из последнего полного снимка.
     /// </summary>
     public static event Action<int> OnPulseBeforeGomeostasis;
 
@@ -159,7 +159,7 @@ namespace ISIDA.Common
 
     /// <summary>
     /// true, если после <see cref="InitializeSystems"/> статические ссылки на системы ещё не сброшены вызовом <see cref="ClearSystems"/>.
-    /// Используется хостом (например Velum), чтобы не считать контекст ISIDA живым после освобождения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/>.
+    /// Используется хостом, чтобы не считать контекст ISIDA живым после освобождения <see cref="T:ISIDA.Common.IsidaEngine+IsidaContext"/>.
     /// </summary>
     public static bool ArePulseSystemsReady =>
         _gomeostas != null && _actionsSystem != null;

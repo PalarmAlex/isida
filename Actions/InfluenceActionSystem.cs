@@ -156,7 +156,7 @@ namespace ISIDA.Actions
       public List<int> AntagonistInfluences { get; set; } = new List<int>();
 
       /// <summary>
-      /// Ключ пробы метрики среды (хост, например Velum, сопоставляет с сэмплером); пусто — воздействие не от среды.
+      /// Ключ пробы метрики среды (хост, сопоставляет с сэмплером); пусто — воздействие не от среды.
       /// </summary>
       public string EnvironmentMetricProbeKey { get; set; } = string.Empty;
     }
@@ -185,7 +185,7 @@ namespace ISIDA.Actions
     /// <param name="description">Описание воздействия</param>
     /// <param name="influences">Словарь влияний на параметры гомеостаза (ID параметра -> величина воздействия). Отражает полезный/вредный эффект воздействия.</param>
     /// <param name="antagonistInfluence">Список ID антагонистических действий, которые несовместимы с данным действием</param>
-    /// <param name="environmentMetricProbeKey">Ключ пробы метрики среды для хоста (например Velum); null или пустая строка — воздействие не привязано к среде</param>
+    /// <param name="environmentMetricProbeKey">Ключ пробы метрики среды для хоста; null или пустая строка — воздействие не привязано к среде</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <returns>ID созданного воздействия и массив предупреждений (если были скорректированы значения)</returns>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени воздействия</exception>

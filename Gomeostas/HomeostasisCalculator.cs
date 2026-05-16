@@ -391,6 +391,15 @@ namespace ISIDA.Gomeostas
         int pulsesSinceChange = GlobalTimer.GlobalPulsCount - param.LastStateChangePulse.Value;
         bool keepHolding = (pulsesSinceChange < dynamicTime) || AppGlobalState.IsReflexChainActive || AppGlobalState.IsAutomatizmChainActive;
 
+        if (ParameterData.TracePulseHold)
+        {
+          Trace.WriteLine(
+              $"[ISIDA.PulseHold] HOLD branch id={param.Id} name={param.Name} pulse={GlobalTimer.GlobalPulsCount} " +
+              $"lastState={param.LastState} anchorPulse={param.LastStateChangePulse} since={pulsesSinceChange}/{dynamicTime} " +
+              $"keep={keepHolding} reflex={AppGlobalState.IsReflexChainActive} auto={AppGlobalState.IsAutomatizmChainActive} " +
+              $"absΔ={absDelta:F6}<dif={difSensorPar:F6}");
+        }
+
         if (keepHolding)
         {
           // Продолжаем удерживать состояние
@@ -406,6 +415,13 @@ namespace ISIDA.Gomeostas
         else
         {
           // Время удержания истекло
+          if (ParameterData.TracePulseHold)
+          {
+            Trace.WriteLine(
+                $"[ISIDA.PulseHold] HOLD expire id={param.Id} name={param.Name} pulse={GlobalTimer.GlobalPulsCount} " +
+                $"since={pulsesSinceChange}>={dynamicTime} → fall through to recalc");
+          }
+
           param.LastStateChangePulse = null;
           param.LastState = ParameterState.Normal;
         }
@@ -433,9 +449,14 @@ namespace ISIDA.Gomeostas
       if (newState == ParameterState.Well ||
           (newState == ParameterState.Bad && !isInBadZone))
       {
-        // Временное состояние — удерживаем
+        // Временное состояние — удерживаем. Якорь LastStateChangePulse задаёт длительность удержания
+        // (dynamicTime тактов). Если хост на каждом пульсе снова даёт «удар» того же транзиторного
+        // смысла (например Well→Well при непрерывном потоке метрик из среды), не сбрасывать якорь —
+        // иначе отсчёт никогда не дойдёт до возврата в Норму;
+        ParameterState priorLast = param.LastState;
         param.LastState = newState;
-        param.LastStateChangePulse = GlobalTimer.GlobalPulsCount;
+        if (!(param.LastStateChangePulse.HasValue && newState == priorLast))
+          param.LastStateChangePulse = GlobalTimer.GlobalPulsCount;
       }
       else
       {
