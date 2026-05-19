@@ -189,6 +189,7 @@
     <Compile Include="Reflexes\ReflexExecutionService.cs" />
     <Compile Include="Reflexes\ReflexTreeSystem.cs" />
     <Compile Include="Sensors\SensorChannel.cs" />
+    <Compile Include="Sensors\SensorNodeType.cs" />
     <Compile Include="Sensors\SensorSandbox.cs" />
     <Compile Include="Sensors\SensorTree.cs" />
     <Compile Include="Sensors\SensorySystem.cs" />
