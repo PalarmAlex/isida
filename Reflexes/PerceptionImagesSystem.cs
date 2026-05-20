@@ -130,6 +130,11 @@ namespace ISIDA.Reflexes
       public List<int> PhraseIdList { get; set; } = new List<int>();
 
       /// <summary>
+      /// Список ID CAD-паттернов (CadChannel PhraseTree)
+      /// </summary>
+      public List<int> CadPatternIdList { get; set; } = new List<int>();
+
+      /// <summary>
       /// Код зрительного канала (см. <see cref="AgentVisualColor"/>). Всегда задан; по умолчанию белый (0).
       /// </summary>
       public int VisualColorId { get; set; }
@@ -341,22 +346,25 @@ namespace ISIDA.Reflexes
     /// <param name="influenceActionList">Список ID воздействий с пульта</param>
     /// <param name="phraseIdList">Список ID фраз</param>
     /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
+    /// <param name="cadPatternIdList">Список ID CAD-паттернов</param>
     /// <returns>ID существующего или нового образа. 0 если ошибка</returns>
-    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList, int visualColorId = 0)
+    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList, int visualColorId = 0, List<int> cadPatternIdList = null)
     {
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
 
       bool hasA = influenceActionList != null && influenceActionList.Any();
       bool hasP = phraseIdList != null && phraseIdList.Any();
+      bool hasCad = cadPatternIdList != null && cadPatternIdList.Any();
       bool hasColorSignal = visualColorId != AgentVisualColor.White;
-      if (!hasA && !hasP && !hasColorSignal)
+      if (!hasA && !hasP && !hasCad && !hasColorSignal)
         return 0;
 
       var newPerceptionImage = new PerceptionImage
       {
         InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
+        CadPatternIdList = cadPatternIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
         VisualColorId = visualColorId
       };
 
@@ -378,6 +386,7 @@ namespace ISIDA.Reflexes
             Id = newId,
             InfluenceActionsList = newPerceptionImage.InfluenceActionsList,
             PhraseIdList = newPerceptionImage.PhraseIdList,
+            CadPatternIdList = newPerceptionImage.CadPatternIdList,
             VisualColorId = visualColorId
           };
 
@@ -401,7 +410,9 @@ namespace ISIDA.Reflexes
              existing.InfluenceActionsList.OrderBy(x => x).SequenceEqual(
                  newImage.InfluenceActionsList.OrderBy(x => x)) &&
              existing.PhraseIdList.OrderBy(x => x).SequenceEqual(
-                 newImage.PhraseIdList.OrderBy(x => x));
+                 newImage.PhraseIdList.OrderBy(x => x)) &&
+             existing.CadPatternIdList.OrderBy(x => x).SequenceEqual(
+                 newImage.CadPatternIdList.OrderBy(x => x));
     }
 
     /// <summary>
@@ -550,14 +561,25 @@ namespace ISIDA.Reflexes
               continue;
 
             int colorId = AgentVisualColor.White;
-            if (parts.Length > 3 && int.TryParse(parts[3].Trim(), out int parsedColor))
-              colorId = AgentVisualColor.IsValidCode(parsedColor) ? parsedColor : AgentVisualColor.White;
+            var cadPatternIdList = new List<int>();
+            if (parts.Length == 4)
+            {
+              if (int.TryParse(parts[3].Trim(), out int parsedColorOld))
+                colorId = AgentVisualColor.IsValidCode(parsedColorOld) ? parsedColorOld : AgentVisualColor.White;
+            }
+            else if (parts.Length >= 5)
+            {
+              cadPatternIdList = AddUtils.ParseIntList(parts[3]);
+              if (int.TryParse(parts[4].Trim(), out int parsedColor))
+                colorId = AgentVisualColor.IsValidCode(parsedColor) ? parsedColor : AgentVisualColor.White;
+            }
 
             var perceptionImage = new PerceptionImage
             {
               Id = id,
               InfluenceActionsList = AddUtils.ParseIntList(parts[1]),
               PhraseIdList = AddUtils.ParseIntList(parts[2]),
+              CadPatternIdList = cadPatternIdList,
               VisualColorId = colorId
             };
 
@@ -641,16 +663,18 @@ namespace ISIDA.Reflexes
                 {
                   FileValidator.FileHeaders.PerceptionImagesFormat,
                   FileValidator.FileHeaders.PerceptionImagesLists,
+                  FileValidator.FileHeaders.PerceptionImagesCadPatternIdList,
                   FileValidator.FileHeaders.PerceptionImagesVisualColor
                 };
 
         foreach (var image in _perceptionImages.Values.OrderBy(x => x.Id))
         {
           lines.Add($"{image.Id}|{AddUtils.IntListToString(image.InfluenceActionsList)}|" +
-                    $"{AddUtils.IntListToString(image.PhraseIdList)}|{image.VisualColorId}");
+                    $"{AddUtils.IntListToString(image.PhraseIdList)}|" +
+                    $"{AddUtils.IntListToString(image.CadPatternIdList)}|{image.VisualColorId}");
         }
 
-        var lineCount = 3;
+        var lineCount = 4;
         if (lines.Count == 2)
           lineCount = 2; // для случая очистки всего кроме шапки
 
@@ -737,6 +761,29 @@ namespace ISIDA.Reflexes
         foreach (var image in _perceptionImages.Values)
         {
           image.PhraseIdList.Clear();
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    #endregion
+
+    #region Очистка CAD-паттернов
+
+    /// <summary>
+    /// Очищает все CadPatternIdList в образах восприятия
+    /// </summary>
+    public void ClearAllCadPatternIds()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        foreach (var image in _perceptionImages.Values)
+        {
+          image.CadPatternIdList.Clear();
         }
       }
       finally

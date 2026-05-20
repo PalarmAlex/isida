@@ -117,6 +117,7 @@ public static class AppGlobalState
   #region Вербальные образы
 
   private static int _curActiveVerbalId = 0;
+  private static int _curActiveCadId = 0;
 
   #endregion
 
@@ -1022,6 +1023,15 @@ public static class AppGlobalState
   {
     get => _curActiveVerbalId;
     set => _curActiveVerbalId = value;
+  }
+
+  /// <summary>
+  /// ID текущего активного CAD-образа
+  /// </summary>
+  public static int CurActiveCadId
+  {
+    get => _curActiveCadId;
+    set => _curActiveCadId = value;
   }
 
   #endregion

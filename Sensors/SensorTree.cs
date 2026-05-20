@@ -67,7 +67,7 @@ namespace ISIDA.Sensors
     /// </summary>
     /// <param name="treeName">Имя дерева (используется для именования файлов)</param>
     /// <param name="baseFolderPath">Базовый путь к директории данных</param>
-    /// <exception cref="ArgumentNullException">Выбрасывается если treeName или logger равны null</exception>
+    /// <exception cref="ArgumentNullException">Выбрасывается если treeName равен null</exception>
     public SensorTree(string treeName, string baseFolderPath)
     {
       _treeName = treeName ?? throw new ArgumentNullException(nameof(treeName));
@@ -77,8 +77,7 @@ namespace ISIDA.Sensors
       if (!Directory.Exists(_treeFolderPath))
         Directory.CreateDirectory(_treeFolderPath);
 
-      // Создаем корневой узел сразу
-      var rootNode = new TreeNode<TElement>(default, default, null, SensorNodeType.Verbal);
+      var rootNode = new TreeNode<TElement>(default, default, null);
       _nodes.Add(default, rootNode);
     }
 
@@ -127,10 +126,8 @@ namespace ISIDA.Sensors
         _nodes.Clear();
         _branches.Clear();
 
-        // Создаем корневой узел
-        var rootNode = new TreeNode<TElement>(default, default, null, SensorNodeType.Verbal);
+        var rootNode = new TreeNode<TElement>(default, default, null);
         _nodes.Add(default, rootNode);
-
         _lastNodeId = default;
       }
       finally
@@ -143,35 +140,25 @@ namespace ISIDA.Sensors
 
     #region Работа с ветками
 
-    /// <summary>
-    /// Находит ветку в дереве по последовательности элементов и типу узлов ветки
-    /// </summary>
-    /// <param name="branch">Последовательность элементов для поиска</param>
-    /// <param name="nodeType">Тип узлов ветки</param>
-    /// <returns>Идентификатор конечного узла ветки или значение по умолчанию если ветка не найдена</returns>
-    internal TNodeId FindBranchInternal(IEnumerable<TElement> branch, SensorNodeType nodeType = SensorNodeType.Verbal)
+    internal TNodeId FindBranchInternal(IEnumerable<TElement> branch)
     {
       if (branch == null) return default(TNodeId);
 
       var elements = branch.ToList();
       if (!elements.Any()) return default(TNodeId);
 
-      // Начинаем с корневого узла
       if (!_nodes.TryGetValue(default(TNodeId), out var currentNode))
         return default(TNodeId);
 
-      // Проходим по всем элементам ветки
       foreach (var element in elements)
       {
-        // Ищем дочерний узел с таким элементом и типом
         var childNode = currentNode.Children
-            .FirstOrDefault(c => c.Element.Equals(element) && c.NodeType == nodeType);
+            .FirstOrDefault(c => c.Element.Equals(element));
 
         if (childNode == null) return default(TNodeId);
         currentNode = childNode;
       }
 
-      // Возвращаем ID конечного узла
       return currentNode.Id;
     }
 
@@ -179,15 +166,13 @@ namespace ISIDA.Sensors
     /// Находит ветку в дереве по последовательности элементов
     /// </summary>
     /// <param name="branch">Последовательность элементов для поиска</param>
-    /// <param name="nodeType">Тип узлов ветки</param>
     /// <returns>Идентификатор конечного узла ветки или значение по умолчанию если ветка не найдена</returns>
-
-    public TNodeId FindBranch(IEnumerable<TElement> branch, SensorNodeType nodeType = SensorNodeType.Verbal)
+    public TNodeId FindBranch(IEnumerable<TElement> branch)
     {
       _lock.EnterReadLock();
       try
       {
-        return FindBranchInternal(branch, nodeType);
+        return FindBranchInternal(branch);
       }
       finally
       {
@@ -199,10 +184,9 @@ namespace ISIDA.Sensors
     /// Добавляет новую ветку в дерево
     /// </summary>
     /// <param name="branch">Последовательность элементов для добавления</param>
-    /// <param name="nodeType">Тип создаваемых узлов ветки</param>
     /// <returns>Идентификатор конечного узла добавленной ветки</returns>
     /// <exception cref="ArgumentNullException">Выбрасывается если branch равен null</exception>
-    public TNodeId AddBranch(IEnumerable<TElement> branch, SensorNodeType nodeType = SensorNodeType.Verbal)
+    public TNodeId AddBranch(IEnumerable<TElement> branch)
     {
       if (branch == null) throw new ArgumentNullException(nameof(branch));
 
@@ -211,18 +195,16 @@ namespace ISIDA.Sensors
       {
         var elements = branch.ToList();
 
-        // Проверяем полное совпадение
-        var existingId = FindBranchInternal(elements, nodeType);
+        var existingId = FindBranchInternal(elements);
         if (!EqualityComparer<TNodeId>.Default.Equals(existingId, default(TNodeId)))
           return existingId;
 
-        // Постепенно строим ветку, переиспользуя существующие узлы где возможно
         TreeNode<TElement> parentNode = _nodes[default];
 
         foreach (var element in elements)
         {
           var existingChild = parentNode.Children
-              .FirstOrDefault(c => c.Element.Equals(element) && c.NodeType == nodeType);
+              .FirstOrDefault(c => c.Element.Equals(element));
 
           if (existingChild != null)
           {
@@ -230,15 +212,13 @@ namespace ISIDA.Sensors
           }
           else
           {
-            // Создаем новый узел
-            var newNode = new TreeNode<TElement>(GetNewNodeId(), element, parentNode, nodeType);
+            var newNode = new TreeNode<TElement>(GetNewNodeId(), element, parentNode);
             _nodes.Add(newNode.Id, newNode);
             parentNode.Children.Add(newNode);
             parentNode = newNode;
           }
         }
 
-        // Всегда создаем новый конечный узел для уникального ID
         if (!EqualityComparer<TNodeId>.Default.Equals(parentNode.Id, default(TNodeId)))
         {
           _branches[parentNode.Id] = new List<TreeNode<TElement>> { parentNode };
@@ -299,29 +279,23 @@ namespace ISIDA.Sensors
       {
         var path = Path.Combine(_treeFolderPath, $"{_treeName}.dat");
 
-        // Очищаем текущие данные
         _nodes.Clear();
         _branches.Clear();
 
-        // Создаем корневой узел
-        var rootNode = new TreeNode<TElement>(default, default, null, SensorNodeType.Verbal);
+        var rootNode = new TreeNode<TElement>(default, default, null);
         _nodes.Add(default, rootNode);
 
         if (!File.Exists(path))
-        {
-          return; // Файла нет - возвращаем только корневой узел
-        }
+          return;
 
-        // Временное хранилище для данных узлов (element, parentId, nodeType)
-        var nodeData = new Dictionary<TNodeId, (TElement element, TNodeId parentId, SensorNodeType nodeType)>();
+        var nodeData = new Dictionary<TNodeId, (TElement element, TNodeId parentId)>();
 
-        // Формат строки: id|parentId|#|element|#|nodeType
         foreach (var line in File.ReadLines(path))
         {
           if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
 
           var parts = line.Split(new[] { "|#|" }, StringSplitOptions.None);
-          if (parts.Length < 3) continue;
+          if (parts.Length < 2) continue;
 
           var idParts = parts[0].Split('|');
           if (idParts.Length != 2) continue;
@@ -331,35 +305,27 @@ namespace ISIDA.Sensors
             var id = (TNodeId)Convert.ChangeType(idParts[0], typeof(TNodeId));
             var parentId = (TNodeId)Convert.ChangeType(idParts[1], typeof(TNodeId));
             var element = (TElement)Convert.ChangeType(parts[1], typeof(TElement));
-            var nodeType = (SensorNodeType)Enum.Parse(typeof(SensorNodeType), parts[2].Trim(), true);
 
-            nodeData[id] = (element, parentId, nodeType);
+            nodeData[id] = (element, parentId);
 
-            // Обновляем последний ID
             if (Comparer<TNodeId>.Default.Compare(id, _lastNodeId) > 0)
-            {
               _lastNodeId = id;
-            }
           }
           catch
           {
-
           }
         }
 
-        // Создаем все узлы (без связей)
         foreach (var item in nodeData)
         {
-          // Пропускаем корневой узел — он уже создан
           if (EqualityComparer<TNodeId>.Default.Equals(item.Key, default(TNodeId)))
             continue;
 
-          var newNode = new TreeNode<TElement>(item.Key, item.Value.element, null, item.Value.nodeType);
+          var newNode = new TreeNode<TElement>(item.Key, item.Value.element, null);
           _nodes.Add(item.Key, newNode);
         }
 
-        // Устанавливаем связи родитель-потомок
-        foreach (var node in _nodes.Values.ToList()) // ToList для копирования
+        foreach (var node in _nodes.Values.ToList())
         {
           if (EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
             continue;
@@ -372,13 +338,10 @@ namespace ISIDA.Sensors
           }
         }
 
-        // Заполняем ветки (конечные узлы)
         foreach (var node in _nodes.Values)
         {
           if (node.Children.Count == 0 && !EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
-          {
             _branches[node.Id] = new List<TreeNode<TElement>> { node };
-          }
         }
       }
       finally
@@ -398,32 +361,25 @@ namespace ISIDA.Sensors
         var path = Path.Combine(_treeFolderPath, $"{_treeName}.dat");
         var lines = new List<string>
         {
-          "# id|parentId|#|element|#|nodeType"
+          "# id|parentId|#|element"
         };
 
-        // Сохраняем все узлы, кроме корневого
         foreach (var node in _nodes.Values)
         {
           if (node.Parent == null && !EqualityComparer<TNodeId>.Default.Equals(node.Id, default(TNodeId)))
             continue;
 
-          var line = $"{node.Id}|{node.ParentID}|#|{node.Element}|#|{node.NodeType}";
+          var line = $"{node.Id}|{node.ParentID}|#|{node.Element}";
           lines.Add(line);
         }
 
-        // Сначала записываем во временный файл
         var tempPath = path + ".tmp";
         File.WriteAllLines(tempPath, lines);
 
-        // Затем атомарно заменяем старый файл
         if (File.Exists(path))
           File.Delete(path);
 
         File.Move(tempPath, path);
-      }
-      catch
-      {
-        throw;
       }
       finally
       {
@@ -447,7 +403,6 @@ namespace ISIDA.Sensors
       }
       catch
       {
-        // при выгрузке не пробрасываем
       }
       finally
       {
@@ -467,47 +422,26 @@ namespace ISIDA.Sensors
       /// <summary>
       /// Получает уникальный идентификатор узла.
       /// </summary>
-      /// <value>
-      /// Идентификатор узла типа <typeparamref name="TNodeId"/>.
-      /// </value>
       public TNodeId Id { get; }
 
       /// <summary>
       /// Получает идентификатор родительского узла.
       /// </summary>
-      /// <value>
-      /// Идентификатор родительского узла или значение по умолчанию для типа <typeparamref name="TNodeId"/>, 
-      /// если узел является корневым.
-      /// </value>
       public TNodeId ParentID { get; private set; }
 
       /// <summary>
       /// Получает элемент данных, хранящийся в узле.
       /// </summary>
-      /// <value>
-      /// Элемент данных типа <typeparamref name="T"/>.
-      /// </value>
       public T Element { get; }
 
       /// <summary>
       /// Получает ссылку на родительский узел.
       /// </summary>
-      /// <value>
-      /// Родительский узел или <c>null</c>, если узел является корневым.
-      /// </value>
       public TreeNode<T> Parent { get; private set; }
-
-      /// <summary>
-      /// Получает тип узла (категория токена восприятия).
-      /// </summary>
-      public SensorNodeType NodeType { get; }
 
       /// <summary>
       /// Получает список дочерних узлов.
       /// </summary>
-      /// <value>
-      /// Список дочерних узлов. Если узел не имеет дочерних элементов, возвращается пустой список.
-      /// </value>
       public List<TreeNode<T>> Children { get; } = new List<TreeNode<T>>();
 
       /// <summary>
@@ -516,29 +450,21 @@ namespace ISIDA.Sensors
       /// <param name="id">Уникальный идентификатор узла.</param>
       /// <param name="element">Элемент данных узла.</param>
       /// <param name="parent">Родительский узел (может быть null для корневого узла).</param>
-      /// <param name="nodeType">Тип узла; по умолчанию <see cref="SensorNodeType.Verbal"/>.</param>
       /// <exception cref="ArgumentNullException">Генерируется, если element равен null.</exception>
-      public TreeNode(TNodeId id, T element, TreeNode<T> parent, SensorNodeType nodeType = SensorNodeType.Verbal)
+      public TreeNode(TNodeId id, T element, TreeNode<T> parent)
       {
         if (element == null)
-        {
           throw new ArgumentNullException(nameof(element));
-        }
 
         Id = id;
         Element = element;
-        NodeType = nodeType;
         SetParent(parent);
       }
 
       /// <summary>
       /// Устанавливает родительский узел и обновляет связанные свойства.
       /// </summary>
-      /// <param name="parent">Родительский узел или <c>null</c> для сброса родителя.</param>
-      /// <remarks>
-      /// Этот метод автоматически обновляет свойство <see cref="ParentID"/> в соответствии 
-      /// с идентификатором родительского узла.
-      /// </remarks>
+      /// <param name="parent">Родительский узел или null для сброса родителя.</param>
       public void SetParent(TreeNode<T> parent)
       {
         Parent = parent;

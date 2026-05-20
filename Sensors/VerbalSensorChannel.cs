@@ -2,7 +2,6 @@ using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -20,18 +19,24 @@ namespace ISIDA.Sensors
     private bool _authoritativeMode = false;
     private string _primarySensorsPath = "";
     private readonly GomeostasSystem _gomeostas;
+    private readonly SensorChannelOptions _options;
 
     #region Поля и свойства
 
-    /// <summary>
-    /// Дерево распознавания слов (символы -> слова)
-    /// </summary>
-    public SensorTree<int, char> WordTree { get; private set; }
+    /// <summary>Параметры канала (вербальный или CAD).</summary>
+    public SensorChannelOptions Options => _options;
 
-    /// <summary>
-    /// Дерево распознавания фраз (слова -> фразы)
-    /// </summary>
-    public SensorTree<int, int> PhraseTree { get; private set; }
+    /// <summary>true — атомарные контуры (CAD), false — побуквенные слова.</summary>
+    public bool UsesAtomicTokens => Options.AtomicTokens;
+
+    /// <summary>Дерево слов (символы → слова). Только для побуквенного режима.</summary>
+    public SensorTree<int, char> WordTree { get; }
+
+    /// <summary>Дерево контуров (primary id → слово). Только для атомарного режима.</summary>
+    public SensorTree<int, int> AtomicWordTree { get; }
+
+    /// <summary>Дерево распознавания фраз (слова → фразы)</summary>
+    public SensorTree<int, int> PhraseTree { get; }
 
     /// <summary>
     /// Песочница для новых слов
@@ -49,12 +54,7 @@ namespace ISIDA.Sensors
     public SensorSandbox<string> PhraseTextSandbox { get; private set; }
 
     private Dictionary<char, int> _primarySensors = new Dictionary<char, int>();
-
-    /// <summary>
-    /// Словарь узлов дерева слов (ID -> узел)
-    /// </summary>
-    private IReadOnlyDictionary<int, SensorTree<int, char>.TreeNode<char>> WordTreeFromID =>
-        WordTree.Nodes;
+    private Dictionary<string, int> _primaryTokens = new Dictionary<string, int>();
 
     /// <summary>
     /// Словарь узлов дерева фраз (ID -> узел)
@@ -114,23 +114,38 @@ namespace ISIDA.Sensors
     /// <param name="gomeostasSystem">Ссылка на класс гомеостаза</param> 
     /// <param name="baseFolderPath">Базовый путь к директории данных</param>
     /// <param name="primarySensorsPath">Путь к файлу первичных сенсоров</param>
+    /// <param name="options">Параметры канала (по умолчанию вербальный)</param>
     /// <exception cref="ArgumentNullException">Выбрасывается если logger равен null</exception>
-    public VerbalSensorChannel(GomeostasSystem gomeostasSystem, string baseFolderPath, string primarySensorsPath)
+    public VerbalSensorChannel(
+        GomeostasSystem gomeostasSystem,
+        string baseFolderPath,
+        string primarySensorsPath,
+        SensorChannelOptions options = null)
         : base(baseFolderPath, "")
     {
       try
       {
         _gomeostas = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
+        _options = options ?? SensorChannelOptions.Verbal;
 
         _primarySensorsPath = primarySensorsPath;
         LoadPrimarySensors(_primarySensorsPath);
 
-        // Инициализация деревьев и песочниц
-        WordTree = new SensorTree<int, char>("Words", baseFolderPath);
-        PhraseTree = new SensorTree<int, int>("Phrases", baseFolderPath);
-        WordSandbox = new SensorSandbox<string>("Words", baseFolderPath);
-        PhraseSandbox = new SensorSandbox<List<int>>("Phrases", baseFolderPath);
-        PhraseTextSandbox = new SensorSandbox<string>("PhrasesText", baseFolderPath);
+        if (_options.AtomicTokens)
+        {
+          AtomicWordTree = new SensorTree<int, int>(_options.WordsTreeName, baseFolderPath);
+          WordTree = null;
+        }
+        else
+        {
+          WordTree = new SensorTree<int, char>(_options.WordsTreeName, baseFolderPath);
+          AtomicWordTree = null;
+        }
+
+        PhraseTree = new SensorTree<int, int>(_options.PhrasesTreeName, baseFolderPath);
+        WordSandbox = new SensorSandbox<string>(_options.WordSandboxName, baseFolderPath);
+        PhraseSandbox = new SensorSandbox<List<int>>(_options.PhraseSandboxName, baseFolderPath);
+        PhraseTextSandbox = new SensorSandbox<string>(_options.PhraseTextSandboxName, baseFolderPath);
 
         LoadTrees();
         LoadSandboxes();
@@ -143,6 +158,29 @@ namespace ISIDA.Sensors
 
     private void LoadPrimarySensors(string filePath)
     {
+      if (_options.AtomicTokens)
+      {
+        _primaryTokens.Clear();
+        if (!File.Exists(filePath))
+          return;
+
+        foreach (var line in File.ReadAllLines(filePath))
+        {
+          if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
+
+          var parts = line.Split(new[] { "|#|" }, StringSplitOptions.None);
+          if (parts.Length != 2) continue;
+
+          var token = parts[0].Trim();
+          if (string.IsNullOrEmpty(token)) continue;
+
+          if (int.TryParse(parts[1].Trim(), out int id))
+            _primaryTokens[token] = id;
+        }
+
+        return;
+      }
+
       if (!File.Exists(filePath))
         throw new FileNotFoundException($"Файл первичных сенсоров не найден: {filePath}");
 
@@ -159,9 +197,7 @@ namespace ISIDA.Sensors
         if (symbol.Length != 1) continue;
 
         if (int.TryParse(parts[1].Trim(), out int id))
-        {
           _primarySensors[symbol[0]] = id;
-        }
       }
 
       if (_primarySensors.Count == 0)
@@ -172,7 +208,11 @@ namespace ISIDA.Sensors
     {
       try
       {
-        WordTree.Load();
+        if (_options.AtomicTokens)
+          AtomicWordTree.Load();
+        else
+          WordTree.Load();
+
         PhraseTree.Load();
       }
       catch
@@ -206,11 +246,13 @@ namespace ISIDA.Sensors
       _lock.EnterWriteLock();
       try
       {
-        // Очищаем деревья
-        WordTree.Clear();
+        if (_options.AtomicTokens)
+          AtomicWordTree.Clear();
+        else
+          WordTree.Clear();
+
         PhraseTree.Clear();
 
-        // Очищаем песочницы
         WordSandbox.Clear();
         PhraseSandbox.Clear();
         PhraseTextSandbox.Clear();
@@ -236,7 +278,6 @@ namespace ISIDA.Sensors
       if (_primarySensors.TryGetValue(symbol, out int id))
         return id;
 
-      // Фразы в дереве могут храниться с заглавной, а в первичных сенсорах — только строчные
       char lower = char.ToLowerInvariant(symbol);
       if (lower != symbol && _primarySensors.TryGetValue(lower, out id))
         return id;
@@ -254,65 +295,32 @@ namespace ISIDA.Sensors
 
     #endregion
 
-    #region Типы токенов
+    #region Внутренние операции со словами
 
-    /// <summary>
-    /// Определяет тип узла сенсорного дерева по строковому представлению токена.
-    /// </summary>
-    /// <param name="token">Строковый токен восприятия</param>
-    /// <returns><see cref="SensorNodeType.Command"/> для CAD-команд (sw:, pt:), иначе <see cref="SensorNodeType.Verbal"/></returns>
-    public static SensorNodeType GetTokenNodeType(string token)
+    private int FindWordBranchId(string word)
     {
-      if (string.IsNullOrWhiteSpace(token))
-        return SensorNodeType.Verbal;
-
-      if (token.StartsWith("sw:", StringComparison.OrdinalIgnoreCase)
-          || token.StartsWith("pt:", StringComparison.OrdinalIgnoreCase))
-        return SensorNodeType.Command;
-
-      return SensorNodeType.Verbal;
-    }
-
-    /// <summary>
-    /// Возвращает тип узла слова по его ID в дереве слов.
-    /// </summary>
-    /// <param name="wordId">ID слова в дереве</param>
-    /// <returns>Тип узла или <see cref="SensorNodeType.Verbal"/> если слово не найдено</returns>
-    private SensorNodeType GetWordNodeTypeFromId(int wordId)
-    {
-      if (!WordTreeFromID.TryGetValue(wordId, out var node))
-        return SensorNodeType.Verbal;
-
-      return node.NodeType;
-    }
-
-    /// <summary>
-    /// Определяет тип узла фразы по составу слов: если есть хотя бы один командный токен — Command, иначе Verbal.
-    /// </summary>
-    /// <param name="wordIds">Список ID слов фразы</param>
-    /// <param name="words">Необязательный список строковых токенов (если ID ещё не в дереве)</param>
-    /// <returns>Тип узла для дерева фраз</returns>
-    private SensorNodeType ResolvePhraseNodeType(IList<int> wordIds, IList<string> words = null)
-    {
-      if (wordIds != null)
+      if (_options.AtomicTokens)
       {
-        foreach (var wordId in wordIds)
-        {
-          if (wordId != 0 && GetWordNodeTypeFromId(wordId) == SensorNodeType.Command)
-            return SensorNodeType.Command;
-        }
+        if (!_primaryTokens.TryGetValue(word, out int primaryId))
+          return 0;
+
+        return AtomicWordTree.FindBranchInternal(new[] { primaryId });
       }
 
-      if (words != null)
+      return WordTree.FindBranchInternal(word);
+    }
+
+    private int AddWordBranch(string word)
+    {
+      if (_options.AtomicTokens)
       {
-        foreach (var word in words)
-        {
-          if (GetTokenNodeType(word) == SensorNodeType.Command)
-            return SensorNodeType.Command;
-        }
+        if (!_primaryTokens.TryGetValue(word, out int primaryId))
+          return 0;
+
+        return AtomicWordTree.AddBranch(new[] { primaryId });
       }
 
-      return SensorNodeType.Verbal;
+      return WordTree.AddBranch(word);
     }
 
     #endregion
@@ -332,9 +340,15 @@ namespace ISIDA.Sensors
       _lock.EnterReadLock();
       try
       {
-        var nodeType = GetTokenNodeType(word);
-        var existingId = WordTree.FindBranchInternal(word, nodeType);
-        return existingId != 0;
+        if (_options.AtomicTokens)
+        {
+          if (!_primaryTokens.ContainsKey(word))
+            return false;
+
+          return FindWordBranchId(word) != 0;
+        }
+
+        return FindWordBranchId(word) != 0;
       }
       finally
       {
@@ -347,27 +361,27 @@ namespace ISIDA.Sensors
     /// </summary>
     public int GetFirstSymbolFromWordId(int wordId)
     {
-      // Получаем слово по ID
-      var word = GetWordFromWordIdInternal(wordId);
-
-      if (string.IsNullOrEmpty(word))
-        return 0;
-
-      // Берем первый символ
-      char firstChar = word[0];
-
-      // Ищем его ID в первичных сенсорах
-      foreach (var line in File.ReadLines(_primarySensorsPath))
+      _lock.EnterReadLock();
+      try
       {
-        if (line.StartsWith("#")) continue;
-
-        var parts = line.Split(new[] { "|#|" }, StringSplitOptions.None);
-        if (parts.Length == 2 && parts[0].Trim() == firstChar.ToString())
+        if (_options.AtomicTokens)
         {
-          return int.Parse(parts[1]);
+          if (!AtomicWordTree.Nodes.TryGetValue(wordId, out var node))
+            return 0;
+
+          return node.Element;
         }
+
+        var word = GetWordFromWordIdInternal(wordId);
+        if (string.IsNullOrEmpty(word))
+          return 0;
+
+        return GetPrimarySensorId(word[0]);
       }
-      return 0;
+      finally
+      {
+        _lock.ExitReadLock();
+      }
     }
 
     /// <summary>
@@ -386,30 +400,27 @@ namespace ISIDA.Sensors
       _lock.EnterWriteLock();
       try
       {
-        var nodeType = GetTokenNodeType(word);
+        if (_options.AtomicTokens && !_primaryTokens.ContainsKey(word))
+          return null;
 
-        // Проверяем в дереве
-        var existingId = WordTree.FindBranchInternal(word, nodeType);
+        var existingId = FindWordBranchId(word);
         if (existingId != 0)
           return existingId;
 
-        // Фильтр мусора (только для вербальных токенов)
-        if (nodeType == SensorNodeType.Verbal && IsGarbageWord(word)) return null;
+        if (_options.FilterGarbageWords && IsGarbageWord(word)) return null;
 
-        // Авторитарный режим - сразу в дерево
         if (_authoritativeMode)
         {
-          var newId = WordTree.AddBranch(word, nodeType);
-          return newId;
+          var newId = AddWordBranch(word);
+          return newId != 0 ? newId : (int?)null;
         }
 
-        // Работа с песочницей
         bool isNew = WordSandbox.FindOrAdd(word, out int count);
         if (!isNew && count >= _recognitionThreshold)
         {
-          var newId = WordTree.AddBranch(word, nodeType);
+          var newId = AddWordBranch(word);
           WordSandbox.Remove(word);
-          return newId;
+          return newId != 0 ? newId : (int?)null;
         }
 
         return null;
@@ -422,23 +433,20 @@ namespace ISIDA.Sensors
 
     private bool IsGarbageWord(string word)
     {
-      // Одиночные не-буквы
       if (word.Length == 1 && !char.IsLetter(word[0]))
         return true;
 
-      // Слишком длинные "слова" (возможные ошибки склейки)
       if (word.Length > 50)
         return true;
 
-      // Регулярные выражения для типичного мусора
       var garbagePatterns = new[]
       {
-        @"\d{12,}",           // Очень длинные цифры (ID, хеш, timestamp)
-        @"[^\w\s]{4,}",      // 4+ спецсимволов подряд (но ..., !!! — разрешены)
-        @"(.)\1{5,}",        // 6+ повторений символа (аааааа, !!!!!!)
-        @"^[\W_]+$",         // Только символы, без букв/цифр (###, ---, ~~~)
-        @"^https?://",       // Ссылки
-        @"^www\.",           // Ссылки
+        @"\d{12,}",
+        @"[^\w\s]{4,}",
+        @"(.)\1{5,}",
+        @"^[\W_]+$",
+        @"^https?://",
+        @"^www\.",
     };
       foreach (var pattern in garbagePatterns)
       {
@@ -472,14 +480,23 @@ namespace ISIDA.Sensors
     /// </summary>
     internal string GetWordFromWordIdInternal(int wordId)
     {
-      if (!WordTreeFromID.TryGetValue(wordId, out var node))
+      if (_options.AtomicTokens)
+      {
+        if (!AtomicWordTree.Nodes.TryGetValue(wordId, out var node))
+          return string.Empty;
+
+        int primaryId = node.Element;
+        return _primaryTokens.FirstOrDefault(x => x.Value == primaryId).Key ?? string.Empty;
+      }
+
+      if (!WordTree.Nodes.TryGetValue(wordId, out var charNode))
         return string.Empty;
 
       var symbols = new Stack<char>();
-      while (node != null && node.Id != 0)
+      while (charNode != null && charNode.Id != 0)
       {
-        symbols.Push(node.Element);
-        node = node.Parent;
+        symbols.Push(charNode.Element);
+        charNode = charNode.Parent;
       }
 
       return new string(symbols.ToArray());
@@ -492,7 +509,9 @@ namespace ISIDA.Sensors
     internal Dictionary<int, string> GetAllWordsInternal()
     {
       var words = new Dictionary<int, string>();
-      var branchEndpoints = WordTree.GetBranchEndpointIds();
+      var branchEndpoints = _options.AtomicTokens
+          ? AtomicWordTree.GetBranchEndpointIds()
+          : WordTree.GetBranchEndpointIds();
 
       foreach (var id in branchEndpoints)
       {
@@ -530,19 +549,17 @@ namespace ISIDA.Sensors
     /// Находит ID фразы по точной последовательности ID слов.
     /// Вызывающий код должен удерживать read lock при вызове (используется из FindPhraseId).
     /// </summary>
-    private int FindExactPhraseIdInternal(List<int> wordIds, SensorNodeType phraseType)
+    private int FindExactPhraseIdInternal(List<int> wordIds)
     {
       if (wordIds == null || wordIds.Count == 0) return 0;
 
-      // Начинаем с корневого узла (ID = 0)
       if (!PhraseTreeFromID.TryGetValue(0, out var currentNode))
         return 0;
 
-      // Идем по пути из слов
       foreach (var wordId in wordIds)
       {
         var childNode = currentNode.Children
-            .FirstOrDefault(c => c.Element.Equals(wordId) && c.NodeType == phraseType);
+            .FirstOrDefault(c => c.Element.Equals(wordId));
 
         if (childNode == null)
           return 0;
@@ -550,21 +567,20 @@ namespace ISIDA.Sensors
         currentNode = childNode;
       }
 
-      // Возвращаем ID последнего узла в пути (даже если у него есть дети)
       return currentNode.Id;
     }
 
     /// <summary>
     /// Находит ID фразы по точной последовательности ID слов (с захватом блокировки).
     /// </summary>
-    private int FindExactPhraseId(List<int> wordIds, SensorNodeType phraseType)
+    private int FindExactPhraseId(List<int> wordIds)
     {
       if (wordIds == null || wordIds.Count == 0) return 0;
 
       _lock.EnterReadLock();
       try
       {
-        return FindExactPhraseIdInternal(wordIds, phraseType);
+        return FindExactPhraseIdInternal(wordIds);
       }
       finally
       {
@@ -601,9 +617,15 @@ namespace ISIDA.Sensors
         if (string.IsNullOrEmpty(firstWord))
           return 0;
 
-        char firstChar = firstWord[0];
+        if (_options.AtomicTokens)
+        {
+          if (_primaryTokens.TryGetValue(firstWord, out int primaryId))
+            return primaryId;
 
-        return GetPrimarySensorId(firstChar);
+          return 0;
+        }
+
+        return GetPrimarySensorId(firstWord[0]);
       }
       finally
       {
@@ -621,32 +643,25 @@ namespace ISIDA.Sensors
       if (phraseWords == null || !phraseWords.Any())
         return false;
 
-      // Сначала проверяем существование всех слов
       foreach (var word in phraseWords)
       {
         if (!WordExists(word))
           return false;
       }
 
-      // Конвертируем слова в их ID
       var wordIds = new List<int>();
       foreach (var word in phraseWords)
       {
-        var nodeType = GetTokenNodeType(word);
-        var id = WordTree.FindBranchInternal(word, nodeType);
+        var id = FindWordBranchId(word);
         if (id == 0)
           return false;
         wordIds.Add(id);
       }
 
-      var phraseType = ResolvePhraseNodeType(wordIds, phraseWords);
-
       _lock.EnterReadLock();
       try
       {
-        // Ищем фразу в дереве
-        var existingId = PhraseTree.FindBranchInternal(wordIds, phraseType);
-        return existingId != 0;
+        return PhraseTree.FindBranchInternal(wordIds) != 0;
       }
       finally
       {
@@ -664,7 +679,6 @@ namespace ISIDA.Sensors
       if (string.IsNullOrWhiteSpace(phraseText))
         return false;
 
-      // Разбиваем текст на слова
       var words = Regex.Matches(phraseText, @"(\S+)")
                      .Cast<Match>()
                      .Select(m => m.Value)
@@ -683,7 +697,6 @@ namespace ISIDA.Sensors
       if (string.IsNullOrWhiteSpace(phraseText))
         return 0;
 
-      // Разбиваем текст на слова
       var words = Regex.Matches(phraseText, @"(\S+)")
                      .Cast<Match>()
                      .Select(m => m.Value)
@@ -692,29 +705,23 @@ namespace ISIDA.Sensors
       if (words.Count == 0)
         return 0;
 
-      // Сначала проверяем существование всех слов
       var wordIds = new List<int>();
       foreach (var word in words)
       {
-        var nodeType = GetTokenNodeType(word);
-        var wordId = WordTree.FindBranchInternal(word, nodeType);
+        var wordId = FindWordBranchId(word);
         if (wordId == 0)
           return 0;
         wordIds.Add(wordId);
       }
 
-      var phraseType = ResolvePhraseNodeType(wordIds, words);
-
       _lock.EnterReadLock();
       try
       {
-        // СПОСОБ 1: Ищем точное совпадение по пути (Internal — уже удерживаем read lock)
-        var exactId = FindExactPhraseIdInternal(wordIds, phraseType);
+        var exactId = FindExactPhraseIdInternal(wordIds);
         if (exactId != 0)
           return exactId;
 
-        // СПОСОБ 2: Ищем среди конечных узлов (старая логика)
-        return PhraseTree.FindBranchInternal(wordIds, phraseType);
+        return PhraseTree.FindBranchInternal(wordIds);
       }
       finally
       {
@@ -738,28 +745,20 @@ namespace ISIDA.Sensors
       _lock.EnterWriteLock();
       try
       {
-        var phraseType = ResolvePhraseNodeType(wordIds);
-
-        // Проверяем в дереве
-        var existingId = PhraseTree.FindBranchInternal(wordIds, phraseType);
+        var existingId = PhraseTree.FindBranchInternal(wordIds);
         if (existingId != 0)
           return existingId;
 
-        //// Фильтр мусора
-        //if (IsGarbagePhrase(wordIds)) return null;
-
-        // Авторитарный режим - сразу в дерево
         if (_authoritativeMode)
         {
-          var newId = PhraseTree.AddBranch(wordIds, phraseType);
+          var newId = PhraseTree.AddBranch(wordIds);
           return newId;
         }
 
-        // Работа с песочницей
         bool isNew = PhraseSandbox.FindOrAdd(wordIds, out int count);
         if (!isNew && count >= _recognitionThreshold)
         {
-          var newId = PhraseTree.AddBranch(wordIds, phraseType);
+          var newId = PhraseTree.AddBranch(wordIds);
           PhraseSandbox.Remove(wordIds);
           return newId;
         }
@@ -771,19 +770,6 @@ namespace ISIDA.Sensors
         _lock.ExitWriteLock();
       }
     }
-
-    //private bool IsGarbagePhrase(List<int> wordIds)
-    //{
-    //  //// 1. Фразы из 1 слова (кроме исключений типа "Стоп!")
-    //  //if (wordIds.Count == 1 && GetFirstSymbolFromWordId(wordIds[0]) != 60 /* ! */)
-    //  //  return true;
-
-    //  // 2. Повторяющиеся слова ("да да да")
-    //  if (wordIds.Distinct().Count() < wordIds.Count)
-    //    return true;
-
-    //  return false;
-    //}
 
     /// <summary>
     /// Получает фразу по ее ID из дерева фраз
@@ -808,22 +794,18 @@ namespace ISIDA.Sensors
     /// </summary>
     internal string GetPhraseFromPhraseIdInternal(int phraseId)
     {
-      // Находим конечный узел фразы
       if (!PhraseTreeFromID.TryGetValue(phraseId, out var phraseNode))
         return string.Empty;
 
-      // Собираем цепочку слов В ПРАВИЛЬНОМ ПОРЯДКЕ
       var wordIds = new List<int>();
       var currentNode = phraseNode;
 
-      // Собираем все элементы от конечного узла до корня
       while (currentNode != null && currentNode.Id != 0)
       {
         wordIds.Add(currentNode.Element);
         currentNode = currentNode.Parent;
       }
 
-      // РАЗВОРАЧИВАЕМ список, потому что дерево хранит слова в обратном порядке
       wordIds.Reverse();
 
       var words = wordIds.Select(id => GetWordFromWordIdInternal(id));
@@ -890,14 +872,15 @@ namespace ISIDA.Sensors
       _lock.EnterWriteLock();
       try
       {
-        // Фаза 1: обработка слов (инлайн-логика ProcessWord без вложенных блокировок)
         var wordIdMap = new Dictionary<string, int>();
         foreach (var word in words)
         {
           if (string.IsNullOrWhiteSpace(word)) continue;
 
-          var nodeType = GetTokenNodeType(word);
-          var existingId = WordTree.FindBranchInternal(word, nodeType);
+          if (_options.AtomicTokens && !_primaryTokens.ContainsKey(word))
+            continue;
+
+          var existingId = FindWordBranchId(word);
           if (existingId != 0)
           {
             wordIdMap[word] = existingId;
@@ -905,11 +888,11 @@ namespace ISIDA.Sensors
             continue;
           }
 
-          if (nodeType == SensorNodeType.Verbal && IsGarbageWord(word)) continue;
+          if (_options.FilterGarbageWords && IsGarbageWord(word)) continue;
 
           if (_authoritativeMode)
           {
-            var newId = WordTree.AddBranch(word, nodeType);
+            var newId = AddWordBranch(word);
             if (newId != 0) wordIdMap[word] = newId;
             continue;
           }
@@ -917,20 +900,18 @@ namespace ISIDA.Sensors
           bool isNewWord = WordSandbox.FindOrAdd(word, out int wordCount);
           if (!isNewWord && wordCount >= _recognitionThreshold)
           {
-            var newId = WordTree.AddBranch(word, nodeType);
+            var newId = AddWordBranch(word);
             WordSandbox.Remove(word);
             if (newId != 0) wordIdMap[word] = newId;
           }
         }
 
-        // Фаза 2: обработка фраз (используем собранные ID из фазы 1)
         for (int i = 0; i < words.Count; i++)
         {
           for (int j = 1; j <= maxPhraseLength && i + j <= words.Count; j++)
           {
             var phraseSlice = words.Skip(i).Take(j).ToList();
             var phraseText = string.Join(" ", phraseSlice);
-            var phraseType = ResolvePhraseNodeType(null, phraseSlice);
 
             var wordIds = new List<int>();
             bool allResolved = true;
@@ -951,7 +932,7 @@ namespace ISIDA.Sensors
 
             if (!allResolved) continue;
 
-            var existingId = PhraseTree.FindBranchInternal(wordIds, phraseType);
+            var existingId = PhraseTree.FindBranchInternal(wordIds);
             if (existingId != 0)
             {
               PhraseTextSandbox.Remove(phraseText);
@@ -961,14 +942,14 @@ namespace ISIDA.Sensors
 
             if (_authoritativeMode)
             {
-              PhraseTree.AddBranch(wordIds, phraseType);
+              PhraseTree.AddBranch(wordIds);
               PhraseTextSandbox.Remove(phraseText);
               continue;
             }
 
             if (!isNew && textCount >= _recognitionThreshold)
             {
-              PhraseTree.AddBranch(wordIds, phraseType);
+              PhraseTree.AddBranch(wordIds);
               PhraseTextSandbox.Remove(phraseText);
               PhraseSandbox.Remove(wordIds);
             }
@@ -993,10 +974,8 @@ namespace ISIDA.Sensors
       if (string.IsNullOrWhiteSpace(text))
         return new List<int>();
 
-      // Сохраняем оригинальный режим
       bool originalMode = _authoritativeMode;
 
-      // Временно устанавливаем нужный режим
       if (authoritativeWrite)
         _authoritativeMode = true;
 
@@ -1006,7 +985,6 @@ namespace ISIDA.Sensors
       }
       finally
       {
-        // Восстанавливаем оригинальный режим
         _authoritativeMode = originalMode;
       }
     }
@@ -1020,13 +998,8 @@ namespace ISIDA.Sensors
       {
         var recognizedPhraseIds = new List<int>();
 
-        // Нормализуем входной текст
-        var inputTextNormalized = text.Trim().ToLower();
-
-        // обрабатываем текст (добавляем слова и фразы в дерево/песочницу)
         ProcessText(text, maxPhraseLength);
 
-        // Получаем ID слов для входного текста
         var words = Regex.Matches(text, @"(\S+)")
                        .Cast<Match>()
                        .Select(m => m.Value)
@@ -1035,17 +1008,14 @@ namespace ISIDA.Sensors
         var wordIds = new List<int>();
         foreach (var word in words)
         {
-          var nodeType = GetTokenNodeType(word);
-          var wordId = WordTree.FindBranchInternal(word, nodeType);
+          var wordId = FindWordBranchId(word);
           if (wordId != 0)
             wordIds.Add(wordId);
         }
 
-        // Ищем точное совпадение по пути (включая не-листовые узлы)
         if (wordIds.Count > 0)
         {
-          var phraseType = ResolvePhraseNodeType(wordIds, words);
-          var exactPhraseId = FindExactPhraseId(wordIds, phraseType);
+          var exactPhraseId = FindExactPhraseId(wordIds);
           if (exactPhraseId != 0)
           {
             recognizedPhraseIds.Add(exactPhraseId);
@@ -1053,7 +1023,6 @@ namespace ISIDA.Sensors
           }
         }
 
-        // Если точного совпадения нет, возвращаем пустой список
         return recognizedPhraseIds;
       }
       catch (Exception ex)
@@ -1098,6 +1067,7 @@ namespace ISIDA.Sensors
       try
       {
         WordTree?.Dispose();
+        AtomicWordTree?.Dispose();
         PhraseTree?.Dispose();
         WordSandbox?.Dispose();
         PhraseSandbox?.Dispose();
@@ -1108,7 +1078,7 @@ namespace ISIDA.Sensors
         base.Dispose();
       }
     }
-  }
 
-  #endregion
+    #endregion
+  }
 }

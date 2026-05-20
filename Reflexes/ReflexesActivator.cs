@@ -322,7 +322,7 @@ namespace ISIDA.Reflexes
       _reflexTree.ConditionsDetection(conditions);
 
       CollectReflexesForExecution();
-      bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, _activetStyleIds, null, null, 0, 0); // Тип 1 - изменение условий
+      bool psychicBlocked = _psychicSystem.SensorActivation(1, _activeCurBaseID, _activetStyleIds, null, null, null, 0, 0); // Тип 1 - изменение условий
       if (psychicBlocked)
       {
         Logger.Info("Рефлекс заблокирован психикой");
@@ -386,7 +386,7 @@ namespace ISIDA.Reflexes
           GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
         }
         CollectReflexesForExecution();
-        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, 0, 0); // Тип 2 - действие с пульта
+        bool psychicBlocked = _psychicSystem.SensorActivation(2, _activeCurBaseID, _activetStyleIds, actionIdList, null, null, 0, 0); // Тип 2 - действие с пульта
         if (psychicBlocked)
         {
           Logger.Info("Рефлекс заблокирован психикой");
@@ -466,7 +466,15 @@ namespace ISIDA.Reflexes
         _geneticReflexesToRun.Clear();
         GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
 
-        bool psychicBlocked = _psychicSystem.SensorActivation(3, _activeCurBaseID, _activetStyleIds, actionIdList, phraseIdList, toneId, moodId,
+        bool psychicBlocked = _psychicSystem.SensorActivation(
+            3,
+            _activeCurBaseID,
+            _activetStyleIds,
+            actionIdList,
+            phraseIdList,
+            _influenceActions.LastAppliedCadPatternIdList,
+            toneId,
+            moodId,
             _influenceActions.LastAppliedVisualColorId);
         if (psychicBlocked)
         {
