@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Sensors;
@@ -13,7 +13,7 @@ using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Система управления гомеостатическими целями агента
+  /// Система управления гомеостатическими целями симбионта
   /// </summary>
   public sealed class PurposeGeneticImageSystem: IDisposable
   {
@@ -344,7 +344,7 @@ namespace ISIDA.Psychic
         }
         else
         {
-          // если автоматизм протух, и состояние агента Bad, создаем новый на базе гомеостатических целей
+          // если автоматизм протух, и состояние симбионта Bad, создаем новый на базе гомеостатических целей
           if(atmz.Usefulness < 0)
           {
             if(AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad)

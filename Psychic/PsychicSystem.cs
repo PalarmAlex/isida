@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
@@ -270,7 +270,7 @@ namespace ISIDA.Psychic
     public int PulseCount { get; private set; } = 0;
 
     /// <summary>
-    /// Время жизни агента (в пульсах)
+    /// Время жизни симбионта (в пульсах)
     /// </summary>
     public int LifeTime { get; private set; } = 0;
 
@@ -471,7 +471,7 @@ namespace ISIDA.Psychic
         if (mirrorAutomatizm != null)
         {
           // TryCreateMirror выставляет trigger = узел фразы оператора; фактически же на этом пульсе может исполняться
-          // предпочтённый штатный автоматизм с другим ответом агента (напр. «все ОК» вместо повтора «как дела»).
+          // предпочтённый штатный автоматизм с другим ответом симбионта (напр. «все ОК» вместо повтора «как дела»).
           // Якорь следующего сдвига должен совпадать с узлом фразы ответа выполняемого автоматизма — иначе следующий
           // TryCreateMirror создаст Belief=2 на старом узле и перевяжет штат с ветки «как дела».
           if (AppGlobalState.EvolutionStage == 3 &&
@@ -578,7 +578,7 @@ namespace ISIDA.Psychic
     /// Активация по событиям с Пульта - основной метод
     /// </summary>
     /// <param name="activationType">Тип активации: 1-изменение условий, 2-действие, 3-фраза</param>
-    /// <param name="currentBaseId">ID состояния агента: -1: плохо, 0: норма, 1: хорошо</param>
+    /// <param name="currentBaseId">ID состояния симбионта: -1: плохо, 0: норма, 1: хорошо</param>
     /// <param name="stileIdList">список ID активных стилей</param>
     /// <param name="actionIdList">список ID действий с пульта</param>
     /// <param name="phraseIdList">список ID фраз с пульта</param>
@@ -755,7 +755,7 @@ namespace ISIDA.Psychic
             }
 
             // Стадия 3: перед запуском уже выученного автоматизма включить цикл зеркалирования — иначе RegisterOperatorResponse
-            // не примет следующий стимул оператора (требуется _dialogMirrorActive), цепочка «ответ агента → новый стимул» рвётся.
+            // не примет следующий стимул оператора (требуется _dialogMirrorActive), цепочка «ответ симбионта → новый стимул» рвётся.
             // Якорь следующего сдвига — узел фразы ответа выполняемого автоматизма (как в зеркале до визуального канала), иначе после «хай→как дела»
             // следующий ответ оператора ошибочно строился бы как сдвиг от узла «хай», а не «как дела».
             // Не вызывать, если на этом же стимуле уже поставлена отложенная оценка зеркала: иначе StartDialogMirror перезапишет якорь
@@ -1081,7 +1081,7 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Образ ответа агента (kind=1, adaptive act ids), по образцу стимула с пульта — аналогично зеркалу.
+    /// Образ ответа симбионта (kind=1, adaptive act ids), по образцу стимула с пульта — аналогично зеркалу.
     /// </summary>
     private int GetOrCreateAgentResponseActionsImageFromStimulusTemplate(int stimulusActionsImageId, List<int> responsePhraseIds)
     {
@@ -1405,7 +1405,7 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить ID узла дерева автоматизмов по вербальной и/или командной части образа действий (например ответа агента).
+    /// Получить ID узла дерева автоматизмов по вербальной и/или командной части образа действий (например ответа симбионта).
     /// Для сдвига после штатного автоматизма на ст. 3 см. <see cref="ApplyStage3MirrorContextBeforeExecute"/>.
     /// </summary>
     /// <param name="responseActionsImageId">ID образа действий (ответ автоматизма).</param>
@@ -1567,7 +1567,7 @@ namespace ISIDA.Psychic
             _automatismResultTracker.FinishTracking(trackingResult);
           }
 
-          // Триггер «Игнор агента»: негативный эффект моторного автоматизма — обновить тему и дерево проблем
+          // Триггер «Игнор симбионта»: негативный эффект моторного автоматизма — обновить тему и дерево проблем
           if (_understandingTreeSystem != null && _problemTreeSystem != null)
             _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 
@@ -1676,7 +1676,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Оценить предыдущий автоматизм по стимулу оператора. Вызывать только из <see cref="ProcessPsychicPulse"/> на пульсе после стимула (не из SensorActivation).
     /// </summary>
-    /// <param name="automatizmIdToEvaluate">ID автоматизма агента, на который отвечает оператор.</param>
+    /// <param name="automatizmIdToEvaluate">ID автоматизма симбионта, на который отвечает оператор.</param>
     /// <param name="lastRunPulseForResponseTime">
     /// Пульс, с которого считать время реакции оператора (снимок до StartWaiting нового автоматизма на пульсе стимула); 0 — взять из AppGlobalState.
     /// </param>
@@ -1737,7 +1737,7 @@ namespace ISIDA.Psychic
           responseTime,
           operatorResponseImageId);
 
-      // Триггер «Игнор агента»: негативный эффект при отрицательной оценке оператора
+      // Триггер «Игнор симбионта»: негативный эффект при отрицательной оценке оператора
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)
         _understandingTreeSystem.UpdateThemeByTriggerAndRefreshProblemTree(AgentEventsCatalog.Codes.AgentIgnore, _problemTreeSystem);
 

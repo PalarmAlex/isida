@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking;
@@ -117,7 +117,7 @@ namespace ISIDA.Psychic
     public bool ShouldRunSleepThinkingCycles =>
         SessionActive && (Phase == SleepPhase.Reprocessing || Phase == SleepPhase.Waking);
 
-    /// <summary>Фаза сновидения для событий агента (бывший IsSleepingDream).</summary>
+    /// <summary>Фаза сновидения для событий симбионта (бывший IsSleepingDream).</summary>
     public bool IsDreamReprocessingPhase => SessionActive && Phase == SleepPhase.Reprocessing;
 
     /// <summary>
@@ -140,7 +140,7 @@ namespace ISIDA.Psychic
         return;
       }
 
-      // Сохранённый сон из свойств агента без явного типа от таймера
+      // Сохранённый сон из свойств симбионта без явного типа от таймера
       if (!SessionActive && AppGlobalState.IsSleeping)
       {
         _preferDreamOnStart = false;

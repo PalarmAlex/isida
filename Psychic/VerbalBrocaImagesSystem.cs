@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ using static ISIDA.Psychic.Automatism.ActionsImagesSystem;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Система управления словесными образами агента
+  /// Система управления словесными образами симбионта
   /// </summary>
   public sealed class VerbalBrocaImagesSystem: IDisposable
   {
@@ -72,7 +72,7 @@ namespace ISIDA.Psychic
     private const string VerbalBrocaImageFileName = "verbal_broca_images";
 
     /// <summary>
-    /// Словесный образ агента ИИ
+    /// Словесный образ симбионта ИИ
     /// </summary>
     public class VerbalBrocaImage
     {

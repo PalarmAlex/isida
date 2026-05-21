@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Reflexes;
 using System;
@@ -120,7 +120,7 @@ namespace ISIDA.Scenarios
 
     /// <summary>
     /// Стадия, относительно которой проверяем доступность функций шагов: явная стадия перед запуском (0–5)
-    /// из шапки сценария или текущая стадия агента при «не менять стадию» (−1).
+    /// из шапки сценария или текущая стадия симбионта при «не менять стадию» (−1).
     /// </summary>
     private static int EffectiveEvolutionStageForValidation(ScenarioDocument doc)
     {
@@ -130,11 +130,11 @@ namespace ISIDA.Scenarios
       return AppGlobalState.EvolutionStage;
     }
 
-    /// <summary>Проверка перед запуском: документ, пульсация, живой агент.</summary>
+    /// <summary>Проверка перед запуском: документ, пульсация, живой симбионт.</summary>
     /// <param name="doc">Сценарий.</param>
     /// <param name="influenceActions">Справочник воздействий.</param>
     /// <param name="pulsationRunning">Состояние пульсации (из хоста, не синглтон таймера).</param>
-    /// <param name="agentIsDead">Агент мёртв (из хоста, не синглтон гомеостаза).</param>
+    /// <param name="agentIsDead">Симбионт мёртв (из хоста, не синглтон гомеостаза).</param>
     /// <returns>Сообщение об ошибке или <c>null</c>, если запуск допустим.</returns>
     public static string ValidateForRun(
         ScenarioDocument doc,
@@ -148,7 +148,7 @@ namespace ISIDA.Scenarios
       if (!pulsationRunning)
         return "Включите пульсацию перед запуском сценария.";
       if (agentIsDead)
-        return "Агент мёртв — запуск сценария невозможен.";
+        return "Симбионт мёртв — запуск сценария невозможен.";
       if (doc.Lines == null || doc.Lines.Count == 0)
         return "В сценарии нет ни одной строки.";
       return null;

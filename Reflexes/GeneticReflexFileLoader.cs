@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
@@ -353,7 +353,7 @@ namespace ISIDA.Reflexes
       level3 = new List<int>();
       if (string.IsNullOrWhiteSpace(triggerStr))
         return true;
-      // "Нет" = рефлекс без триггера, только состояние агента + комбинации стилей
+      // "Нет" = рефлекс без триггера, только состояние симбионта + комбинации стилей
       if (string.Equals(triggerStr.Trim(), "Нет", StringComparison.OrdinalIgnoreCase))
         return true;
       var influence = InfluenceActionSystem.Instance;

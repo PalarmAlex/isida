@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,7 +8,7 @@ using System.Threading;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Система образов команды агента (CommandChannel PhraseTree)
+  /// Система образов команды симбионта (CommandChannel PhraseTree)
   /// </summary>
   public sealed class CommandBrocaImagesSystem : IDisposable
   {
@@ -70,7 +70,7 @@ namespace ISIDA.Psychic
     private const string LegacyCadBrocaImageFileName = "cad_broca_images";
 
     /// <summary>
-    /// Образ команды агента ИИ
+    /// Образ команды симбионта ИИ
     /// </summary>
     public class CommandBrocaImage
     {

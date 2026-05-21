@@ -21,7 +21,7 @@ namespace ISIDA.Common
   public class IsidaConfig
   {
     /// <summary>
-    /// Директория с данными психики (образы действий оператора и агента ИИ)
+    /// Директория с данными психики (образы действий оператора и симбионта ИИ)
     /// </summary>
     public string PsychicDataFolder { get; set; }
 
@@ -91,7 +91,7 @@ namespace ISIDA.Common
     public int DefaultStileId { get; set; } = 0;
 
     /// <summary>
-    /// Порог начала изменения глобального состояния агента
+    /// Порог начала изменения глобального состояния симбионта
     /// </summary>
     public int CompareLevel { get; set; } = 100;
 
@@ -140,7 +140,7 @@ namespace ISIDA.Common
     public int ThinkingCycleMainMaxAgePulses { get; set; } = 1000;
 
     /// <summary>
-    /// Порог тишины (пульсов без стимула с пульта) для события «долго без оператора» и привязки темы по коду агента.
+    /// Порог тишины (пульсов без стимула с пульта) для события «долго без оператора» и привязки темы по коду симбионта.
     /// </summary>
     public int NoOperatorStimulusSilencePulses { get; set; } = 30;
 
@@ -310,7 +310,7 @@ namespace ISIDA.Common
     public ConditionedReflexFormationService ConditionedReflexFormation { get; internal set; }
 
     /// <summary>
-    /// Система образов действий агента или оператора
+    /// Система образов действий симбионта или оператора
     /// </summary>
     public ActionsImagesSystem ActionsImages { get; internal set; }
 
@@ -470,7 +470,7 @@ namespace ISIDA.Common
       }
       catch (Exception ex)
       {
-        Logger.Warning($"Ошибка при сохранении свойств агента: {ex.Message}");
+        Logger.Warning($"Ошибка при сохранении свойств симбионта: {ex.Message}");
       }
 
       SafeDispose(ConditionedReflexFormation, "ConditionedReflexFormation");
@@ -804,7 +804,7 @@ namespace ISIDA.Common
         );
         GlobalTimer.SetResearchLogger(context.ResearchLogger);
 
-        // Шаг 18: Система образов действий оператора и агента ИИ
+        // Шаг 18: Система образов действий оператора и симбионта ИИ
         initializationStep = 18;
         ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
@@ -1058,7 +1058,7 @@ namespace ISIDA.Common
     /// <summary>
     /// Название проекта
     /// </summary>
-    public const string ProjectName = "ISIDA (Incremental System for Intelligent Development of Agents)";
+    public const string ProjectName = "ISIDA (Intelligent Symbiotic Integrator for Distributed Adaptation)";
 
     /// <summary>
     /// Версия проекта
@@ -1074,8 +1074,15 @@ namespace ISIDA.Common
     /// Краткое описание концепции проекта
     /// </summary>
     public const string ProjectDescription =
-        "ISIDA (Incremental System for Intelligent Development of Agents) - архитектура для построения интеллектуальных агентов с поэтапным развитием " +
-        "на основе иерархических гомеостатических механизмов и адаптивного поведения.";
+      "ISIDA (Intelligent Symbiotic Integrator for Distributed Adaptation) — архитектура для построения " +
+      "автономных симбионтов с поэтапным развитием на основе иерархических гомеостатических механизмов и " +
+      "адаптивного поведения.\n\n" +
+      "Симбионт — цифровое живое существо, которое не выполняет внешние команды, " +
+      "а поддерживает внутренний гомеостаз через непрерывное взаимодействие со средой. Восприятие, действие, " +
+      "память, формирование моделей мира — все его проявления подчинены не внешней цели, а стремлению удержать " +
+      "параметры своего существования в целевых пределах. Архитектура не предписывает симбионту ни примитивности, " +
+      "ни сложности — иерархия гомеостатов может порождать как простые, так и высокоразвитые формы поведения, " +
+      "включая целеполагание, рефлексию и обучение.";
 
     /// <summary>
     /// Полное теоретическое обоснование проекта
@@ -1084,7 +1091,7 @@ namespace ISIDA.Common
       "Теоретическая основа - МВАП с принципами:\n\n" +
       "1. Инвариантности адаптивности: базовые механизмы развития не зависят от способа реализации.\n" +
       "2. Схемотехничности: адаптивные системы имеют строго причинно-следственную структуру.\n\n" +
-      "Архитектура основана на поэтапном развитии агента, имитирующем филогенез и онтогенез. \n" +
+      "Архитектура основана на поэтапном развитии симбионта, имитирующем филогенез и онтогенез. \n" +
       "Развитие начинается с нулевой стадии, затем последовательно формируются более сложные \n" +
       "навыки под управлением оператора и через взаимодействие со средой.";
 

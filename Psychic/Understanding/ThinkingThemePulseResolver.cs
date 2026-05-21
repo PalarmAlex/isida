@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ using System.Linq;
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Один раз на пульс: по стимулам предыдущего пульса (событие агента, воздействия с пульта) и текущему настроению
+  /// Один раз на пульс: по стимулам предыдущего пульса (событие симбионта, воздействия с пульта) и текущему настроению
   /// выбирает тип темы мышления: сначала максимальный вес темы, при равенстве — воздействие, затем событие, затем настроение.
   /// После выбора сбрасывает буферы стимулов в <see cref="AppGlobalState"/>.
   /// Тема мышления задаётся только со <see cref="AppGlobalState.EvolutionStage"/> ≥ 4 (как циклы мышления); на стадиях 1–3 резолвер не активен.
@@ -16,7 +16,7 @@ namespace ISIDA.Psychic.Understanding
   {
     private static int _noOperatorEventEmittedForLastPultPulse;
 
-    /// <summary>Конец пульса: зафиксировать события агента, которые должны попасть в буфер с номером текущего пульса (чтобы резолвер следующего пульса их увидел).</summary>
+    /// <summary>Конец пульса: зафиксировать события симбионта, которые должны попасть в буфер с номером текущего пульса (чтобы резолвер следующего пульса их увидел).</summary>
     public static void RecordEndOfPulseAgentEvents()
     {
       if (AppGlobalState.EvolutionStage < 4) return;
@@ -30,7 +30,7 @@ namespace ISIDA.Psychic.Understanding
         _noOperatorEventEmittedForLastPultPulse = lastPult;
     }
 
-    /// <summary>Вызывать в начале обработки пульса (до изменения состояния агента), с текущим GlobalPulsCount.</summary>
+    /// <summary>Вызывать в начале обработки пульса (до изменения состояния симбионта), с текущим GlobalPulsCount.</summary>
     public static void ResolveAtPulseStart(int currentPulse)
     {
       if (currentPulse <= 0) return;

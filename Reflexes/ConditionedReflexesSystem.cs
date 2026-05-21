@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -73,7 +73,7 @@ using static ISIDA.Common.FileValidator;
 namespace ISIDA.Reflexes
 {
   /// <summary>
-  /// Система управления условными рефлексами агента.
+  /// Система управления условными рефлексами симбионта.
   /// Активация по пусковому образу (<see cref="ConditionedReflex.Level3"/>) использует иерархию
   /// «полный / частичный стимул» через отношение подмножества на <see cref="PerceptionImagesSystem.PerceptionImage"/>  
   /// (обобщение по структуре образа). Это не отдельная ассоциативная сеть «стимул–стимул» в смысле
@@ -154,7 +154,7 @@ namespace ISIDA.Reflexes
     private const string ConditionedReflexSettingsFileName = "ConditionedReflexSettings";
 
     /// <summary>
-    /// Условный рефлекс агента
+    /// Условный рефлекс симбионта
     /// </summary>
     public class ConditionedReflex
     {
@@ -424,7 +424,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Получает текущее время жизни агента (кешированное значение)
+    /// Получает текущее время жизни симбионта (кешированное значение)
     /// Для внутреннего использования и доступа из класса ConditionedReflex
     /// </summary>
     internal int GetCurrentAgentLifetime()
@@ -1179,7 +1179,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Обновляет время жизни агента (вызывается из GlobalTimer при каждом пульсе)
+    /// Обновляет время жизни симбионта (вызывается из GlobalTimer при каждом пульсе)
     /// </summary>
   internal void UpdateAgentLifetime()
     {

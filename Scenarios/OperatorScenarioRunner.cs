@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
 using System;
@@ -215,7 +215,7 @@ namespace ISIDA.Scenarios
             var pult = _getPult();
             if (pult == null)
             {
-              Fail("Пульт агента недоступен (откройте вкладку агента).");
+              Fail("Пульт симбионта недоступен (откройте вкладку симбионта).");
               return;
             }
 

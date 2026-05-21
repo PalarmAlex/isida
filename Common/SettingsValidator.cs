@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -176,7 +176,7 @@ namespace ISIDA.Common
     #region Параметры гомеостаза
 
     /// <summary>
-    /// Валидация интегрального порога состояния агента
+    /// Валидация интегрального порога состояния симбионта
     /// </summary>
     /// <param name="value">Значение для валидации (int)</param>
     public static (bool isValid, string errorMessage) ValidateCompareLevel(int? value)
@@ -702,6 +702,51 @@ namespace ISIDA.Common
       {
         return false;
       }
+    }
+
+    /// <summary>
+    /// Создаёт каталоги проекта по дереву <see cref="GetProjectDirectoryTemplateRoot"/> (файлы в шаблоне пропускаются).
+    /// </summary>
+    /// <param name="projectRoot">Корень проекта данных.</param>
+    public static void EnsureProjectDirectoryStructure(string projectRoot)
+    {
+      if (string.IsNullOrWhiteSpace(projectRoot))
+        throw new ArgumentException("Корень проекта не задан.", nameof(projectRoot));
+
+      string rootFull = Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+      Directory.CreateDirectory(rootFull);
+
+      ProjectDirectoryTemplateNode templateRoot = GetProjectDirectoryTemplateRoot();
+      for (int i = 0; i < templateRoot.Children.Count; i++)
+        EnsureProjectDirectoryNode(rootFull, templateRoot.Children[i], null);
+    }
+
+    private static void EnsureProjectDirectoryNode(string projectRootFull, ProjectDirectoryTemplateNode node, string relativePath)
+    {
+      if (TemplateNodeLooksLikeFile(node.Name))
+        return;
+
+      string directoryPath = string.IsNullOrEmpty(relativePath)
+          ? Path.Combine(projectRootFull, node.Name)
+          : Path.Combine(projectRootFull, relativePath, node.Name);
+
+      Directory.CreateDirectory(directoryPath);
+
+      string childRelative = string.IsNullOrEmpty(relativePath)
+          ? node.Name
+          : Path.Combine(relativePath, node.Name);
+
+      for (int i = 0; i < node.Children.Count; i++)
+        EnsureProjectDirectoryNode(projectRootFull, node.Children[i], childRelative);
+    }
+
+    private static bool TemplateNodeLooksLikeFile(string name)
+    {
+      if (string.IsNullOrEmpty(name))
+        return true;
+
+      int dot = name.LastIndexOf('.');
+      return dot > 0 && dot < name.Length - 1;
     }
 
     #endregion

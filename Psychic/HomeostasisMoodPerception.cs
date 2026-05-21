@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 
@@ -14,8 +14,8 @@ namespace ISIDA.Psychic
     /// Интегральное настроение по текущему снимку гомеостаза: боль/радость, интегральное состояние, взвешенные Bad/Well.
     /// </summary>
     /// <param name="agentState">Результат <c>CalculateAgentState</c> на этом пульсе.</param>
-    /// <param name="painValue">Величина боли агента (как в состоянии гомеостаза).</param>
-    /// <param name="joyValue">Величина радости агента.</param>
+    /// <param name="painValue">Величина боли симбионта (как в состоянии гомеостаза).</param>
+    /// <param name="joyValue">Величина радости симбионта.</param>
     /// <param name="overallState">Интегральное состояние (уже выставлено в <c>CalculateAgentState</c>).</param>
     /// <returns>Значение в диапазоне −10…+10.</returns>
     public static int EstimateMood(

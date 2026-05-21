@@ -1,6 +1,6 @@
-namespace ISIDA.Psychic.Thinking
+﻿namespace ISIDA.Psychic.Thinking
 {
-  /// <summary>Снимок полей цикла мышления до снятия по подтверждённой полезности решения (для агентного лога).</summary>
+  /// <summary>Снимок полей цикла мышления до снятия по подтверждённой полезности решения (для симбионтного лога).</summary>
   public sealed class MainThinkingCycleClosedLogPayload
   {
     /// <summary>Создаёт снимок полей цикла.</summary>

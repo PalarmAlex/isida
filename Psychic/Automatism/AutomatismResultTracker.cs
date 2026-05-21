@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
@@ -152,12 +152,12 @@ namespace ISIDA.Psychic
       public int StimulusImageId { get; set; }
 
       /// <summary>
-      /// Предыдущее глобальное состояние агента
+      /// Предыдущее глобальное состояние симбионта
       /// </summary>
       public AppGlobalState.HomeostasisState PreviousState { get; set; }
 
       /// <summary>
-      /// Текущее глобальное состояние агента после выполнения
+      /// Текущее глобальное состояние симбионта после выполнения
       /// </summary>
       public AppGlobalState.HomeostasisState CurrentState { get; set; }
 

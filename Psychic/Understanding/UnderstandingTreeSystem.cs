@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -179,7 +179,7 @@ namespace ISIDA.Psychic.Understanding
     }
 
     /// <summary>
-    /// Обновить тему мышления по коду события агента (<see cref="AgentEventsCatalog.Codes"/>).
+    /// Обновить тему мышления по коду события симбионта (<see cref="AgentEventsCatalog.Codes"/>).
     /// Возвращает ID образа темы; при отсутствии привязки используется тема по умолчанию.
     /// Вызывается при активации дерева понимания и из модулей (например, <see cref="AgentEventsCatalog.Codes.AgentIgnore"/>, <see cref="AgentEventsCatalog.Codes.HighObjectImportance"/>).
     /// </summary>

@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
 using System;
@@ -19,7 +19,7 @@ using static ISIDA.Gomeostas.GomeostasSystem;
 namespace ISIDA.Actions
 {
   /// <summary>
-  /// Система управления адаптивными действиями агента
+  /// Система управления адаптивными действиями симбионта
   /// </summary>
   public sealed class AdaptiveActionsSystem : IDisposable
   {
@@ -93,7 +93,7 @@ namespace ISIDA.Actions
         Path.Combine(_actionsFolderPath, $"{ActionsFileName}.dat");
 
     /// <summary>
-    /// Представляет адаптивное действие агента
+    /// Представляет адаптивное действие симбионта
     /// </summary>
     public class AdaptiveAction
     {

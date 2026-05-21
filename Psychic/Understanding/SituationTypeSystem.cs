@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -132,7 +132,7 @@ namespace ISIDA.Psychic.Understanding
       return rec.ThemeTypeId;
     }
 
-    /// <summary>ThemeTypeId по коду события агента (слоты 1–20: EventAgentCode или совпадение Id с кодом для совместимости).</summary>
+    /// <summary>ThemeTypeId по коду события симбионта (слоты 1–20: EventAgentCode или совпадение Id с кодом для совместимости).</summary>
     public int GetThemeTypeIdByAgentEventCode(int eventCode)
     {
       if (eventCode <= 0) return 0;
@@ -374,7 +374,7 @@ namespace ISIDA.Psychic.Understanding
         if (r.Id >= 1 && r.Id <= 20)
         {
           if (r.EventAgentCode <= 0)
-            return (false, $"Слот события {r.Id}: выбрана тема (ThemeTypeId={r.ThemeTypeId}), но не задан код события агента. Укажите событие или сбросьте тему (—).");
+            return (false, $"Слот события {r.Id}: выбрана тема (ThemeTypeId={r.ThemeTypeId}), но не задан код события симбионта. Укажите событие или сбросьте тему (—).");
         }
         else if (r.Id >= 21 && r.Id <= 40)
         {

@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -73,7 +73,7 @@ namespace ISIDA.Psychic.Automatism
     private const string InfluenceActionsImagesFileName = "influence_action_images";
 
     /// <summary>
-    /// Образ действий оператора или агента ИИ
+    /// Образ действий оператора или симбионта ИИ
     /// </summary>
     public class InfluenceActionsImage
     {

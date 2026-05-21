@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking.Strategies;
@@ -46,7 +46,7 @@ namespace ISIDA.Psychic.Thinking
     /// <summary>Сигнатура последней «типовой» строки лога по циклу — не дублировать при неизменном исходе.</summary>
     private readonly Dictionary<int, string> _lastCondensedLogDigestByCycleId = new Dictionary<int, string>();
 
-    /// <summary>Уведомление перед снятием цикла с подтверждённым решением (полезность ≥ 1): для агентного лога/UI до удаления экземпляра.</summary>
+    /// <summary>Уведомление перед снятием цикла с подтверждённым решением (полезность ≥ 1): для симбионтного лога/UI до удаления экземпляра.</summary>
     private Action<int, MainThinkingCycleClosedLogPayload> _onMainCycleClosedAfterConfirmedSolution;
 
     /// <summary>Базовый вес главного цикла при создании (фоновый наследует его после демоута).</summary>

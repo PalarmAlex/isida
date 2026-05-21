@@ -1,20 +1,20 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
-  /// Фиксированный справочник событий агента (Id, Name). В файл не сохраняется.
+  /// Фиксированный справочник событий симбионта (Id, Name). В файл не сохраняется.
   /// Числовые коды в логике резолва образа ситуации и триггеров темы должны совпадать с <see cref="Codes"/>.
   /// Ввод с пульта (настроение, воздействия) в движке идёт через слоты 21–60, а не через отдельные коды 6–7 резолвера.
   /// </summary>
   public static class AgentEventsCatalog
   {
-    /// <summary>Коды событий агента (Id в справочнике). Использовать вместо «магических» чисел.</summary>
+    /// <summary>Коды событий симбионта (Id в справочнике). Использовать вместо «магических» чисел.</summary>
     public static class Codes
     {
-      /// <summary>Действие агента</summary>
+      /// <summary>Действие симбионта</summary>
       public const int ResponseAction = 1;
       /// <summary>Автоматизм в ветке</summary>
       public const int AutomatizmInBranch = 2;
@@ -26,7 +26,7 @@ namespace ISIDA.Psychic.Understanding
       public const int OperatorIgnore = 5;
       /// <summary>Стимул с пульта (привязка темы в слотах событий)</summary>
       public const int PultStimulus = 6;
-      /// <summary>Игнор агента</summary>
+      /// <summary>Игнор симбионта</summary>
       public const int AgentIgnore = 7;
       /// <summary>Высокая значимость объекта</summary>
       public const int HighObjectImportance = 8;
@@ -55,13 +55,13 @@ namespace ISIDA.Psychic.Understanding
 
     private static readonly IReadOnlyList<Entry> Catalog = new List<Entry>
     {
-      new Entry(Codes.ResponseAction, "Действие агента"),
+      new Entry(Codes.ResponseAction, "Действие симбионта"),
       new Entry(Codes.AutomatizmInBranch, "Автоматизм в ветке"),
       new Entry(Codes.NeedThinking, "Нужно мышление"),
       new Entry(Codes.Experiment, "Эксперимент"),
       new Entry(Codes.OperatorIgnore, "Игнор оператора"),
       new Entry(Codes.PultStimulus, "Стимул с пульта"),
-      new Entry(Codes.AgentIgnore, "Игнор агента"),
+      new Entry(Codes.AgentIgnore, "Игнор симбионта"),
       new Entry(Codes.HighObjectImportance, "Высокая значимость объекта"),
       new Entry(Codes.NoOperatorStimulusLong, "Длительное отсутствие стимула оператора"),
       new Entry(Codes.PassiveReprocessing, "Пассивная переобработка")

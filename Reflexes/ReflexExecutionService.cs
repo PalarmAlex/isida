@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
 using System;
@@ -360,12 +360,12 @@ namespace ISIDA.Reflexes
     #region Свойства состояний
 
     /// <summary>
-    /// Текущий образ сочетаний действий агента
+    /// Текущий образ сочетаний действий симбионта
     /// </summary>
     public List<int> ActivedTerminalImage { get; private set; } = new List<int>();
 
     /// <summary>
-    /// Предыдущий образ сочетаний действий агента
+    /// Предыдущий образ сочетаний действий симбионта
     /// </summary>
     public List<int> OldActivedTerminalImage { get; private set; } = new List<int>();
 

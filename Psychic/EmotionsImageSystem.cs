@@ -1,4 +1,4 @@
-using ISIDA.Psychic.Automatism;
+﻿using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ using System.Threading;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Система управления эмоциями агента
+  /// Система управления эмоциями симбионта
   /// </summary>
   public sealed class EmotionsImageSystem : IDisposable
   {
@@ -72,7 +72,7 @@ namespace ISIDA.Psychic
     private const string EmotionsImageFileName = "emotions_images";
 
     /// <summary>
-    /// Образ эмоций агента ИИ
+    /// Образ эмоций симбионта ИИ
     /// </summary>
     public class EmotionsImage
     {

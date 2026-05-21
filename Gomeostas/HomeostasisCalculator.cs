@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -482,7 +482,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Рассчитывает общее состояние гомеостаза агента с учётом динамики и гистерезиса
+    /// Рассчитывает общее состояние гомеостаза симбионта с учётом динамики и гистерезиса
     /// Использует относительные пороги вместо абсолютных для корректной работы с любым количеством параметров
     /// </summary>
     /// <param name="parameters">Коллекция параметров гомеостаза</param>
@@ -491,7 +491,7 @@ namespace ISIDA.Gomeostas
     /// <param name="lastWellStatePulse">Время в пульсах последнего перехода в состояние Well (для гистерезиса)</param>
     /// <param name="relativeThreshold">Относительный порог активации состояния (0-1). 
     /// Например, 0.3 означает, что состояние активируется при 30% от максимально возможного отклонения</param>
-    /// <returns>Состояние гомеостаза агента</returns>
+    /// <returns>Состояние гомеостаза симбионта</returns>
     public AgentHomeostasisState CalculateAgentState(
         IEnumerable<ParameterData> parameters,
         int dynamicTime,

@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -8,7 +8,7 @@ using System.Threading;
 namespace ISIDA.Sensors
 {
   /// <summary>
-  /// Представляет систему сенсорного восприятия агента
+  /// Представляет систему сенсорного восприятия симбионта
   /// </summary>
   public sealed class SensorySystem : IDisposable
   {

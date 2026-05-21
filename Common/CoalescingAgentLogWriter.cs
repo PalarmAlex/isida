@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 
 namespace ISIDA.Common
 {
   /// <summary>
-  /// Сливает несколько агентных строк <see cref="ResearchLogger"/> с одним глобальным пульсом в один снимок для UI
+  /// Сливает несколько симбионтных строк <see cref="ResearchLogger"/> с одним глобальным пульсом в один снимок для UI
   /// (аналогично <c>ScenarioLogComparer.AggregateByPulse</c>). После каждого входящего снимка вызывает <see cref="ILogWriter.WriteLog"/>
   /// с уже объединённым состоянием — приёмник должен заменять последнюю строку того же пульса, а не только добавлять.
   /// Полный лог для отчётов сценария остаётся на отдельном <see cref="ILogWriter"/> без этого обёртки.
@@ -19,7 +19,7 @@ namespace ISIDA.Common
     private PendingRow _pending;
 
     /// <summary>
-    /// Создаёт обёртку, передающую объединённые агентные строки во внутренний писатель.
+    /// Создаёт обёртку, передающую объединённые симбионтные строки во внутренний писатель.
     /// </summary>
     /// <param name="inner">Приёмник после слияния по пульсу (например UI с заменой строки при том же <c>pulse</c>).</param>
     public CoalescingAgentLogWriter(ILogWriter inner)
@@ -92,7 +92,7 @@ namespace ISIDA.Common
       }
     }
 
-    /// <remarks>Не используется для канала отображения агента; полные логи параметров идут в основной <see cref="ILogWriter"/>.</remarks>
+    /// <remarks>Не используется для канала отображения симбионта; полные логи параметров идут в основной <see cref="ILogWriter"/>.</remarks>
     public void WriteParameterLog(int pulse, int paramId, string paramName, int weight,
         int normaWell, int speed, float value, float urgencyFunction,
         string parameterState, string activationZone)

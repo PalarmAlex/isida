@@ -1,4 +1,4 @@
-using ISIDA.Psychic;
+﻿using ISIDA.Psychic;
 using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
@@ -199,7 +199,7 @@ namespace ISIDA.Reflexes
     // Список выполненных ID рефлексов в текущей цепочке
     private readonly List<int> _completedReflexesInChain = new List<int>();
 
-    // Флаг режима сна агента
+    // Флаг режима сна симбионта
     private bool _isSleeping = false;
 
     private readonly List<int> _geneticReflexesToRun = new List<int>();       // Список безусловных рефлексов для выполнения

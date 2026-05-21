@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Thinking;
@@ -95,9 +95,9 @@ namespace ISIDA.Common
     /// </summary>
     public bool IsDisposed => _disposed;
 
-    // Писатель в память (для UI) — полные строки агента (отчёты сценариев, отладка)
+    // Писатель в память (для UI) — полные строки симбионта (отчёты сценариев, отладка)
     private static ILogWriter _memoryLogWriter;
-    /// <summary>Опционально: сжатый канал агентного лога для отображения (например <see cref="CoalescingAgentLogWriter"/>).</summary>
+    /// <summary>Опционально: сжатый канал симбионтного лога для отображения (например <see cref="CoalescingAgentLogWriter"/>).</summary>
     private static ILogWriter _displayLogWriter;
 
     private Dictionary<string, object> _currentPulseLogEntry = null;
@@ -106,7 +106,7 @@ namespace ISIDA.Common
     /// <summary>Глобальный номер пульса при постановке в буфер — только для условия сброса буфера (не смешивать с correctPulse).</summary>
     private int _bufferedRawPulse = -1;
 
-    /// <summary>Отпечаток последней записанной строки агент-лога (без Время/Пульс), чтобы не писать подряд дубли с тем же содержимым колонок.</summary>
+    /// <summary>Отпечаток последней записанной строки симбионт-лога (без Время/Пульс), чтобы не писать подряд дубли с тем же содержимым колонок.</summary>
     private string _lastWrittenAgentLogFingerprint;
 
     // Логирование цепочек
@@ -604,14 +604,14 @@ namespace ISIDA.Common
       _memoryLogWriter = logWriter;
     }
 
-    /// <summary>Канал только для агентных строк (тот же вызов, что и в полный лог). Параметры/стили не дублируются.</summary>
+    /// <summary>Канал только для симбионтных строк (тот же вызов, что и в полный лог). Параметры/стили не дублируются.</summary>
     public void SetDisplayLogWriter(ILogWriter logWriter)
     {
       _displayLogWriter = logWriter;
     }
 
     /// <summary>
-    /// Отдельная строка агентного лога: цикл снят после подтверждения полезности решения (до смены главного в <see cref="AppGlobalState"/>).
+    /// Отдельная строка симбионтного лога: цикл снят после подтверждения полезности решения (до смены главного в <see cref="AppGlobalState"/>).
     /// Метод <c>ThinkingCycleClosed</c> обходит <see cref="CoalescingAgentLogWriter"/>-слияние с обычным <c>LogSystemState</c> на том же пульсе.
     /// </summary>
     /// <param name="globalPulse">Глобальный номер пульса.</param>
@@ -826,7 +826,7 @@ namespace ISIDA.Common
       if (state.CurrentAutomatizmID.HasValue)
         AppGlobalState.LastTriggerStimulusID = 0;
 
-      // Иерархия активации: при выбранном автоматизме рефлексы «найдены» в активаторе, но в агентной строке не показываем
+      // Иерархия активации: при выбранном автоматизме рефлексы «найдены» в активаторе, но в симбионтной строке не показываем
       // (как для триггера — см. GetCurrentTriggerImageID). Иначе в логе и отчёте смешиваются уровни.
       bool reflexSuppressedByAutomatizm =
           state.CurrentAutomatizmID.HasValue && state.CurrentAutomatizmID.Value > 0;
@@ -1217,7 +1217,7 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Сбрасывает буфер текущего пульса в CSV/JSONL и в память (UI) сразу, без ожидания следующего пульса.
-    /// Нужен для отчётов сценария: иначе последняя строка агента оказывается в буфере до начала следующего пульса.
+    /// Нужен для отчётов сценария: иначе последняя строка симбионта оказывается в буфере до начала следующего пульса.
     /// Не очищает <see cref="_chainInfoByPulse"/> (в отличие от <see cref="Flush"/>).
     /// </summary>
     public void FlushBufferedAgentRowToMemoryNow()

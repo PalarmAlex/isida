@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
@@ -19,7 +19,7 @@ using static ISIDA.Psychic.InformationEnvironmentSystem;
 namespace ISIDA.Gomeostas
 {
   /// <summary>
-  /// Система управления гомеостазом агента
+  /// Система управления гомеостазом симбионта
   /// </summary>
   public sealed class GomeostasSystem : IDisposable
   {
@@ -91,7 +91,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установка сервиса переключения стадий развития агента
+    /// Установка сервиса переключения стадий развития симбионта
     /// </summary>
     public void SetEvolutionStageService(EvolutionStageService service)
     {
@@ -112,7 +112,7 @@ namespace ISIDA.Gomeostas
     /// Инициализирует глобальный экземпляр системы гомеостаза с указанными путями.
     /// Должен быть вызван один раз при старте приложения.
     /// </summary>
-    /// <param name="informationEnvironmentSystem">Система управления инфо-картиной агента</param>
+    /// <param name="informationEnvironmentSystem">Система управления инфо-картиной симбионта</param>
     /// <param name="gomeostasFolderPath">Путь к каталогу данных гомеостаза. Если null, используется путь по умолчанию.</param>
     public static void InitializeInstance(InformationEnvironmentSystem informationEnvironmentSystem, string gomeostasFolderPath = null)
     {
@@ -176,7 +176,7 @@ namespace ISIDA.Gomeostas
     internal bool HasCriticalChanges = false;
 
     /// <summary>
-    /// Обновляет на каждом пульсе состояние агента (параметры, стили, время и т.п.) без активации реакций.
+    /// Обновляет на каждом пульсе состояние симбионта (параметры, стили, время и т.п.) без активации реакций.
     /// </summary>
     internal void UpdateStateOnly()
     {
@@ -185,7 +185,7 @@ namespace ISIDA.Gomeostas
       {
         if (_agentState.IsDead)
         {
-          Logger.Warning("Агент уже мертв, обновление невозможно");
+          Logger.Warning("Симбионт уже мертв, обновление невозможно");
           return;
         }
 
@@ -680,7 +680,7 @@ namespace ISIDA.Gomeostas
     /// (жадный выбор по возрастанию ID — детерминированно, как при ручной правке).
     /// ID &lt; 0 (деактивации в списке) не участвуют в проверке антагонистов и сохраняются в начале списка.
     /// </summary>
-    /// <param name="parameters">Параметры для правки; null — все параметры текущего агента из состояния.</param>
+    /// <param name="parameters">Параметры для правки; null — все параметры текущего симбионта из состояния.</param>
     /// <returns>Число удалённых вхождений положительных ID стилей из зон (с учётом дубликатов).</returns>
     public int FixParameterStyleActivationConflicts(IEnumerable<ParameterData> parameters = null)
     {
@@ -752,8 +752,8 @@ namespace ISIDA.Gomeostas
     private const string StylesFileName = "BehaviorStyles";
     private const string AgentParametersFileName = "VitalParameters";
     private const string AgentPropertiesFileName = "AgentProperties";
-    private const string DefaultAgentName = "Агент";
-    private const string DefaultAgentDescription = "Простой агент";
+    private const string DefaultAgentName = "Симбионт";
+    private const string DefaultAgentDescription = "Простой симбионт";
     /// <summary>Разделитель строк в однострочном представлении многострочного текста в файле (U+2028 LINE SEPARATOR).</summary>
     private const string MultilinePlaceholder = "\u2028";
     internal string GomeostasFolderPath;
@@ -765,7 +765,7 @@ namespace ISIDA.Gomeostas
         Path.Combine(GomeostasFolderPath, $"{AgentPropertiesFileName}.dat");
 
     /// <summary>
-    /// Получает словарь всех поведенческих стилей агента (для внутреннего использования)
+    /// Получает словарь всех поведенческих стилей симбионта (для внутреннего использования)
     /// </summary>
     internal ReadOnlyDictionary<int, BehaviorStyle> InternalBehaviorStyles
     {
@@ -794,7 +794,7 @@ namespace ISIDA.Gomeostas
     public int PulseCount { get; set; }
 
     /// <summary>
-    /// Стиль поведения агента
+    /// Стиль поведения симбионта
     /// </summary>
     public class BehaviorStyle
     {
@@ -1026,7 +1026,7 @@ namespace ISIDA.Gomeostas
 
       /// <summary>
       /// Флаг, указывающий что параметр является жизненно важным
-      /// Критические мин/макс значения только таких параметров могут вызвать "смерть" агента
+      /// Критические мин/макс значения только таких параметров могут вызвать "смерть" симбионта
       /// </summary>
       public bool IsVital { get; set; } = false;
 
@@ -1183,7 +1183,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Состояние агента
+    /// Состояние симбионта
     /// </summary>
     private class AgentState
     {
@@ -1194,12 +1194,12 @@ namespace ISIDA.Gomeostas
       public int LastBehaviorStylesId { get; set; }
 
       /// <summary>
-      /// Жизненные параметры агента
+      /// Жизненные параметры симбионта
       /// </summary>
       public List<ParameterData> Parameters = new List<ParameterData>();
 
       /// <summary>
-      /// Стили поведения агента
+      /// Стили поведения симбионта
       /// </summary>
       public Dictionary<int, BehaviorStyle> BehaviorStyles { get; } = new Dictionary<int, BehaviorStyle>();
 
@@ -1209,12 +1209,12 @@ namespace ISIDA.Gomeostas
       public DateTime LastUpdated;
 
       /// <summary>
-      ///  Имя агента
+      ///  Имя симбионта
       /// </summary>
       public string Name { get; set; }
 
       /// <summary>
-      /// Описание агента
+      /// Описание симбионта
       /// </summary>
       public string Description { get; set; }
 
@@ -1224,7 +1224,7 @@ namespace ISIDA.Gomeostas
       public int PriorityParameterId { get; set; }
 
       /// <summary>
-      /// Время жизни агента в пульсах
+      /// Время жизни симбионта в пульсах
       /// </summary>
       public int Lifetime { get; set; }
 
@@ -1260,7 +1260,7 @@ namespace ISIDA.Gomeostas
       public int JoyValue { get; set; }
 
       /// <summary>
-      /// Флаг смерти агента (повреждения > 99%)
+      /// Флаг смерти симбионта (повреждения > 99%)
       /// </summary>
       public bool IsDead { get; set; }
 
@@ -1302,11 +1302,11 @@ namespace ISIDA.Gomeostas
       public int? LastWellStatePulse { get; set; } = null;
 
       /// <summary>
-      /// Флаг первого пульса агента
+      /// Флаг первого пульса симбионта
       /// </summary>
       public bool IsFirstPulse { get; set; } = true;
 
-      // Расширенные свойства агента (форма «Свойства агента»)
+      // Расширенные свойства симбионта (форма «Свойства симбионта»)
       public string BaseArchetype { get; set; }
       public List<string> BaseArchetypeValues { get; set; } = new List<string>();
       public string KeyMotivation { get; set; }
@@ -1332,12 +1332,12 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Представляет интегральное состояние гомеостаза агента
+    /// Представляет интегральное состояние гомеостаза симбионта
     /// </summary>
     public class AgentHomeostasisState
     {
       /// <summary>
-      ///  Интегральное состояние агента
+      ///  Интегральное состояние симбионта
       /// </summary>
       public HomeostasisOverallState OverallState { get; set; }
       /// <summary>
@@ -1349,7 +1349,7 @@ namespace ISIDA.Gomeostas
       /// </summary>
       public float WellSum { get; set; }
       /// <summary>
-      ///  Список состояний всех параметров агента
+      ///  Список состояний всех параметров симбионта
       /// </summary>
       public List<ParameterStateInfo> ParametersState { get; set; }
 
@@ -1365,25 +1365,25 @@ namespace ISIDA.Gomeostas
     public class ParameterStateInfo
     {
       /// <summary>
-      /// Состояние параметра гомеостаза агента
+      /// Состояние параметра гомеостаза симбионта
       /// </summary>
       public ParameterState State { get; set; }
       /// <summary>
-      /// Значение параметра гомеостаза агента
+      /// Значение параметра гомеостаза симбионта
       /// </summary>
       public float Value { get; set; }
       /// <summary>
-      /// ID параметра гомеостаза агента
+      /// ID параметра гомеостаза симбионта
       /// </summary>
       public int ParameterId { get; set; }
       /// <summary>
-      /// Имя параметра гомеостаза агента
+      /// Имя параметра гомеостаза симбионта
       /// </summary>
       public string ParameterName { get; set; }
     }
 
     /// <summary>
-    /// Общее состояние гомеостаза агента
+    /// Общее состояние гомеостаза симбионта
     /// </summary>
     public enum HomeostasisOverallState
     {
@@ -1462,7 +1462,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Порог начала изменения глобального состояния агента
+    /// Порог начала изменения глобального состояния симбионта
     /// </summary>
     public int CompareLevel
     {
@@ -1549,7 +1549,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установка стадии развития агента
+    /// Установка стадии развития симбионта
     /// </summary>
     public EvolutionStageService EvolutionStageService
     {
@@ -1560,62 +1560,62 @@ namespace ISIDA.Gomeostas
     #endregion
 
     /// <summary>
-    /// Информация о состоянии агента
+    /// Информация о состоянии симбионта
     /// </summary>
     public class AgentStateInfo
     {
       /// <summary>
-      ///  Имя агента
+      ///  Имя симбионта
       /// </summary>
       public string Name { get; set; }
 
       /// <summary>
-      /// Описание агента
+      /// Описание симбионта
       /// </summary>
       public string Description { get; set; }
 
       /// <summary>
-      /// Флаг, указывающий находится ли агент в состоянии сна
+      /// Флаг, указывающий находится ли симбионт в состоянии сна
       /// </summary>
       public bool IsSleeping { get; set; }
 
       /// <summary>
-      /// Флаг, указывающий является ли агент мертвым
+      /// Флаг, указывающий является ли симбионт мертвым
       /// </summary>
       public bool IsDead { get; set; }
 
       /// <summary>
-      /// Время жизни агента в пульсах
+      /// Время жизни симбионта в пульсах
       /// </summary>
       public int Lifetime { get; set; }
 
       /// <summary>
-      /// Текущая стадия эволюции агента (от 0 до 5)
+      /// Текущая стадия эволюции симбионта (от 0 до 5)
       /// </summary>
       public int EvolutionStage { get; set; }
 
       /// <summary>
-      /// Текущий уровень боли агента (0-100)
+      /// Текущий уровень боли симбионта (0-100)
       /// </summary>
       public int PainValue { get; set; }
 
       /// <summary>
-      /// Текущий уровень радости агента (0-100)
+      /// Текущий уровень радости симбионта (0-100)
       /// </summary>
       public int JoyValue { get; set; }
 
       /// <summary>
-      /// Флаг первого пульса агента
+      /// Флаг первого пульса симбионта
       /// </summary>
       public bool IsFirstPulse { get; set; }
 
       /// <summary>
-      ///  Интегральное состояние агента
+      ///  Интегральное состояние симбионта
       /// </summary>
       public HomeostasisOverallState OverallState { get; set; }
 
       /// <summary>
-      /// Полный словарь всех поведенческих стилей агента
+      /// Полный словарь всех поведенческих стилей симбионта
       /// </summary>
       /// <remarks>
       /// Ключ - ID стиля, значение - информация о стиле поведения
@@ -1628,7 +1628,7 @@ namespace ISIDA.Gomeostas
       public IReadOnlyList<BehaviorStyle> ActiveStyles { get; set; }
 
       /// <summary>
-      /// Базовый психологический архетип агента (форма «Свойства агента»).
+      /// Базовый психологический архетип симбионта (форма «Свойства симбионта»).
       /// </summary>
       public string BaseArchetype { get; set; }
 
@@ -1638,7 +1638,7 @@ namespace ISIDA.Gomeostas
       public IReadOnlyList<string> BaseArchetypeValues { get; set; }
 
       /// <summary>
-      /// Ключевая мотивация агента — главный движущий мотив.
+      /// Ключевая мотивация симбионта — главный движущий мотив.
       /// </summary>
       public string KeyMotivation { get; set; }
 
@@ -1663,7 +1663,7 @@ namespace ISIDA.Gomeostas
       public IReadOnlyList<int> StressBehaviorIds { get; set; }
 
       /// <summary>
-      /// Стиль социального взаимодействия агента.
+      /// Стиль социального взаимодействия симбионта.
       /// </summary>
       public string Sociality { get; set; }
 
@@ -1698,7 +1698,7 @@ namespace ISIDA.Gomeostas
       public IReadOnlyList<string> SpecialTriggersValues { get; set; }
 
       /// <summary>
-      /// Особые табу — действия или ситуации, которых агент избегает.
+      /// Особые табу — действия или ситуации, которых симбионт избегает.
       /// </summary>
       public string SpecialTaboos { get; set; }
 
@@ -1708,7 +1708,7 @@ namespace ISIDA.Gomeostas
       public IReadOnlyList<string> SpecialTaboosValues { get; set; }
 
       /// <summary>
-      /// Дополнительные пожелания по поведению агента для учёта при генерации.
+      /// Дополнительные пожелания по поведению симбионта для учёта при генерации.
       /// </summary>
       public string AdditionalWishes { get; set; }
 
@@ -1719,7 +1719,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Получает полный словарь всех поведенческих стилей агента
+    /// Получает полный словарь всех поведенческих стилей симбионта
     /// </summary>
     /// <returns>
     /// ReadOnlyDictionary где ключ - ID стиля, значение - информация о стиле поведения.
@@ -1739,7 +1739,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Получает список текущих активных стилей поведения агента
+    /// Получает список текущих активных стилей поведения симбионта
     /// </summary>
     /// <returns>
     /// ReadOnlyCollection содержащий до 3 активных стилей поведения. 
@@ -1781,7 +1781,7 @@ namespace ISIDA.Gomeostas
     /// [<see cref="ParameterData.CriticalMinValue"/>, <see cref="ParameterData.CriticalMaxValue"/>] (концы включительно — допустимы,
     /// см. <see cref="SettingsValidator.ValidateCriticalMinMaxValueParamValue"/> при сохранении).
     /// Раньше использовались &lt;= и &gt;= на границах — значение ровно на критическом пороге считалось «мёртвым», хотя в файле и UI допустимо;
-    /// при выключенном пульсовом дрейфе значение не «отъезжало» от границы и агент умирал на первом пульсе.
+    /// при выключенном пульсовом дрейфе значение не «отъезжало» от границы и симбионт умирал на первом пульсе.
     /// </summary>
     private void CheckForCriticalState()
     {
@@ -1810,7 +1810,7 @@ namespace ISIDA.Gomeostas
 
     private void OnAgentDeath(ParameterData criticalParameter)
     {
-      Logger.Info($"OnAgentDeath: Агент умер: параметр '{criticalParameter.Name}' " +
+      Logger.Info($"OnAgentDeath: Симбионт умер: параметр '{criticalParameter.Name}' " +
                             $"достиг критического значения {criticalParameter.Value}");
 
       // Можно добавить событие для внешних систем
@@ -1818,7 +1818,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Флаг статуса агента
+    /// Флаг статуса симбионта
     /// </summary>
     [Flags]
     public enum AgentCheck
@@ -1846,7 +1846,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Проверка статуса агента без выброса исключений: существует, активен, жив
+    /// Проверка статуса симбионта без выброса исключений: существует, активен, жив
     /// </summary>
     public bool TryEnsureAgentState(AgentCheck checks, int? paramId = null, bool silent = false)
     {
@@ -1855,7 +1855,7 @@ namespace ISIDA.Gomeostas
         EnsureAgentState(checks, paramId);
         return true;
       }
-      catch (InvalidOperationException ex) when (ex.Message.Contains("Агент мертв") || ex.Message.Contains("Агент спит"))
+      catch (InvalidOperationException ex) when (ex.Message.Contains("Симбионт мертв") || ex.Message.Contains("Симбионт спит"))
       {
         if (!silent)
           Logger.Error(ex.Message);
@@ -1872,19 +1872,19 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Проверка статуса агента: существует, активен, жив
-    /// Проверка параметра агента: существует ли параметр с таким ID
+    /// Проверка статуса симбионта: существует, активен, жив
+    /// Проверка параметра симбионта: существует ли параметр с таким ID
     /// </summary>
     public void EnsureAgentState(AgentCheck checks, int? paramId = null)
     {
       if ((checks & AgentCheck.NotDead) != 0 && _agentState.IsDead)
-        throw new InvalidOperationException("Агент мертв");
+        throw new InvalidOperationException("Симбионт мертв");
 
       if ((checks & AgentCheck.NotSleeping) != 0 && _agentState.IsSleeping)
-        throw new InvalidOperationException("Агент спит");
+        throw new InvalidOperationException("Симбионт спит");
 
       if ((checks & AgentCheck.IsActive) != 0 && _agentState.IsFirstPulse)
-        throw new InvalidOperationException("Агент неактивен");
+        throw new InvalidOperationException("Симбионт неактивен");
 
       if ((checks & AgentCheck.Exists) != 0)
       {
@@ -1897,10 +1897,10 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Получить свойства агентов
+    /// Получить свойства симбионтов
     /// </summary>
     /// <summary>
-    /// Получить свойства агента
+    /// Получить свойства симбионта
     /// </summary>
     public AgentStateInfo GetAgentState()
     {
@@ -1926,7 +1926,7 @@ namespace ISIDA.Gomeostas
         _lock.ExitReadLock();
       }
 
-      // Теперь получаем остальные данные агента
+      // Теперь получаем остальные данные симбионта
       _lock.EnterReadLock();
       try
       {
@@ -2304,7 +2304,7 @@ namespace ISIDA.Gomeostas
 
     #endregion
 
-    #region Управление состоянием агента
+    #region Управление состоянием симбионта
 
     /// <summary>
     /// Установить флаг сна
@@ -2325,7 +2325,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установить флаг сна без проверки «агент не спит» (для пробуждения и оркестратора фаз сна).
+    /// Установить флаг сна без проверки «симбионт не спит» (для пробуждения и оркестратора фаз сна).
     /// </summary>
     public void ApplySleepState(bool isSleeping)
     {
@@ -2343,7 +2343,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установить время жизни агента
+    /// Установить время жизни симбионта
     /// </summary>
     public void SetLifeTime(int lifeTime)
     {
@@ -2361,7 +2361,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Устанавливает имя агента
+    /// Устанавливает имя симбионта
     /// </summary>
     public void SetAgentName(string name)
     {
@@ -2378,7 +2378,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Устанавливает описание агента
+    /// Устанавливает описание симбионта
     /// </summary>
     public void SetAgentDescription(string description)
     {
@@ -2395,7 +2395,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Устанавливает расширенные свойства агента (форма «Свойства агента»).
+    /// Устанавливает расширенные свойства симбионта (форма «Свойства симбионта»).
     /// </summary>
     public void SetExtendedAgentProperties(
       string name,
@@ -2457,7 +2457,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установить стадию развития агента
+    /// Установить стадию развития симбионта
     /// </summary>
     public void SetEvolutionStage(int stage)
     {
@@ -2468,7 +2468,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Установить стадию развития агента
+    /// Установить стадию развития симбионта
     /// </summary>
     public EvolutionStageChangeResult SetEvolutionStage(int stage, bool force = false, bool skipDataClearing = false)
     {
@@ -2506,7 +2506,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Очищает данные текущей стадии агента как при шаге вниз, без смены стадии (предзапуск сценария).
+    /// Очищает данные текущей стадии симбионта как при шаге вниз, без смены стадии (предзапуск сценария).
     /// </summary>
     public EvolutionStageChangeResult ClearEvolutionStageDataForScenarioPreRun()
     {
@@ -2547,10 +2547,10 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Определяет интегральное состояние агента на основе его параметров гомеостаза
+    /// Определяет интегральное состояние симбионта на основе его параметров гомеостаза
     /// </summary>
     /// <summary>
-    /// Определяет интегральное состояние агента на основе его параметров гомеостаза
+    /// Определяет интегральное состояние симбионта на основе его параметров гомеостаза
     /// </summary>
     public AgentHomeostasisState GetHomeostasisState()
     {
@@ -2570,7 +2570,7 @@ namespace ISIDA.Gomeostas
     #region Управление стилями реагирования
 
     /// <summary>
-    /// Добавляет новый стиль поведения агента
+    /// Добавляет новый стиль поведения симбионта
     /// </summary>
     /// <param name="name">Наименование стиля</param>
     /// <param name="description">Описание стиля</param>
@@ -2621,7 +2621,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Удаляет стиль поведения агента по указанному ID
+    /// Удаляет стиль поведения симбионта по указанному ID
     /// </summary>
     /// <param name="styleId">ID стиля для удаления</param>
     /// <returns>True, если стиль был успешно удален, иначе False</returns>
@@ -3240,7 +3240,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Загружает стили поведения агента из файла данных.
+    /// Загружает стили поведения симбионта из файла данных.
     /// Если файл отсутствует или повреждён — инициализирует стили из шаблона.
     /// </summary>
     private void LoadAgentBehaviorStyles()
@@ -3276,12 +3276,12 @@ namespace ISIDA.Gomeostas
       }
       catch (Exception initEx)
       {
-        throw new InvalidOperationException("Ошибка при загрузке стилей реагирования агента", initEx);
+        throw new InvalidOperationException("Ошибка при загрузке стилей реагирования симбионта", initEx);
       }
     }
 
     /// <summary>
-    /// Снять отметку смерти агента (IsDead = false) и сохранить свойства в AgentProperties.dat.
+    /// Снять отметку смерти симбионта (IsDead = false) и сохранить свойства в AgentProperties.dat.
     /// </summary>
     public (bool Success, string ErrorMessage) ReviveAgentSaveProperties()
     {
@@ -3303,7 +3303,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Сохранить свойства агента
+    /// Сохранить свойства симбионта
     /// </summary>
     public (bool Success, string ErrorMessage) SaveAgentProperties()
     {
@@ -3377,7 +3377,7 @@ namespace ISIDA.Gomeostas
             lines,
             FileValidator.IsValidAgentPropertiesFile,
             minLinesCount: 3,
-            fileDescription: "свойств агента");
+            fileDescription: "свойств симбионта");
 
         if (!result.Success)
         {
@@ -3395,7 +3395,7 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Формирует базовую часть промпта (общую для всех промптов) из текущего состояния агента и обновляет AppGlobalState.AgentPropertiesPromptContent.
+    /// Формирует базовую часть промпта (общую для всех промптов) из текущего состояния симбионта и обновляет AppGlobalState.AgentPropertiesPromptContent.
     /// Хранит ТОЛЬКО базовую часть — без PromptSuffix и без текстов вставки для конкретных типов генерации.
     /// </summary>
     public void UpdateAgentPropertiesPromptContent()
@@ -3427,7 +3427,7 @@ namespace ISIDA.Gomeostas
 
       string content = $@"БАЗОВЫЕ ПАРАМЕТРЫ:
 Базовый архетип (Базовый психологический архетип, определяющий фундаментальные паттерны поведения): [{baseArchetype}]
-Ключевая мотивация (Главный движущий мотив агента, определяет приоритеты в принятии решений): [{keyMotivation}]
+Ключевая мотивация (Главный движущий мотив симбионта, определяет приоритеты в принятии решений): [{keyMotivation}]
 
 ТЕМПЕРАМЕНТ:
 Активность (Уровень общей активности: Низкая - флегматичность, экономия энергии; Средняя - сбалансированность; Высокая - гиперактивность, постоянное движение): [{temperamentActivity}]
@@ -3442,9 +3442,9 @@ namespace ISIDA.Gomeostas
 
 ОСОБЕННОСТИ:
 Особые триггеры (Факторы, которые могут вызвать нестабильность или неадекватную реакцию. Важно для ИИ при моделировании поведения): [{specialTriggers}]
-Особые табу (Действия или ситуации, которых агент избегает даже в хорошем состоянии. Критически важно для избегания неконсистентного поведения): [{specialTaboos}]
+Особые табу (Действия или ситуации, которых симбионт избегает даже в хорошем состоянии. Критически важно для избегания неконсистентного поведения): [{specialTaboos}]
 
-ДОПОЛНИТЕЛЬНЫЕ ПОЖЕЛАНИЯ (Дополнительные замечания, особенности или пожелания по поведению агента, которые нужно учесть при генерации):
+ДОПОЛНИТЕЛЬНЫЕ ПОЖЕЛАНИЯ (Дополнительные замечания, особенности или пожелания по поведению симбионта, которые нужно учесть при генерации):
 [{additionalWishes}]
 ".TrimEnd();
 
@@ -3597,16 +3597,16 @@ namespace ISIDA.Gomeostas
             lines,
             IsValidAgentParametersFile,
             minLinesCount: linCount,
-            fileDescription: "параметров агента");
+            fileDescription: "параметров симбионта");
 
         if (!result.Success)
-          errorMessage = $"Ошибка сохранения параметров агента: {result.ErrorMessage}";
+          errorMessage = $"Ошибка сохранения параметров симбионта: {result.ErrorMessage}";
 
         return result;
       }
       catch (Exception ex)
       {
-        string error = $"Критическая ошибка при сохранении параметров агента: {ex.Message}";
+        string error = $"Критическая ошибка при сохранении параметров симбионта: {ex.Message}";
         return (false, error);
       }
     }
@@ -3651,10 +3651,10 @@ namespace ISIDA.Gomeostas
             lines,
             IsValidStyleFile,
             minLinesCount: linCount,
-            fileDescription: "стилей поведения агента");
+            fileDescription: "стилей поведения симбионта");
 
         if (!result.Success)
-          errorMessage = $"Ошибка сохранения стилей реагирования агента: {result.ErrorMessage}";
+          errorMessage = $"Ошибка сохранения стилей реагирования симбионта: {result.ErrorMessage}";
 
         return result;
       }
@@ -3675,7 +3675,7 @@ namespace ISIDA.Gomeostas
       var errors = new List<string>();
 
       var (propsSuccess, propsError) = SaveAgentProperties();
-      if (!propsSuccess) errors.Add($"Свойства агента: {propsError}");
+      if (!propsSuccess) errors.Add($"Свойства симбионта: {propsError}");
 
       var (paramsSuccess, paramsError) = SaveAgentParameters();
       if (!paramsSuccess) errors.Add($"Параметры: {paramsError}");

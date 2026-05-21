@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
 using System.Collections.Generic;
@@ -9,7 +9,7 @@ using System.Threading;
 namespace ISIDA.Reflexes
 {
   /// <summary>
-  /// Дискретные коды зрительного канала агента (фон сцены / поле зрения).
+  /// Дискретные коды зрительного канала симбионта (фон сцены / поле зрения).
   /// 0 — белый по умолчанию; 1 — чёрный; 2–8 — семь спектральных оттенков (для протоколов компаундного CS).
   /// </summary>
   public static class AgentVisualColor

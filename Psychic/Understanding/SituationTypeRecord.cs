@@ -1,8 +1,8 @@
-namespace ISIDA.Psychic.Understanding
+﻿namespace ISIDA.Psychic.Understanding
 {
   /// <summary>
   /// Запись справочника типов ситуаций.
-  /// Id 1–20: слоты событий (код события агента + ThemeTypeId). Id 21–40: настроение (MoodId + ThemeTypeId). Id 41–60: воздействие (InfluenceId + ThemeTypeId).
+  /// Id 1–20: слоты событий (код события симбионта + ThemeTypeId). Id 21–40: настроение (MoodId + ThemeTypeId). Id 41–60: воздействие (InfluenceId + ThemeTypeId).
   /// </summary>
   public class SituationTypeRecord
   {
@@ -18,7 +18,7 @@ namespace ISIDA.Psychic.Understanding
     /// <summary>ID типа темы (справочник тем). -1=не задано.</summary>
     public int ThemeTypeId { get; set; } = -1;
 
-    /// <summary>Код события агента из AgentEventsCatalog для слотов Id 1–20. -1=не задано.</summary>
+    /// <summary>Код события симбионта из AgentEventsCatalog для слотов Id 1–20. -1=не задано.</summary>
     public int EventAgentCode { get; set; } = -1;
 
     /// <summary>Текст для отладки / отображения без UI-таблицы</summary>

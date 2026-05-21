@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -73,12 +73,12 @@ namespace ISIDA.Common
       public const string ParametersFormat = "# Формат: ID|Название|Описание|Значение|Вес|Норма|Скорость|Активации стилей|Критический|Мин.значение|Макс.значение";
       public const string ParametersActivations = "# Активации стилей: id1,id2,id3";
 
-      // Свойства агента
+      // Свойства симбионта
       public const string PropertiesFormat = "# Формат: Ключ|Значение";
       public const string PropertiesIsSleeping = "IsSleeping|";
       public const string PropertiesIsDead = "IsDead|";
 
-      // Образы действий агента для психики
+      // Образы действий симбионта для психики
       public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID|CommandPatternIdList";
       public const string ActionsImagesActIdList = "# ActIdList: ID образа действий с Пульта (через запятую)";
       public const string ActionsImagesPhraseIdList = "# PhraseIdList: ID фраз (через запятую)";
@@ -712,7 +712,7 @@ namespace ISIDA.Common
     #region IsValidAgentParametersFile
 
     /// <summary>
-    /// Проверяет валидность файла параметров агента по пути
+    /// Проверяет валидность файла параметров симбионта по пути
     /// </summary>
     public static bool IsValidAgentParametersFile(string filePath)
     {
@@ -731,7 +731,7 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Проверяет валидность содержимого файла параметров агента
+    /// Проверяет валидность содержимого файла параметров симбионта
     /// Разрешает файлы, содержащие только шапку (комментарии #)
     /// </summary>
     public static bool IsValidAgentParametersFile(IEnumerable<string> lines)
@@ -770,7 +770,7 @@ namespace ISIDA.Common
     #region IsValidAgentPropertiesFile
 
     /// <summary>
-    /// Проверяет валидность файла свойств агента по пути
+    /// Проверяет валидность файла свойств симбионта по пути
     /// </summary>
     public static bool IsValidAgentPropertiesFile(string filePath)
     {
@@ -789,7 +789,7 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Проверяет валидность содержимого файла свойств агента
+    /// Проверяет валидность содержимого файла свойств симбионта
     /// Разрешает файлы, содержащие только шапку (комментарии #), если нет данных
     /// Если есть данные — требует обязательные ключи
     /// </summary>

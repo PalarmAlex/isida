@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -14,7 +14,7 @@ namespace ISIDA.Common
 {
   /// <summary>
   /// Глобальный таймер и диспетчер пульсации системы гомеостаза.
-  /// Централизованно управляет обновлением состояния агента, включая:
+  /// Централизованно управляет обновлением состояния симбионта, включая:
   /// - обновление параметров гомеостаза
   /// - пересчёт активных стилей
   /// - реакцию на отклонения (через адаптивные действия)
@@ -240,7 +240,7 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Сбрасывает счетчик пульсов (без сброса времени жизни агента)
+    /// Сбрасывает счетчик пульсов (без сброса времени жизни симбионта)
     /// </summary>
     public static void Reset()
     {
@@ -365,11 +365,11 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Безопасная остановка при смерти агента
+    /// Безопасная остановка при смерти симбионта
     /// </summary>
     private static void SafeStopWithAgentDeath()
     {
-      Logger.Info("Начало остановки из-за смерти агента");
+      Logger.Info("Начало остановки из-за смерти симбионта");
 
       bool shouldStop = false;
       lock (_timerLock)
@@ -384,8 +384,8 @@ namespace ISIDA.Common
       if (shouldStop)
       {
         OnPulsationStopped();
-        // Вызываем событие смерти агента
-        OnPulseError?.Invoke("Агент умер");
+        // Вызываем событие смерти симбионта
+        OnPulseError?.Invoke("Симбионт умер");
 
         // Останавливаем таймеры
         StopTimers();
@@ -549,10 +549,10 @@ namespace ISIDA.Common
           return;
         }
 
-        // Если агент мертв - прерываем обработку
+        // Если симбионт мертв - прерываем обработку
         if (AppGlobalState.IsDead)
         {
-          Logger.Warning($"Агент мертв на пульсе {GlobalPulsCount}");
+          Logger.Warning($"Симбионт мертв на пульсе {GlobalPulsCount}");
           SafeStopWithAgentDeath();
           return;
         }
@@ -568,7 +568,7 @@ namespace ISIDA.Common
 
         if (AppGlobalState.IsDead)
         {
-          Logger.Warning($"Агент мертв на пульсе {GlobalPulsCount}");
+          Logger.Warning($"Симбионт мертв на пульсе {GlobalPulsCount}");
           SafeStopWithAgentDeath();
           return;
         }
@@ -607,7 +607,7 @@ namespace ISIDA.Common
           }
         }
 
-        // Строка агента за пульс буферизуется в ResearchLogger и обычно уходит в UI только на следующем пульсе.
+        // Строка симбионта за пульс буферизуется в ResearchLogger и обычно уходит в UI только на следующем пульсе.
         // Иначе HTML-отчёт сценария (построенный сразу после последнего шага) не видит ОР/автоматизм за этот пульс.
         try
         {

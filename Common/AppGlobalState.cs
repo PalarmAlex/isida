@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
@@ -56,7 +56,7 @@ public static class AppGlobalState
 
   #endregion
 
-  #region Состояние агента
+  #region Состояние симбионта
 
   private static HomeostasisState _currentOverallState = HomeostasisState.Normal;
   private static int _dominantParam = 0;
@@ -121,10 +121,10 @@ public static class AppGlobalState
 
   #endregion
 
-  #region Промпт свойств агента
+  #region Промпт свойств симбионта
 
   /// <summary>
-  /// Базовая часть промпта (общая для всех генераций) — параметры агента без текстов вставки.
+  /// Базовая часть промпта (общая для всех генераций) — параметры симбионта без текстов вставки.
   /// Обновляется движком через GomeostasSystem.UpdateAgentPropertiesPromptContent().
   /// </summary>
   private static string _agentPropertiesPromptContent = string.Empty;
@@ -631,7 +631,7 @@ public static class AppGlobalState
 
   #endregion
 
-  #region Состояние агента - Свойства и методы
+  #region Состояние симбионта - Свойства и методы
 
   /// <summary>
   /// Флаг изменения контекста условий
@@ -643,7 +643,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Состояние гомеостаза агента
+  /// Состояние гомеостаза симбионта
   /// </summary>
   public enum HomeostasisState
   {
@@ -662,7 +662,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущее интегральное состояние агента
+  /// Текущее интегральное состояние симбионта
   /// </summary>
   public static HomeostasisState CurrentOverallState
   {
@@ -680,7 +680,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Флаг смерти агента
+  /// Флаг смерти симбионта
   /// </summary>
   public static bool IsDead
   {
@@ -689,7 +689,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Флаг сна агента
+  /// Флаг сна симбионта
   /// </summary>
   public static bool IsSleeping
   {
@@ -698,7 +698,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущие активные стили поведения агента
+  /// Текущие активные стили поведения симбионта
   /// </summary>
   public static IReadOnlyList<GomeostasSystem.BehaviorStyle> ActiveStyles
   {
@@ -706,7 +706,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущие активные адаптивные действия агента
+  /// Текущие активные адаптивные действия симбионта
   /// </summary>
   public static IReadOnlyList<AdaptiveActionsSystem.AdaptiveAction> ActiveAdaptiveActions
   {
@@ -761,7 +761,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущая стадия эволюции агента
+  /// Текущая стадия эволюции симбионта
   /// </summary>
   public static int EvolutionStage
   {
@@ -770,7 +770,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Время жизни агента в пульсах
+  /// Время жизни симбионта в пульсах
   /// </summary>
   public static int Lifetime
   {
@@ -783,7 +783,7 @@ public static class AppGlobalState
   #region Пульт — режим наблюдения (свойства)
 
   /// <summary>
-  /// Режим наблюдения: при true воздействия с пульта не меняют параметры гомеостаза агента.
+  /// Режим наблюдения: при true воздействия с пульта не меняют параметры гомеостаза симбионта.
   /// </summary>
   public static bool ObservationMode
   {
@@ -846,7 +846,7 @@ public static class AppGlobalState
   public static int AutomatizmIdWaitingForOperatorEvaluation => _automatizmIdWaitingForOperatorEvaluation;
 
   /// <summary>
-  /// Состояние агента перед воздействием оператора (для оценки)
+  /// Состояние симбионта перед воздействием оператора (для оценки)
   /// </summary>
   public static HomeostasisState StateBeforeOperatorImpact
   {
@@ -910,7 +910,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Порог тишины (пульсов без стимула с пульта) для события агента «долго без оператора» (резолвер типа темы мышления).
+  /// Порог тишины (пульсов без стимула с пульта) для события симбионта «долго без оператора» (резолвер типа темы мышления).
   /// </summary>
   public static int NoOperatorStimulusSilencePulses
   {
@@ -1075,7 +1075,7 @@ public static class AppGlobalState
     set { _lock.EnterWriteLock(); try { _resolvedThinkingThemeTypeId = value; } finally { _lock.ExitWriteLock(); } }
   }
 
-  /// <summary>Зафиксировать код события агента на текущем глобальном пульсе (последнее значение перезаписывает предыдущее).</summary>
+  /// <summary>Зафиксировать код события симбионта на текущем глобальном пульсе (последнее значение перезаписывает предыдущее).</summary>
   public static void RecordStimulusAgentEvent(int eventCode)
   {
     if (eventCode <= 0) return;
@@ -1088,7 +1088,7 @@ public static class AppGlobalState
     finally { _lock.ExitWriteLock(); }
   }
 
-  /// <summary>Записать событие агента, если на этом пульсе ещё не зафиксировано другое (не перезаписывает).</summary>
+  /// <summary>Записать событие симбионта, если на этом пульсе ещё не зафиксировано другое (не перезаписывает).</summary>
   public static bool TryRecordStimulusAgentEvent(int eventCode)
   {
     if (eventCode <= 0) return false;

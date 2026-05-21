@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -72,7 +72,7 @@ namespace ISIDA.Scenarios
     public int VisualColorId { get; set; }
     /// <summary>Идентификаторы воздействий с пульта.</summary>
     public List<int> ActionIds { get; set; } = new List<int>();
-    /// <summary>Текст фразы для подачи агенту.</summary>
+    /// <summary>Текст фразы для подачи симбионту.</summary>
     public string Phrase { get; set; } = "";
 
     /// <summary>Названия выбранных воздействий через запятую (только для отображения).</summary>
@@ -228,7 +228,7 @@ namespace ISIDA.Scenarios
             ? PreRunTargetStage.ToString(CultureInfo.InvariantCulture)
             : "";
 
-    /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах агента).</summary>
+    /// <summary>Очищать данные при переходе на стадию (как при смене стадии в свойствах симбионта).</summary>
     public bool PreRunClearAgentData { get; set; }
 
     /// <summary>Перед запуском: выставить «норму» по ориентации Speed — дефицит (Speed &lt; 0) в 100, избыток (Speed &gt; 0) в 0; затем хост выдерживает паузу на стабилизацию.</summary>

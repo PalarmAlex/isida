@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
@@ -17,7 +17,7 @@ using static ISIDA.Common.FileValidator;
 namespace ISIDA.Reflexes
 {
   /// <summary>
-  /// Система управления безусловными рефлексами агента
+  /// Система управления безусловными рефлексами симбионта
   /// </summary>
   public sealed class GeneticReflexesSystem : IDisposable
   {
@@ -193,7 +193,7 @@ namespace ISIDA.Reflexes
         Path.Combine(_reflexesFolderPath, $"{GeneticReflexesFileName}.dat");
 
     /// <summary>
-    /// Безусловный рефлекс агента
+    /// Безусловный рефлекс симбионта
     /// </summary>
     public class GeneticReflex
     {

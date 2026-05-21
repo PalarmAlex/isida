@@ -1,4 +1,4 @@
-using ISIDA.Psychic.Automatism;
+﻿using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
@@ -16,7 +16,7 @@ using static ISIDA.Gomeostas.GomeostasSystem;
 namespace ISIDA.Actions
 {
   /// <summary>
-  /// Система управления внешними воздействиями на агента
+  /// Система управления внешними воздействиями на симбионта
   /// </summary>
   public sealed class InfluenceActionSystem : IDisposable
   {
@@ -103,7 +103,7 @@ namespace ISIDA.Actions
       Path.Combine(_influenceActionsFolderPath, $"{InfluenceActionsFileName}.dat");
 
     /// <summary>
-    /// Представляет внешнее гомеостатическое воздействие на агента
+    /// Представляет внешнее гомеостатическое воздействие на симбионта
     /// </summary>
     public class GomeostasisInfluenceAction
     {
@@ -343,7 +343,7 @@ namespace ISIDA.Actions
             AdaptiveActionsSystem.Instance.IsInfluenceActionIdUsedForMirroring(actionId))
         {
           var actionName = _influenceActions[actionId].Name;
-          throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется для отзеркаливания в действиях агента и не может быть удалено");
+          throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется для отзеркаливания в действиях симбионта и не может быть удалено");
         }
 
         bool removed = _influenceActions.Remove(actionId);
@@ -450,9 +450,9 @@ namespace ISIDA.Actions
       if (!GlobalTimer.IsPulsationRunning)
         return (false, "Пульсация выключена — воздействия не применяются");
 
-      // Безопасная проверка состояния агента
+      // Безопасная проверка состояния симбионта
       if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
-        return (false, "Агент неактивен или мертв - воздействие невозможно");
+        return (false, "Симбионт неактивен или мертв - воздействие невозможно");
 
       _lock.EnterWriteLock();
       try
@@ -602,7 +602,7 @@ namespace ISIDA.Actions
       try
       {
         if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
-          return (false, "Агент неактивен или мертв - воздействие невозможно");
+          return (false, "Симбионт неактивен или мертв - воздействие невозможно");
 
         if (AppGlobalState.ObservationMode)
           return (true, string.Empty);

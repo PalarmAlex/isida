@@ -1,4 +1,4 @@
-using ISIDA.Common;
+﻿using ISIDA.Common;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -11,7 +11,7 @@ using System.Threading;
 namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
-  /// Система образов действий агента или оператора
+  /// Система образов действий симбионта или оператора
   /// </summary>
   public sealed class ActionsImagesSystem : IDisposable
   {
@@ -94,7 +94,7 @@ namespace ISIDA.Psychic.Automatism
       };
 
     /// <summary>
-    /// Образ действий оператора или агента ИИ
+    /// Образ действий оператора или симбионта ИИ
     /// </summary>
     public class ActionsImage
     {
