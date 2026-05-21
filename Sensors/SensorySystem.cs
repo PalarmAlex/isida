@@ -40,7 +40,7 @@ namespace ISIDA.Sensors
     public const string DefaultVerbalPrimariesFileName = "DefaultVerbalPrimaries";
 
     /// <summary>
-    /// Имя файла с первичными CAD-командами по умолчанию
+    /// Имя файла с первичными командами по умолчанию
     /// </summary>
     public const string DefaultCommandPrimariesFileName = "DefaultCommandPrimaries";
 
@@ -89,33 +89,33 @@ namespace ISIDA.Sensors
     public VerbalSensorChannel VerbalChannel { get; private set; }
 
     /// <summary>
-    /// CAD-сенсорный канал (атомарные контуры команд)
+    /// Командный сенсорный канал (атомарные контуры команд)
     /// </summary>
-    public VerbalSensorChannel CadChannel { get; private set; }
+    public VerbalSensorChannel CommandChannel { get; private set; }
 
     /// <summary>
-    /// Устанавливает или получает авторитарный режим CAD-канала
+    /// Устанавливает или получает авторитарный режим командного канала
     /// </summary>
-    public bool CadAuthoritativeMode
+    public bool CommandAuthoritativeMode
     {
-      get => CadChannel?.AuthoritativeMode ?? false;
+      get => CommandChannel?.AuthoritativeMode ?? false;
       set
       {
-        if (CadChannel != null)
-          CadChannel.AuthoritativeMode = value;
+        if (CommandChannel != null)
+          CommandChannel.AuthoritativeMode = value;
       }
     }
 
     /// <summary>
-    /// Устанавливает или получает порог подтверждения для CAD-канала
+    /// Устанавливает или получает порог подтверждения для командного канала
     /// </summary>
-    public int CadRecognitionThreshold
+    public int CommandRecognitionThreshold
     {
-      get => CadChannel?.RecognitionThreshold ?? 0;
+      get => CommandChannel?.RecognitionThreshold ?? 0;
       set
       {
-        if (CadChannel != null)
-          CadChannel.RecognitionThreshold = value;
+        if (CommandChannel != null)
+          CommandChannel.RecognitionThreshold = value;
       }
     }
 
@@ -184,14 +184,14 @@ namespace ISIDA.Sensors
             _sensorsFolderPath,
             primarySensorsPath);
 
-        var cadPrimariesPath = Path.Combine(_sensorsFolderPath,
+        var commandPrimariesPath = Path.Combine(_sensorsFolderPath,
             $"{DefaultCommandPrimariesFileName}.tmp");
 
-        CadChannel = new VerbalSensorChannel(
+        CommandChannel = new VerbalSensorChannel(
             _gomeostas,
             _sensorsFolderPath,
-            cadPrimariesPath,
-            SensorChannelOptions.Cad);
+            commandPrimariesPath,
+            SensorChannelOptions.Command);
 
         SubscribeToEvents();
       }
@@ -212,16 +212,16 @@ namespace ISIDA.Sensors
     {
       if (VerbalChannel != null)
         VerbalChannel.AllPhrasesCleared += OnAllPhrasesCleared;
-      if (CadChannel != null)
-        CadChannel.AllPhrasesCleared += OnAllPhrasesCleared;
+      if (CommandChannel != null)
+        CommandChannel.AllPhrasesCleared += OnAllPhrasesCleared;
     }
 
     private void UnsubscribeFromEvents()
     {
       if (VerbalChannel != null)
         VerbalChannel.AllPhrasesCleared -= OnAllPhrasesCleared;
-      if (CadChannel != null)
-        CadChannel.AllPhrasesCleared -= OnAllPhrasesCleared;
+      if (CommandChannel != null)
+        CommandChannel.AllPhrasesCleared -= OnAllPhrasesCleared;
     }
 
     private void OnAllPhrasesCleared()
@@ -229,7 +229,7 @@ namespace ISIDA.Sensors
       try
       {
         _perceptionImagesSystem?.ClearAllPhraseIds();
-        _perceptionImagesSystem?.ClearAllCadPatternIds();
+        _perceptionImagesSystem?.ClearAllCommandPatternIds();
       }
       catch (Exception ex)
       {
@@ -251,7 +251,7 @@ namespace ISIDA.Sensors
       {
         UnsubscribeFromEvents();
         VerbalChannel?.Dispose();
-        CadChannel?.Dispose();
+        CommandChannel?.Dispose();
       }
       finally
       {

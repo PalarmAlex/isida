@@ -30,7 +30,7 @@ namespace ISIDA.Psychic.Automatism
     private int _pendingResponseActionsImageId;
     private int _pendingResponseNodeId;
     private bool _pendingResponseHasVerbalPart;
-    private bool _pendingResponseHasCadPart;
+    private bool _pendingResponseHasCommandPart;
     private bool _pendingResponseHasNonVerbalPart;
 
     /// <summary>
@@ -48,13 +48,13 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="detectedNodeId">ID узла дерева автоматизмов, распознанного по стимулу.</param>
     /// <param name="actionsImageId">ID образа действий (стимул оператора).</param>
     /// <param name="hasVerbalPart">Есть ли в стимуле вербальная часть (фраза).</param>
-    /// <param name="hasCadPart">Есть ли в стимуле CAD-часть (Solid-команда).</param>
+    /// <param name="hasCommandPart">Есть ли в стимуле командная часть (Solid-команда).</param>
     /// <param name="hasNonVerbalPart">Есть ли в стимуле невербальная часть (действия с пульта).</param>
     public int TryCreateInitialParrotAutomatizm(
       int detectedNodeId,
       int actionsImageId,
       bool hasVerbalPart,
-      bool hasCadPart = false,
+      bool hasCommandPart = false,
       bool hasNonVerbalPart = false)
     {
       if (AppGlobalState.EvolutionStage != 3)
@@ -63,7 +63,7 @@ namespace ISIDA.Psychic.Automatism
         return 0;
       }
 
-      bool canMirror = hasVerbalPart || hasCadPart || (AppGlobalState.ObservationMode && hasNonVerbalPart);
+      bool canMirror = hasVerbalPart || hasCommandPart || (AppGlobalState.ObservationMode && hasNonVerbalPart);
       if (detectedNodeId <= 0 || actionsImageId <= 0 || !canMirror)
         return 0;
 
@@ -101,7 +101,7 @@ namespace ISIDA.Psychic.Automatism
     private string MirrorStateInlineUnsynchronized()
     {
       return
-          $"active={_dialogMirrorActive}, triggerNode={_dialogTriggerNodeId}, pendingImg={_pendingResponseActionsImageId}, pendingNode={_pendingResponseNodeId}, pendingVerbal={_pendingResponseHasVerbalPart}, pendingCad={_pendingResponseHasCadPart}, pendingNonVerbal={_pendingResponseHasNonVerbalPart}";
+          $"active={_dialogMirrorActive}, triggerNode={_dialogTriggerNodeId}, pendingImg={_pendingResponseActionsImageId}, pendingNode={_pendingResponseNodeId}, pendingVerbal={_pendingResponseHasVerbalPart}, pendingCommand={_pendingResponseHasCommandPart}, pendingNonVerbal={_pendingResponseHasNonVerbalPart}";
     }
 
     /// <summary>
@@ -138,7 +138,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="actionsImageId">ID образа действий (ответ оператора).</param>
     /// <param name="detectedNodeId">ID узла дерева автоматизмов, распознанного по ответу.</param>
     /// <param name="hasVerbalPart">Есть ли в ответе вербальная часть (фраза).</param>
-    /// <param name="hasCadPart">Есть ли в ответе CAD-часть.</param>
+    /// <param name="hasCommandPart">Есть ли в ответе командная часть.</param>
     /// <param name="hasNonVerbalPart">Есть ли в ответе невербальная часть (действия с пульта).</param>
     /// <remarks>
     /// При смешанном стимуле (фраза + действие) InfluenceActionSystem вызывает и PhraseStimulusActivated,
@@ -149,7 +149,7 @@ namespace ISIDA.Psychic.Automatism
       int actionsImageId,
       int detectedNodeId,
       bool hasVerbalPart,
-      bool hasCadPart = false,
+      bool hasCommandPart = false,
       bool hasNonVerbalPart = false)
     {
       if (actionsImageId <= 0 || detectedNodeId <= 0)
@@ -173,7 +173,7 @@ namespace ISIDA.Psychic.Automatism
 
         // При смешанном стимуле PhraseStimulusActivated вызывается первым (полный ответ),
         // затем TriggerStimulusActivated (только действие). Не перезаписывать полный ответ более бедным.
-        if ((_pendingResponseHasVerbalPart || _pendingResponseHasCadPart) && !hasVerbalPart && !hasCadPart)
+        if ((_pendingResponseHasVerbalPart || _pendingResponseHasCommandPart) && !hasVerbalPart && !hasCommandPart)
         {
           return;
         }
@@ -181,7 +181,7 @@ namespace ISIDA.Psychic.Automatism
         _pendingResponseActionsImageId = actionsImageId;
         _pendingResponseNodeId = detectedNodeId;
         _pendingResponseHasVerbalPart = hasVerbalPart;
-        _pendingResponseHasCadPart = hasCadPart;
+        _pendingResponseHasCommandPart = hasCommandPart;
         _pendingResponseHasNonVerbalPart = hasNonVerbalPart;
       }
       finally
@@ -369,7 +369,7 @@ namespace ISIDA.Psychic.Automatism
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
         // 2) Эхо на ветке нового стимула: S_n→S_n. Belief=2 не ставим — иначе эхо перезапишет выученный сдвиг на этой ветке.
-        bool continueCycle = _pendingResponseHasVerbalPart || _pendingResponseHasCadPart ||
+        bool continueCycle = _pendingResponseHasVerbalPart || _pendingResponseHasCommandPart ||
             (AppGlobalState.ObservationMode && _pendingResponseHasNonVerbalPart);
         if (continueCycle)
         {
@@ -462,7 +462,7 @@ namespace ISIDA.Psychic.Automatism
       _pendingResponseActionsImageId = 0;
       _pendingResponseNodeId = 0;
       _pendingResponseHasVerbalPart = false;
-      _pendingResponseHasCadPart = false;
+      _pendingResponseHasCommandPart = false;
       _pendingResponseHasNonVerbalPart = false;
     }
 
@@ -511,7 +511,7 @@ namespace ISIDA.Psychic.Automatism
         moodId: img.MoodId,
         checkUnicum: true,
         visualColorId: img.VisualColorId,
-        cadPatternIdList: img.CadPatternIdList?.ToList());
+        commandPatternIdList: img.CommandPatternIdList?.ToList());
       return newId > 0 ? newId : stimulusActionsImageId;
     }
   }

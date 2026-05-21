@@ -23,10 +23,10 @@ namespace ISIDA.Sensors
 
     #region Поля и свойства
 
-    /// <summary>Параметры канала (вербальный или CAD).</summary>
+    /// <summary>Параметры канала (вербальный или командный).</summary>
     public SensorChannelOptions Options => _options;
 
-    /// <summary>true — атомарные контуры (CAD), false — побуквенные слова.</summary>
+    /// <summary>true — атомарные контуры (команда), false — побуквенные слова.</summary>
     public bool UsesAtomicTokens => Options.AtomicTokens;
 
     /// <summary>Дерево слов (символы → слова). Только для побуквенного режима.</summary>
@@ -131,21 +131,27 @@ namespace ISIDA.Sensors
         _primarySensorsPath = primarySensorsPath;
         LoadPrimarySensors(_primarySensorsPath);
 
+        string wordsTreeName = ResolveTreeFileBaseName(baseFolderPath, _options.WordsTreeName, "CadWords");
+        string phrasesTreeName = ResolveTreeFileBaseName(baseFolderPath, _options.PhrasesTreeName, "CadPhrases");
+        string wordSandboxName = ResolveTreeFileBaseName(baseFolderPath, _options.WordSandboxName, "CadWords");
+        string phraseSandboxName = ResolveTreeFileBaseName(baseFolderPath, _options.PhraseSandboxName, "CadPhrases");
+        string phraseTextSandboxName = ResolveTreeFileBaseName(baseFolderPath, _options.PhraseTextSandboxName, "CadPhrasesText");
+
         if (_options.AtomicTokens)
         {
-          AtomicWordTree = new SensorTree<int, int>(_options.WordsTreeName, baseFolderPath);
+          AtomicWordTree = new SensorTree<int, int>(wordsTreeName, baseFolderPath);
           WordTree = null;
         }
         else
         {
-          WordTree = new SensorTree<int, char>(_options.WordsTreeName, baseFolderPath);
+          WordTree = new SensorTree<int, char>(wordsTreeName, baseFolderPath);
           AtomicWordTree = null;
         }
 
-        PhraseTree = new SensorTree<int, int>(_options.PhrasesTreeName, baseFolderPath);
-        WordSandbox = new SensorSandbox<string>(_options.WordSandboxName, baseFolderPath);
-        PhraseSandbox = new SensorSandbox<List<int>>(_options.PhraseSandboxName, baseFolderPath);
-        PhraseTextSandbox = new SensorSandbox<string>(_options.PhraseTextSandboxName, baseFolderPath);
+        PhraseTree = new SensorTree<int, int>(phrasesTreeName, baseFolderPath);
+        WordSandbox = new SensorSandbox<string>(wordSandboxName, baseFolderPath);
+        PhraseSandbox = new SensorSandbox<List<int>>(phraseSandboxName, baseFolderPath);
+        PhraseTextSandbox = new SensorSandbox<string>(phraseTextSandboxName, baseFolderPath);
 
         LoadTrees();
         LoadSandboxes();
@@ -154,6 +160,16 @@ namespace ISIDA.Sensors
       {
         throw;
       }
+    }
+
+    private static string ResolveTreeFileBaseName(string baseFolderPath, string preferredName, string legacyName)
+    {
+      if (File.Exists(Path.Combine(baseFolderPath, $"{preferredName}.dat")))
+        return preferredName;
+      if (!string.IsNullOrEmpty(legacyName) &&
+          File.Exists(Path.Combine(baseFolderPath, $"{legacyName}.dat")))
+        return legacyName;
+      return preferredName;
     }
 
     private void LoadPrimarySensors(string filePath)

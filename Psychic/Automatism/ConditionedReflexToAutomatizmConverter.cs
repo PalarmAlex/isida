@@ -245,10 +245,10 @@ namespace ISIDA.Psychic
 
         // получаем пусковые действия и фразу для триггера автоматизма из Level 3 условного рефлекса
         var (actionsTrigger, phrases, toneId, moodId, triggerVisualColorId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
-        var cadPatterns = GetCadPatternsFromConditionedReflex(conditionedReflex);
+        var commandPatterns = GetCommandPatternsFromConditionedReflex(conditionedReflex);
         int symbolId = 0;
         int verbId = 0;
-        int cadId = 0;
+        int commandId = 0;
 
         if (phrases?.Any() == true)
         {
@@ -267,8 +267,8 @@ namespace ISIDA.Psychic
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
         }
 
-        if (cadPatterns?.Any() == true)
-          cadId = CadBrocaImagesSystem.Instance.CreateNewCadBrocaImage(cadPatterns, true).Item1;
+        if (commandPatterns?.Any() == true)
+          commandId = CommandBrocaImagesSystem.Instance.CreateNewCommandBrocaImage(commandPatterns, true).Item1;
 
         var treeComponentsResult = ConvertReflexLevelsToTreeComponents(
             conditionedReflex,
@@ -278,7 +278,7 @@ namespace ISIDA.Psychic
             moodId,
             symbolId,
             verbId,
-            cadId,
+            commandId,
             triggerVisualColorId);
 
         if (!treeComponentsResult.IsValid)
@@ -457,9 +457,9 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получает CAD-паттерны из образа восприятия условного рефлекса (Level 3).
+    /// Получает паттерны команды из образа восприятия условного рефлекса (Level 3).
     /// </summary>
-    private List<int> GetCadPatternsFromConditionedReflex(ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
+    private List<int> GetCommandPatternsFromConditionedReflex(ConditionedReflexesSystem.ConditionedReflex conditionedReflex)
     {
       try
       {
@@ -469,7 +469,7 @@ namespace ISIDA.Psychic
         var perceptionImage = _perceptionImagesSystem.GetAllPerceptionImagesList()
             .FirstOrDefault(img => img.Id == conditionedReflex.Level3);
 
-        return perceptionImage?.CadPatternIdList?.ToList() ?? new List<int>();
+        return perceptionImage?.CommandPatternIdList?.ToList() ?? new List<int>();
       }
       catch (Exception ex)
       {
@@ -489,7 +489,7 @@ namespace ISIDA.Psychic
         int moodId,
         int symbolId,
         int verbId,
-        int cadId,
+        int commandId,
         int triggerVisualColorId)
     {
       try
@@ -511,7 +511,7 @@ namespace ISIDA.Psychic
         components.ToneMoodID = PsychicSystem.GetToneMoodID(toneId, moodId);
         components.SimbolID = symbolId;
         components.VerbID = verbId;
-        components.CadID = cadId;
+        components.CommandID = commandId;
         components.VisualID = AgentVisualColor.IsValidCode(triggerVisualColorId)
             ? triggerVisualColorId
             : AgentVisualColor.White;
@@ -570,7 +570,7 @@ namespace ISIDA.Psychic
             components.ToneMoodID,
             components.SimbolID,
             components.VerbID,
-            components.CadID,
+            components.CommandID,
             components.VisualID,
             isUnrecognizedPhrase: false);
 
@@ -659,7 +659,7 @@ namespace ISIDA.Psychic
       public int ToneMoodID { get; set; }
       public int SimbolID { get; set; }
       public int VerbID { get; set; }
-      public int CadID { get; set; }
+      public int CommandID { get; set; }
       public int VisualID { get; set; }
     }
 
@@ -822,11 +822,11 @@ namespace ISIDA.Psychic
 
         // Создаем дерево автоматизмов для этого условного рефлекса
         var (actionsTrigger, phrases, toneId, moodId, chainVisualColorId) = GetActionPhrasesFromConditionedReflex(conditionedReflex);
-        var cadPatterns = GetCadPatternsFromConditionedReflex(conditionedReflex);
+        var commandPatterns = GetCommandPatternsFromConditionedReflex(conditionedReflex);
 
         int symbolId = 0;
         int verbId = 0;
-        int cadId = 0;
+        int commandId = 0;
         if (phrases?.Any() == true)
         {
           int phraseId0 = phrases[0];
@@ -844,8 +844,8 @@ namespace ISIDA.Psychic
           (verbId, _) = _verbalBrocaImages.CreateNewVerbalBrocaImage(symbolId, phrases, toneId, moodId, true);
         }
 
-        if (cadPatterns?.Any() == true)
-          cadId = CadBrocaImagesSystem.Instance.CreateNewCadBrocaImage(cadPatterns, true).Item1;
+        if (commandPatterns?.Any() == true)
+          commandId = CommandBrocaImagesSystem.Instance.CreateNewCommandBrocaImage(commandPatterns, true).Item1;
 
         var treeComponentsResult = ConvertReflexLevelsToTreeComponents(
             conditionedReflex,
@@ -855,7 +855,7 @@ namespace ISIDA.Psychic
             moodId,
             symbolId,
             verbId,
-            cadId,
+            commandId,
             chainVisualColorId);
 
         if (!treeComponentsResult.IsValid)

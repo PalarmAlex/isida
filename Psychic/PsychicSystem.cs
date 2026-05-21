@@ -42,7 +42,7 @@ namespace ISIDA.Psychic
     private readonly EmotionsImageSystem _emotionsImageSystem;
     private readonly SensorySystem _sensorySystem;
     private readonly VerbalBrocaImagesSystem _verbalBrocaImages;
-    private readonly CadBrocaImagesSystem _cadBrocaImages;
+    private readonly CommandBrocaImagesSystem _commandBrocaImages;
     private readonly AutomatismResultTracker _automatismResultTracker;
     private readonly GomeostasSystem _gomeostasSystem;
     private OrientationReflexSystem _orientationReflexSystem;
@@ -83,7 +83,7 @@ namespace ISIDA.Psychic
         EmotionsImageSystem emotionsImageSystem,
         SensorySystem sensorySystem,
         VerbalBrocaImagesSystem verbalBrocaImages,
-        CadBrocaImagesSystem cadBrocaImages,
+        CommandBrocaImagesSystem commandBrocaImages,
         AutomatismResultTracker automatismResultTracker,
         GomeostasSystem gomeostasSystem)
     {
@@ -99,7 +99,7 @@ namespace ISIDA.Psychic
         emotionsImageSystem,
         sensorySystem,
         verbalBrocaImages,
-        cadBrocaImages,
+        commandBrocaImages,
         automatismResultTracker,
         gomeostasSystem);
     }
@@ -113,7 +113,7 @@ namespace ISIDA.Psychic
       EmotionsImageSystem emotionsImageSystem,
       SensorySystem sensorySystem,
       VerbalBrocaImagesSystem verbalBrocaImages,
-      CadBrocaImagesSystem cadBrocaImages,
+      CommandBrocaImagesSystem commandBrocaImages,
       AutomatismResultTracker automatismResultTracker,
       GomeostasSystem gomeostasSystem)
     {
@@ -125,7 +125,7 @@ namespace ISIDA.Psychic
       _emotionsImageSystem = emotionsImageSystem ?? throw new ArgumentNullException(nameof(emotionsImageSystem));
       _sensorySystem = sensorySystem ?? throw new ArgumentNullException(nameof(sensorySystem));
       _verbalBrocaImages = verbalBrocaImages ?? throw new ArgumentNullException(nameof(verbalBrocaImages));
-      _cadBrocaImages = cadBrocaImages ?? throw new ArgumentNullException(nameof(cadBrocaImages));
+      _commandBrocaImages = commandBrocaImages ?? throw new ArgumentNullException(nameof(commandBrocaImages));
       _automatismResultTracker = automatismResultTracker ?? throw new ArgumentNullException(nameof(automatismResultTracker));
       _gomeostasSystem = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
       _mirrorAutomatizmService = new MirrorAutomatizmService(_automatizmSystem);
@@ -582,7 +582,7 @@ namespace ISIDA.Psychic
     /// <param name="stileIdList">список ID активных стилей</param>
     /// <param name="actionIdList">список ID действий с пульта</param>
     /// <param name="phraseIdList">список ID фраз с пульта</param>
-    /// <param name="cadPatternIdList">список ID CAD-паттернов с пульта</param>
+    /// <param name="commandPatternIdList">список ID паттернов команды с пульта</param>
     /// <param name="toneId">ID тона сообщения</param>
     /// <param name="moodId">ID настроения сообщения</param>
     /// <param name="visualColorId">Код зрительного канала (см. <see cref="AgentVisualColor"/>)</param>
@@ -593,7 +593,7 @@ namespace ISIDA.Psychic
       List<int> stileIdList, // хотя через пульсы передается StileIdList, от действия может поменяться stileIdList на текущем пульсе
       List<int> actionIdList,
       List<int> phraseIdList,
-      List<int> cadPatternIdList = null,
+      List<int> commandPatternIdList = null,
       int toneId = 0,
       int moodId = 0,
       int visualColorId = 0)
@@ -605,7 +605,7 @@ namespace ISIDA.Psychic
       }
 
       if ((actionIdList?.Count ?? 0) == 0 && (phraseIdList?.Count ?? 0) == 0 &&
-          (cadPatternIdList?.Count ?? 0) == 0 &&
+          (commandPatternIdList?.Count ?? 0) == 0 &&
           visualColorId == AgentVisualColor.White)
         return false;
 
@@ -624,10 +624,10 @@ namespace ISIDA.Psychic
         int firstSimbol = 0;
         int verbId = 0;
         int verbIdForTree = 0;
-        int cadIdForTree = 0;
+        int commandIdForTree = 0;
         int actionsImageId = 0;
         List<int> phraseIdListForStimulus = phraseIdList;
-        List<int> cadPatternIdListForStimulus = cadPatternIdList;
+        List<int> commandPatternIdListForStimulus = commandPatternIdList;
 
         if (phraseIdList?.Any() == true)
         {
@@ -638,30 +638,30 @@ namespace ISIDA.Psychic
         else
           AppGlobalState.CurActiveVerbalId = 0;
 
-        if (cadPatternIdList?.Any() == true)
+        if (commandPatternIdList?.Any() == true)
         {
-          (int cadId, List<int> patternIdListForStimulus) = PrepareCadStimulus(cadPatternIdList);
-          cadIdForTree = cadId;
-          cadPatternIdListForStimulus = patternIdListForStimulus;
-          AppGlobalState.CurActiveCadId = cadId;
+          (int commandId, List<int> patternIdListForStimulus) = PrepareCommandStimulus(commandPatternIdList);
+          commandIdForTree = commandId;
+          commandPatternIdListForStimulus = patternIdListForStimulus;
+          AppGlobalState.CurActiveCommandId = commandId;
         }
         else
-          AppGlobalState.CurActiveCadId = 0;
+          AppGlobalState.CurActiveCommandId = 0;
 
-        if (phraseIdList?.Any() == true || cadPatternIdList?.Any() == true)
+        if (phraseIdList?.Any() == true || commandPatternIdList?.Any() == true)
         {
           var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(
               actionIdList,
               phraseIdListForStimulus ?? phraseIdList,
               visualColorId,
-              cadPatternIdListForStimulus ?? cadPatternIdList);
+              commandPatternIdListForStimulus ?? commandPatternIdList);
           AppGlobalState.LastTriggerStimulusID = perceptionImageId;
         }
 
         actionsImageId = CreateActionsImage(
             actionIdList,
             phraseIdListForStimulus ?? phraseIdList,
-            cadPatternIdListForStimulus ?? cadPatternIdList,
+            commandPatternIdListForStimulus ?? commandPatternIdList,
             toneId,
             moodId,
             visualColorId);
@@ -680,7 +680,7 @@ namespace ISIDA.Psychic
             toneMood,
             firstSimbol,
             verbIdForTree,
-            cadIdForTree,
+            commandIdForTree,
             visualColorId);
         bool deferredOperatorEvalScheduledThisStimulus = false;
 
@@ -704,9 +704,9 @@ namespace ISIDA.Psychic
         if (automatizmNodeId > 0)
         {
           bool hasVerbalPart = phraseIdList?.Any() == true;
-          bool hasCadPart = cadPatternIdList?.Any() == true;
+          bool hasCommandPart = commandPatternIdList?.Any() == true;
           bool hasNonVerbalPart = actionIdList?.Any() == true;
-          bool hasSymbolicPart = hasVerbalPart || hasCadPart;
+          bool hasSymbolicPart = hasVerbalPart || hasCommandPart;
 
           AppGlobalState.AutomatizmNodeId = automatizmNodeId;
 
@@ -716,7 +716,7 @@ namespace ISIDA.Psychic
 
           // Стадия 2+: RegisterOperatorResponse здесь; EvaluatePreviousAutomatizm — строго в следующем ProcessPsychicPulse (см. _deferredOperatorEvaluationAutomatizmId). Полезность по ответу оператора — со стадии 2.
           TryScheduleDeferredOperatorEvaluationOnStimulus(
-              activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasCadPart, hasNonVerbalPart);
+              activationType, actionsImageId, automatizmNodeId, hasVerbalPart, hasCommandPart, hasNonVerbalPart);
           deferredOperatorEvalScheduledThisStimulus = _deferredOperatorEvaluationAutomatizmId > 0;
 
           // Стадия < 4 — только ОР (без уровней 1–2 и без циклов мышления). Стадия >= 4 — уровни мышления и циклы; без ОР.
@@ -822,7 +822,7 @@ namespace ISIDA.Psychic
                 automatizmNodeId,
                 actionsImageId,
                 hasVerbalPart,
-                hasCadPart,
+                hasCommandPart,
                 hasNonVerbalPart);
               if (parrotAutomatizmId > 0)
                 atmz = _automatizmSystem.GetAutomatizmById(parrotAutomatizmId);
@@ -1108,7 +1108,7 @@ namespace ISIDA.Psychic
           moodId: img.MoodId,
           checkUnicum: true,
           visualColorId: img.VisualColorId,
-          cadPatternIdList: img.CadPatternIdList?.ToList());
+          commandPatternIdList: img.CommandPatternIdList?.ToList());
       return newId > 0 ? newId : 0;
     }
 
@@ -1269,7 +1269,7 @@ namespace ISIDA.Psychic
     /// <param name="toneMoodId">ID тона и настроения.</param>
     /// <param name="simbolId">ID первого символа фразы.</param>
     /// <param name="verbId">ID вербального образа.</param>
-    /// <param name="cadId">ID CAD-образа.</param>
+    /// <param name="commandId">ID образа команды.</param>
     /// <param name="visualId">Код зрительного канала (<see cref="AgentVisualColor"/>).</param>
     /// <param name="isUnrecognizedPhrase">Флаг нераспознанной фразы при обходе дерева.</param>
     internal int AutomatizmTreeActivation(
@@ -1279,7 +1279,7 @@ namespace ISIDA.Psychic
         int toneMoodId,
         int simbolId,
         int verbId,
-        int cadId,
+        int commandId,
         int visualId,
         bool isUnrecognizedPhrase = false)
     {
@@ -1300,7 +1300,7 @@ namespace ISIDA.Psychic
           toneMoodId,
           simbolId,
           verbId,
-          cadId,
+          commandId,
           visualId,
           isUnrecognizedPhrase);
 
@@ -1308,12 +1308,12 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Готовит CAD-стимул: образ CadBroca и список паттернов для образа восприятия.
+    /// Готовит командный стимул: образ CommandBroca и список паттернов для образа восприятия.
     /// </summary>
-    private (int cadId, List<int> patternIdList) PrepareCadStimulus(List<int> cadPatternIdList)
+    private (int commandId, List<int> patternIdList) PrepareCommandStimulus(List<int> commandPatternIdList)
     {
-      int cadId = _cadBrocaImages.CreateNewCadBrocaImage(cadPatternIdList, true).Item1;
-      return (cadId, cadPatternIdList);
+      int commandId = _commandBrocaImages.CreateNewCommandBrocaImage(commandPatternIdList, true).Item1;
+      return (commandId, commandPatternIdList);
     }
 
     /// <summary>
@@ -1405,7 +1405,7 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить ID узла дерева автоматизмов по вербальной и/или CAD-части образа действий (например ответа агента).
+    /// Получить ID узла дерева автоматизмов по вербальной и/или командной части образа действий (например ответа агента).
     /// Для сдвига после штатного автоматизма на ст. 3 см. <see cref="ApplyStage3MirrorContextBeforeExecute"/>.
     /// </summary>
     /// <param name="responseActionsImageId">ID образа действий (ответ автоматизма).</param>
@@ -1427,8 +1427,8 @@ namespace ISIDA.Psychic
         return 0;
 
       bool hasVerbal = img.PhraseIdList?.Any() == true;
-      bool hasCad = img.CadPatternIdList?.Any() == true;
-      if (!hasVerbal && !hasCad)
+      bool hasCommand = img.CommandPatternIdList?.Any() == true;
+      if (!hasVerbal && !hasCommand)
         return 0;
 
       int verbIdForTree = 0;
@@ -1438,9 +1438,9 @@ namespace ISIDA.Psychic
         (_, verbIdForTree, firstSimbol, _) = PrepareVerbalStimulusForStage2(img.PhraseIdList, img.ToneId, img.MoodId);
       }
 
-      int cadIdForTree = 0;
-      if (hasCad)
-        cadIdForTree = PrepareCadStimulus(img.CadPatternIdList).cadId;
+      int commandIdForTree = 0;
+      if (hasCommand)
+        commandIdForTree = PrepareCommandStimulus(img.CommandPatternIdList).commandId;
 
       int toneMood = GetToneMoodID(img.ToneId, img.MoodId);
 
@@ -1448,7 +1448,7 @@ namespace ISIDA.Psychic
       if (!AgentVisualColor.IsValidCode(responseVisual))
         responseVisual = AgentVisualColor.White;
 
-      return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree, cadIdForTree, responseVisual);
+      return AutomatizmTreeActivation(currentBaseId, currentEmotionId, currentActivityId, toneMood, firstSimbol, verbIdForTree, commandIdForTree, responseVisual);
     }
 
     /// <summary>
@@ -1641,7 +1641,7 @@ namespace ISIDA.Psychic
       int actionsImageId,
       int automatizmNodeId,
       bool hasVerbalPart,
-      bool hasCadPart,
+      bool hasCommandPart,
       bool hasNonVerbalPart)
     {
       if (!AppGlobalState.WaitingForOperatorEvaluation || activationType < 2)
@@ -1656,7 +1656,7 @@ namespace ISIDA.Psychic
         return;
       }
 
-      _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasCadPart, hasNonVerbalPart);
+      _mirrorAutomatizmService.RegisterOperatorResponse(actionsImageId, automatizmNodeId, hasVerbalPart, hasCommandPart, hasNonVerbalPart);
 
       // Кого оцениваем: в первую очередь тот, на кого открыто ожидание (снимок до выполнения следующего автоматизма
       // на этом пульсе, иначе StartWaiting перезапишет waitTarget). Цепочка prev/cur — запасной вариант.
@@ -1993,14 +1993,14 @@ namespace ISIDA.Psychic
     /// </summary>
     /// <param name="actionIdList">Список ID действий с пульта.</param>
     /// <param name="phraseIdList">Список ID фраз.</param>
-    /// <param name="cadPatternIdList">Список ID CAD-паттернов.</param>
+    /// <param name="commandPatternIdList">Список ID паттернов команды.</param>
     /// <param name="toneId">ID тона.</param>
     /// <param name="moodId">ID настроения.</param>
     /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
     private int CreateActionsImage(
       List<int> actionIdList,
       List<int> phraseIdList,
-      List<int> cadPatternIdList,
+      List<int> commandPatternIdList,
       int toneId,
       int moodId,
       int visualColorId)
@@ -2015,7 +2015,7 @@ namespace ISIDA.Psychic
 
         if ((actionIdList == null || !actionIdList.Any()) &&
             (phraseIdList == null || !phraseIdList.Any()) &&
-            (cadPatternIdList == null || !cadPatternIdList.Any()))
+            (commandPatternIdList == null || !commandPatternIdList.Any()))
           return 0;
 
         if (!ActionsImagesSystem.IsValidToneId(toneId))
@@ -2043,7 +2043,7 @@ namespace ISIDA.Psychic
             moodId: moodId,
             checkUnicum: true, // проверяем уникальность
             visualColorId: visualColorId,
-            cadPatternIdList: cadPatternIdList?.ToList());
+            commandPatternIdList: commandPatternIdList?.ToList());
 
         if (imageId > 0)
           Logger.Info($"Создан образ действий ID: {imageId}, Tone: {toneId}, Mood: {moodId}");

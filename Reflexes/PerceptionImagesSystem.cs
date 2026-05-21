@@ -130,9 +130,9 @@ namespace ISIDA.Reflexes
       public List<int> PhraseIdList { get; set; } = new List<int>();
 
       /// <summary>
-      /// Список ID CAD-паттернов (CadChannel PhraseTree)
+      /// Список ID паттернов команды (CommandChannel PhraseTree)
       /// </summary>
-      public List<int> CadPatternIdList { get; set; } = new List<int>();
+      public List<int> CommandPatternIdList { get; set; } = new List<int>();
 
       /// <summary>
       /// Код зрительного канала (см. <see cref="AgentVisualColor"/>). Всегда задан; по умолчанию белый (0).
@@ -346,25 +346,25 @@ namespace ISIDA.Reflexes
     /// <param name="influenceActionList">Список ID воздействий с пульта</param>
     /// <param name="phraseIdList">Список ID фраз</param>
     /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
-    /// <param name="cadPatternIdList">Список ID CAD-паттернов</param>
+    /// <param name="commandPatternIdList">Список ID паттернов команды</param>
     /// <returns>ID существующего или нового образа. 0 если ошибка</returns>
-    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList, int visualColorId = 0, List<int> cadPatternIdList = null)
+    public int AddPerceptionImage(List<int> influenceActionList, List<int> phraseIdList, int visualColorId = 0, List<int> commandPatternIdList = null)
     {
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
 
       bool hasA = influenceActionList != null && influenceActionList.Any();
       bool hasP = phraseIdList != null && phraseIdList.Any();
-      bool hasCad = cadPatternIdList != null && cadPatternIdList.Any();
+      bool hasCommand = commandPatternIdList != null && commandPatternIdList.Any();
       bool hasColorSignal = visualColorId != AgentVisualColor.White;
-      if (!hasA && !hasP && !hasCad && !hasColorSignal)
+      if (!hasA && !hasP && !hasCommand && !hasColorSignal)
         return 0;
 
       var newPerceptionImage = new PerceptionImage
       {
         InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
-        CadPatternIdList = cadPatternIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
+        CommandPatternIdList = commandPatternIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
         VisualColorId = visualColorId
       };
 
@@ -386,7 +386,7 @@ namespace ISIDA.Reflexes
             Id = newId,
             InfluenceActionsList = newPerceptionImage.InfluenceActionsList,
             PhraseIdList = newPerceptionImage.PhraseIdList,
-            CadPatternIdList = newPerceptionImage.CadPatternIdList,
+            CommandPatternIdList = newPerceptionImage.CommandPatternIdList,
             VisualColorId = visualColorId
           };
 
@@ -411,8 +411,8 @@ namespace ISIDA.Reflexes
                  newImage.InfluenceActionsList.OrderBy(x => x)) &&
              existing.PhraseIdList.OrderBy(x => x).SequenceEqual(
                  newImage.PhraseIdList.OrderBy(x => x)) &&
-             existing.CadPatternIdList.OrderBy(x => x).SequenceEqual(
-                 newImage.CadPatternIdList.OrderBy(x => x));
+             existing.CommandPatternIdList.OrderBy(x => x).SequenceEqual(
+                 newImage.CommandPatternIdList.OrderBy(x => x));
     }
 
     /// <summary>
@@ -561,7 +561,7 @@ namespace ISIDA.Reflexes
               continue;
 
             int colorId = AgentVisualColor.White;
-            var cadPatternIdList = new List<int>();
+            var commandPatternIdList = new List<int>();
             if (parts.Length == 4)
             {
               if (int.TryParse(parts[3].Trim(), out int parsedColorOld))
@@ -569,7 +569,7 @@ namespace ISIDA.Reflexes
             }
             else if (parts.Length >= 5)
             {
-              cadPatternIdList = AddUtils.ParseIntList(parts[3]);
+              commandPatternIdList = AddUtils.ParseIntList(parts[3]);
               if (int.TryParse(parts[4].Trim(), out int parsedColor))
                 colorId = AgentVisualColor.IsValidCode(parsedColor) ? parsedColor : AgentVisualColor.White;
             }
@@ -579,7 +579,7 @@ namespace ISIDA.Reflexes
               Id = id,
               InfluenceActionsList = AddUtils.ParseIntList(parts[1]),
               PhraseIdList = AddUtils.ParseIntList(parts[2]),
-              CadPatternIdList = cadPatternIdList,
+              CommandPatternIdList = commandPatternIdList,
               VisualColorId = colorId
             };
 
@@ -663,7 +663,7 @@ namespace ISIDA.Reflexes
                 {
                   FileValidator.FileHeaders.PerceptionImagesFormat,
                   FileValidator.FileHeaders.PerceptionImagesLists,
-                  FileValidator.FileHeaders.PerceptionImagesCadPatternIdList,
+                  FileValidator.FileHeaders.PerceptionImagesCommandPatternIdList,
                   FileValidator.FileHeaders.PerceptionImagesVisualColor
                 };
 
@@ -671,7 +671,7 @@ namespace ISIDA.Reflexes
         {
           lines.Add($"{image.Id}|{AddUtils.IntListToString(image.InfluenceActionsList)}|" +
                     $"{AddUtils.IntListToString(image.PhraseIdList)}|" +
-                    $"{AddUtils.IntListToString(image.CadPatternIdList)}|{image.VisualColorId}");
+                    $"{AddUtils.IntListToString(image.CommandPatternIdList)}|{image.VisualColorId}");
         }
 
         var lineCount = 4;
@@ -771,19 +771,19 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Очистка CAD-паттернов
+    #region Очистка паттернов команды
 
     /// <summary>
-    /// Очищает все CadPatternIdList в образах восприятия
+    /// Очищает все CommandPatternIdList в образах восприятия
     /// </summary>
-    public void ClearAllCadPatternIds()
+    public void ClearAllCommandPatternIds()
     {
       _lock.EnterWriteLock();
       try
       {
         foreach (var image in _perceptionImages.Values)
         {
-          image.CadPatternIdList.Clear();
+          image.CommandPatternIdList.Clear();
         }
       }
       finally

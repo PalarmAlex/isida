@@ -178,7 +178,7 @@
     <Compile Include="Psychic\Thinking\Strategies\ThinkingStrategyContext.cs" />
     <Compile Include="Psychic\PurposeGeneticSystem.cs" />
     <Compile Include="Psychic\VerbalBrocaImagesSystem.cs" />
-    <Compile Include="Psychic\CadBrocaImagesSystem.cs" />
+    <Compile Include="Psychic\CommandBrocaImagesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />

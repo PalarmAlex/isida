@@ -8,9 +8,9 @@ using System.Threading;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Система CAD-образов агента (CadChannel PhraseTree)
+  /// Система образов команды агента (CommandChannel PhraseTree)
   /// </summary>
-  public sealed class CadBrocaImagesSystem : IDisposable
+  public sealed class CommandBrocaImagesSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
@@ -18,13 +18,13 @@ namespace ISIDA.Psychic
 
     #region Инициализация
 
-    private static CadBrocaImagesSystem _instance;
+    private static CommandBrocaImagesSystem _instance;
 
     /// <summary>
-    /// Глобальный экземпляр системы CAD-образов. Должен быть инициализирован через InitializeInstance()
+    /// Глобальный экземпляр системы образов команды. Должен быть инициализирован через InitializeInstance()
     /// </summary>
-    public static CadBrocaImagesSystem Instance => _instance ??
-        throw new InvalidOperationException("CadBrocaImagesSystem не инициализирован. Вызовите InitializeInstance().");
+    public static CommandBrocaImagesSystem Instance => _instance ??
+        throw new InvalidOperationException("CommandBrocaImagesSystem не инициализирован. Вызовите InitializeInstance().");
 
     /// <summary>
     /// Флаг инициализации класса
@@ -32,18 +32,18 @@ namespace ISIDA.Psychic
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
-    /// Инициализирует глобальный экземпляр системы CAD-образов
+    /// Инициализирует глобальный экземпляр системы образов команды
     /// </summary>
     /// <param name="psychicDataPath">Путь к каталогу данных психики</param>
     public static void InitializeInstance(string psychicDataPath = null)
     {
       if (_instance != null)
-        throw new InvalidOperationException("CadBrocaImagesSystem уже инициализирован.");
+        throw new InvalidOperationException("CommandBrocaImagesSystem уже инициализирован.");
 
-      _instance = new CadBrocaImagesSystem(psychicDataPath);
+      _instance = new CommandBrocaImagesSystem(psychicDataPath);
     }
 
-    private CadBrocaImagesSystem(string psychicDataPath = null)
+    private CommandBrocaImagesSystem(string psychicDataPath = null)
     {
       _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
           ? Path.Combine(
@@ -53,7 +53,7 @@ namespace ISIDA.Psychic
       try
       {
         EnsureDataDirectory();
-        LoadCadBrocaImages();
+        LoadCommandBrocaImages();
       }
       catch (Exception ex)
       {
@@ -66,12 +66,13 @@ namespace ISIDA.Psychic
 
     #region Константы и структуры
 
-    private const string CadBrocaImageFileName = "cad_broca_images";
+    private const string CommandBrocaImageFileName = "command_broca_images";
+    private const string LegacyCadBrocaImageFileName = "cad_broca_images";
 
     /// <summary>
-    /// CAD-образ агента ИИ
+    /// Образ команды агента ИИ
     /// </summary>
-    public class CadBrocaImage
+    public class CommandBrocaImage
     {
       /// <summary>
       /// Идентификатор образа
@@ -79,7 +80,7 @@ namespace ISIDA.Psychic
       public int Id { get; set; }
 
       /// <summary>
-      /// Массив ID паттернов из CadChannel PhraseTree
+      /// Массив ID паттернов из CommandChannel PhraseTree
       /// </summary>
       public List<int> PatternIdList { get; set; } = new List<int>();
     }
@@ -88,10 +89,10 @@ namespace ISIDA.Psychic
 
     #region Поля и свойства
 
-    private readonly Dictionary<int, CadBrocaImage> _cadBrocaImages = new Dictionary<int, CadBrocaImage>();
-    private int _lastCadBrocaImageId = 0;
+    private readonly Dictionary<int, CommandBrocaImage> _commandBrocaImages = new Dictionary<int, CommandBrocaImage>();
+    private int _lastCommandBrocaImageId = 0;
 
-    private readonly Dictionary<string, int> _unicumCadBrocaKeyToId = new Dictionary<string, int>();
+    private readonly Dictionary<string, int> _unicumCommandBrocaKeyToId = new Dictionary<string, int>();
 
     private bool _suppressFoundExistingLog = false;
 
@@ -105,17 +106,17 @@ namespace ISIDA.Psychic
 
     #endregion
 
-    #region Управление CAD-образами
+    #region Управление образами команды
 
     /// <summary>
-    /// Возвращает список всех CAD-образов
+    /// Возвращает список всех образов команды
     /// </summary>
-    public List<CadBrocaImage> GetAllCadBrocaImagesList()
+    public List<CommandBrocaImage> GetAllCommandBrocaImagesList()
     {
       _lock.EnterReadLock();
       try
       {
-        return _cadBrocaImages.Values.ToList();
+        return _commandBrocaImages.Values.ToList();
       }
       finally
       {
@@ -124,14 +125,14 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получить CAD-образ по ID
+    /// Получить образ команды по ID
     /// </summary>
-    public CadBrocaImage GetCadBrocaImage(int id)
+    public CommandBrocaImage GetCommandBrocaImage(int id)
     {
       _lock.EnterReadLock();
       try
       {
-        return _cadBrocaImages.TryGetValue(id, out var image) ? image : null;
+        return _commandBrocaImages.TryGetValue(id, out var image) ? image : null;
       }
       finally
       {
@@ -140,9 +141,9 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Создать новый CAD-образ или вернуть существующий
+    /// Создать новый образ команды или вернуть существующий
     /// </summary>
-    public (int Id, CadBrocaImage Image) CreateNewCadBrocaImage(List<int> patternIdList, bool checkUnicum = true)
+    public (int Id, CommandBrocaImage Image) CreateNewCommandBrocaImage(List<int> patternIdList, bool checkUnicum = true)
     {
       if (patternIdList == null)
         return (0, null);
@@ -152,11 +153,11 @@ namespace ISIDA.Psychic
       {
         if (checkUnicum)
         {
-          var existing = CheckUnicumCadBrocaImageNoLock(patternIdList);
+          var existing = CheckUnicumCommandBrocaImageNoLock(patternIdList);
           if (existing.Image != null)
           {
             if (!_suppressFoundExistingLog)
-              Logger.Info($"Найден существующий CAD-образ ID={existing.Id}");
+              Logger.Info($"Найден существующий образ команды ID={existing.Id}");
             return existing;
           }
         }
@@ -164,7 +165,7 @@ namespace ISIDA.Psychic
         _lock.EnterWriteLock();
         try
         {
-          return CreateCadBrocaImageCore(0, patternIdList, false);
+          return CreateCommandBrocaImageCore(0, patternIdList, false);
         }
         finally
         {
@@ -177,15 +178,15 @@ namespace ISIDA.Psychic
       }
     }
 
-    internal (int Id, CadBrocaImage Image) CreateNewCadBrocaWithIdNoLock(
+    internal (int Id, CommandBrocaImage Image) CreateNewCommandBrocaWithIdNoLock(
         int id,
         List<int> patternIdList,
         bool checkUnicum)
     {
-      return CreateCadBrocaImageCore(id, patternIdList, checkUnicum);
+      return CreateCommandBrocaImageCore(id, patternIdList, checkUnicum);
     }
 
-    private (int Id, CadBrocaImage Image) CreateCadBrocaImageCore(
+    private (int Id, CommandBrocaImage Image) CreateCommandBrocaImageCore(
         int id,
         List<int> patternIdList,
         bool checkUnicum)
@@ -195,46 +196,46 @@ namespace ISIDA.Psychic
 
       if (checkUnicum)
       {
-        var existing = CheckUnicumCadBrocaImageNoLock(patternIdList);
+        var existing = CheckUnicumCommandBrocaImageNoLock(patternIdList);
         if (existing.Image != null)
           return existing;
       }
 
       int newId = id;
       if (id == 0)
-        newId = ++_lastCadBrocaImageId;
-      else if (_lastCadBrocaImageId < id)
-        _lastCadBrocaImageId = id;
+        newId = ++_lastCommandBrocaImageId;
+      else if (_lastCommandBrocaImageId < id)
+        _lastCommandBrocaImageId = id;
 
-      var image = new CadBrocaImage
+      var image = new CommandBrocaImage
       {
         Id = newId,
         PatternIdList = patternIdList?.ToList() ?? new List<int>()
       };
 
-      _cadBrocaImages[newId] = image;
-      _unicumCadBrocaKeyToId[CadBrocaUnicumKey(patternIdList)] = newId;
+      _commandBrocaImages[newId] = image;
+      _unicumCommandBrocaKeyToId[CommandBrocaUnicumKey(patternIdList)] = newId;
       if (checkUnicum && !_suppressFoundExistingLog)
-        Logger.Info($"Создан новый CAD-образ ID={newId}");
+        Logger.Info($"Создан новый образ команды ID={newId}");
 
       return (newId, image);
     }
 
-    private static string CadBrocaUnicumKey(List<int> patternIdList)
+    private static string CommandBrocaUnicumKey(List<int> patternIdList)
     {
       if (patternIdList == null || patternIdList.Count == 0)
         return "";
       return string.Join(",", patternIdList.OrderBy(x => x));
     }
 
-    private (int Id, CadBrocaImage Image) CheckUnicumCadBrocaImageNoLock(List<int> patternIdList)
+    private (int Id, CommandBrocaImage Image) CheckUnicumCommandBrocaImageNoLock(List<int> patternIdList)
     {
-      string key = CadBrocaUnicumKey(patternIdList);
-      if (_unicumCadBrocaKeyToId.TryGetValue(key, out int existingId) &&
-          _cadBrocaImages.TryGetValue(existingId, out var existingImg))
+      string key = CommandBrocaUnicumKey(patternIdList);
+      if (_unicumCommandBrocaKeyToId.TryGetValue(key, out int existingId) &&
+          _commandBrocaImages.TryGetValue(existingId, out var existingImg))
         return (existingId, existingImg);
 
-      foreach (var kvp in _cadBrocaImages)
+      foreach (var kvp in _commandBrocaImages)
       {
         var v = kvp.Value;
         if (v == null)
@@ -243,7 +244,7 @@ namespace ISIDA.Psychic
         if (!AddUtils.AreListsEqual(patternIdList, v.PatternIdList))
           continue;
 
-        _unicumCadBrocaKeyToId[key] = kvp.Key;
+        _unicumCommandBrocaKeyToId[key] = kvp.Key;
         return (kvp.Key, v);
       }
 
@@ -251,16 +252,16 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Очищает все CAD-образы
+    /// Очищает все образы команды
     /// </summary>
-    public void ClearAllCadBrocaImages()
+    public void ClearAllCommandBrocaImages()
     {
       _lock.EnterWriteLock();
       try
       {
-        _cadBrocaImages.Clear();
-        _unicumCadBrocaKeyToId.Clear();
-        _lastCadBrocaImageId = 0;
+        _commandBrocaImages.Clear();
+        _unicumCommandBrocaKeyToId.Clear();
+        _lastCommandBrocaImageId = 0;
       }
       finally
       {
@@ -278,30 +279,43 @@ namespace ISIDA.Psychic
         Directory.CreateDirectory(_psychicDataPath);
     }
 
-    private string GetCadBrocaImagesFilePath()
+    private string GetCommandBrocaImagesFilePath()
     {
-      return Path.Combine(_psychicDataPath, $"{CadBrocaImageFileName}.dat");
+      return Path.Combine(_psychicDataPath, $"{CommandBrocaImageFileName}.dat");
     }
 
-    private void LoadCadBrocaImages()
+    private string ResolveCommandBrocaImagesLoadPath()
     {
-      string filePath = GetCadBrocaImagesFilePath();
+      string newPath = GetCommandBrocaImagesFilePath();
+      if (File.Exists(newPath))
+        return newPath;
 
-      if (!File.Exists(filePath) || !FileValidator.IsValidCadBrocaImagesFile(filePath))
+      string legacyPath = Path.Combine(_psychicDataPath, $"{LegacyCadBrocaImageFileName}.dat");
+      if (File.Exists(legacyPath))
+        return legacyPath;
+
+      return newPath;
+    }
+
+    private void LoadCommandBrocaImages()
+    {
+      string filePath = ResolveCommandBrocaImagesLoadPath();
+
+      if (!File.Exists(filePath) || !FileValidator.IsValidCommandBrocaImagesFile(filePath))
       {
         try
         {
           EnsureDataDirectory();
           var lines = new List<string>
           {
-            FileValidator.FileHeaders.CadBrocaImagesFormat,
-            FileValidator.FileHeaders.CadBrocaPatternIdList
+            FileValidator.FileHeaders.CommandBrocaImagesFormat,
+            FileValidator.FileHeaders.CommandBrocaPatternIdList
           };
 
-          File.WriteAllLines(filePath, lines);
-          _cadBrocaImages.Clear();
-          _unicumCadBrocaKeyToId.Clear();
-          _lastCadBrocaImageId = 0;
+          File.WriteAllLines(GetCommandBrocaImagesFilePath(), lines);
+          _commandBrocaImages.Clear();
+          _unicumCommandBrocaKeyToId.Clear();
+          _lastCommandBrocaImageId = 0;
           return;
         }
         catch (Exception ex)
@@ -316,9 +330,9 @@ namespace ISIDA.Psychic
         _lock.EnterWriteLock();
         try
         {
-          _cadBrocaImages.Clear();
-          _unicumCadBrocaKeyToId.Clear();
-          _lastCadBrocaImageId = 0;
+          _commandBrocaImages.Clear();
+          _unicumCommandBrocaKeyToId.Clear();
+          _lastCommandBrocaImageId = 0;
 
           foreach (var line in File.ReadLines(filePath))
           {
@@ -334,7 +348,7 @@ namespace ISIDA.Psychic
               continue;
 
             var patternIdList = AddUtils.ParseIntList(parts[1]);
-            CreateCadBrocaImageCore(id, patternIdList, false);
+            CreateCommandBrocaImageCore(id, patternIdList, false);
           }
         }
         finally
@@ -348,12 +362,12 @@ namespace ISIDA.Psychic
       }
     }
 
-    internal (bool Success, string ErrorMessage) SaveCadBrocaImages()
+    internal (bool Success, string ErrorMessage) SaveCommandBrocaImages()
     {
       _lock.EnterReadLock();
       try
       {
-        return SaveCadBrocaImagesNoLock();
+        return SaveCommandBrocaImagesNoLock();
       }
       finally
       {
@@ -361,17 +375,17 @@ namespace ISIDA.Psychic
       }
     }
 
-    private (bool Success, string ErrorMessage) SaveCadBrocaImagesNoLock()
+    private (bool Success, string ErrorMessage) SaveCommandBrocaImagesNoLock()
     {
       try
       {
         var lines = new List<string>
         {
-          FileValidator.FileHeaders.CadBrocaImagesFormat,
-          FileValidator.FileHeaders.CadBrocaPatternIdList
+          FileValidator.FileHeaders.CommandBrocaImagesFormat,
+          FileValidator.FileHeaders.CommandBrocaPatternIdList
         };
 
-        foreach (var kvp in _cadBrocaImages.OrderBy(x => x.Key))
+        foreach (var kvp in _commandBrocaImages.OrderBy(x => x.Key))
         {
           var v = kvp.Value;
           if (v == null)
@@ -382,11 +396,11 @@ namespace ISIDA.Psychic
 
         var minLinesCount = lines.Count == 2 ? 2 : 3;
         var result = FileValidator.SafeSaveFile(
-            GetCadBrocaImagesFilePath(),
+            GetCommandBrocaImagesFilePath(),
             lines,
-            content => FileValidator.IsValidCadBrocaImagesFile(string.Join(Environment.NewLine, content)),
+            content => FileValidator.IsValidCommandBrocaImagesFile(string.Join(Environment.NewLine, content)),
             minLinesCount: minLinesCount,
-            fileDescription: "CAD-образов");
+            fileDescription: "образов команды");
 
         return result;
       }
@@ -401,16 +415,16 @@ namespace ISIDA.Psychic
     #region IDisposable
 
     /// <summary>
-    /// Освобождает ресурсы, используемые системой CAD-образов.
+    /// Освобождает ресурсы, используемые системой образов команды.
     /// </summary>
     public void Dispose()
     {
       if (_disposed) return;
       try
       {
-        var (success, error) = SaveCadBrocaImages();
+        var (success, error) = SaveCommandBrocaImages();
         if (!success && !string.IsNullOrEmpty(error))
-          Logger.Error($"CadBrocaImagesSystem: не удалось сохранить CAD-образы: {error}");
+          Logger.Error($"CommandBrocaImagesSystem: не удалось сохранить образы команды: {error}");
       }
       catch (Exception ex)
       {

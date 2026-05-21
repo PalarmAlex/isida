@@ -415,8 +415,8 @@ namespace ISIDA.Actions
     /// <summary>Код зрительного канала, применённый в последнем <see cref="ApplyMultipleInfluenceActions"/>.</summary>
     public int LastAppliedVisualColorId { get; private set; }
 
-    /// <summary>CAD-паттерны, применённые в последнем <see cref="ApplyMultipleInfluenceActions"/>.</summary>
-    public List<int> LastAppliedCadPatternIdList { get; private set; } = new List<int>();
+    /// <summary>Паттерны команды, применённые в последнем <see cref="ApplyMultipleInfluenceActions"/>.</summary>
+    public List<int> LastAppliedCommandPatternIdList { get; private set; } = new List<int>();
 
     /// <summary>
     /// Текущий ID частичного образа сочетаний пусковых стимулов: только действия.
@@ -430,7 +430,7 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="actionIdList">ID гомеостатических воздействий; пустой список — стимул без кнопок гомеостаза (значимость этого тика — 0).</param>
     /// <param name="phraseIdList">ID фраз стимула для образа восприятия.</param>
-    /// <param name="cadPatternIdList">ID CAD-паттернов стимула для образа восприятия.</param>
+    /// <param name="commandPatternIdList">ID паттернов команды стимула для образа восприятия.</param>
     /// <param name="authoritativeMode">Режим передачи в событие фразового стимула.</param>
     /// <param name="toneId">ID тона сообщения.</param>
     /// <param name="moodId">ID настроения.</param>
@@ -439,7 +439,7 @@ namespace ISIDA.Actions
     public (bool Success, string ErrorMessage) ApplyMultipleInfluenceActions(
         List<int> actionIdList,
         List<int> phraseIdList,
-        List<int> cadPatternIdList = null,
+        List<int> commandPatternIdList = null,
         bool authoritativeMode = false,
         int toneId = 0,
         int moodId = 0,
@@ -475,13 +475,13 @@ namespace ISIDA.Actions
         if (!AgentVisualColor.IsValidCode(visualColorId))
           visualColorId = AgentVisualColor.White;
         LastAppliedVisualColorId = visualColorId;
-        LastAppliedCadPatternIdList = cadPatternIdList?.ToList() ?? new List<int>();
+        LastAppliedCommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>();
         ActiveCurTriggerStimulusID = CreatePerceptionImage(
             actionIdList,
             phraseIdList ?? new List<int>(),
-            cadPatternIdList ?? new List<int>(),
+            commandPatternIdList ?? new List<int>(),
             visualColorId);
-        // для стимула б/у рефлексов фразу, CAD и цвет игнорируем
+        // для стимула б/у рефлексов фразу, команду и цвет игнорируем
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(
             actionIdList,
             new List<int>(),
@@ -490,7 +490,7 @@ namespace ISIDA.Actions
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
         bool verbalReflexPath = phraseIdList?.Any() == true
-            || cadPatternIdList?.Any() == true
+            || commandPatternIdList?.Any() == true
             || visualColorId != AgentVisualColor.White;
         if (verbalReflexPath)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId, authoritativeMode);
@@ -642,7 +642,7 @@ namespace ISIDA.Actions
     private int CreatePerceptionImage(
         List<int> actionIdList,
         List<int> phraseIdList,
-        List<int> cadPatternIdList,
+        List<int> commandPatternIdList,
         int visualColorId = 0)
     {
       try
@@ -654,7 +654,7 @@ namespace ISIDA.Actions
             actionIdList,
             phraseIdList,
             visualColorId,
-            cadPatternIdList);
+            commandPatternIdList);
       }
       catch (Exception ex)
       {

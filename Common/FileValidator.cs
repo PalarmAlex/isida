@@ -26,10 +26,10 @@ namespace ISIDA.Common
       public const string ConditionedReflexesOrder = "# Order: порядок рефлекса (1=первичный, 2=вторичный, 3=третичный)";
 
       // Образы восприятия (пусковые стимулы для условных рефлексов)
-      public const string PerceptionImagesFormat = "# ID|InfluenceActionsList|PhraseIdList|CadPatternIdList|VisualColorId";
+      public const string PerceptionImagesFormat = "# ID|InfluenceActionsList|PhraseIdList|CommandPatternIdList|VisualColorId";
       public const string PerceptionImagesLists = "# Формат списков: id1,id2,id3";
-      public const string PerceptionImagesCadPatternIdList =
-          "# CadPatternIdList: ID паттернов CadChannel PhraseTree (через запятую); столбец опционален в старых файлах (как пусто)";
+      public const string PerceptionImagesCommandPatternIdList =
+          "# CommandPatternIdList: ID паттернов CommandChannel PhraseTree (через запятую); столбец опционален в старых файлах (как пусто)";
       public const string PerceptionImagesVisualColor =
           "# VisualColorId: 0 белый, 1 чёрный, 2–8 спектр (см. AgentVisualColor); столбец опционален в старых файлах (как 0)";
 
@@ -79,14 +79,14 @@ namespace ISIDA.Common
       public const string PropertiesIsDead = "IsDead|";
 
       // Образы действий агента для психики
-      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID|CadPatternIdList";
+      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID|CommandPatternIdList";
       public const string ActionsImagesActIdList = "# ActIdList: ID образа действий с Пульта (через запятую)";
       public const string ActionsImagesPhraseIdList = "# PhraseIdList: ID фраз (через запятую)";
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
       public const string ActionsImagesMoodId = "# MoodID: ID настроения: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
       public const string ActionsImagesVisualColorId = "# VisualColorID: зрительный канал (AgentVisualColor): 0=белый, 1=чёрный, 2–8=спектр; при отсутствии столбца в старых файлах подразумевается 0";
-      public const string ActionsImagesCadPatternIdList = "# CadPatternIdList: ID паттернов CadChannel PhraseTree (через запятую); столбец опционален в старых файлах (как пусто)";
+      public const string ActionsImagesCommandPatternIdList = "# CommandPatternIdList: ID паттернов CommandChannel PhraseTree (через запятую); столбец опционален в старых файлах (как пусто)";
 
       // Образы действий с пульта для психики
       public const string InfluenceActionsImagesFormat = "# ID|ActIdList";
@@ -103,12 +103,16 @@ namespace ISIDA.Common
       public const string VerbalBrocaToneId = "# ToneId: ID тона сообщения с Пульта или Ответного действия";
       public const string VerbalBrocaMoodId = "# MoodId: ID настроения при передаче фразы с Пульта или Ответного действия";
 
-      // CAD-образы для психики
-      public const string CadBrocaImagesFormat = "# ID|PatternIdList";
-      public const string CadBrocaPatternIdList = "# PatternIdList: ID паттернов CadChannel PhraseTree (через запятую)";
+      // Образы команды для психики
+      public const string CommandBrocaImagesFormat = "# ID|PatternIdList";
+      public const string CommandBrocaPatternIdList = "# PatternIdList: ID паттернов CommandChannel PhraseTree (через запятую)";
+
+      // Legacy alias: старые файлы могут содержать CadPatternIdList в шапке (столбец данных тот же).
+      public const string PerceptionImagesLegacyCommandPatternIdListHeader = "CadPatternIdList";
+      public const string ActionsImagesLegacyCommandPatternIdListHeader = "CadPatternIdList";
 
       // Дерево автоматизмов
-      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|VerbID|CadID|VisualID";
+      public const string AutomatizmTreeFormat = "# Формат записи: ID|ParentID|BaseID|EmotionID|ActivityID|ToneMoodID|SimbolID|VerbID|CommandID|VisualID";
       public const string AutomatizmTreeFields1 = "# ID: уникальный идентификатор узла дерева";
       public const string AutomatizmTreeFields2 = "# ParentID: ID родительского узла (0 для корневых веток)";
       public const string AutomatizmTreeFields3 = "# BaseID: базовое состояние: -1=Плохо, 0=Норма, 1=Хорошо";
@@ -117,8 +121,8 @@ namespace ISIDA.Common
       public const string AutomatizmTreeFields6 = "# ToneMoodID: ID образа контекста сообщения";
       public const string AutomatizmTreeFields7 = "# SimbolID: ID первого символа фразы (0 если нет фразы)";
       public const string AutomatizmTreeFields8 = "# VerbID: ID вербального образа (0 если нет фразы)";
-      public const string AutomatizmTreeFields10 = "# CadID: ID CAD-образа (0 если нет CAD-паттерна)";
-      public const string AutomatizmTreeFields11 = "# VisualID: код зрительного канала (AgentVisualColor), 0=нейтральный; при отсутствии столбца CadID/VisualID в старых файлах подразумевается 0";
+      public const string AutomatizmTreeFields10 = "# CommandID: ID образа команды (0 если нет команды)";
+      public const string AutomatizmTreeFields11 = "# VisualID: код зрительного канала (AgentVisualColor), 0=нейтральный; при отсутствии столбца CommandID/VisualID в старых файлах подразумевается 0";
 
       // Автоматизмы
       public const string AutomatizmFormat = "# Формат записи: ID|BranchID|Usefulness|ActionsImageID|NextID|Energy|Belief|Count|GomeoIdSuccesArr";
@@ -299,7 +303,7 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Проверяет валидность содержимого файла образов восприятия.
-    /// Строка данных: ID|список воздействий|список фраз|опционально CadPatternIdList|опционально VisualColorId (0–8).
+    /// Строка данных: ID|список воздействий|список фраз|опционально CommandPatternIdList|опционально VisualColorId (0–8).
     /// </summary>
     public static bool IsValidPerceptionImagesFile(IEnumerable<string> lines)
     {
@@ -996,12 +1000,25 @@ namespace ISIDA.Common
 
     #endregion
 
-    #region IsValidCadBrocaImagesFile
+    /// <summary>
+    /// Проверяет, что строка шапки описывает столбец паттернов команд (CommandPatternIdList или legacy CadPatternIdList).
+    /// </summary>
+    internal static bool IsCommandPatternIdListHeader(string line)
+    {
+      if (string.IsNullOrWhiteSpace(line))
+        return false;
+
+      var trimmed = line.Trim();
+      return trimmed.IndexOf("CommandPatternIdList", StringComparison.Ordinal) >= 0 ||
+             trimmed.IndexOf(FileHeaders.PerceptionImagesLegacyCommandPatternIdListHeader, StringComparison.Ordinal) >= 0;
+    }
+
+    #region IsValidCommandBrocaImagesFile
 
     /// <summary>
-    /// Проверяет валидность файла CAD-образов по пути
+    /// Проверяет валидность файла образов команды по пути
     /// </summary>
-    public static bool IsValidCadBrocaImagesFile(string filePath)
+    public static bool IsValidCommandBrocaImagesFile(string filePath)
     {
       if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
         return false;
@@ -1009,7 +1026,7 @@ namespace ISIDA.Common
       try
       {
         var lines = File.ReadLines(filePath).ToList();
-        return IsValidCadBrocaImagesFile(lines);
+        return IsValidCommandBrocaImagesFile(lines);
       }
       catch
       {
@@ -1018,9 +1035,9 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Проверяет валидность содержимого файла CAD-образов
+    /// Проверяет валидность содержимого файла образов команды
     /// </summary>
-    public static bool IsValidCadBrocaImagesFile(IEnumerable<string> lines)
+    public static bool IsValidCommandBrocaImagesFile(IEnumerable<string> lines)
     {
       if (lines == null)
         return false;
@@ -1229,10 +1246,10 @@ namespace ISIDA.Common
           }
         }
 
-        // CadID (опционально в старых файлах): parts[8] при 10+ столбцах
+        // CommandID (опционально в старых файлах): parts[8] при 10+ столбцах
         if (parts.Length >= 10 && !string.IsNullOrWhiteSpace(parts[8]))
         {
-          if (!int.TryParse(parts[8], out int cadId) || cadId < 0)
+          if (!int.TryParse(parts[8], out int commandId) || commandId < 0)
             return false;
         }
 

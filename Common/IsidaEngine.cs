@@ -350,9 +350,9 @@ namespace ISIDA.Common
     public VerbalBrocaImagesSystem VerbalBrocaImagesSystem { get; internal set; }
 
     /// <summary>
-    /// Система управления CAD-образами
+    /// Система управления образами команды
     /// </summary>
-    public CadBrocaImagesSystem CadBrocaImagesSystem { get; internal set; }
+    public CommandBrocaImagesSystem CommandBrocaImagesSystem { get; internal set; }
 
     /// <summary>
     /// Система управления информационной картиной
@@ -490,7 +490,7 @@ namespace ISIDA.Common
       SafeDispose(PsychicSystem, "PsychicSystem");
       SafeDispose(ConditionedReflexToAutomatizm, "ConditionedReflexToAutomatizm");
       SafeDispose(VerbalBrocaImagesSystem, "VerbalBrocaImagesSystem");
-      SafeDispose(CadBrocaImagesSystem, "CadBrocaImagesSystem");
+      SafeDispose(CommandBrocaImagesSystem, "CommandBrocaImagesSystem");
       SafeDispose(EmotionsImageSystem, "EmotionsImageSystem");
       SafeDispose(AutomatismResult, "AutomatismResult");
       SafeDispose(AutomatizmChainsSystem, "AutomatizmChainsSystem");
@@ -593,7 +593,7 @@ namespace ISIDA.Common
         MirrorAutomatizmService != null &&
         EmotionsImageSystem != null &&
         VerbalBrocaImagesSystem != null &&
-        CadBrocaImagesSystem != null &&
+        CommandBrocaImagesSystem != null &&
         InformationEnvironmentSystem != null &&
         PurposeGeneticImageSystem != null &&
         OrientationReflex != null &&
@@ -712,7 +712,7 @@ namespace ISIDA.Common
         SensorySystem.InitializeInstance(context.Gomeostas, config.SensorsFolder);
         context.SensorySystem = SensorySystem.Instance;
         context.SensorySystem.VerbalRecognitionThreshold = config.RecognitionThreshold;
-        context.SensorySystem.CadRecognitionThreshold = config.RecognitionThreshold;
+        context.SensorySystem.CommandRecognitionThreshold = config.RecognitionThreshold;
 
         // Шаг 8: Безусловные рефлексы
         initializationStep = 8;
@@ -865,8 +865,8 @@ namespace ISIDA.Common
         VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
         context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
-        CadBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
-        context.CadBrocaImagesSystem = CadBrocaImagesSystem.Instance;
+        CommandBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        context.CommandBrocaImagesSystem = CommandBrocaImagesSystem.Instance;
 
         // Шаг 26: Сервис отслеживания выполнения резульатов автоматизмов
         initializationStep = 26;
@@ -898,7 +898,7 @@ namespace ISIDA.Common
           context.EmotionsImageSystem,
           context.SensorySystem,
           context.VerbalBrocaImagesSystem,
-          context.CadBrocaImagesSystem,
+          context.CommandBrocaImagesSystem,
           context.AutomatismResult,
           context.Gomeostas);
           context.PsychicSystem = PsychicSystem.Instance;

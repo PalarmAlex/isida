@@ -123,9 +123,9 @@ namespace ISIDA.Psychic.Automatism
       public List<int> PhraseIdList { get; set; } = new List<int>();
 
       /// <summary>
-      /// Массив ID CAD-паттернов (CadChannel PhraseTree)
+      /// Массив ID паттернов команды (CommandChannel PhraseTree)
       /// </summary>
-      public List<int> CadPatternIdList { get; set; } = new List<int>();
+      public List<int> CommandPatternIdList { get; set; } = new List<int>();
 
       /// <summary>
       /// ID тона сообщения с Пульта или Ответного действия
@@ -456,7 +456,7 @@ namespace ISIDA.Psychic.Automatism
     int kind,
     List<int> actIdList,
     List<int> phraseIdList,
-    List<int> cadPatternIdList,
+    List<int> commandPatternIdList,
     int toneId,
     int moodId,
     int visualColorId,
@@ -467,13 +467,13 @@ namespace ISIDA.Psychic.Automatism
 
       bool hasAct = actIdList != null && actIdList.Count > 0;
       bool hasPhrase = phraseIdList != null && phraseIdList.Count > 0 && !_isUnrecognizedPhraseFromAtmtzmTreeActivation;
-      bool hasCad = cadPatternIdList != null && cadPatternIdList.Count > 0;
-      if (!hasAct && !hasPhrase && !hasCad)
+      bool hasCommand = commandPatternIdList != null && commandPatternIdList.Count > 0;
+      if (!hasAct && !hasPhrase && !hasCommand)
         return (0, null);
 
       if (checkUnicum)
       {
-        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId);
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId);
         if (existing.Image != null)
           return existing;
       }
@@ -491,26 +491,26 @@ namespace ISIDA.Psychic.Automatism
         Kind = kind,
         ActIdList = actIdList?.ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.ToList() ?? new List<int>(),
-        CadPatternIdList = cadPatternIdList?.ToList() ?? new List<int>(),
+        CommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>(),
         ToneId = toneId,
         MoodId = moodId,
         VisualColorId = visualColorId
       };
 
       _actionsImages[newId] = image;
-      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId)] = newId;
+      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId)] = newId;
       if (checkUnicum)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
-    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, List<int> cadPatternIdList, int toneId, int moodId, int visualColorId)
+    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, List<int> commandPatternIdList, int toneId, int moodId, int visualColorId)
     {
       string actKey = actIdList == null || actIdList.Count == 0 ? "" : string.Join(",", actIdList.OrderBy(x => x));
       string phraseKey = phraseIdList == null || phraseIdList.Count == 0 ? "" : string.Join(",", phraseIdList.OrderBy(x => x));
-      string cadKey = cadPatternIdList == null || cadPatternIdList.Count == 0 ? "" : string.Join(",", cadPatternIdList.OrderBy(x => x));
-      return $"{kind}_{toneId}_{moodId}_{visualColorId}_{actKey}_{phraseKey}_{cadKey}";
+      string commandKey = commandPatternIdList == null || commandPatternIdList.Count == 0 ? "" : string.Join(",", commandPatternIdList.OrderBy(x => x));
+      return $"{kind}_{toneId}_{moodId}_{visualColorId}_{actKey}_{phraseKey}_{commandKey}";
     }
 
     /// <summary>
@@ -519,7 +519,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="kind">Тип: 0 - объективное действие, 1 - субъективное предположение</param>
     /// <param name="actIdList">Массив ID действий</param>
     /// <param name="phraseIdList">Массив ID фраз</param>
-    /// <param name="cadPatternIdList">Массив ID CAD-паттернов</param>
+    /// <param name="commandPatternIdList">Массив ID паттернов команды</param>
     /// <param name="toneId">ID тона</param>
     /// <param name="moodId">ID настроения</param>
     /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
@@ -533,7 +533,7 @@ namespace ISIDA.Psychic.Automatism
         int moodId,
         bool checkUnicum,
         int visualColorId = 0,
-        List<int> cadPatternIdList = null)
+        List<int> commandPatternIdList = null)
     {
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
@@ -543,7 +543,7 @@ namespace ISIDA.Psychic.Automatism
       {
         if (checkUnicum)
         {
-          var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId);
+          var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId);
           if (existing.Image != null)
             return existing;
         }
@@ -551,7 +551,7 @@ namespace ISIDA.Psychic.Automatism
         _lock.EnterWriteLock();
         try
         {
-          return CreateActionsImageCore(0, kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId, false);
+          return CreateActionsImageCore(0, kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, false);
         }
         finally
         {
@@ -575,7 +575,7 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="moodId">ID настроения.</param>
     /// <param name="checkUnicum">Проверять уникальность.</param>
     /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>)</param>
-    /// <param name="cadPatternIdList">Список ID CAD-паттернов</param>
+    /// <param name="commandPatternIdList">Список ID паттернов команды</param>
     internal (int Id, ActionsImage Image) CreateNewActionsImageWithIdNoLock(
         int id,
         int kind,
@@ -585,9 +585,9 @@ namespace ISIDA.Psychic.Automatism
         int moodId,
         bool checkUnicum,
         int visualColorId = 0,
-        List<int> cadPatternIdList = null)
+        List<int> commandPatternIdList = null)
     {
-      return CreateActionsImageCore(id, kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId, checkUnicum);
+      return CreateActionsImageCore(id, kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, checkUnicum);
     }
 
     /// <summary>
@@ -597,7 +597,7 @@ namespace ISIDA.Psychic.Automatism
         int kind,
         List<int> actIdList,
         List<int> phraseIdList,
-        List<int> cadPatternIdList,
+        List<int> commandPatternIdList,
         int toneId,
         int moodId,
         int visualColorId)
@@ -605,7 +605,7 @@ namespace ISIDA.Psychic.Automatism
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
 
-      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId);
+      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId);
       if (_unicumActionsImageKeyToId.TryGetValue(key, out int existingId) &&
           _actionsImages.TryGetValue(existingId, out var existingImg))
         return (existingId, existingImg);
@@ -625,7 +625,7 @@ namespace ISIDA.Psychic.Automatism
         if (!AddUtils.AreListsEqual(phraseIdList, v.PhraseIdList))
           continue;
 
-        if (!AddUtils.AreListsEqual(cadPatternIdList, v.CadPatternIdList))
+        if (!AddUtils.AreListsEqual(commandPatternIdList, v.CommandPatternIdList))
           continue;
 
         if (toneId != v.ToneId || moodId != v.MoodId)
@@ -699,7 +699,7 @@ namespace ISIDA.Psychic.Automatism
             FileValidator.FileHeaders.ActionsImagesMoodId,
             FileValidator.FileHeaders.ActionsImagesKind,
             FileValidator.FileHeaders.ActionsImagesVisualColorId,
-            FileValidator.FileHeaders.ActionsImagesCadPatternIdList
+            FileValidator.FileHeaders.ActionsImagesCommandPatternIdList
           };
 
           File.WriteAllLines(filePath, lines);
@@ -756,10 +756,10 @@ namespace ISIDA.Psychic.Automatism
             if (parts.Length > 6 && int.TryParse(parts[6].Trim(), out int parsedVisual))
               visualColorId = AgentVisualColor.IsValidCode(parsedVisual) ? parsedVisual : AgentVisualColor.White;
 
-            var cadPatternIdList = parts.Length > 7 ? AddUtils.ParseIntList(parts[7]) : new List<int>();
+            var commandPatternIdList = parts.Length > 7 ? AddUtils.ParseIntList(parts[7]) : new List<int>();
 
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateActionsImageCore(id, kind, actIdList, phraseIdList, cadPatternIdList, toneId, moodId, visualColorId, false);
+            CreateActionsImageCore(id, kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, false);
           }
         }
         finally
@@ -805,7 +805,7 @@ namespace ISIDA.Psychic.Automatism
           FileValidator.FileHeaders.ActionsImagesMoodId,
           FileValidator.FileHeaders.ActionsImagesKind,
           FileValidator.FileHeaders.ActionsImagesVisualColorId,
-          FileValidator.FileHeaders.ActionsImagesCadPatternIdList
+          FileValidator.FileHeaders.ActionsImagesCommandPatternIdList
         };
 
         foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
@@ -822,7 +822,7 @@ namespace ISIDA.Psychic.Automatism
           line += $"{v.MoodId}|";
           line += $"{v.Kind}|";
           line += $"{v.VisualColorId}|";
-          line += AddUtils.IntListToString(v.CadPatternIdList);
+          line += AddUtils.IntListToString(v.CommandPatternIdList);
 
           lines.Add(line);
         }

@@ -472,7 +472,7 @@ namespace ISIDA.Reflexes
             _activetStyleIds,
             actionIdList,
             phraseIdList,
-            _influenceActions.LastAppliedCadPatternIdList,
+            _influenceActions.LastAppliedCommandPatternIdList,
             toneId,
             moodId,
             _influenceActions.LastAppliedVisualColorId);

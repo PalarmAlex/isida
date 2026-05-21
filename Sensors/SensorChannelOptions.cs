@@ -1,7 +1,7 @@
 namespace ISIDA.Sensors
 {
   /// <summary>
-  /// Параметры экземпляра канала токенов/паттернов (вербальный или CAD).
+  /// Параметры экземпляра канала токенов/паттернов (вербальный или командный).
   /// </summary>
   public sealed class SensorChannelOptions
   {
@@ -15,13 +15,13 @@ namespace ISIDA.Sensors
         atomicTokens: false,
         filterGarbageWords: true);
 
-    /// <summary>CAD-канал: атомарные контуры из DefaultCommandPrimaries, CadWords.dat / CadPhrases.dat.</summary>
-    public static readonly SensorChannelOptions Cad = new SensorChannelOptions(
-        wordsTreeName: "CadWords",
-        phrasesTreeName: "CadPhrases",
-        wordSandboxName: "CadWords",
-        phraseSandboxName: "CadPhrases",
-        phraseTextSandboxName: "CadPhrasesText",
+    /// <summary>Командный канал: атомарные контуры из DefaultCommandPrimaries, CommandWords.dat / CommandPhrases.dat.</summary>
+    public static readonly SensorChannelOptions Command = new SensorChannelOptions(
+        wordsTreeName: "CommandWords",
+        phrasesTreeName: "CommandPhrases",
+        wordSandboxName: "CommandWords",
+        phraseSandboxName: "CommandPhrases",
+        phraseTextSandboxName: "CommandPhrasesText",
         atomicTokens: true,
         filterGarbageWords: false);
 
@@ -58,7 +58,7 @@ namespace ISIDA.Sensors
     /// <summary>Имя файла текстовой песочницы паттернов.</summary>
     public string PhraseTextSandboxName { get; }
 
-    /// <summary>true — токен атомарный (CAD); false — побуквенное дерево (речь).</summary>
+    /// <summary>true — токен атомарный (команда); false — побуквенное дерево (речь).</summary>
     public bool AtomicTokens { get; }
 
     /// <summary>true — отфильтровывать «мусорные» вербальные токены перед записью в дерево.</summary>
