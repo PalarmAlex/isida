@@ -1,4 +1,5 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
+using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
 using System;
@@ -60,6 +61,17 @@ namespace ISIDA.Actions
     }
 
     private readonly GomeostasSystem _gomeostas;
+    private CouplingBridge _couplingBridge;
+
+    /// <summary>
+    /// Подключает мост coupling Creature→Niche (триада).
+    /// </summary>
+    /// <param name="couplingBridge">CouplingBridge или null для отключения.</param>
+    public void SetCouplingBridge(CouplingBridge couplingBridge)
+    {
+      _couplingBridge = couplingBridge;
+    }
+
     private AdaptiveActionsSystem(
         GomeostasSystem gomeostas,
         string actionsFolderPath = null)
@@ -745,6 +757,7 @@ namespace ISIDA.Actions
         if (phraseId != 0 && actionImageIdForToneMood > 0)
           _activeActionPhrasesImageId[actionId] = actionImageIdForToneMood;
 
+        _couplingBridge?.NotifyCreatureActionApplied(actionId, GlobalTimer.GlobalPulsCount);
         return true;
       }
       finally

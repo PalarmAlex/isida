@@ -172,6 +172,19 @@ namespace ISIDA.Sensors
       return preferredName;
     }
 
+    private static void EnsureDefaultPrimarySensorsFile(string filePath)
+    {
+      var directory = Path.GetDirectoryName(filePath);
+      if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        Directory.CreateDirectory(directory);
+
+      File.WriteAllLines(filePath, new[]
+      {
+        FileValidator.FileHeaders.VerbalPrimariesFormat,
+        " |#|0"
+      });
+    }
+
     private void LoadPrimarySensors(string filePath)
     {
       if (_options.AtomicTokens)
@@ -198,7 +211,7 @@ namespace ISIDA.Sensors
       }
 
       if (!File.Exists(filePath))
-        throw new FileNotFoundException($"Файл первичных сенсоров не найден: {filePath}");
+        EnsureDefaultPrimarySensorsFile(filePath);
 
       _primarySensors.Clear();
 
@@ -209,11 +222,10 @@ namespace ISIDA.Sensors
         var parts = line.Split(new[] { "|#|" }, StringSplitOptions.None);
         if (parts.Length != 2) continue;
 
-        var symbol = parts[0].Trim();
-        if (symbol.Length != 1) continue;
+        if (parts[0].Length != 1) continue;
 
         if (int.TryParse(parts[1].Trim(), out int id))
-          _primarySensors[symbol[0]] = id;
+          _primarySensors[parts[0][0]] = id;
       }
 
       if (_primarySensors.Count == 0)

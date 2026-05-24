@@ -1,0 +1,506 @@
+Триада «симбионт — среда — оператор»: реализация в движке ISIDA и интерфейс AIStudio
+
+Версия 1.0 (сверка с «Архитектура движка isida.txt» v3.6 и «План внедрения триады» от 2026-05-23)
+Дата сверки: 2026-05-24
+
+Статус документа: описание фактической реализации (не канон). Канон семантики — «Архитектура
+движка isida.txt» §0–§11; дорожная карта и чеклист этапов — «План внедрения триады
+симбионт-среда-оператор.md». Настоящий документ фиксирует, что уже есть в коде
+(`D:\ISIDA\Programms\isida`, сборка V3.2) и в хосте (`D:\ISIDA\Programms\app\AIStudio`).
+
+Методологическая оговорка: §12 и §13 канона v3.6 описывают состояние «до триады».
+По плану внедрения (этапы 0–4 и 6) основной контур MVP-диады и UI уже реализованы;
+§12.16 канона устарел относительно текущего кода — см. §1 настоящего документа.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+0. КРАТКОЕ РЕЗЮМЕ
+═══════════════════════════════════════════════════════════════════════════════
+
+0.1. Задуманная триада (канон)
+
+Три участника:
+
+  ┌─────────────┬──────────────────────────────┬────────────────────────────────────────────┐
+  │ Участник    │ Роль                         │ Суть                                       │
+  ├─────────────┼──────────────────────────────┼────────────────────────────────────────────┤
+  │ Creature    │ Симбионт-объект исследования │ Полный стек ISIDA (гомеостаз, УР, УР,       │
+  │             │                              │ автоматизмы, зеркало, мышление)            │
+  ├─────────────┼──────────────────────────────┼────────────────────────────────────────────┤
+  │ Niche       │ Симбионт-среда               │ Реактивный партнёр: отклик на действия       │
+  │             │                              │ Creature, автономный дрейф, coupling →       │
+  │             │                              │ гомеостаз Creature                         │
+  ├─────────────┼──────────────────────────────┼────────────────────────────────────────────┤
+  │ Operator    │ Педагог / экспериментатор    │ Сценарии, пульт; на зрелых стадиях —       │
+  │             │                              │ форма и ритуал, не первичный судья AOE     │
+  └─────────────┴──────────────────────────────┴────────────────────────────────────────────┘
+
+Целевая каузальная схема (MVP и далее):
+
+  Operator ──AssessmentType, сценарии──► (форма, ритуал)
+                  │
+                  └── (фаза C) ──► Niche ──coupling──► Creature
+
+  Creature ──ApplyAction──► CouplingBridge ──► Niche (гомеостаз среды)
+                                │
+  Niche.Update ──mapping──► Creature (HostBatchUpdate, StimulusOrigin=Niche)
+                                │
+  Creature ──AOE──► Δгомеостаз (первично от Niche на фазе B+, не от Operator)
+
+0.2. Что реализовано сейчас
+
+  • Движок: каталог `Environment/` (namespace `ISIDA.Niche`), CouplingBridge,
+    NicheEngine, TriadOrchestrator, AoeEvaluationService, RoleProfile, контуры.
+  • Такт: `GlobalTimer.ProcessAgentPulse` → `TriadOrchestrator.ProcessTriadPulse`
+    → `CouplingBridge.ProcessPulseBeforeGomeostasis` → `GomeostasSystem.UpdateStateOnly`.
+  • AOE: первичный канал Niche (фаза B+), вторичный Operator (ритуал, зеркало).
+  • Фаза C: блок прямого Influence на Creature (стадия 4+), Operator→Niche.
+  • AIStudio: панель «Триада Creature↔Niche», inline-редактор конфигов, сценарии
+    валидации §6.14, метрики §13.3, манифест прогона.
+
+0.3. Что остаётся post-MVP (этап 5 плана)
+
+  • Eligibility trace (λ=0.85, M=5) в `AutomatismResultTracker`.
+  • Forward model runtime (EMA action→Δgomeo).
+  • Выученный coupling (корреляция action→Δniche→Δcreature).
+  • Адаптивный EWMA-baseline для нестационарной Niche.
+  • Полная изоляция состояния от `AppGlobalState` (частично — `TriadInstanceState`).
+
+
+═══════════════════════════════════════════════════════════════════════════════
+1. СРАВНЕНИЕ: КАНОН §12–§13 vs ПЛАН vs КОД (2026-05-24)
+═══════════════════════════════════════════════════════════════════════════════
+
+1.1. Матрица компонентов
+
+  ┌────────────────────────────┬──────────┬──────────┬──────────┬─────────────────────────┐
+  │ Компонент                  │ Канон    │ План     │ Код      │ Примечание              │
+  │                            │ v3.6 §12 │ этап     │          │                         │
+  ├────────────────────────────┼──────────┼──────────┼──────────┼─────────────────────────┤
+  │ Creature (полный стек)     │ ✅       │ —        │ ✅       │ Без изменений по триаде │
+  │ Operator (сценарии, пульт) │ ✅       │ —        │ ✅       │ + AssessmentType        │
+  │ Niche как симбионт-среда   │ ✅       │ 1, 4     │ ✅       │ NicheEngine + host-state│
+  │ CouplingBridge             │ ❌ §12   │ 1        │ ✅       │ `CouplingBridge.cs`     │
+  │ CouplingTarget (action→N)  │ ❌ §12   │ 1        │ ✅       │ `action_coupling.dat`   │
+  │ Niche→Creature mapping     │ ❌ §12   │ 1        │ ✅       │ `niche_creature_mapping`│
+  │ StimulusOrigin             │ ❌ §12   │ 1        │ ✅       │ Лог + HostBatch API     │
+  │ AssessmentType             │ ❌ §12   │ 2        │ ✅       │ `InfluenceActionSystem` │
+  │ Baseline / niche_response  │ ❌ §12   │ 2        │ ✅       │ `AoeEvaluationService`  │
+  │ Исходы AOE (NoResponse…)   │ ❌ §12   │ 2        │ ✅       │ Success/Fail/…/Ambiguous│
+  │ Niche-primary AOE          │ ❌ §12   │ 2        │ ✅       │ Фаза B+                 │
+  │ Gate Operator на Creature  │ ❌ §12   │ 3        │ ✅       │ Фаза C, стадия 4+       │
+  │ Operator→Niche coupling    │ ❌ §12   │ 3        │ ✅       │ `operator_niche_coupling`│
+  │ RoleProfile Niche           │ ❌ §12   │ 4        │ ✅       │ niche_minimal/reactive  │
+  │ NicheEngine + рефлексы     │ ❌ §12   │ 4        │ ✅       │ `Data/Niche/`           │
+  │ TriadOrchestrator           │ ❌ §12   │ 4        │ ✅       │ Координатор такта       │
+  │ Contour / InputSnapshot     │ ❌ §12   │ 1, 6.4   │ ✅       │ ProbeContourAdapter     │
+  │ Init / reset диады (§6.11–12)│ ✅ канон│ 1        │ ✅       │ ResetDyad, NicheInit    │
+  │ Лог диады + манифест        │ ✅ канон│ 1, 6.5   │ ✅       │ AgentLogs_Dyad.jsonl    │
+  │ AIStudio UI триады          │ —        │ 6        │ ✅       │ TriadView / ViewModel   │
+  │ Eligibility trace           │ ✅ канон│ 5        │ ❌       │ Post-MVP                │
+  │ Forward model runtime       │ ✅ канон│ 5        │ ❌       │ Post-MVP                │
+  │ Выученный coupling          │ ✅ канон│ 5        │ ❌       │ Post-MVP                │
+  │ Второй полный IsidaEngine   │ канон   │ 4        │ ⚠️       │ NicheEngine, не полный  │
+  │                             │          │          │          │ дубликат Creature-стека │
+  │ Изоляция AppGlobalState     │ канон   │ 4.6      │ ⚠️       │ TriadInstanceState для  │
+  │                             │          │          │          │ AOE UI; singleton остаёт│
+  └────────────────────────────┴──────────┴──────────┴──────────┴─────────────────────────┘
+
+1.2. Эволюция схемы
+
+Было (диада, §12.16 канона v3.6):
+
+  Operator ──InfluenceAction──► Creature (гомеостаз, AOE по ответу Operator)
+                  │
+                  └── (иногда) хост-хук ──► параметры Creature
+
+Стало (триада в коде):
+
+  Operator ──InfluenceAction / сценарии──► Creature (фаза A–B) или Niche (фаза C)
+                  │
+  Creature ──ApplyAction──► CouplingBridge ──► NicheEngine / NicheHostState
+                  │
+  TriadOrchestrator (каждый пульс) ──► Niche update → mapping → Creature params
+                  │
+  PsychicSystem ──► AoeEvaluationService (B+) ──► Usefulness от Niche-канала
+
+1.3. Расхождение канона §12.16 с кодом
+
+Раздел §12.16 «Хост-хуки (зачаток Niche, не полная триада)» в каноне v3.6 не обновлён
+после внедрения. Фактически реализованы все пункты, перечисленные там как «отсутствует»:
+CouplingBridge, CouplingTarget, StimulusOrigin, AssessmentType, Niche-primary AOE.
+Хост-хук `GlobalTimer.OnPulseBeforeGomeostasis` сохранён для дополнительных inject-сценариев,
+но основной контур среды идёт через `CouplingBridge`, а не через произвольный хост.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+2. КАК РАБОТАЕТ ТРИАДА В ДВИЖКЕ
+═══════════════════════════════════════════════════════════════════════════════
+
+2.1. Участники и ключевые классы
+
+  ┌─────────────────┬──────────────────────────────────────────────────────────────┐
+  │ Роль            │ Классы / файлы                                               │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Creature        │ `GomeostasSystem`, `PsychicSystem`, `AdaptiveActionsSystem`, │
+  │                 │ `InfluenceActionSystem`, `AutomatismResultTracker`           │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Niche (среда)   │ `NicheEngine`, `NicheHostState`, `NicheReflexLayer`,         │
+  │                 │ `RoleProfile`, контуры (`StaticContourAdapter`,              │
+  │                 │ `ProbeContourAdapter`)                                       │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Мост coupling   │ `CouplingBridge`, `CouplingMappingLoader`                    │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Координация     │ `TriadOrchestrator`, `GlobalTimer`                           │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ AOE по Niche    │ `AoeEvaluationService`, `HomeostasisCalculator.              │
+  │                 │ ComputeNicheMappedAutomatizmAssessment`                      │
+  ├─────────────────┼──────────────────────────────────────────────────────────────┤
+  │ Контекст        │ `IsidaContext` (`CouplingBridge`, `TriadOrchestrator`),      │
+  │                 │ `IsidaEngine` (создание при `TriadEnabled=true`)             │
+  └─────────────────┴──────────────────────────────────────────────────────────────┘
+
+Namespace: `ISIDA.Niche` (не `ISIDA.Environment` — конфликт с `System.Environment`).
+
+2.2. Инициализация
+
+При создании движка (`IsidaEngine`, `config.TriadEnabled=true`):
+
+  1. `CouplingBridge` загружает каталог `Environment/` (шаблоны создаются при отсутствии).
+  2. `NicheEngine.Initialize` — параметры из `niche_params.dat`, профиль из `triad_config.dat`
+     (`UseFullNicheEngine`, `NicheRoleProfileId`), рефлексы из `Data/Niche/niche_reflexes.dat`.
+  3. `TriadOrchestrator` оборачивает bridge и создаёт `TriadInstanceState`.
+  4. Подписки: `AdaptiveActionsSystem.SetCouplingBridge`, `PsychicSystem.SetCouplingBridge`,
+     `InfluenceActionSystem.SetCouplingBridge` + `SetTriadOrchestrator`,
+     `GlobalTimer.SetTriadOrchestrator`.
+  5. `CouplingBridge.RecordRunStart()` — снимок Niche (`niche_init_log.jsonl`), манифест прогона.
+
+Пути задаются в `IsidaConfig`: `EnvironmentFolder`, `NicheDataFolder`, `TriadEnabled`.
+В AIStudio: `TriadProjectPaths` → `{ProjectRoot}/Environment`, `{ProjectRoot}/Data/Niche`.
+
+2.3. Тактовый цикл (§6.5)
+
+Порядок на один глобальный пульс (`GlobalTimer.ProcessAgentPulse`):
+
+  1. `TriadOrchestrator.ProcessTriadPulse(pulse)`
+       └─ `CouplingBridge.ProcessPulseBeforeGomeostasis(pulse)`:
+            a. `NicheEngine.BeginPulse()`
+            b. Спонтанный дрейф + contour-input (`ApplySpontaneousAndContour`)
+            c. Отображение Niche→Creature (`ApplyNicheToCreatureMapping` →
+               `HostBatchUpdateParameterValues`, `StimulusOrigin=Niche`)
+            d. `NicheEngine.EndPulse()` — снимок after, дельты spontaneous/response
+            e. Запись строки диады в `AgentLogs_Dyad.jsonl`
+            f. `AoeEvaluationService.RecordDyadPulse` — baseline, окно AOE
+  2. `OnPulseBeforeGomeostasis` (опциональный хост-хук)
+  3. `GomeostasSystem.UpdateStateOnly()` — метаболизм Creature
+  4. … рефлексы, психика …
+  5. `PsychicSystem.ProcessPsychicPulse`:
+       • `TryFinalizePrimaryNicheAoe` → `MarkNichePrimaryAoeOutcome` (фаза B+)
+       • `EvaluatePreviousAutomatizm` — вторичный канал Operator (если был стимул)
+
+Схема потока:
+
+  ┌──────────────┐     ApplyAction      ┌─────────────────┐
+  │   Creature   │ ───────────────────► │ CouplingBridge  │
+  │ (mid-pulse)  │                      │ → NicheEngine   │
+  └──────────────┘                      └────────┬────────┘
+                                                 │
+  ┌──────────────┐   mapping + origin=Niche      │
+  │   Creature   │ ◄─────────────────────────────┘
+  │  (next tick) │   ProcessPulseBeforeGomeostasis
+  └──────┬───────┘
+         │ UpdateStateOnly
+         ▼
+  ┌──────────────┐   AOE (B+)           ┌──────────────────┐
+  │ PsychicSystem│ ◄─────────────────── │ AoeEvaluation    │
+  └──────────────┘                      └──────────────────┘
+
+2.4. Coupling Creature → Niche
+
+После успешного `AdaptiveActionsSystem.ApplyAction(actionId)`:
+
+  • `CouplingBridge.NotifyCreatureActionApplied` читает `action_coupling.dat`
+    (формат: `actionId|nicheParamId|delta|scale`).
+  • Дельта масштабируется vigor действия (`GetModifiedVigor / 5`).
+  • `NicheEngine.ApplyCreatureCoupling` меняет параметры Niche; при `UseFullNicheEngine`
+    срабатывают рефлексы Niche (`NicheReflexLayer`).
+
+Важно: `TargetGomeoParamIdArr` в метаданных действия — унаследованное поле Creature;
+для coupling Niche используется только `CouplingTarget` в конфиге эксперимента (§6.7).
+
+2.5. Coupling Niche → Creature
+
+Статическая таблица `niche_creature_mapping.dat`:
+
+  `nicheParamId|creatureParamId|scale|lag_pulses`
+
+На каждом такте до `UpdateStateOnly` bridge вычисляет значения mapped-параметров Creature
+и записывает через `HostBatchUpdateParameterValues` с меткой `StimulusOrigin.Niche`.
+Creature не «видит» происхождение в конвейере восприятия — origin только для логов и AOE.
+
+2.6. Operator и каналы влияния
+
+  ┌─────────────────────┬───────┬──────────────────────────────────────────────────────┐
+  │ AssessmentType      │ Фазы  │ Поведение в коде                                     │
+  ├─────────────────────┼───────┼──────────────────────────────────────────────────────┤
+  │ Bootstrap           │ A     │ Прямой Influence на Creature; operator-centric AOE   │
+  ├─────────────────────┼───────┼──────────────────────────────────────────────────────┤
+  │ RitualScaffold      │ B     │ Демонстрация, зеркало; AOE вторичный (не primary)    │
+  ├─────────────────────┼───────┼──────────────────────────────────────────────────────┤
+  │ RitualViolation     │ C     │ Meta-сигнал; без пошагового ±1 на Creature          │
+  ├─────────────────────┼───────┼──────────────────────────────────────────────────────┤
+  │ EmergencyOverride   │ любая │ Обход gate фазы C на Creature                        │
+  └─────────────────────┴───────┴──────────────────────────────────────────────────────┘
+
+Фаза C, стадия 4+: `CouplingBridge.IsOperatorCreatureInfluenceBlocked` — отказ прямого
+`InfluenceAction` на Creature (кроме emergency). Operator воздействует через
+`operator_niche_coupling.dat` → `ApplyOperatorInfluencesToNiche`.
+
+`EnvironmentMetricProbeKey` на воздействии пульта: при `UseProbeContour` передаётся в
+`ProbeContourAdapter` → one-shot Δ Niche на такт (§6.8).
+
+2.7. AOE: первичный канал Niche (фаза B+)
+
+`AoeEvaluationService` (настройки в `triad_config.dat`: BaselineN, Threshold, K, W_eval):
+
+  1. После automatizm Creature открывается окно `W_eval` (`WaitingForNicheResponse`).
+  2. На каждом такте диады считаются `niche_spontaneous_delta` и `niche_response_delta`
+     (response = Δ − baseline по mapped-параметрам).
+  3. Исходы: Success / Fail / NoResponse / Ambiguous (§5.3.2).
+     NoResponse → `UsefulnessDelta=0` (не нейтральный ±1).
+  4. `ComputeNicheMappedAutomatizmAssessment` — оценка только по параметрам из mapping
+     Niche→Creature.
+  5. `AutomatismResultTracker.MarkNichePrimaryAoeOutcome` обновляет полезность;
+     на фазе C с `finalizeTracking` — episodic `FixDirectRule` от Niche-AOE.
+
+Operator-канал: `EvaluatePreviousAutomatizm` / `MarkOperatorRecognition(..., updateUsefulness)`
+не участвует в primary AOE на фазе B+ (ритуал и зеркало — вторично).
+
+2.8. NicheEngine vs host-only
+
+  ┌──────────────────────┬────────────────────────────────────────────────────────────┐
+  │ Режим                │ Поведение                                                  │
+  ├──────────────────────┼────────────────────────────────────────────────────────────┤
+  │ host_mvp             │ `UseFullNicheEngine=0`: только `NicheHostState`, дрейф,    │
+  │ (по умолчанию MVP)   │ mapping; без рефлексов Niche                               │
+  ├──────────────────────┼────────────────────────────────────────────────────────────┤
+  │ Full Niche engine    │ `UseFullNicheEngine=1`: RoleProfile (niche_minimal /       │
+  │                      │ niche_reactive), `niche_reflexes.dat`, contour adapters    │
+  └──────────────────────┴────────────────────────────────────────────────────────────┘
+
+Niche — не второй полный `IsidaEngine` с деревом автоматизмов Creature; это редуцированный
+стек по `RoleProfile` (§1.4 канона): гомеостаз + опционально рефлексы и contour-input.
+
+2.9. Фазы песочницы (§0.7)
+
+  ┌───────┬────────────────────────────────────────┬─────────────────────────────────┐
+  │ Фаза  │ Operator                               │ AOE / обучение                  │
+  ├───────┼────────────────────────────────────────┼─────────────────────────────────┤
+  │ A     │ Прямо на Creature (CS/US, bootstrap)   │ Operator-centric (как раньше)   │
+  ├───────┼────────────────────────────────────────┼─────────────────────────────────┤
+  │ B     │ Ритуал + демонстрация                  │ Primary — отклик Niche; Operator│
+  │       │                                        │ — вторичный (зеркало)           │
+  ├───────┼────────────────────────────────────────┼─────────────────────────────────┤
+  │ C     │ Только через Niche (стадия 4+)         │ Episodic / Niche-AOE; gate      │
+  │       │                                        │ прямого пульта на Creature      │
+  └───────┴────────────────────────────────────────┴─────────────────────────────────┘
+
+Фаза хранится в `triad_config.dat`. Допустимый диапазон задаётся стадией симбионта
+(§4.1, `TriadPhaseStagePolicy`): 0–1 → только A; 2–3 → A или B; 4+ → только C.
+При сохранении из AIStudio недопустимая фаза отклоняется; при смене стадии движок
+auto-clamp и перезаписывает `triad_config.dat`. Сценарии валидации по-прежнему
+выставляют фазу вручную в пределах допустимого диапазона.
+
+2.10. Сброс и перенос
+
+Сброс диады (`CouplingBridge.ResetDyad`, API `IsidaContext.ResetDyad`):
+
+  • NicheSoft — параметры Niche → снимок инициализации
+  • CreatureSoft — гомеостаз Creature → норма; сброс окон AOE
+  • DyadHard — оба + новый `experiment_run_id`
+  • Calibration — калибровка параметров Niche в диапазоне эксперимента
+
+Перенос §6.6: `TriadOrchestrator.ApplyNicheTransfer` / `CouplingBridge.ApplyNicheTransfer` —
+новые начальные параметры Niche₂ при той же структуре mapping.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+3. КОНФИГУРАЦИЯ И ЛОГИРОВАНИЕ
+═══════════════════════════════════════════════════════════════════════════════
+
+3.1. Каталог Environment (на проект)
+
+  ┌─────────────────────────────┬────────────────────────────────────────────────────┐
+  │ Файл                        │ Назначение                                         │
+  ├─────────────────────────────┼────────────────────────────────────────────────────┤
+  │ triad_config.dat            │ Фаза, ContourId, drift, mapping version, AOE,      │
+  │                             │ UseFullNicheEngine, RoleProfile, UseProbeContour   │
+  │ action_coupling.dat         │ Creature action → Niche param (CouplingTarget)     │
+  │ niche_creature_mapping.dat  │ Niche param → Creature param                       │
+  │ niche_params.dat            │ Начальные значения и SpeedPerPulse параметров Niche│
+  │ operator_niche_coupling.dat │ Influence action → Niche (фаза C)                  │
+  │ contour_probes.dat          │ probeKey → Niche (EnvironmentMetricProbeKey)       │
+  │ TRIAD_VALIDATION_README.txt │ Подсказка к сценариям §6.14 (создаётся bootstrap)  │
+  └─────────────────────────────┴────────────────────────────────────────────────────┘
+
+Каталог `Data/Niche/`: `niche_reflexes.dat` (реактивные правила среды).
+
+3.2. Логи исследователя
+
+  ┌─────────────────────────────┬────────────────────────────────────────────────────┐
+  │ Артефакт                    │ Содержание                                         │
+  ├─────────────────────────────┼────────────────────────────────────────────────────┤
+  │ AgentLogs_Dyad.jsonl        │ Каждый такт: niche before/after, creature mapping, │
+  │                             │ spontaneous/response delta, StimulusOrigin,        │
+  │                             │ contour probe, experimentRunId, mapping version;     │
+  │                             │ event `niche_aoe_outcome`                          │
+  │ Environment/niche_init_log  │ Снимки инициализации Niche (§6.11)                 │
+  │ .jsonl                      │                                                    │
+  │ triad_run_manifest.json     │ experimentRunId, couplingMappingVersion, phase,    │
+  │ triad_run_history.jsonl     │ contourId, environmentFolder (§6.5)                │
+  └─────────────────────────────┴────────────────────────────────────────────────────┘
+
+3.3. StimulusOrigin (§6.3)
+
+Значения: `Operator | Niche | CreatureSelf | Spontaneous | Unknown`.
+Используются в `HostBatchUpdateParameterValues`, `InfluenceActionSystem`, строках
+`AgentLogs_Dyad.jsonl`. Не попадают в сенсорный конвейер Creature.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+4. ИНТЕРФЕЙС ТРИАДЫ В AISTUDIO
+═══════════════════════════════════════════════════════════════════════════════
+
+4.1. Доступ и интеграция
+
+  • Пункт меню / навигации: «Триада Creature↔Niche» (`MainViewModel.ShowTriad`, case "18").
+  • Представление: `Pages/TriadView.xaml`, модель `ViewModels/TriadViewModel.cs`.
+  • При старте движка: `BuildIsidaConfigFromAppConfig` выставляет `TriadEnabled=true`,
+    `EnvironmentFolder`, `NicheDataFolder`; `ProjectBootstrap` создаёт шаблоны Environment
+    и Data/Niche для нового проекта.
+  • ViewModel получает `IsidaContext`, каталог логов и Environment; live-обновление
+    каждые 500 ms (снимок Niche, хвост лога диады, флаг AOE).
+
+4.2. Структура панели
+
+Заголовок: «Триада: Creature ↔ Niche (среда)».
+
+Блок «Фаза эксперимента»:
+  • ComboBox: фаза A / B / C с подсказками (Bootstrap; Ritual+coupling; Only Niche).
+  • Кнопка «Применить фазу» → запись в `triad_config.dat`, перезагрузка bridge.
+  • Предупреждение `PhaseRestrictionHint` (напр. фаза C + стадия 4+: пульт Creature
+    заблокирован — использовать Operator→Niche).
+  • Строка статуса: run id, mapping version, RoleProfile, ContourId, последний probe.
+
+Панель команд:
+  • «Сохранить в Environment» — все таблицы coupling + triad_config + contour_probes.
+  • «mapping version +1» — инкремент версии при сохранении (воспроизводимость §6.5).
+  • «Перезагрузить» — `CouplingBridge.ReloadConfig` из диска.
+  • «Каталог Environment» — проводник Windows.
+  • «Init Niche» — `RecordRunStart`, niche_init + манифест.
+  • «Лог диады» / «Манифест прогона» — открыть файлы в редакторе ОС.
+  • «Сценарии §6.14» — `TriadValidationScenarioBootstrap.TryInstall` (A/B/C + группа).
+  • «Метрики §13.3» — `TriadValidationMetricsChecker` по последнему прогону.
+  • Индикатор AOE: «ожидание вкл/выкл» (`WaitingForNicheResponse`).
+
+Редактирование coupling блокируется во время пульсации (`IsCouplingReadOnly`).
+
+4.3. Вкладки
+
+Вкладка «Coupling»:
+  • Таблица Creature action → Niche (ActionId, NicheParam, Delta, Scale).
+  • Таблица Operator → Niche (InfluenceId, NicheParam, Delta, Scale) — фаза C.
+  • Таблица Niche → Creature (Niche, Creature, Scale, Lag).
+
+Вкладка «Niche params»:
+  • Редактор `niche_params.dat` (ParamId, InitialValue, SpeedPerPulse).
+  • Live-снимок текущих значений Niche из движка (только чтение).
+
+Вкладка «Движок & AOE»:
+  • ContourId, Mapping version, Spontaneous drift, Full Niche engine, Probe contour.
+  • RoleProfile: niche_minimal / niche_reactive.
+  • Параметры AOE §5.3: Baseline N, Threshold, Horizon K, Eval window W.
+
+Вкладка «Контур»:
+  • Редактор `contour_probes.dat` (ProbeKey, NicheParam, Delta).
+  • Связь с `EnvironmentMetricProbeKey` на воздействиях пульта (`AgentPultViewModel`).
+
+Нижняя зона:
+  • Хвост `AgentLogs_Dyad.jsonl` (последние строки, шрифт Consolas).
+  • Кнопки сброса: NicheSoft, CreatureSoft, DyadHard, Calibration.
+  • Путь к каталогу Environment.
+
+4.4. Сценарии валидации §6.14  / §6.14
+
+`TriadValidationScenarioBootstrap` устанавливает:
+  • Сценарии `[Triad A/B/C]` для стадий 2 / 3 / 4.
+  • Группу `[Triad] Валидация §6.14`.
+  • Preset Environment (если файлы ещё шаблонные): coupling, operator_niche, фаза A.
+
+`TriadValidationMetricsChecker` проверяет по логам:
+  • A: УР или automatizm с AOE≥0.
+  • B: Belief=2, Usefulness≥0, StimulusOrigin=Niche, отклик coupling.
+  • C: Operator→Niche, niche_aoe_outcome в AgentLogs_Dyad.jsonl.
+
+Отчёт доступен из панели «Метрики §13.3» и в HTML-отчёте сценария.
+
+4.5. Связь с пультом Operator
+
+  • Пульт (`AgentPultViewModel`) — прямое воздействие на Creature (пока не заблокировано).
+  • При фазе C + стадия 4+ воздействия с пульта на Creature отклоняются движком;
+    оператор настраивает `operator_niche_coupling.dat` и применяет Influence, которые
+    меняют Niche.
+  • Поле `EnvironmentMetricProbeKey` в описании воздействия (см. шаблон в ProjectBootstrap)
+    активирует contour probe при включённом `UseProbeContour`.
+
+4.6. Типовой рабочий процесс исследователя в AIStudio
+
+  1. Создать/открыть проект → каталоги Environment и Data/Niche (bootstrap).
+  2. Открыть «Триада» → заполнить coupling и niche_params (или «Сценарии §6.14»).
+  3. «Сохранить в Environment» → «Перезагрузить» → «Init Niche».
+  4. Выбрать фазу A/B/C → «Применить фазу».
+  5. Запустить пульсацию; наблюдать live Niche и лог диады; при необходимости — пульт
+     или сценарий Operator.
+  6. Остановить пульс → «Метрики §13.3» или прогон группы валидации.
+  7. При смене эксперимента — DyadHard или NicheSoft; mapping version +1 при изменении
+     coupling.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+5. СООТВЕТСТВИЕ ПРИЁМОЧНЫМ ТЕСТАМ ПЛАНА
+═══════════════════════════════════════════════════════════════════════════════
+
+  ┌────────────────────────────┬──────────┬──────────────────────────────────────────┐
+  │ Тест (план §6)             │ Этап     │ Статус в коде + UI                       │
+  ├────────────────────────────┼──────────┼──────────────────────────────────────────┤
+  │ MVP-диада A                │ 1–2      │ ✅ Coupling + лог; сценарий + метрики   │
+  │ Coupling action→Niche      │ 1        │ ✅ action_coupling + AgentLogs_Dyad     │
+  │ Разделение каналов (B)     │ 2        │ ✅ Niche-primary AOE; StimulusOrigin    │
+  │ Ритуал + Niche (B)         │ 2        │ ✅ Зеркало + coupling; метрика Belief=2 │
+  │ Блок Operator на Creature  │ 3        │ ✅ Gate + UI hint; Operator→Niche таблица│
+  │ Перенос §6.6               │ 1–4      │ ✅ ApplyNicheTransfer API                 │
+  │ Trace 5 шагов              │ 5        │ ❌ Не реализовано                         │
+  │ Forward model              │ 5        │ ❌ Не реализовано                         │
+  └────────────────────────────┴──────────┴──────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+6. ОГРАНИЧЕНИЯ И РИСКИ (АКТУАЛЬНЫЕ)
+═══════════════════════════════════════════════════════════════════════════════
+
+  • `AppGlobalState` остаётся singleton: два полных Creature+Niche в одном процессе
+    без гонок — не гарантировано; `TriadInstanceState` дублирует только окно AOE Niche.
+  • Niche — редуцированный `NicheEngine`, не полный второй `IsidaEngine` с УР/автomatisms
+    среды как у Creature.
+  • Baseline — скользящее среднее; для сильно нестационарной Niche возможны ложные
+    Ambiguous (post-MVP: EWMA, этап 5).
+  • §12 канона v3.6 при следующем обновлении архитектуры следует переписать §12.7–12.16
+    с учётом `ISIDA.Niche` и Niche-primary AOE.
+  • IE (`InformationEnvironmentSystem`) — внутренний кадр Creature; не путать с Niche
+    (терминология сохранена в UI и логах).
+
+
+───────────────────────────────────────────────────────────────────────────────
+Версия 1.0 — сверка реализации триады (isida + AIStudio) с каноном v3.6 и планом
+внедрения 2026-05-23; описание runtime §2, конфигов §3, UI AIStudio §4.
+───────────────────────────────────────────────────────────────────────────────

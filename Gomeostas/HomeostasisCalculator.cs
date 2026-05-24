@@ -1,4 +1,4 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -127,6 +127,50 @@ namespace ISIDA.Gomeostas
         result = overallAssess;
  
       return result;
+    }
+
+    /// <summary>
+    /// Оценка ответа Niche (−1 / 0 / +1) только по параметрам Creature из mapping Niche→Creature (§5.3.3).
+    /// </summary>
+    /// <param name="valuesBefore">Снимок параметров до отклика Niche.</param>
+    /// <param name="currentParameters">Текущие параметры Creature.</param>
+    /// <param name="mappedCreatureParameterIds">ID параметров Creature из таблицы mapping.</param>
+    /// <param name="overallBefore">Интегральное состояние до отклика.</param>
+    /// <param name="overallAfter">Интегральное состояние после отклика.</param>
+    /// <returns>Оценка −1, 0 или +1.</returns>
+    public int ComputeNicheMappedAutomatizmAssessment(
+        IReadOnlyDictionary<int, float> valuesBefore,
+        IList<ParameterData> currentParameters,
+        IReadOnlyCollection<int> mappedCreatureParameterIds,
+        AppGlobalState.HomeostasisState overallBefore,
+        AppGlobalState.HomeostasisState overallAfter)
+    {
+      if (mappedCreatureParameterIds == null || mappedCreatureParameterIds.Count == 0)
+        return AssessmentFromOverallStates(overallBefore, overallAfter);
+
+      if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
+        return AssessmentFromOverallStates(overallBefore, overallAfter);
+
+      int vitalScore = 0;
+      foreach (var p in currentParameters)
+      {
+        if (!mappedCreatureParameterIds.Contains(p.Id))
+          continue;
+        if (!p.IsVital)
+          continue;
+        if (!valuesBefore.TryGetValue(p.Id, out float bpv))
+          continue;
+        var s = TrySignedParameterDelta(bpv, p);
+        if (s == 1)
+          vitalScore++;
+        else if (s == -1)
+          vitalScore--;
+      }
+
+      if (vitalScore != 0)
+        return vitalScore > 0 ? 1 : -1;
+
+      return AssessmentFromOverallStates(overallBefore, overallAfter);
     }
 
     private static int AssessmentFromOverallStates(AppGlobalState.HomeostasisState before, AppGlobalState.HomeostasisState after)

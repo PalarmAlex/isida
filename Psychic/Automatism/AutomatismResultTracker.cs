@@ -1,5 +1,6 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Niche;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using System;
@@ -180,6 +181,16 @@ namespace ISIDA.Psychic
       /// Время реакции оператора (в пульсах)
       /// </summary>
       public int OperatorResponseTime { get; set; }
+
+      /// <summary>
+      /// Исход первичного AOE по каналу Niche (§5.3.2).
+      /// </summary>
+      public AoeOutcome NicheAoeOutcome { get; set; }
+
+      /// <summary>
+      /// Оценка первичного AOE по Niche (−1..1).
+      /// </summary>
+      public int NicheAoeAssessment { get; set; }
     }
 
     /// <summary>
@@ -547,7 +558,14 @@ namespace ISIDA.Psychic
     /// <param name="assessment">Оценка (-1..1)</param>
     /// <param name="responseTime">Время реакции оператора</param>
     /// <param name="operatorResponseActionsImageId">ID образа действий оператора (для FixTeacherRule, stage 4)</param>
-    public void MarkOperatorRecognition(int automatizmId, bool recognized, int assessment = 0, int responseTime = 0, int operatorResponseActionsImageId = 0)
+    /// <param name="updateUsefulness">Обновлять полезность automatizm (false для вторичного канала Operator на фазе B).</param>
+    public void MarkOperatorRecognition(
+        int automatizmId,
+        bool recognized,
+        int assessment = 0,
+        int responseTime = 0,
+        int operatorResponseActionsImageId = 0,
+        bool updateUsefulness = true)
     {
       _lock.EnterWriteLock();
       try
@@ -561,8 +579,8 @@ namespace ISIDA.Psychic
           if (_episodicRulesService != null && operatorResponseActionsImageId > 0 && result.ActionsImageId > 0)
             _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, result.ActionsImageId, AppGlobalState.CurrentStimulsEffect);
 
-          // Обновляем полезность автоматизма на основе оценки оператора
-          UpdateAutomatizmUsefulness(automatizmId, assessment);
+          if (updateUsefulness)
+            UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(result);
         }
         else
@@ -583,7 +601,8 @@ namespace ISIDA.Psychic
             _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, newResult.ActionsImageId, AppGlobalState.CurrentStimulsEffect);
 
           _lastAutomatizmResults[automatizmId] = newResult;
-          UpdateAutomatizmUsefulness(automatizmId, assessment);
+          if (updateUsefulness)
+            UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(newResult);
         }
       }
@@ -594,8 +613,60 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
+    /// Зафиксировать исход первичного AOE по каналу Niche (§5.3.2).
+    /// </summary>
+    /// <param name="automatizmId">ID automatizm Creature.</param>
+    /// <param name="outcome">Исход окна AOE.</param>
+    /// <param name="assessment">Оценка (−1..1) для Success/Fail.</param>
+    /// <param name="finalizeTracking">Завершить отслеживание и записать episodic rule (фаза C).</param>
+    public void MarkNichePrimaryAoeOutcome(int automatizmId, AoeOutcome outcome, int assessment, bool finalizeTracking = false)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_lastAutomatizmResults.TryGetValue(automatizmId, out var result))
+        {
+          var atmz = _automatizmSystem.GetAutomatizmById(automatizmId);
+          result = new AutomatizmResult
+          {
+            AutomatizmId = automatizmId,
+            ActionsImageId = atmz?.ActionsImageID ?? 0
+          };
+          _lastAutomatizmResults[automatizmId] = result;
+        }
+
+        result.NicheAoeOutcome = outcome;
+        result.NicheAoeAssessment = assessment;
+
+        if (outcome == AoeOutcome.Success || outcome == AoeOutcome.Fail)
+        {
+          result.UsefulnessDelta = assessment;
+          UpdateAutomatizmUsefulness(automatizmId, assessment);
+          result.Result = assessment > 0 ? ExecutionResult.Success :
+                          assessment < 0 ? ExecutionResult.Error : ExecutionResult.Skipped;
+        }
+        else
+        {
+          result.UsefulnessDelta = 0;
+          result.Result = ExecutionResult.Skipped;
+        }
+
+        Logger.Info($"AOE Niche: automatizm ID={automatizmId}, outcome={outcome}, assessment={assessment}");
+
+        if (finalizeTracking)
+          FinishTracking(result);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Получить результат последнего выполнения автоматизма
     /// </summary>
+    /// <param name="automatizmId">ID automatizm.</param>
+    /// <returns>Последний результат или null.</returns>
     public AutomatizmResult GetLastResult(int automatizmId)
     {
       _lock.EnterReadLock();

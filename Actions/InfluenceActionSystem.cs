@@ -1,5 +1,6 @@
-﻿using ISIDA.Psychic.Automatism;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
+using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -24,6 +25,11 @@ namespace ISIDA.Actions
     private PerceptionImagesSystem _perceptionImagesSystem;
     private bool _disposed = false;
     private readonly GomeostasSystem _gomeostas;
+    private CouplingBridge _couplingBridge;
+    private TriadOrchestrator _triadOrchestrator;
+
+    /// <summary>Тип последнего применённого сигнала оператора (§6.2).</summary>
+    public AssessmentType LastAppliedAssessmentType { get; private set; } = AssessmentType.Bootstrap;
 
     /// <summary>Событие активации триггерного стимула (действия с пульта)</summary>
     public event Action<int, List<int>, bool> TriggerStimulusActivated;
@@ -47,6 +53,24 @@ namespace ISIDA.Actions
     public void SetPerceptionImagesSystem(PerceptionImagesSystem perceptionImagesSystem)
     {
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+    }
+
+    /// <summary>
+    /// Подключает CouplingBridge для определения <see cref="AssessmentType"/> по фазе триады.
+    /// </summary>
+    /// <param name="couplingBridge">Мост триады или null.</param>
+    public void SetCouplingBridge(CouplingBridge couplingBridge)
+    {
+      _couplingBridge = couplingBridge;
+    }
+
+    /// <summary>
+    /// Подключает оркестратор триады для probe-key контура Niche.
+    /// </summary>
+    /// <param name="orchestrator">TriadOrchestrator или null.</param>
+    public void SetTriadOrchestrator(TriadOrchestrator orchestrator)
+    {
+      _triadOrchestrator = orchestrator;
     }
 
     /// <summary>
@@ -435,6 +459,7 @@ namespace ISIDA.Actions
     /// <param name="toneId">ID тона сообщения.</param>
     /// <param name="moodId">ID настроения.</param>
     /// <param name="visualColorId">Код зрительного канала сцены.</param>
+    /// <param name="emergencyOverride">Аварийное переопределение (§6.2 EmergencyOverride).</param>
     /// <returns>Признак успеха и текст сообщения об ошибках при частичном применении.</returns>
     public (bool Success, string ErrorMessage) ApplyMultipleInfluenceActions(
         List<int> actionIdList,
@@ -443,7 +468,8 @@ namespace ISIDA.Actions
         bool authoritativeMode = false,
         int toneId = 0,
         int moodId = 0,
-        int visualColorId = 0)
+        int visualColorId = 0,
+        bool emergencyOverride = false)
     {
       string errorMessage = string.Empty;
 
@@ -498,18 +524,48 @@ namespace ISIDA.Actions
           TriggerStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, authoritativeMode);
 
         Dictionary<int, float> homeostasisSnapshotBeforeApply = null;
-        if (!AppGlobalState.ObservationMode &&
-            OperatorStimulusHasHomeostasisActionComponents(actionIdList) &&
-            actionsToApply.Count > 0)
+        bool hasHomeostasisActions = OperatorStimulusHasHomeostasisActionComponents(actionIdList) && actionsToApply.Count > 0;
+        bool routeToNiche = false;
+
+        if (hasHomeostasisActions && _couplingBridge != null && _couplingBridge.IsActive)
+        {
+          if (_couplingBridge.IsOperatorCreatureInfluenceBlocked && !emergencyOverride)
+          {
+            routeToNiche = true;
+            Logger.Info("Triad фаза C: прямое влияние на Creature заблокировано — маршрут Operator→Niche");
+          }
+        }
+
+        if (!AppGlobalState.ObservationMode && hasHomeostasisActions && !routeToNiche)
           homeostasisSnapshotBeforeApply = SnapshotHomeostasisParameterValues(_gomeostas);
 
         // Применение воздействий (после вызова событий)
-        foreach (var action in actionsToApply)
+        LastAppliedAssessmentType = ResolveAssessmentTypeForApply(emergencyOverride);
+
+        if (routeToNiche)
         {
-          var result = ApplySingleInfluenceActionInternal(action);
-          if (!result.Success)
-            errors.Add($"Воздействие ID {action.Id}: {result.ErrorMessage}");
+          int nicheApplied = _couplingBridge.ApplyOperatorInfluencesToNiche(actionIdList ?? new List<int>());
+          if (nicheApplied == 0)
+            errors.Add("Фаза C: нет Operator→Niche mapping для воздействий с пульта");
         }
+        else
+        {
+          foreach (var action in actionsToApply)
+          {
+            var result = ApplySingleInfluenceActionInternal(action);
+            if (!result.Success)
+              errors.Add($"Воздействие ID {action.Id}: {result.ErrorMessage}");
+          }
+        }
+
+        if (LastAppliedAssessmentType == AssessmentType.RitualViolation &&
+            !hasHomeostasisActions &&
+            AppGlobalState.EvolutionStage >= 4)
+        {
+          Logger.Info("RitualViolation: meta-сигнал оператора (без прямого ±1 на Creature)");
+        }
+
+        ForwardContourProbeKey(actionsToApply);
 
         if (!AppGlobalState.ObservationMode)
         {
@@ -625,6 +681,7 @@ namespace ISIDA.Actions
 
           param.Value = newValue;
         }
+        _gomeostas.MarkDirectParameterInfluenceOrigin(StimulusOrigin.Operator);
         _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
 
         return (true, string.Empty);
@@ -634,6 +691,50 @@ namespace ISIDA.Actions
         FileValidator.LogError($"{ex.Message}");
         return (false, ex.Message);
       }
+    }
+
+    private AssessmentType ResolveAssessmentTypeForApply(bool emergencyOverride = false)
+    {
+      if (emergencyOverride)
+        return AssessmentType.EmergencyOverride;
+
+      if (_couplingBridge == null || !_couplingBridge.IsActive)
+        return AssessmentType.Bootstrap;
+
+      switch (_couplingBridge.EffectivePhase)
+      {
+        case TriadPhase.C:
+          return AssessmentType.RitualViolation;
+        case TriadPhase.B:
+          return AssessmentType.RitualScaffold;
+        default:
+          return AssessmentType.Bootstrap;
+      }
+    }
+
+    private void ForwardContourProbeKey(List<GomeostasisInfluenceAction> actionsToApply)
+    {
+      if (actionsToApply == null || actionsToApply.Count == 0)
+        return;
+
+      if (_triadOrchestrator == null && (_couplingBridge == null || !_couplingBridge.IsActive))
+        return;
+
+      string probeKey = string.Empty;
+      for (int i = actionsToApply.Count - 1; i >= 0; i--)
+      {
+        string candidate = actionsToApply[i].EnvironmentMetricProbeKey?.Trim() ?? string.Empty;
+        if (candidate.Length > 0)
+        {
+          probeKey = candidate;
+          break;
+        }
+      }
+
+      if (_triadOrchestrator != null)
+        _triadOrchestrator.SetContourProbeKey(probeKey);
+      else
+        _couplingBridge.SetContourProbeKey(probeKey);
     }
 
     /// <summary>

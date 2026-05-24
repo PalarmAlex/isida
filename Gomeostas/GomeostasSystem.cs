@@ -1,5 +1,6 @@
-﻿using ISIDA.Actions;
+using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Niche;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
 using System;
@@ -2131,9 +2132,25 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
+    /// Происхождение последнего пакетного обновления параметров с хоста/Niche (для лога диады, §6.3).
+    /// </summary>
+    public StimulusOrigin LastHostBatchUpdateOrigin { get; private set; } = StimulusOrigin.Unknown;
+
+    /// <summary>
     /// Атомарное обновление значений нескольких параметров на одном захвате блокировки записи (полный снимок среды SW).
     /// </summary>
+    /// <param name="values">ID параметра → новое значение.</param>
     public void HostBatchUpdateParameterValues(IReadOnlyDictionary<int, float> values)
+    {
+      HostBatchUpdateParameterValues(values, StimulusOrigin.Unknown);
+    }
+
+    /// <summary>
+    /// Атомарное обновление параметров Creature с разметкой происхождения для исследователя (не для восприятия).
+    /// </summary>
+    /// <param name="values">ID параметра → новое значение.</param>
+    /// <param name="origin">Источник изменения (Niche, Operator и т.д.).</param>
+    public void HostBatchUpdateParameterValues(IReadOnlyDictionary<int, float> values, StimulusOrigin origin)
     {
       if (values == null || values.Count == 0)
         return;
@@ -2149,11 +2166,21 @@ namespace ISIDA.Gomeostas
             continue;
           p.Value = kv.Value;
         }
+        LastHostBatchUpdateOrigin = origin;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Фиксирует происхождение прямого влияния на параметры (Operator через InfluenceActionSystem).
+    /// </summary>
+    /// <param name="origin">Источник изменения.</param>
+    public void MarkDirectParameterInfluenceOrigin(StimulusOrigin origin)
+    {
+      LastHostBatchUpdateOrigin = origin;
     }
 
     /// <summary>
@@ -2250,6 +2277,28 @@ namespace ISIDA.Gomeostas
       if (v < lo) return lo;
       if (v > hi) return hi;
       return v;
+    }
+
+    /// <summary>
+    /// Мягкий сброс Creature для диады: параметры → NormaWell (§6.12 CreatureSoft).
+    /// </summary>
+    public void RestoreParametersToNormForDyadReset()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_agentState?.Parameters == null)
+          return;
+
+        foreach (var p in _agentState.Parameters)
+          p.Value = ClampValueToParameterRange(p, p.NormaWell);
+
+        MarkDirectParameterInfluenceOrigin(StimulusOrigin.Unknown);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
     }
 
     /// <summary>
