@@ -1,6 +1,6 @@
 Архитектура симбиотической системы ISIDA: формальное описание
 
-Версия 3.6 (рецензия v3.5: спецификация движка §12, дорожная карта триады §13)
+Версия 3.8 (§1.4: Niche только стадии 0–1; план §11 этап 7)
 
 Статус документа: архитектурный канон + инженерная спецификация реализованных механизмов (§1.6–1.7, §5.0–5.2) +
 MVP-диады (§5.3, §6.7–6.14). Спецификация движка для валидации — §12.
@@ -259,6 +259,9 @@ Operator. До прохождения переноса — режим остаё
     Creature/Niche — RoleProfile (маска активных подсистем) в рамках наблюдательного
     среза (срез эксперимента: кто для кого среда в данном прогоне).
 
+  • В текущем коде Creature — полный `IsidaEngine`; Niche — отдельный
+    `NicheEngine` + `NicheHostState` (§1.4.1), не второй экземпляр движка.
+
 Следствие: при смене фокуса исследования Niche может быть развёрнута до Creature
 (активируются верхние уровни стека). Механизм — динамический RoleProfile, а не
 статическая «урезанная версия навсегда».
@@ -275,19 +278,62 @@ Operator. До прохождения переноса — режим остаё
   │ (IE)                    │ значит для меня»). Не Niche                            │
   └─────────────────────────┴────────────────────────────────────────────────────────┘
 
-1.4. Минимальный стек в роли Niche
+1.4. Минимальный стек в роли Niche (**финализировано v3.8**)
 
-  • `GomeostasSystem` — обязательно.
-  • Безусловные рефлексы — обязательно.
-  • Условные рефлексы (стадия 1) — опционально, ограниченно.
-  • Автоматизмы (стадия 2) — только реактивные; без контура ожидания оценки
-    оператора, без зеркалирования оператора.
-  • Психика (2+), зеркальные автоматизмы (3), эпизодика (4+), циклы мышления —
-    не активированы в роли Niche.
+  • **Стадия 0 (базовая):** гомеostаз (`GomeostasSystem`) + безусловные рефлексы — **обязательно**.
+  • **Стадия 1 (опционально):** условные рефлексы — **ограниченно**, если экология требует отложенных эффектов.
+  • **Стадии 2+ для Niche — запрещены:** без психики, без automatisms, без зеркала, без эпизодики, без мышления.
+  • Niche **не учится** (нет AOE, нет Operator-as-teacher для среды); только реагирует.
+  • Niche **универсальна по коду:** привязка к конкретной внешней среде — через справочники `Data/Niche/` и конфиг `Environment/` в проекте AIStudio, не через ветвления в движке.
 
-Niche не нейтральный фон: она имеет собственную динамику (дрейф, рефлексы,
-автономные изменения). Она реактивна в отношении Creature: отклик на его действия
-+ спонтанная динамика, которую Creature должен отличать от отклика (§4.5, §4.6).
+Niche не нейтральный фон: собственная динамика (дрейф, рефлексы, contour-input),
+реактивность на действия Creature + спонтанный фон (§4.5, §4.6).
+
+1.4.1. Гомеостаз Niche в коде (инженерное упрощение vs канон §1.4)
+
+По канону Niche — симбионт примитивного уровня с тем же классом подсистемы
+гомеостаза, что и Creature. В текущей сборке (V3.2, 2026-05) реализовано так:
+
+  ┌────────────────────┬──────────────────────────┬──────────────────────────────┐
+  │ Аспект             │ Creature (симбионт)      │ Niche (среда)                │
+  ├────────────────────┼──────────────────────────┼──────────────────────────────┤
+  │ Хранение параметров│ `GomeostasSystem`        │ `NicheHostState` (in-memory) │
+  │                    │ + `VitalParameters.dat`  │ + `Environment/niche_params  │
+  │                    │                          │ .dat`                        │
+  ├────────────────────┼──────────────────────────┼──────────────────────────────┤
+  │ Тактовый цикл      │ `UpdateStateOnly`: дрейф,│ `NicheEngine`: BeginPulse →  │
+  │                    │ стили, IE, Danger        │ drift/contour → coupling →   │
+  │                    │                          │ mapping на Creature          │
+  ├────────────────────┼──────────────────────────┼──────────────────────────────┤
+  │ Стили, IsVital,    │ Полная модель §1.6       │ Нет (упрощённые 0…100)       │
+  │ CriticalMin/Max    │                          │                              │
+  ├────────────────────┼──────────────────────────┼──────────────────────────────┤
+  │ Рефлексы           │ `GeneticReflexesSystem`, │ `NicheReflexLayer` +         │
+  │                    │ УР, деревья              │ `Data/Niche/niche_reflexes   │
+  │                    │                          │ .dat` (при full engine)      │
+  ├────────────────────┼──────────────────────────┼──────────────────────────────┤
+  │ Влияние на партнёра│ Через coupling (косвенно)│ `niche_creature_mapping.dat` │
+  │                    │                          │ → `HostBatchUpdateParameter  │
+  │                    │                          │ Values(..., StimulusOrigin=  │
+  │                    │                          │ Niche)` на Creature          │
+  └────────────────────┴──────────────────────────┴──────────────────────────────┘
+
+Координатор: `TriadOrchestrator.ProcessTriadPulse` → `CouplingBridge` →
+`GomeostasSystem` Creature. Отдельный экземпляр `GomeostasSystem` для Niche
+не создаётся; post-MVP — второй `IsidaEngine` с `RoleProfile` (§13.1).
+
+Настройка гомеостаза Niche (не дублирует каталог `Data/Gomeostas/` Creature):
+
+  • `Environment/niche_params.dat` — paramId|initialValue|speedPerPulse
+  • `Environment/triad_config.dat` — SpontaneousDriftEnabled, UseFullNicheEngine,
+    NicheRoleProfileId, AOE baseline/W_eval
+  • `Environment/action_coupling.dat` — Creature action → Δ Niche param
+  • `Environment/niche_creature_mapping.dat` — Niche param → Creature param
+  • `Environment/operator_niche_coupling.dat` — Operator influence → Niche (фаза C)
+  • `Environment/contour_probes.dat` — probeKey → Niche (§6.8)
+  • `Data/Niche/niche_reflexes.dat` — реактивные правила Niche
+
+UI и bootstrap: AIStudio `TriadView`, `TriadProjectPaths`, `ProjectBootstrap`.
 
 1.5. Рекурсивная вложенность
 
@@ -1317,7 +1363,7 @@ Creature инициализируется отдельным снимком (с�
 
 6.13. Пример минимальной конфигурации MVP-диады (воспроизводимость)
 
-Файлы данных (не JSON в текущей реализации; текстовые .dat в `ProgramData\ISIDA`):
+Файлы данных (текстовые .dat; корень проекта или `%ProgramData%\ISIDA\`):
 
   ┌────────────────────────────┬──────────────────────────────────────────────────┐
   │ Компонент                  │ Файл / путь                                      │
@@ -1325,10 +1371,14 @@ Creature инициализируется отдельным снимком (с�
   │ Параметры Creature         │ `Data/Gomeostas/VitalParameters.dat`             │
   │ Стили Creature             │ `Data/Gomeostas/BehaviorStyles.dat`              │
   │ Свойства агента            │ `Data/Gomeostas/AgentProperties.dat`             │
-  │ Настройки УР               │ `ConditionedReflexSettings` (TimeWindowPulses=5) │
-  │ Coupling (исследователь)   │ конфиг эксперимента: actionId → CouplingTarget[] │
-  │ Niche → Creature           │ таблица nicheParamId → creatureParamId, scale    │
-  │ Контур                     │ ContourId, InputSnapshot_dim, LatencyPulses      │
+  │ Настройки УР               │ `Data/Reflexes/ConditionedReflexSettings.dat`    │
+  │ Параметры Niche (среда)    │ `Environment/niche_params.dat`                   │
+  │ Coupling action→Niche      │ `Environment/action_coupling.dat`                │
+  │ Niche → Creature           │ `Environment/niche_creature_mapping.dat`         │
+  │ Operator → Niche (фаза C)  │ `Environment/operator_niche_coupling.dat`        │
+  │ Фаза, drift, AOE, engine   │ `Environment/triad_config.dat`                   │
+  │ Контур / probeKey          │ `Environment/contour_probes.dat` + ContourId     │
+  │ Рефлексы Niche             │ `Data/Niche/niche_reflexes.dat`                  │
   └────────────────────────────┴──────────────────────────────────────────────────┘
 
 Минимальный прогон MVP-диады:
@@ -1357,69 +1407,63 @@ OverallState, WaitingForOperatorEvaluation.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-7. ТЕКУЩЕЕ СОСТОЯНИЕ VS КАНОН (СВЕРКА С КОДОМ)
+7. ТЕКУЩЕЕ СОСТОЯНИЕ VS КАНОН (СВЕРКА С КОДОМ, 2026-05-24)
 
-Полная спецификация реализованного движка — §12. Матрица доработок — §13.
+Полная спецификация реализованного движка — §12. Матрица post-MVP — §13.1.
+MVP триады (этапы 0–4, 6) реализованы; см. также план внедрения §10.
 ═══════════════════════════════════════════════════════════════════════════════
 
   ┌───────────────────────────────┬──────────────────────────────────────────────┐
   │ Канон                         │ Текущая реализация ISIDA                     │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Niche как симбионт            │ Нет; перехватчики: `OnPulseBeforeGomeostasis,│
-  │                               │ `HostBatchUpdateParameterValues`,            │
-  │                               │ `EnvironmentMetricProbeKey`                  │
+  │ Niche как симбионт-среда      │ ✅ `NicheEngine`, `NicheHostState`,           │
+  │                               │ `NicheReflexLayer`; упрощённый гомеостаз §1.4.1│
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Coupling Creature→Niche       │ `ApplyAction` не меняет Niche;               │
-  │                               │ `TargetGomeoParamIdArr` = параметры Creature,│
-  │                               │ нужен `CouplingTarget` (§6.7)                │
+  │ Coupling Creature→Niche       │ ✅ `CouplingBridge`, `action_coupling.dat`;   │
+  │                               │ `AdaptiveActionsSystem` → NotifyCreatureAction│
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Первичная оценка через Niche  │ Первичный: `WaitingForOperatorEvaluation` +  │
-  │                               │ влияние Operator                             │
+  │ Niche→Creature mapping        │ ✅ `niche_creature_mapping.dat` →            │
+  │                               │ `HostBatchUpdateParameterValues`             │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ ISIDA-OR                      │ `OrientationReflexSystem` есть (ОР1/ОР2 на   │
-  │                               │ стимул, стадии <4); не AOE после действия    │
+  │ Первичная оценка через Niche  │ ✅ `AoeEvaluationService`, фаза B+;          │
+  │                               │ `TryFinalizePrimaryNicheAoe` в PsychicSystem │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ AOE после действия            │Частично:`ComputeOperatorAutomatizmAssessment`│
-  │                               │ по Δparams; триггер — Operator, не Niche     │
+  │ ISIDA-OR                      │ ✅ `OrientationReflexSystem` (<4); ≠ AOE     │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Гомеостаз (§1.6)              │ `GomeostasSystem`, `HomeostasisCalculator` — │
-  │                               │ полный тактовый цикл, IsVital, стили         │
+  │ AOE после действия            │ ✅ Niche-primary + вторичный Operator/зеркало; │
+  │                               │ `ComputeNicheMappedAutomatizmAssessment`      │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Условные рефлексы стадия 1    │ `ConditionedReflexFormationService`,         │
-  │                               │ Rescorla–Wagner, τ, Order 1–3 (§5.1)         │
+  │ Гомеостаз Creature (§1.6)     │ ✅ `GomeostasSystem`, `HomeostasisCalculator`│
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Правило обучения AOE          │ Usefulness += assessment; выбор по Belief    │
-  │                               │ (§5.2.2d)                                    │
+  │ Гомеостаз Niche               │ ⚠️ `NicheHostState`, не полный               │
+  │                               │ `GomeostasSystem` (§1.4.1)                   │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Eligibility trace             │ Канон §5.2.2e; в коде — MVP (один automatizm)│
+  │ Условные рефлексы стадия 1    │ ✅ `ConditionedReflexFormationService`, …     │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Forward model                 │ `GomeoIdSuccesArr` — метаданные; runtime —   │
-  │                               │ post-MVP §5.2.3                              │
+  │ StimulusOrigin                │ ✅ Operator / Niche / Spontaneous в API и логах│
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Семантика параметров          │ Name/Description + таксономия §1.6.6         │
+  │ AssessmentType + фаза C gate  │ ✅ `InfluenceActionSystem`, фаза C → Niche     │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Attribution 4+                │ Эпизодическая память, IE, значимость — есть; │
-  │                               │ не связано с диадой Niche                    │
+  │ Baseline / niche_response     │ ✅ `AoeEvaluationService`, лог диады           │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ StimulusOrigin                │ Нет                                          │
+  │ RoleProfile Niche             │ ✅ `RoleProfile`, `UseFullNicheEngine`         │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ AssessmentType                │ Один канал ±1                                │
+  │ Eligibility trace             │ ❌ Канон §5.2.2e; MVP — один automatizm/такт │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Принудительное угасание       │ Нет                                          │
+  │ Forward model runtime         │ ❌ post-MVP §5.2.3                             │
   ├───────────────────────────────┼──────────────────────────────────────────────┤
-  │ Мультиэкземплярность          │ Архитектура одиночного экземпляра;           │
-  │                               │ `IsidaContext` — задел                       │
+  │ Выученный coupling            │ ❌ post-MVP §6.7                               │
+  ├───────────────────────────────┼──────────────────────────────────────────────┤
+  │ Мультиэкземплярность          │ ⚠️ `TriadInstanceState`; `AppGlobalState` —   │
+  │                               │ singleton для Creature                         │
   └───────────────────────────────┴──────────────────────────────────────────────┘
 
-Путь миграции:
+Путь дальнейшей эволюции (post-MVP):
 
-  1. Host-Niche (перехватчики) + логирование диады + `StimulusOrigin` в логах.
-  2. CouplingBridge (action→Niche→Creature).
-  3. Окно AOE с первичным триггером = отклик Niche; канал Operator = вторичный.
-  4. `AssessmentType` + фазовые ограничения.
-  5. Движки уровня экземпляра.
-  6. Полный симбионт-Niche + RoleProfile.
-  7. Протокол теста переноса.
+  1. Eligibility trace + forward model (§13.2 этап 3).
+  2. Выученный coupling, EWMA baseline.
+  3. Второй `IsidaEngine` / полный `GomeostasSystem` для Niche.
+  4. Изоляция состояния экземпляров от `AppGlobalState`.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -1539,7 +1583,8 @@ V3.2, 2026). Используется для валидации поведени
   ├──────────────────┼─────────────────────────────────────────────────────────┤
   │ `IsidaEngine`    │ `Common\IsidaEngine.cs` — `Create(IsidaConfig)`,        │
   │                  │ `CreateWithDefaults`, `Dispose`                         │
-  │ `IsidaConfig`    │ Пути данных, `CompareLevel`, `DifSensorPar`,            │
+  │ `IsidaConfig`    │ Пути данных, `EnvironmentFolder`, `NicheDataFolder`,    │
+  │                  │ `TriadEnabled`, `CompareLevel`, `DifSensorPar`,         │
   │                  │ `DynamicTime`, `WaitingPeriodForActionsVal` (≈30),      │
   │                  │ `HomeostasisPulseSpeedDriftEnabled`, логирование        │
   │ `IsidaContext`   │ Контейнер всех подсистем; `CancelWaitingPeriodAndReset  │
@@ -1579,7 +1624,7 @@ Actions, Logs, BootData).
 
 ```
 [≥4] ThinkingThemePulseResolver.ResolveAtPulseStart(pulse)
-→ OnPulseBeforeGomeostasis(pulse)          // хост / зачаток Niche
+→ TriadOrchestrator.ProcessTriadPulse(pulse)   // Niche drift, coupling, mapping
 → GomeostasSystem.UpdateStateOnly()
 → if IsDead → stop
 → OnPulseAfterGomeostasisBeforePsychic     // сценарии Operator: стимул пульта
@@ -1592,6 +1637,9 @@ Actions, Logs, BootData).
 → OnPulseCompleted(pulse)
 → finally: IsNewConditions=false; ReflexesActivator.ResetStates
 ```
+
+Дополнительно: `GlobalTimer.OnPulseBeforeGomeostasis` — опциональный хост-inject,
+не заменяет `TriadOrchestrator` при `TriadEnabled=true`.
 
 Критично для AOE: стимул Operator вставляется после `UpdateStateOnly`, до
 `ProcessPsychicPulse`; оценка автоматизма — в начале следующего `ProcessPsychicPulse`
@@ -1652,8 +1700,11 @@ Actions, Logs, BootData).
   • `TargetGomeoParamIdArr` — метаданные «какие параметры улучшает», не coupling
 
 `InfluenceActionSystem` (`Actions\InfluenceActionSystem.cs`):
-  • `ApplyMultipleInfluenceActions` — дельты параметров Creature, образы восприятия,
-    события стимула; `EnvironmentMetricProbeKey` — метаданные пробы среды (без Niche)
+  • `ApplyMultipleInfluenceActions` — дельты параметров Creature (фазы A–B) или
+    маршрут Operator→Niche (фаза C, `ApplyOperatorInfluencesToNiche`)
+  • `EnvironmentMetricProbeKey` → `CouplingBridge.SetContourProbeKey` /
+    `ProbeContourAdapter` (§6.8)
+  • `AssessmentType`, `StimulusOrigin` для логов и AOE
 
 12.8. Сенсоры (`SensorySystem`)
 
@@ -1668,7 +1719,8 @@ Actions, Logs, BootData).
   1. Очистка thinking при стадии <4
   2. `AgentSleepOrchestrator` (сон/консолидация)
   3. [>3] Wake-up: активация Understanding
-  4. Отложенная оценка: `EvaluatePreviousAutomatizm` (AOE после Operator)
+  4. Отложенная оценка: `TryFinalizePrimaryNicheAoe` (фаза B+, Niche-primary), затем
+     `EvaluatePreviousAutomatizm` (Operator / зеркало — вторичный канал)
   5. [3] выполнение зеркального automatizm после оценки
   6. `AutomatismExecutionService.ProcessAutomatizmChainsPulse`
   7. [≥4] `ThinkingCyclesSystem.DispatchCycles`
@@ -1733,23 +1785,36 @@ AOE (`EvaluatePreviousAutomatizm` → `ComputeOperatorAutomatizmAssessment`):
 
 12.15. Персистентность (основные файлы)
 
-  • Gomeostas: `VitalParameters.dat`, `BehaviorStyles.dat`, `AgentProperties.dat`
-  • Reflexes: genetic/conditioned lists, settings (TimeWindowPulses)
+  • Gomeostas Creature: `Data/Gomeostas/VitalParameters.dat`, `BehaviorStyles.dat`,
+    `AgentProperties.dat`
+  • Reflexes Creature: genetic/conditioned lists, settings (TimeWindowPulses)
   • Psychic: automatisms, trees, episodic memory (стадия 4+)
   • Sensors: Words/Phrases/CommandWords/CommandPhrases
+  • Триада Niche: каталог `Environment/` (см. §6.13, §1.4.1)
+  • Рефлексы Niche: `Data/Niche/niche_reflexes.dat`
+  • Логи триады: `Logs/AgentLogs_Dyad.jsonl`, `triad_run_manifest.json`
 
 12.16. Триада Creature↔Niche (реализовано, namespace `ISIDA.Niche`)
 
   • `CouplingBridge`, `TriadOrchestrator`, `NicheEngine` — coupling, такт §6.5
-  • `TriadPhaseStagePolicy` — допустимый диапазон фазы по стадии §4.1 (ceiling/floor)
+  • `NicheHostState` — упрощённый гомеостаз среды (§1.4.1); не `GomeostasSystem`
+  • `TriadPhaseStagePolicy` — допустимый диапазон фазы по стадии §4.1
   • `StimulusOrigin`, `AssessmentType`, Niche-primary AOE (`AoeEvaluationService`)
   • Конфиг: каталог `Environment/` (`triad_config.dat`, coupling, mapping)
+  • Рефлексы Niche: `Data/Niche/niche_reflexes.dat` при `UseFullNicheEngine=1`
   • Лог диады: `AgentLogs_Dyad.jsonl`; UI: панель «Триада» в AIStudio
 
-  Хост-хук `GlobalTimer.OnPulseBeforeGomeostasis` — дополнительный inject, не основной
-  контур Niche. Post-MVP: eligibility trace, forward model runtime (§13).
+  Разведение обработки воздействий (§1.4.1):
 
-  Отсутствует: полная изоляция второго экземпляра от `AppGlobalState` (§4.6).
+  • Operator → Creature: `InfluenceActionSystem` → `GomeostasSystem` (если не фаза C)
+  • Operator → Niche: `CouplingBridge.ApplyOperatorInfluencesToNiche`
+  • Creature action → Niche: `AdaptiveActionsSystem` → `NotifyCreatureActionApplied`
+    → `NicheEngine.ApplyCreatureCoupling` + `NicheReflexLayer`
+  • Niche → Creature: `ApplyNicheToCreatureMapping` →
+    `GomeostasSystem.HostBatchUpdateParameterValues(..., StimulusOrigin.Niche)`
+
+  Хост-хук `GlobalTimer.OnPulseBeforeGomeostasis` — дополнительный inject.
+  Post-MVP: eligibility trace, forward model, полный второй `IsidaEngine` (§13).
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -1779,28 +1844,27 @@ AOE (`EvaluatePreviousAutomatizm` → `ComputeOperatorAutomatizmAssessment`):
   │                            │          │          │ второй IsidaEngine      │
   └────────────────────────────┴──────────┴──────────┴─────────────────────────┘
 
-13.2. Этапы реализации (рекомендуемый порядок)
+13.2. Этапы реализации (статус 2026-05-24)
 
-Этап 1 — MVP-диада на хост-хуках (минимальный инкремент)
-  1. Логирование диады: `ResearchLogger` + StimulusOrigin в API (не в восприятии)
-  2. Host-Niche: `OnPulseBeforeGomeostasis` + статическая таблица Niche→Creature
-  3. CouplingBridge: `ApplyAction` → Δ params Niche (конфиг CouplingTarget)
-  4. Протокол §6.11–6.12, тест переноса §6.6
+**Закрыто в коде (этапы 1–2, MVP триады):**
 
-Этап 2 — AOE и фаза B (критично для рецензии v3.5)
-  5. AOE: первичный триггер = отклик Niche (окно W_eval), Operator — вторичный
-  6. `AssessmentType` + блокировка прямого override на 4+
-  7. Baseline / niche_response_delta (§5.3.1)
+  1. ✅ Логирование диады, StimulusOrigin
+  2. ✅ Host-Niche + Niche→Creature mapping
+  3. ✅ CouplingBridge: ApplyAction → Δ Niche
+  4. ✅ Протокол §6.11–6.12, перенос §6.6 (`ApplyNicheTransfer`)
+  5. ✅ AOE: первичный триггер = отклик Niche; Operator — вторичный
+  6. ✅ AssessmentType + блокировка прямого override на 4+ (фаза C)
+  7. ✅ Baseline / niche_response_delta
+  8. ✅ NicheEngine, RoleProfile, TriadOrchestrator, AIStudio UI (§10 плана)
 
-Этап 3 — обучение длинным цепочкам
-  8. Eligibility trace в коде (`AutomatismResultTracker`, λ=0.85, M=5) — §5.2.2e
-  9. Forward model runtime — EMA-кэш в `AutomatizmSystem`, prior `GomeoIdSuccesArr`
+**Post-MVP (этапы 3–4):**
 
-Этап 4 — автономия
-  10. Выученный coupling (корреляция action→Δniche→Δcreature, §6.7)
-  11. Второй `IsidaEngine` / RoleProfile для Niche
-  12. Адаптивное τ УР: τ_eff = τ_base × (1 + 0.5 × IsNewConditions) — §5.1.1b
-  13. Непрерывный assessment ∈ [−1,+1] (§5.2.2d post-MVP)
+  9. Eligibility trace (`AutomatismResultTracker`, λ=0.85, M=5) — §5.2.2e
+  10. Forward model runtime — EMA-кэш в `AutomatizmSystem`
+  11. Выученный coupling (§6.7)
+  12. Второй `IsidaEngine` с полным `GomeostasSystem` для Niche
+  13. Адаптивное τ УР — §5.1.1b
+  14. Непрерывный assessment ∈ [−1,+1] — §5.2.2d
 
 13.3. Валидация (план экспериментов)
 
@@ -1835,18 +1899,21 @@ Effect=+1 без прямого Influence на Creature; перенос на Nic
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-11. ГРАНИЦЫ ПРИМЕНИМОСТИ (v3.6)
+11. ГРАНИЦЫ ПРИМЕНИМОСТИ (v3.7)
 ═══════════════════════════════════════════════════════════════════════════════
 
   ┌─────────────────────────────┬──────────────────────────────────────────────┐
   │ Режим                       │ Готовность спецификации / кода               │
   ├─────────────────────────────┼──────────────────────────────────────────────┤
-  │ MVP-диада, фаза A           │ ✅ Гомеостаз, УР, AOE, зеркало (стадия 3)    │
-  │ (статичная Niche, короткие  │ ✅ Дискретное обучение, один automatizm/такт │
+  │ MVP-диада, фазы A–C         │ ✅ CouplingBridge, NicheEngine, AOE, UI      │
+  │ (host-Niche, короткие       │ ✅ Дискретное обучение, один automatizm/такт │
   │  цепочки)                   │                                              │
   ├─────────────────────────────┼──────────────────────────────────────────────┤
-  │ Фаза B+, нестационарная     │ ⚠️ Baseline,StimulusOrigin, coupling — канон;│
-  │ Niche                       │ частично в коде (§7)                         │
+  │ Фаза B+, нестационарная     │ ✅ Baseline, StimulusOrigin, coupling,       │
+  │ Niche                       │ Niche-primary AOE в коде (§12.16)            │
+  ├─────────────────────────────┼──────────────────────────────────────────────┤
+  │ Полный GomeostasSystem Niche│ ⚠️ `NicheHostState`; второй IsidaEngine —    │
+  │                             │ post-MVP (§1.4.1)                            │
   ├─────────────────────────────┼──────────────────────────────────────────────┤
   │ Длинные цепочки, отложенное │ ❌ Eligibility trace — канон §5.2.2e, не код │
   │ вознаграждение              │                                              │
@@ -1856,17 +1923,17 @@ Effect=+1 без прямого Influence на Creature; перенос на Nic
   │ Автономное обнаружение      │ ❌ Выученный coupling — канон §6.7, post-MVP │
   │ coupling                    │                                              │
   ├─────────────────────────────┼──────────────────────────────────────────────┤
-  │ Эксплуатационная автономия  │ Требует MVP + trace + forward model +        │
+  │ Эксплуатационная автономия  │ Требует trace + forward model +              │
   │ (сложные среды)             │ эмпирическая валидация переноса (§6.6)       │
   └─────────────────────────────┴──────────────────────────────────────────────┘
 
-Документ v3.6 = канон триады (§0–§11) + спецификация движка (§12) + дорожная
-карта (§13). MVP-диада реализуема на хост-хуках (§12.16, §13.2 этап 1); trace,
-forward model и Niche-primary AOE — этапы 2–3 (§13.2).
+Документ v3.7 = канон триады (§0–§11) + спецификация движка (§12) + дорожная
+карта post-MVP (§13). MVP триады реализован (§7, §12.16); trace, forward model
+и полный второй движок — §13.2 этапы 3–4.
 
 
 ───────────────────────────────────────────────────────────────────────────────
-Версия 3.6 — рецензия v3.5: §12 спецификация движка (валидация), §13 дорожная
-карта триады, §5.1.1b адаптивное τ, §6.14 сценарии; v3.5: семантика, trace,
-forward model, §11; v3.4: механизмы гомостаза/УР/AOE.
+Версия 3.7 — актуализация триады в коде: §1.4.1 гомеостаз Niche, §6.13 файлы
+Environment, §7 сверка 2026-05-24, §11–§12.16, §13.2 статус этапов; v3.6: §12–§13;
+v3.5: семантика, trace, forward model; v3.4: механизмы гомостаза/УР/AOE.
 ───────────────────────────────────────────────────────────────────────────────

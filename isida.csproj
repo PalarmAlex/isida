@@ -111,9 +111,17 @@
     <Compile Include="Environment\CouplingBridge.cs" />
     <Compile Include="Environment\CouplingMappingLoader.cs" />
     <Compile Include="Environment\NicheAoeResult.cs" />
+    <Compile Include="Environment\INicheParameterState.cs" />
     <Compile Include="Environment\NicheEngine.cs" />
+    <Compile Include="Environment\NicheGomeostasState.cs" />
     <Compile Include="Environment\NicheInitLogger.cs" />
     <Compile Include="Environment\NicheHostState.cs" />
+    <Compile Include="Environment\NicheSymbiontBootstrap.cs" />
+    <Compile Include="Environment\NicheSymbiontContext.cs" />
+    <Compile Include="Environment\NicheSymbiontGeneticReflexActivator.cs" />
+    <Compile Include="Environment\NicheSymbiontMigration.cs" />
+    <Compile Include="Environment\NicheConditionedReflexStore.cs" />
+    <Compile Include="Environment\NicheHomeostasisSlice.cs" />
     <Compile Include="Environment\NicheReflexLayer.cs" />
     <Compile Include="Environment\NicheReflexLoader.cs" />
     <Compile Include="Environment\NicheReflexModels.cs" />

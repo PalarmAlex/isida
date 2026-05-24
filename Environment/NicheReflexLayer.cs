@@ -9,7 +9,7 @@ namespace ISIDA.Niche
   public sealed class NicheReflexLayer
   {
     private readonly List<NicheReflexRule> _rules = new List<NicheReflexRule>();
-    private readonly RoleProfile _roleProfile;
+    private RoleProfile _roleProfile;
 
     /// <summary>
     /// Создаёт слой рефлексов Niche.
@@ -17,7 +17,14 @@ namespace ISIDA.Niche
     /// <param name="roleProfile">Профиль роли Niche.</param>
     public NicheReflexLayer(RoleProfile roleProfile)
     {
-      _roleProfile = roleProfile ?? RoleProfile.NicheMinimal;
+      _roleProfile = roleProfile ?? RoleProfile.NicheStage0;
+    }
+
+    /// <summary>Обновляет профиль роли после перезагрузки конфигурации.</summary>
+    public void SetRoleProfile(RoleProfile roleProfile)
+    {
+      if (roleProfile != null)
+        _roleProfile = roleProfile;
     }
 
     /// <summary>Число загруженных правил.</summary>
@@ -42,7 +49,7 @@ namespace ISIDA.Niche
     /// <param name="nicheState">Состояние Niche.</param>
     /// <param name="creatureActionId">ID действия Creature на такте (0 если не было).</param>
     /// <returns>Число применённых правил.</returns>
-    public int ApplyReactiveReflexes(NicheHostState nicheState, int creatureActionId)
+    public int ApplyReactiveReflexes(INicheParameterState nicheState, int creatureActionId)
     {
       if (nicheState == null || _rules.Count == 0)
         return 0;

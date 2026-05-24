@@ -6,7 +6,7 @@ namespace ISIDA.Niche
   /// <summary>
   /// In-memory состояние host-Niche: параметры, дрейф, снимки до/после такта.
   /// </summary>
-  public sealed class NicheHostState
+  public sealed class NicheHostState : INicheParameterState
   {
     private readonly Dictionary<int, float> _values = new Dictionary<int, float>();
     private readonly Dictionary<int, float> _speedPerPulse = new Dictionary<int, float>();

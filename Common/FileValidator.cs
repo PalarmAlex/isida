@@ -73,7 +73,7 @@ namespace ISIDA.Common
           TriadConfigFormat + "\r\n" +
           TriadConfigAoeParams + "\r\n" +
           TriadConfigEngineParams + "\r\n" +
-          "B|static_mvp|0|1|20|0.5|3|30|1|niche_minimal|0\r\n";
+          "B|static_mvp|0|1|20|0.5|3|30|1|niche_stage_0|0\r\n";
 
       public const string ActionCouplingTemplate =
           ActionCouplingFormat + "\r\n" +

@@ -30,6 +30,10 @@ namespace ISIDA.Gomeostas
     private ResearchLogger _researchLogger;
     private HomeostasisOverallState _currentOverallState = HomeostasisOverallState.Normal;
     private EvolutionStageService _evolutionStageService;
+    private readonly bool _detachedNicheHost;
+
+    /// <summary>True для отдельного экземпляра гомеостаза Niche (не влияет на AppGlobalState Creature).</summary>
+    public bool IsDetachedNicheHost => _detachedNicheHost;
 
     #region Инициализация класса
 
@@ -45,8 +49,12 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
-    public GomeostasSystem(InformationEnvironmentSystem informationEnvironmentSystem, string gomeostasFolderPath = null)
+    public GomeostasSystem(
+        InformationEnvironmentSystem informationEnvironmentSystem,
+        string gomeostasFolderPath = null,
+        bool detachedNicheHost = false)
     {
+      _detachedNicheHost = detachedNicheHost;
       try
       {
         // Используем переданные пути или вычисляем стандартные 
@@ -63,7 +71,8 @@ namespace ISIDA.Gomeostas
         // Инициализация детектора новизны
         _previousOverallState = HomeostasisOverallState.Normal;
         _previousActiveStyleIds = new List<int>();
-        AppGlobalState.IsNewConditions = false;
+        if (!_detachedNicheHost)
+          AppGlobalState.IsNewConditions = false;
 
         EnsureDataDirectory();
         LoadAgentData();
@@ -181,6 +190,9 @@ namespace ISIDA.Gomeostas
     /// </summary>
     internal void UpdateStateOnly()
     {
+      if (_detachedNicheHost)
+        return;
+
       _lock.EnterWriteLock();
       try
       {
@@ -2158,7 +2170,11 @@ namespace ISIDA.Gomeostas
       _lock.EnterWriteLock();
       try
       {
-        EnsureAgentState(AgentCheck.NotDead);
+        if (!_detachedNicheHost)
+          EnsureAgentState(AgentCheck.NotDead);
+        else if (_agentState.IsDead)
+          return;
+
         foreach (var kv in values)
         {
           var p = _agentState.GetParameter(kv.Key);
@@ -2167,6 +2183,84 @@ namespace ISIDA.Gomeostas
           p.Value = kv.Value;
         }
         LastHostBatchUpdateOrigin = origin;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Такт Niche-симбионта: дрейф Speed и contour без обновления AppGlobalState Creature.
+    /// </summary>
+    internal void DetachedNichePulseUpdate(bool speedDriftEnabled, IReadOnlyDictionary<int, float> contourDeltas)
+    {
+      if (!_detachedNicheHost)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_agentState.IsDead)
+          return;
+
+        foreach (var param in _agentState.Parameters)
+        {
+          if (speedDriftEnabled && Math.Abs(param.Speed) > 0.0001f)
+          {
+            float delta100 = param.Speed / 100f;
+            param.Value = ClampFloat(param.Value + delta100, 0f, 100f);
+          }
+
+          if (contourDeltas != null && contourDeltas.TryGetValue(param.Id, out float cd))
+            param.Value = ClampFloat(param.Value + cd, 0f, 100f);
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>Coupling/рефлекс: дельта к параметру Niche-симбионта.</summary>
+    internal void DetachedApplyParameterDelta(int paramId, float delta)
+    {
+      if (!_detachedNicheHost || Math.Abs(delta) < 0.0001f)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_agentState.IsDead)
+          return;
+
+        var p = _agentState.GetParameter(paramId);
+        if (p == null)
+          return;
+
+        p.Value = ClampFloat(p.Value + delta, 0f, 100f);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>Срез гомеостаза Niche для сопоставления рефлексов (без AppGlobalState Creature).</summary>
+    public NicheHomeostasisSlice DetachedGetHomeostasisSlice()
+    {
+      if (!_detachedNicheHost)
+        throw new InvalidOperationException("DetachedGetHomeostasisSlice только для Niche-симбионта.");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        UpdateActiveStyles(false);
+        return new NicheHomeostasisSlice
+        {
+          BaseStateId = (int)_currentOverallState,
+          ActiveStyleIds = GetActiveStyles().Select(s => s.Id).ToList()
+        };
       }
       finally
       {
@@ -2707,7 +2801,8 @@ namespace ISIDA.Gomeostas
           if (ActiveStyles[i] != null && ActiveStyles[i].Id == styleId)
             ActiveStyles[i] = null;
         }
-        AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
+        if (!_detachedNicheHost)
+          AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
         // БЫСТРОЕ УДАЛЕНИЕ ЧЕРЕЗ ИНДЕКСЫ:
         // Удаляем из антагонистов других стилей
@@ -2777,7 +2872,8 @@ namespace ISIDA.Gomeostas
         if (i >= ActiveStyles.Length) break;
         ActiveStyles[i++] = style;
       }
-      AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
+      if (!_detachedNicheHost)
+        AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
       var finalStylesForLogs = finalStylesWithWeights.Select(sw => new BehaviorStyle
       {

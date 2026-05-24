@@ -25,7 +25,15 @@ namespace ISIDA.Niche
 
       string path = Path.Combine(nicheDataFolder, "niche_reflexes.dat");
       if (!File.Exists(path))
-        return list;
+      {
+        string legacy = Path.Combine(
+            Path.GetDirectoryName(nicheDataFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) ?? nicheDataFolder,
+            "niche_reflexes.dat");
+        if (File.Exists(legacy))
+          path = legacy;
+        else
+          return list;
+      }
 
       list.AddRange(ParseLines(File.ReadAllLines(path)));
       return list;

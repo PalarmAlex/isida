@@ -1,3 +1,4 @@
+using ISIDA.Gomeostas;
 using ISIDA.Niche.Contour;
 using System;
 using System.Collections.Generic;
@@ -5,35 +6,48 @@ using System.Collections.Generic;
 namespace ISIDA.Niche
 {
   /// <summary>
-  /// Движок Niche: host-гомеостаз, рефлексы, такт §6.5 (§1.4, этап 4).
+  /// Движок Niche: host-MVP или универсальный симбионт (Gomeostas + рефлексы), такт §6.5.
   /// </summary>
   public sealed class NicheEngine : IDisposable
   {
-    private readonly NicheHostState _state = new NicheHostState();
+    private readonly NicheHostState _legacyState = new NicheHostState();
+    private NicheGomeostasState _symbiontState;
+    private INicheParameterState _activeState;
     private readonly NicheReflexLayer _reflexLayer;
     private readonly object _lock = new object();
-    private RoleProfile _roleProfile = RoleProfile.NicheMinimal;
+    private RoleProfile _roleProfile = RoleProfile.NicheStage0;
     private IContourAdapter _contour;
     private TriadExperimentConfig _config;
     private string _nicheDataFolder;
     private string _environmentFolder;
     private int _lastReflexesApplied;
     private ContourInputApplication _lastContourApplication;
+    private bool _useSymbiontGomeostas;
     private bool _disposed;
 
     /// <summary>
     /// Создаёт NicheEngine с профилем роли.
     /// </summary>
-    /// <param name="roleProfile">Профиль Niche или null (niche_minimal).</param>
+    /// <param name="roleProfile">Профиль Niche или null (niche_stage_0).</param>
     public NicheEngine(RoleProfile roleProfile = null)
     {
-      _roleProfile = roleProfile ?? RoleProfile.NicheMinimal;
+      _roleProfile = roleProfile ?? RoleProfile.NicheStage0;
       _reflexLayer = new NicheReflexLayer(_roleProfile);
       _contour = new StaticContourAdapter("static_mvp");
+      _activeState = _legacyState;
     }
 
-    /// <summary>Host-state параметров Niche.</summary>
-    public NicheHostState State => _state;
+    /// <summary>Состояние параметров Niche (host или симбионт).</summary>
+    public INicheParameterState State => _activeState;
+
+    /// <summary>Гомеостаз Niche-симбионта; null в режиме host-MVP.</summary>
+    public GomeostasSystem NicheGomeostas => _symbiontState?.Gomeostas;
+
+    /// <summary>Контекст симбионта Niche (гомеостаз + рефлексы).</summary>
+    public NicheSymbiontContext NicheSymbiont => _symbiontState?.Context;
+
+    /// <summary>True, если Niche использует GomeostasSystem (UseFullNicheEngine).</summary>
+    public bool UsesSymbiontGomeostas => _useSymbiontGomeostas;
 
     /// <summary>Активный профиль роли.</summary>
     public RoleProfile RoleProfile => _roleProfile;
@@ -42,7 +56,7 @@ namespace ISIDA.Niche
     public int LastReflexesApplied => _lastReflexesApplied;
 
     /// <summary>True, если Niche инициализирована.</summary>
-    public bool IsInitialized => _state.IsInitialized;
+    public bool IsInitialized => _activeState != null && _activeState.IsInitialized;
 
     /// <summary>
     /// Инициализирует Niche из конфигурации триады и каталога Data/Niche.
@@ -57,17 +71,25 @@ namespace ISIDA.Niche
         _config = config ?? new TriadExperimentConfig();
         _nicheDataFolder = nicheDataFolder;
         _environmentFolder = environmentFolder;
-        if (!_config.UseFullNicheEngine)
+        _useSymbiontGomeostas = _config.UseFullNicheEngine;
+
+        if (!_useSymbiontGomeostas)
         {
           _roleProfile = new RoleProfile
           {
             ProfileId = "host_mvp",
             ActiveMask = SymbiontSubsystem.Gomeostasis
           };
+          _symbiontState?.Dispose();
+          _symbiontState = null;
+          _activeState = _legacyState;
         }
         else
         {
           _roleProfile = RoleProfile.FromConfigName(_config.NicheRoleProfileId);
+          if (_symbiontState == null)
+            _symbiontState = new NicheGomeostasState();
+          _activeState = _symbiontState;
         }
 
         _contour = CreateContourAdapter(_config, environmentFolder);
@@ -75,14 +97,29 @@ namespace ISIDA.Niche
         if (_contour is ProbeContourAdapter probeAdapter)
           probeAdapter.ReloadProbes(environmentFolder);
 
-        NicheReflexLoader.EnsureTemplateFile(_nicheDataFolder);
-
         var parameters = _config.NicheParameters;
         if (parameters == null || parameters.Count == 0)
           parameters = CouplingMappingLoader.LoadFromFolder(environmentFolder ?? string.Empty).NicheParameters;
 
-        _state.Initialize(parameters);
-        _reflexLayer.LoadRules(_config.UseFullNicheEngine ? _nicheDataFolder : null);
+        if (_useSymbiontGomeostas)
+        {
+          _symbiontState.Initialize(_nicheDataFolder, _roleProfile, parameters);
+        }
+        else
+        {
+          _legacyState.Initialize(parameters);
+        }
+
+        string reflexFolder = _useSymbiontGomeostas
+            ? NicheSymbiontBootstrap.GetReflexesFolder(_nicheDataFolder)
+            : null;
+        _reflexLayer.SetRoleProfile(_roleProfile);
+        bool useLegacyReflexFile = _useSymbiontGomeostas &&
+            (_symbiontState.Context?.GeneticReflexes?.GetAllGeneticReflexesList()?.Count ?? 0) == 0;
+        _reflexLayer.LoadRules(
+            _config.UseFullNicheEngine && (!_useSymbiontGomeostas || useLegacyReflexFile)
+                ? reflexFolder ?? _nicheDataFolder
+                : null);
       }
     }
 
@@ -94,7 +131,7 @@ namespace ISIDA.Niche
       lock (_lock)
       {
         _lastReflexesApplied = 0;
-        _state.BeginPulse();
+        _activeState.BeginPulse();
       }
     }
 
@@ -118,7 +155,7 @@ namespace ISIDA.Niche
         if (_contour is ProbeContourAdapter probeAdapter)
           _lastContourApplication = probeAdapter.LastApplication;
 
-        _state.ApplySpontaneousUpdate(drift, contourDeltas);
+        _activeState.ApplySpontaneousUpdate(drift, contourDeltas);
       }
     }
 
@@ -139,11 +176,14 @@ namespace ISIDA.Niche
         foreach (var t in targets)
         {
           float delta = t.Delta * t.Scale * vigorScale;
-          _state.ApplyCouplingDelta(t.NicheParamId, delta);
+          _activeState.ApplyCouplingDelta(t.NicheParamId, delta);
         }
 
-        _state.MarkCreatureAction(actionId, pulse);
-        _lastReflexesApplied = _reflexLayer.ApplyReactiveReflexes(_state, actionId);
+        _activeState.MarkCreatureAction(actionId, pulse);
+        if (_useSymbiontGomeostas && _symbiontState != null)
+          _lastReflexesApplied = _symbiontState.ApplySymbiontReflexes(actionId);
+        else
+          _lastReflexesApplied = _reflexLayer.ApplyReactiveReflexes(_activeState, actionId);
       }
     }
 
@@ -154,7 +194,7 @@ namespace ISIDA.Niche
     public Dictionary<int, float> EndPulse()
     {
       lock (_lock)
-        return _state.EndPulse();
+        return _activeState.EndPulse();
     }
 
     /// <summary>
@@ -168,7 +208,7 @@ namespace ISIDA.Niche
         if (newInitialParams == null || newInitialParams.Count == 0)
           return;
 
-        _state.RestoreFromSnapshot(newInitialParams);
+        _activeState.RestoreFromSnapshot(newInitialParams);
       }
     }
 
@@ -207,7 +247,7 @@ namespace ISIDA.Niche
       lock (_lock)
       {
         if (_config?.NicheParameters != null)
-          _state.ResetToInitial(_config.NicheParameters);
+          _activeState.ResetToInitial(_config.NicheParameters);
       }
     }
 
@@ -218,7 +258,7 @@ namespace ISIDA.Niche
     public void RestoreFromSnapshot(IReadOnlyDictionary<int, float> snapshot)
     {
       lock (_lock)
-        _state.RestoreFromSnapshot(snapshot);
+        _activeState.RestoreFromSnapshot(snapshot);
     }
 
     /// <inheritdoc />
@@ -227,6 +267,8 @@ namespace ISIDA.Niche
       if (_disposed)
         return;
       _disposed = true;
+      _symbiontState?.Dispose();
+      _symbiontState = null;
     }
 
     private static IContourAdapter CreateContourAdapter(TriadExperimentConfig config, string environmentFolder)

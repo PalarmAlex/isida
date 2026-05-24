@@ -33,7 +33,7 @@ namespace ISIDA.Niche
     private int _lastSyncedEvolutionStage = -1;
     private bool _disposed;
 
-    private NicheHostState NicheState => _nicheEngine.State;
+    private INicheParameterState NicheState => _nicheEngine.State;
 
     /// <summary>Идентификатор текущего прогона эксперимента.</summary>
     public string ExperimentRunId => _experimentRunId;

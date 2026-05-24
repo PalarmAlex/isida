@@ -486,6 +486,12 @@ namespace ISIDA.Common
     {
       var reports = new ProjectDirectoryTemplateNode("Reports");
       var scenarios = new ProjectDirectoryTemplateNode("Scenarios", new List<ProjectDirectoryTemplateNode> { reports });
+      var nicheChildren = new List<ProjectDirectoryTemplateNode>
+      {
+        new ProjectDirectoryTemplateNode("Gomeostas"),
+        new ProjectDirectoryTemplateNode("Actions"),
+        new ProjectDirectoryTemplateNode("Reflexes")
+      };
       var dataChildren = new List<ProjectDirectoryTemplateNode>
       {
         new ProjectDirectoryTemplateNode("Gomeostas"),
@@ -493,6 +499,7 @@ namespace ISIDA.Common
         new ProjectDirectoryTemplateNode("Sensors"),
         new ProjectDirectoryTemplateNode("Reflexes"),
         new ProjectDirectoryTemplateNode("Psychic"),
+        new ProjectDirectoryTemplateNode("Niche", nicheChildren),
         scenarios
       };
       var data = new ProjectDirectoryTemplateNode("Data", dataChildren);

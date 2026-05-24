@@ -449,7 +449,7 @@ namespace ISIDA.Niche
             aoe.CorrelationHorizonK.ToString(CultureInfo.InvariantCulture),
             aoe.EvalWindowPulses.ToString(CultureInfo.InvariantCulture),
             config.UseFullNicheEngine ? "1" : "0",
-            (config.NicheRoleProfileId ?? "niche_minimal").Trim(),
+            (config.NicheRoleProfileId ?? "niche_stage_0").Trim(),
             config.UseProbeContour ? "1" : "0")
       };
     }

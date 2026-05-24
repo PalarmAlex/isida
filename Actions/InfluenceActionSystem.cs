@@ -25,8 +25,12 @@ namespace ISIDA.Actions
     private PerceptionImagesSystem _perceptionImagesSystem;
     private bool _disposed = false;
     private readonly GomeostasSystem _gomeostas;
+    private readonly bool _detachedNicheHost;
     private CouplingBridge _couplingBridge;
     private TriadOrchestrator _triadOrchestrator;
+
+    /// <summary>Отдельный экземпляр воздействий Niche.</summary>
+    public bool IsDetachedNicheHost => _detachedNicheHost;
 
     /// <summary>Тип последнего применённого сигнала оператора (§6.2).</summary>
     public AssessmentType LastAppliedAssessmentType { get; private set; } = AssessmentType.Bootstrap;
@@ -96,8 +100,19 @@ namespace ISIDA.Actions
       _instance = new InfluenceActionSystem(gomeostas, actionsFolderPath);
     }
 
-    private InfluenceActionSystem(GomeostasSystem gomeostas, string actionsFolderPath = null)
+    /// <summary>Воздействия на гомеостаз Niche (Data/Niche/Actions).</summary>
+    public static InfluenceActionSystem CreateDetachedForNicheHost(GomeostasSystem gomeostas, string actionsFolderPath)
     {
+      if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
+      return new InfluenceActionSystem(gomeostas, actionsFolderPath, detachedNicheHost: true);
+    }
+
+    private InfluenceActionSystem(
+        GomeostasSystem gomeostas,
+        string actionsFolderPath = null,
+        bool detachedNicheHost = false)
+    {
+      _detachedNicheHost = detachedNicheHost;
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Установка путей
@@ -660,7 +675,7 @@ namespace ISIDA.Actions
         if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
           return (false, "Симбионт неактивен или мертв - воздействие невозможно");
 
-        if (AppGlobalState.ObservationMode)
+        if (!_detachedNicheHost && AppGlobalState.ObservationMode)
           return (true, string.Empty);
 
         var parameters = _gomeostas.GetAllParameters();
@@ -681,8 +696,10 @@ namespace ISIDA.Actions
 
           param.Value = newValue;
         }
-        _gomeostas.MarkDirectParameterInfluenceOrigin(StimulusOrigin.Operator);
-        _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
+        _gomeostas.MarkDirectParameterInfluenceOrigin(
+            _detachedNicheHost ? StimulusOrigin.Niche : StimulusOrigin.Operator);
+        if (!_detachedNicheHost)
+          _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
 
         return (true, string.Empty);
       }
@@ -691,6 +708,27 @@ namespace ISIDA.Actions
         FileValidator.LogError($"{ex.Message}");
         return (false, ex.Message);
       }
+    }
+
+    /// <summary>Применяет воздействие к параметрам Niche-симбионта.</summary>
+    public bool ApplyInfluenceToNicheHost(int influenceActionId)
+    {
+      if (influenceActionId <= 0)
+        return false;
+
+      _lock.EnterReadLock();
+      GomeostasisInfluenceAction action;
+      try
+      {
+        if (!_influenceActions.TryGetValue(influenceActionId, out action))
+          return false;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      return ApplySingleInfluenceActionInternal(action).Success;
     }
 
     private AssessmentType ResolveAssessmentTypeForApply(bool emergencyOverride = false)

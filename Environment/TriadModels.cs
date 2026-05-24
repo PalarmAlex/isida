@@ -221,8 +221,8 @@ namespace ISIDA.Niche
     /// <summary>Использовать полный NicheEngine вместо голого host-state (§4.5).</summary>
     public bool UseFullNicheEngine { get; set; }
 
-    /// <summary>Идентификатор RoleProfile Niche (niche_minimal, niche_reactive).</summary>
-    public string NicheRoleProfileId { get; set; } = "niche_minimal";
+    /// <summary>Идентификатор RoleProfile Niche (niche_stage_0, niche_stage_1).</summary>
+    public string NicheRoleProfileId { get; set; } = "niche_stage_0";
 
     /// <summary>Контур через EnvironmentMetricProbeKey (contour_probes.dat).</summary>
     public bool UseProbeContour { get; set; }
