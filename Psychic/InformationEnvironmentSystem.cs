@@ -34,11 +34,22 @@ namespace ISIDA.Psychic
       if (_instance != null)
         throw new InvalidOperationException("InformationEnvironmentSystem уже инициализирован.");
 
-      _instance = new InformationEnvironmentSystem();
+      _instance = new InformationEnvironmentSystem(forSingletonCreature: true);
     }
 
-    private InformationEnvironmentSystem()
+    /// <summary>
+    /// Отдельный экземпляр для гомеостаза Niche (не регистрируется в singleton Creature).
+    /// </summary>
+    public static InformationEnvironmentSystem CreateDetachedForNicheHost()
     {
+      return new InformationEnvironmentSystem(forSingletonCreature: false);
+    }
+
+    private InformationEnvironmentSystem(bool forSingletonCreature)
+    {
+      if (forSingletonCreature && _instance != null)
+        throw new InvalidOperationException("InformationEnvironmentSystem уже инициализирован.");
+
       try
       {
         InitCurrentInformationEnvironment();

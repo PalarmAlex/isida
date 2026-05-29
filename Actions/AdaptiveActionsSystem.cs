@@ -1,4 +1,5 @@
-﻿using ISIDA.Common;
+using ISIDA.Common;
+using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
 using System;
@@ -59,11 +60,35 @@ namespace ISIDA.Actions
       _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath);
     }
 
+    /// <summary>Отдельный справочник действий Niche (Data/Niche/Actions).</summary>
+    public static AdaptiveActionsSystem CreateDetachedForNicheHost(GomeostasSystem gomeostas, string actionsFolderPath)
+    {
+      if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
+      return new AdaptiveActionsSystem(gomeostas, actionsFolderPath, detachedNicheHost: true);
+    }
+
     private readonly GomeostasSystem _gomeostas;
+    private readonly bool _detachedNicheHost;
+    private CouplingBridge _couplingBridge;
+
+    /// <summary>Отдельный экземпляр для Niche-симбионта.</summary>
+    public bool IsDetachedNicheHost => _detachedNicheHost;
+
+    /// <summary>
+    /// Подключает мост coupling Creature→Niche (триада).
+    /// </summary>
+    /// <param name="couplingBridge">CouplingBridge или null для отключения.</param>
+    public void SetCouplingBridge(CouplingBridge couplingBridge)
+    {
+      _couplingBridge = couplingBridge;
+    }
+
     private AdaptiveActionsSystem(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null)
+        string actionsFolderPath = null,
+        bool detachedNicheHost = false)
     {
+      _detachedNicheHost = detachedNicheHost;
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Установка путей
@@ -361,11 +386,28 @@ namespace ISIDA.Actions
       }
     }
 
+    /// <summary>Возвращает адаптивное действие по ID.</summary>
+    /// <param name="actionId">ID действия.</param>
+    /// <returns>Действие или null, если не найдено.</returns>
+    public AdaptiveAction GetAdaptiveAction(int actionId)
+    {
+      _lock.EnterReadLock();
+      try
+      {
+        _actions.TryGetValue(actionId, out var action);
+        return action;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
     /// <summary>
-    /// Возвращает AdaptiveAction с указанным InfluenceActionId (связь для отзеркаливания).
+    /// Возвращает адаптивное действие с указанным <see cref="AdaptiveAction.InfluenceActionId"/> (связь для отзеркаливания).
     /// </summary>
-    /// <param name="influenceActionId">ID действия с пульта (InfluenceAction)</param>
-    /// <returns>AdaptiveAction или null если нет связи</returns>
+    /// <param name="influenceActionId">ID воздействия с пульта (InfluenceAction).</param>
+    /// <returns>AdaptiveAction или null, если связи нет.</returns>
     public AdaptiveAction GetAdaptiveActionByInfluenceActionId(int influenceActionId)
     {
       if (influenceActionId <= 0) return null;
@@ -745,6 +787,8 @@ namespace ISIDA.Actions
         if (phraseId != 0 && actionImageIdForToneMood > 0)
           _activeActionPhrasesImageId[actionId] = actionImageIdForToneMood;
 
+        if (!_detachedNicheHost)
+          _couplingBridge?.NotifyCreatureActionApplied(actionId, GlobalTimer.GlobalPulsCount);
         return true;
       }
       finally
