@@ -37,14 +37,6 @@ namespace ISIDA.Psychic
       _instance = new InformationEnvironmentSystem(forSingletonCreature: true);
     }
 
-    /// <summary>
-    /// Отдельный экземпляр для гомеостаза Niche (не регистрируется в singleton Creature).
-    /// </summary>
-    public static InformationEnvironmentSystem CreateDetachedForNicheHost()
-    {
-      return new InformationEnvironmentSystem(forSingletonCreature: false);
-    }
-
     private InformationEnvironmentSystem(bool forSingletonCreature)
     {
       if (forSingletonCreature && _instance != null)

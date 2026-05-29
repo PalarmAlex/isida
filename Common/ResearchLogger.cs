@@ -1,5 +1,4 @@
 using ISIDA.Actions;
-using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Thinking;
@@ -82,7 +81,6 @@ namespace ISIDA.Common
     private readonly StreamWriter _parametersCsvWriter;
     private readonly StreamWriter _stylesJsonlWriter;
     private readonly StreamWriter _stylesCsvWriter;
-    private readonly StreamWriter _dyadJsonlWriter;
     private bool _enabled = false;
     private readonly object _lock = new object();
     private bool _disposed = false;
@@ -501,10 +499,6 @@ namespace ISIDA.Common
         var stylesJsonlPath = Path.Combine(logDir, $"{logFileName}_Styles.jsonl");
         _stylesJsonlWriter = new StreamWriter(stylesJsonlPath, append: !clearOnStart, Encoding.UTF8);
         _stylesJsonlWriter.AutoFlush = true;
-
-        var dyadJsonlPath = Path.Combine(logDir, $"{logFileName}_Dyad.jsonl");
-        _dyadJsonlWriter = new StreamWriter(dyadJsonlPath, append: !clearOnStart, Encoding.UTF8);
-        _dyadJsonlWriter.AutoFlush = true;
       }
 
       // Инициализация CSV writers (только если выбран Csv формат)
@@ -2195,133 +2189,6 @@ namespace ISIDA.Common
     #region IDisposable
 
     /// <summary>
-    /// Записывает строку лога диады Creature↔Niche за такт (§5.3.1).
-    /// </summary>
-    /// <param name="entry">Снимок такта диады.</param>
-    public void LogDyadPulseEntry(DyadPulseLogEntry entry)
-    {
-      if (!_enabled || _disposed || entry == null || _dyadJsonlWriter == null)
-        return;
-
-      lock (_lock)
-      {
-        if (_disposed || _dyadJsonlWriter == null)
-          return;
-
-        var payload = new Dictionary<string, object>
-        {
-          ["time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-          ["pulse"] = entry.Pulse,
-          ["creatureActionId"] = entry.CreatureActionId,
-          ["contourId"] = entry.ContourId ?? string.Empty,
-          ["lastCreatureUpdateOrigin"] = entry.LastCreatureUpdateOrigin.ToString(),
-          ["nicheStateBefore"] = entry.NicheStateBefore ?? new Dictionary<int, float>(),
-          ["nicheStateAfter"] = entry.NicheStateAfter ?? new Dictionary<int, float>(),
-          ["creatureGomeoBefore"] = entry.CreatureGomeoBefore ?? new Dictionary<int, float>(),
-          ["creatureGomeoAfterMapping"] = entry.CreatureGomeoAfterMapping ?? new Dictionary<int, float>(),
-          ["nicheSpontaneousDelta"] = entry.NicheSpontaneousDelta ?? new Dictionary<int, float>(),
-          ["nicheResponseDelta"] = entry.NicheResponseDelta ?? new Dictionary<int, float>(),
-          ["nicheReflexesApplied"] = entry.NicheReflexesApplied,
-          ["nicheRoleProfileId"] = entry.NicheRoleProfileId ?? string.Empty,
-          ["contourProbeKey"] = entry.ContourProbeKey ?? string.Empty,
-          ["contourInputDim"] = entry.ContourInputDim,
-          ["contourInputDelta"] = entry.ContourInputDelta ?? new Dictionary<int, float>(),
-          ["experimentRunId"] = entry.ExperimentRunId ?? string.Empty,
-          ["couplingMappingVersion"] = entry.CouplingMappingVersion
-        };
-
-        _dyadJsonlWriter.WriteLine(JsonConvert.SerializeObject(payload));
-      }
-    }
-
-    /// <summary>
-    /// Записывает исход первичного AOE по каналу Niche (§5.3.2).
-    /// </summary>
-    /// <param name="result">Результат AOE.</param>
-    public void LogNicheAoeOutcome(NicheAoeResult result)
-    {
-      if (!_enabled || _disposed || result == null || _dyadJsonlWriter == null)
-        return;
-
-      lock (_lock)
-      {
-        if (_disposed || _dyadJsonlWriter == null)
-          return;
-
-        var payload = new Dictionary<string, object>
-        {
-          ["time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-          ["event"] = "niche_aoe_outcome",
-          ["automatizmId"] = result.AutomatizmId,
-          ["outcome"] = result.Outcome.ToString(),
-          ["assessment"] = result.Assessment,
-          ["actionPulse"] = result.ActionPulse,
-          ["closePulse"] = result.ClosePulse
-        };
-
-        _dyadJsonlWriter.WriteLine(JsonConvert.SerializeObject(payload));
-      }
-    }
-
-    /// <summary>
-    /// Записывает снимок инициализации Niche (§6.11).
-    /// </summary>
-    /// <param name="snapshot">Снимок инициализации.</param>
-    public void LogNicheInitSnapshot(NicheInitSnapshot snapshot)
-    {
-      if (!_enabled || _disposed || snapshot == null || _dyadJsonlWriter == null)
-        return;
-
-      lock (_lock)
-      {
-        if (_disposed || _dyadJsonlWriter == null)
-          return;
-
-        var payload = new Dictionary<string, object>
-        {
-          ["time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-          ["event"] = "niche_init_snapshot",
-          ["experimentRunId"] = snapshot.ExperimentRunId ?? string.Empty,
-          ["phase"] = snapshot.Config != null ? snapshot.Config.Phase.ToString() : string.Empty,
-          ["contourId"] = snapshot.Config != null ? snapshot.Config.ContourId ?? string.Empty : string.Empty,
-          ["couplingMappingVersion"] = snapshot.Config != null ? snapshot.Config.CouplingMappingVersion : 0,
-          ["initialNicheParams"] = snapshot.InitialNicheParams ?? new Dictionary<int, float>()
-        };
-
-        _dyadJsonlWriter.WriteLine(JsonConvert.SerializeObject(payload));
-      }
-    }
-
-    /// <summary>
-    /// Записывает событие сброса диады (§6.12).
-    /// </summary>
-    /// <param name="result">Результат сброса.</param>
-    public void LogDyadReset(DyadResetResult result)
-    {
-      if (!_enabled || _disposed || result == null || _dyadJsonlWriter == null)
-        return;
-
-      lock (_lock)
-      {
-        if (_disposed || _dyadJsonlWriter == null)
-          return;
-
-        var payload = new Dictionary<string, object>
-        {
-          ["time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-          ["event"] = "dyad_reset",
-          ["resetType"] = result.ResetType.ToString(),
-          ["success"] = result.Success,
-          ["experimentRunId"] = result.ExperimentRunId ?? string.Empty,
-          ["couplingMappingVersion"] = result.CouplingMappingVersion,
-          ["message"] = result.Message ?? string.Empty
-        };
-
-        _dyadJsonlWriter.WriteLine(JsonConvert.SerializeObject(payload));
-      }
-    }
-
-    /// <summary>
     /// Освобождает ресурсы
     /// </summary>
     public void Dispose()
@@ -2336,7 +2203,6 @@ namespace ISIDA.Common
         _parametersCsvWriter?.Dispose();
         _stylesJsonlWriter?.Dispose();
         _stylesCsvWriter?.Dispose();
-        _dyadJsonlWriter?.Dispose();
         Flush();
         _disposed = true;
       }

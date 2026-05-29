@@ -1,5 +1,4 @@
 using ISIDA.Common;
-using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Sensors;
 using System;
@@ -60,35 +59,12 @@ namespace ISIDA.Actions
       _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath);
     }
 
-    /// <summary>Отдельный справочник действий Niche (Data/Niche/Actions).</summary>
-    public static AdaptiveActionsSystem CreateDetachedForNicheHost(GomeostasSystem gomeostas, string actionsFolderPath)
-    {
-      if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
-      return new AdaptiveActionsSystem(gomeostas, actionsFolderPath, detachedNicheHost: true);
-    }
-
     private readonly GomeostasSystem _gomeostas;
-    private readonly bool _detachedNicheHost;
-    private CouplingBridge _couplingBridge;
-
-    /// <summary>Отдельный экземпляр для Niche-симбионта.</summary>
-    public bool IsDetachedNicheHost => _detachedNicheHost;
-
-    /// <summary>
-    /// Подключает мост coupling Creature→Niche (триада).
-    /// </summary>
-    /// <param name="couplingBridge">CouplingBridge или null для отключения.</param>
-    public void SetCouplingBridge(CouplingBridge couplingBridge)
-    {
-      _couplingBridge = couplingBridge;
-    }
 
     private AdaptiveActionsSystem(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        bool detachedNicheHost = false)
+        string actionsFolderPath = null)
     {
-      _detachedNicheHost = detachedNicheHost;
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Установка путей
@@ -787,8 +763,6 @@ namespace ISIDA.Actions
         if (phraseId != 0 && actionImageIdForToneMood > 0)
           _activeActionPhrasesImageId[actionId] = actionImageIdForToneMood;
 
-        if (!_detachedNicheHost)
-          _couplingBridge?.NotifyCreatureActionApplied(actionId, GlobalTimer.GlobalPulsCount);
         return true;
       }
       finally

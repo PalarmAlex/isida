@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
 using System;
@@ -90,9 +90,6 @@ public static class AppGlobalState
   private static bool _waitingForOperatorEvaluation = false;
   /// <summary>ID автоматизма, запущенного перед окном ожидания (для отложенной оценки, если поля психики обнулились).</summary>
   private static int _automatizmIdWaitingForOperatorEvaluation = 0;
-  private static bool _waitingForNicheResponse = false;
-  private static int _automatizmIdWaitingForNicheResponse = 0;
-  private static int _nicheAoeWindowCountdown = 0;
   private static int _lastAutomatizmEvaluationTime = 0;
   private static int _waitingPeriodForActionsVal = 0;
   private static int _noOperatorStimulusSilencePulses = 30;
@@ -872,21 +869,6 @@ public static class AppGlobalState
   public static int AutomatizmIdWaitingForOperatorEvaluation => _automatizmIdWaitingForOperatorEvaluation;
 
   /// <summary>
-  /// Флаг ожидания первичного отклика Niche (фаза B+, §5.3).
-  /// </summary>
-  public static bool WaitingForNicheResponse
-  {
-    get => _waitingForNicheResponse;
-    private set => _waitingForNicheResponse = value;
-  }
-
-  /// <summary>Автоматизм, для которого открыто окно AOE по Niche.</summary>
-  public static int AutomatizmIdWaitingForNicheResponse => _automatizmIdWaitingForNicheResponse;
-
-  /// <summary>Оставшееся время окна AOE Niche (пульсы).</summary>
-  public static int NicheAoeWindowCountdown => _nicheAoeWindowCountdown;
-
-  /// <summary>
   /// Состояние симбионта перед воздействием оператора (для оценки)
   /// </summary>
   public static HomeostasisState StateBeforeOperatorImpact
@@ -957,29 +939,6 @@ public static class AppGlobalState
   {
     get => _noOperatorStimulusSilencePulses;
     set => _noOperatorStimulusSilencePulses = value < 1 ? 1 : value;
-  }
-
-  /// <summary>
-  /// Начать период ожидания первичного отклика Niche (AOE, фаза B+).
-  /// </summary>
-  /// <param name="automatizmId">ID automatizm Creature.</param>
-  /// <param name="windowPulses">Длина окна W_eval.</param>
-  public static void StartWaitingForNicheResponse(int automatizmId, int windowPulses)
-  {
-    WaitingForNicheResponse = true;
-    _automatizmIdWaitingForNicheResponse = automatizmId > 0 ? automatizmId : 0;
-    _nicheAoeWindowCountdown = windowPulses < 1 ? 1 : windowPulses;
-    Logger.Info($"Начат период ожидания отклика Niche для automatizm ID={automatizmId}, W_eval={_nicheAoeWindowCountdown}");
-  }
-
-  /// <summary>
-  /// Сбросить состояние окна AOE по Niche.
-  /// </summary>
-  public static void ResetWaitingForNicheResponse()
-  {
-    WaitingForNicheResponse = false;
-    _automatizmIdWaitingForNicheResponse = 0;
-    _nicheAoeWindowCountdown = 0;
   }
 
   /// <summary>

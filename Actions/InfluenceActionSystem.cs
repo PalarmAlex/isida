@@ -1,6 +1,5 @@
 using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
-using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -25,15 +24,6 @@ namespace ISIDA.Actions
     private PerceptionImagesSystem _perceptionImagesSystem;
     private bool _disposed = false;
     private readonly GomeostasSystem _gomeostas;
-    private readonly bool _detachedNicheHost;
-    private CouplingBridge _couplingBridge;
-    private TriadOrchestrator _triadOrchestrator;
-
-    /// <summary>Отдельный экземпляр воздействий Niche.</summary>
-    public bool IsDetachedNicheHost => _detachedNicheHost;
-
-    /// <summary>Тип последнего применённого сигнала оператора (§6.2).</summary>
-    public AssessmentType LastAppliedAssessmentType { get; private set; } = AssessmentType.Bootstrap;
 
     /// <summary>Событие активации триггерного стимула (действия с пульта)</summary>
     public event Action<int, List<int>, bool> TriggerStimulusActivated;
@@ -60,24 +50,6 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Подключает CouplingBridge для определения <see cref="AssessmentType"/> по фазе триады.
-    /// </summary>
-    /// <param name="couplingBridge">Мост триады или null.</param>
-    public void SetCouplingBridge(CouplingBridge couplingBridge)
-    {
-      _couplingBridge = couplingBridge;
-    }
-
-    /// <summary>
-    /// Подключает оркестратор триады для probe-key контура Niche.
-    /// </summary>
-    /// <param name="orchestrator">TriadOrchestrator или null.</param>
-    public void SetTriadOrchestrator(TriadOrchestrator orchestrator)
-    {
-      _triadOrchestrator = orchestrator;
-    }
-
-    /// <summary>
     /// Флаг инициализации класса
     /// </summary>
     public static bool IsInitialized => _instance != null;
@@ -100,19 +72,10 @@ namespace ISIDA.Actions
       _instance = new InfluenceActionSystem(gomeostas, actionsFolderPath);
     }
 
-    /// <summary>Воздействия на гомеостаз Niche (Data/Niche/Actions).</summary>
-    public static InfluenceActionSystem CreateDetachedForNicheHost(GomeostasSystem gomeostas, string actionsFolderPath)
-    {
-      if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
-      return new InfluenceActionSystem(gomeostas, actionsFolderPath, detachedNicheHost: true);
-    }
-
     private InfluenceActionSystem(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null,
-        bool detachedNicheHost = false)
+        string actionsFolderPath = null)
     {
-      _detachedNicheHost = detachedNicheHost;
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
       // Установка путей
@@ -540,47 +503,16 @@ namespace ISIDA.Actions
 
         Dictionary<int, float> homeostasisSnapshotBeforeApply = null;
         bool hasHomeostasisActions = OperatorStimulusHasHomeostasisActionComponents(actionIdList) && actionsToApply.Count > 0;
-        bool routeToNiche = false;
 
-        if (hasHomeostasisActions && _couplingBridge != null && _couplingBridge.IsActive)
-        {
-          if (_couplingBridge.IsOperatorCreatureInfluenceBlocked && !emergencyOverride)
-          {
-            routeToNiche = true;
-            Logger.Info("Triad фаза C: прямое влияние на Creature заблокировано — маршрут Operator→Niche");
-          }
-        }
-
-        if (!AppGlobalState.ObservationMode && hasHomeostasisActions && !routeToNiche)
+        if (!AppGlobalState.ObservationMode && hasHomeostasisActions)
           homeostasisSnapshotBeforeApply = SnapshotHomeostasisParameterValues(_gomeostas);
 
-        // Применение воздействий (после вызова событий)
-        LastAppliedAssessmentType = ResolveAssessmentTypeForApply(emergencyOverride);
-
-        if (routeToNiche)
+        foreach (var action in actionsToApply)
         {
-          int nicheApplied = _couplingBridge.ApplyOperatorInfluencesToNiche(actionIdList ?? new List<int>());
-          if (nicheApplied == 0)
-            errors.Add("Фаза C: нет Operator→Niche mapping для воздействий с пульта");
+          var result = ApplySingleInfluenceActionInternal(action);
+          if (!result.Success)
+            errors.Add($"Воздействие ID {action.Id}: {result.ErrorMessage}");
         }
-        else
-        {
-          foreach (var action in actionsToApply)
-          {
-            var result = ApplySingleInfluenceActionInternal(action);
-            if (!result.Success)
-              errors.Add($"Воздействие ID {action.Id}: {result.ErrorMessage}");
-          }
-        }
-
-        if (LastAppliedAssessmentType == AssessmentType.RitualViolation &&
-            !hasHomeostasisActions &&
-            AppGlobalState.EvolutionStage >= 4)
-        {
-          Logger.Info("RitualViolation: meta-сигнал оператора (без прямого ±1 на Creature)");
-        }
-
-        ForwardContourProbeKey(actionsToApply);
 
         if (!AppGlobalState.ObservationMode)
         {
@@ -675,7 +607,7 @@ namespace ISIDA.Actions
         if (!_gomeostas.TryEnsureAgentState(AgentCheck.NotDead | AgentCheck.IsActive, silent: true))
           return (false, "Симбионт неактивен или мертв - воздействие невозможно");
 
-        if (!_detachedNicheHost && AppGlobalState.ObservationMode)
+        if (AppGlobalState.ObservationMode)
           return (true, string.Empty);
 
         var parameters = _gomeostas.GetAllParameters();
@@ -696,10 +628,7 @@ namespace ISIDA.Actions
 
           param.Value = newValue;
         }
-        _gomeostas.MarkDirectParameterInfluenceOrigin(
-            _detachedNicheHost ? StimulusOrigin.Niche : StimulusOrigin.Operator);
-        if (!_detachedNicheHost)
-          _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
+        _gomeostas.OnExternalInfluenceApplied(isCriticalImpact);
 
         return (true, string.Empty);
       }
@@ -708,71 +637,6 @@ namespace ISIDA.Actions
         FileValidator.LogError($"{ex.Message}");
         return (false, ex.Message);
       }
-    }
-
-    /// <summary>Применяет воздействие к параметрам Niche-симбионта.</summary>
-    public bool ApplyInfluenceToNicheHost(int influenceActionId)
-    {
-      if (influenceActionId <= 0)
-        return false;
-
-      _lock.EnterReadLock();
-      GomeostasisInfluenceAction action;
-      try
-      {
-        if (!_influenceActions.TryGetValue(influenceActionId, out action))
-          return false;
-      }
-      finally
-      {
-        _lock.ExitReadLock();
-      }
-
-      return ApplySingleInfluenceActionInternal(action).Success;
-    }
-
-    private AssessmentType ResolveAssessmentTypeForApply(bool emergencyOverride = false)
-    {
-      if (emergencyOverride)
-        return AssessmentType.EmergencyOverride;
-
-      if (_couplingBridge == null || !_couplingBridge.IsActive)
-        return AssessmentType.Bootstrap;
-
-      switch (_couplingBridge.EffectivePhase)
-      {
-        case TriadPhase.C:
-          return AssessmentType.RitualViolation;
-        case TriadPhase.B:
-          return AssessmentType.RitualScaffold;
-        default:
-          return AssessmentType.Bootstrap;
-      }
-    }
-
-    private void ForwardContourProbeKey(List<GomeostasisInfluenceAction> actionsToApply)
-    {
-      if (actionsToApply == null || actionsToApply.Count == 0)
-        return;
-
-      if (_triadOrchestrator == null && (_couplingBridge == null || !_couplingBridge.IsActive))
-        return;
-
-      string probeKey = string.Empty;
-      for (int i = actionsToApply.Count - 1; i >= 0; i--)
-      {
-        string candidate = actionsToApply[i].EnvironmentMetricProbeKey?.Trim() ?? string.Empty;
-        if (candidate.Length > 0)
-        {
-          probeKey = candidate;
-          break;
-        }
-      }
-
-      if (_triadOrchestrator != null)
-        _triadOrchestrator.SetContourProbeKey(probeKey);
-      else
-        _couplingBridge.SetContourProbeKey(probeKey);
     }
 
     /// <summary>

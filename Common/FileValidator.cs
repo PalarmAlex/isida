@@ -59,56 +59,6 @@ namespace ISIDA.Common
       public const string InfluenceActionsEnvironmentProbeKey =
           "# EnvironmentMetricProbeKey: ключ пробы метрики среды для хоста; пусто — только оператор/Studio";
 
-      // Триада: coupling host-Niche (каталог Environment)
-      public const string TriadConfigFormat =
-          "# Формат: Phase|ContourId|SpontaneousDrift(0/1)|CouplingMappingVersion|BaselineN|Threshold|K|W_eval|UseFullNicheEngine|RoleProfileId|UseProbeContour";
-      public const string TriadConfigEngineParams = "# UseFullNicheEngine|RoleProfileId|UseProbeContour — этап 4; опционально";
-      public const string TriadConfigAoeParams = "# BaselineN|Threshold|K|W_eval — параметры AOE Niche (§5.3); опционально";
-      public const string ActionCouplingFormat = "# Формат: actionId|nicheParamId|delta|scale";
-      public const string NicheCreatureMappingFormat = "# Формат: nicheParamId|creatureParamId|scale|lagPulses";
-      public const string NicheParamsFormat = "# Формат: nicheParamId|value|speedPerPulse";
-      public const string OperatorNicheCouplingFormat = "# Формат: influenceActionId|nicheParamId|delta|scale";
-
-      public const string TriadConfigTemplate =
-          TriadConfigFormat + "\r\n" +
-          TriadConfigAoeParams + "\r\n" +
-          TriadConfigEngineParams + "\r\n" +
-          "B|static_mvp|0|1|20|0.5|3|30|1|niche_stage_0|0\r\n";
-
-      public const string ActionCouplingTemplate =
-          ActionCouplingFormat + "\r\n" +
-          "# Пример: действие Creature 1 повышает параметр Niche 101 на 5 единиц\r\n" +
-          "1|101|5.0|1.0\r\n";
-
-      public const string NicheCreatureMappingTemplate =
-          NicheCreatureMappingFormat + "\r\n" +
-          "# Пример: параметр Niche 101 → параметр Creature 3 (масштаб 1:1)\r\n" +
-          "101|3|1.0|0\r\n";
-
-      public const string NicheParamsTemplate =
-          NicheParamsFormat + "\r\n" +
-          "# Пример: один параметр среды, без дрейфа\r\n" +
-          "101|50.0|0\r\n";
-
-      public const string OperatorNicheCouplingTemplate =
-          OperatorNicheCouplingFormat + "\r\n" +
-          "# Пример: воздействие пульта 1 → параметр Niche 101 (+3)\r\n" +
-          "1|101|3.0|1.0\r\n";
-
-      public const string NicheReflexesFormat =
-          "# CreatureAction: kind|actionId|nicheParamId|delta|scale\r\n" +
-          "# ParamBelow/Above: kind|sourceParamId|threshold|nicheParamId|delta|scale";
-      public const string NicheReflexesTemplate =
-          NicheReflexesFormat + "\r\n" +
-          "# Пример: после действия Creature 1 — доп. отклик Niche 101\r\n" +
-          "CreatureAction|1|101|1.5|1.0\r\n";
-
-      public const string ContourProbesFormat = "# Формат: probeKey|nicheParamId|delta";
-      public const string ContourProbesTemplate =
-          ContourProbesFormat + "\r\n" +
-          "# Пример: probe «warm» повышает Niche 101\r\n" +
-          "warm|101|2.0\r\n";
-
       // Адаптивные действия
       public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";

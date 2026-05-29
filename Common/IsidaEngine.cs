@@ -1,5 +1,4 @@
 using ISIDA.Actions;
-using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Automatism;
@@ -67,26 +66,6 @@ namespace ISIDA.Common
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "ISIDA",
         "BootData");
-
-    /// <summary>
-    /// Каталог конфигурации триады (coupling host-Niche): action_coupling.dat, niche_creature_mapping.dat и др.
-    /// </summary>
-    public string EnvironmentFolder { get; set; }
-
-    /// <summary>
-    /// Каталог runtime-данных Niche (рефлексы, post-MVP automatisms): Data/Niche.
-    /// </summary>
-    public string NicheDataFolder { get; set; }
-
-    /// <summary>
-    /// Включить полный NicheEngine (рефлексы, RoleProfile). False — host-state MVP.
-    /// </summary>
-    public bool UseFullNicheEngine { get; set; } = true;
-
-    /// <summary>
-    /// Включить обработку триады Creature↔Niche (CouplingBridge).
-    /// </summary>
-    public bool TriadEnabled { get; set; } = true;
 
     /// <summary>
     /// Формат файлов логов
@@ -205,8 +184,6 @@ namespace ISIDA.Common
       PsychicDataFolder = Path.Combine(BaseDirectory, "Data", "Psychic");
       LogsFolder = Path.Combine(BaseDirectory, "Logs");
       BootDataFolder = Path.Combine(BaseDirectory, "BootData");
-      EnvironmentFolder = Path.Combine(BaseDirectory, "Environment");
-      NicheDataFolder = Path.Combine(BaseDirectory, "Data", "Niche");
       return this;
     }
 
@@ -442,16 +419,6 @@ namespace ISIDA.Common
     /// </summary>
     public ResearchLogger ResearchLogger { get; internal set; }
 
-    /// <summary>
-    /// Мост coupling host-Niche (MVP-диада триады).
-    /// </summary>
-    public CouplingBridge CouplingBridge { get; internal set; }
-
-    /// <summary>
-    /// Координатор такта триады (Niche → Coupling → Creature, этап 4.3).
-    /// </summary>
-    public TriadOrchestrator TriadOrchestrator { get; internal set; }
-
     private bool _disposed = false;
 
     /// <summary>
@@ -467,25 +434,6 @@ namespace ISIDA.Common
       AppGlobalState.ResetAutomatizmInfo();
       MirrorAutomatizmService?.ResetDialogMirror();
       EpisodicMemory?.SetInterruption();
-    }
-
-    /// <summary>
-    /// Сброс диады Creature↔Niche (§6.12).
-    /// </summary>
-    /// <param name="resetType">Тип сброса.</param>
-    /// <returns>Результат или null, если триада не активна.</returns>
-    public DyadResetResult ResetDyad(DyadResetType resetType)
-    {
-      return CouplingBridge?.ResetDyad(resetType);
-    }
-
-    /// <summary>
-    /// Синхронизирует фазу триады с текущей стадией эволюции (§4.1).
-    /// </summary>
-    /// <returns>True, если фаза была скорректирована.</returns>
-    public bool SyncTriadPhaseWithEvolutionStage()
-    {
-      return CouplingBridge?.SyncPhaseWithEvolutionStage() ?? false;
     }
 
     /// <summary>
@@ -559,7 +507,6 @@ namespace ISIDA.Common
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
-      SafeDispose(CouplingBridge, "CouplingBridge");
       SafeDispose(AdaptiveActions, "AdaptiveActions");
       SafeDispose(EvolutionStageService, "EvolutionStageService");
       SafeDispose(Gomeostas, "Gomeostas");
@@ -750,21 +697,6 @@ namespace ISIDA.Common
         context.AdaptiveActions.ReflexActionDisplayDuration = config.ReflexActionDisplayDuration;
         context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;
 
-        if (config.TriadEnabled)
-        {
-          if (string.IsNullOrWhiteSpace(config.EnvironmentFolder))
-            config.EnvironmentFolder = Path.Combine(config.BaseDirectory, "Environment");
-          if (string.IsNullOrWhiteSpace(config.NicheDataFolder))
-            config.NicheDataFolder = Path.Combine(config.BaseDirectory, "Data", "Niche");
-          context.CouplingBridge = new CouplingBridge(
-              context.Gomeostas,
-              context.AdaptiveActions,
-              config.EnvironmentFolder,
-              config.NicheDataFolder);
-          context.TriadOrchestrator = new TriadOrchestrator(context.CouplingBridge);
-          context.AdaptiveActions.SetCouplingBridge(context.CouplingBridge);
-        }
-
         // Шаг 5: Внешние действия
         initializationStep = 5;
         InfluenceActionSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
@@ -871,9 +803,6 @@ namespace ISIDA.Common
             enabled: config.LogEnabled
         );
         GlobalTimer.SetResearchLogger(context.ResearchLogger);
-        context.CouplingBridge?.SetResearchLogger(context.ResearchLogger);
-        context.CouplingBridge?.SetLogsFolder(config.LogsFolder);
-        context.CouplingBridge?.RecordRunStart();
 
         // Шаг 18: Система образов действий оператора и симбионта ИИ
         initializationStep = 18;
@@ -1105,12 +1034,6 @@ namespace ISIDA.Common
             context.AdaptiveActions,
             context.ReflexesActivator,
             context.PsychicSystem);
-
-        GlobalTimer.SetTriadOrchestrator(context.TriadOrchestrator);
-        GlobalTimer.SetCouplingBridge(context.CouplingBridge);
-        context.PsychicSystem?.SetCouplingBridge(context.CouplingBridge);
-        context.InfluenceActions?.SetCouplingBridge(context.CouplingBridge);
-        context.InfluenceActions?.SetTriadOrchestrator(context.TriadOrchestrator);
 
         GlobalTimer.SetConditionedReflexesSystem(context.ConditionedReflexes);
         GlobalTimer.SetReflexFormationService(context.ConditionedReflexFormation);

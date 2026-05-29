@@ -1,6 +1,5 @@
 using ISIDA.Common;
 using ISIDA.Gomeostas;
-using ISIDA.Niche;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using System;
@@ -181,16 +180,6 @@ namespace ISIDA.Psychic
       /// Время реакции оператора (в пульсах)
       /// </summary>
       public int OperatorResponseTime { get; set; }
-
-      /// <summary>
-      /// Исход первичного AOE по каналу Niche (§5.3.2).
-      /// </summary>
-      public AoeOutcome NicheAoeOutcome { get; set; }
-
-      /// <summary>
-      /// Оценка первичного AOE по Niche (−1..1).
-      /// </summary>
-      public int NicheAoeAssessment { get; set; }
     }
 
     /// <summary>
@@ -605,56 +594,6 @@ namespace ISIDA.Psychic
             UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(newResult);
         }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Зафиксировать исход первичного AOE по каналу Niche (§5.3.2).
-    /// </summary>
-    /// <param name="automatizmId">ID automatizm Creature.</param>
-    /// <param name="outcome">Исход окна AOE.</param>
-    /// <param name="assessment">Оценка (−1..1) для Success/Fail.</param>
-    /// <param name="finalizeTracking">Завершить отслеживание и записать episodic rule (фаза C).</param>
-    public void MarkNichePrimaryAoeOutcome(int automatizmId, AoeOutcome outcome, int assessment, bool finalizeTracking = false)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        if (!_lastAutomatizmResults.TryGetValue(automatizmId, out var result))
-        {
-          var atmz = _automatizmSystem.GetAutomatizmById(automatizmId);
-          result = new AutomatizmResult
-          {
-            AutomatizmId = automatizmId,
-            ActionsImageId = atmz?.ActionsImageID ?? 0
-          };
-          _lastAutomatizmResults[automatizmId] = result;
-        }
-
-        result.NicheAoeOutcome = outcome;
-        result.NicheAoeAssessment = assessment;
-
-        if (outcome == AoeOutcome.Success || outcome == AoeOutcome.Fail)
-        {
-          result.UsefulnessDelta = assessment;
-          UpdateAutomatizmUsefulness(automatizmId, assessment);
-          result.Result = assessment > 0 ? ExecutionResult.Success :
-                          assessment < 0 ? ExecutionResult.Error : ExecutionResult.Skipped;
-        }
-        else
-        {
-          result.UsefulnessDelta = 0;
-          result.Result = ExecutionResult.Skipped;
-        }
-
-        Logger.Info($"AOE Niche: automatizm ID={automatizmId}, outcome={outcome}, assessment={assessment}");
-
-        if (finalizeTracking)
-          FinishTracking(result);
       }
       finally
       {

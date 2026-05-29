@@ -1,7 +1,6 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
-using ISIDA.Niche;
 using ISIDA.Psychic.Automatism;
 using ISIDA.Psychic.Memory.Episodic;
 using ISIDA.Psychic.Thinking;
@@ -46,7 +45,6 @@ namespace ISIDA.Psychic
     private readonly CommandBrocaImagesSystem _commandBrocaImages;
     private readonly AutomatismResultTracker _automatismResultTracker;
     private readonly GomeostasSystem _gomeostasSystem;
-    private CouplingBridge _couplingBridge;
     private OrientationReflexSystem _orientationReflexSystem;
     private AutomatismExecutionService _automatismExecutionService;
     private PerceptionImagesSystem _perceptionImagesSystem;
@@ -311,15 +309,6 @@ namespace ISIDA.Psychic
     /// </summary>
     private bool _skipStage3MirrorLearningOnNextEval;
 
-    /// <summary>
-    /// Подключает мост триады для первичного AOE по Niche (фаза B+).
-    /// </summary>
-    /// <param name="couplingBridge">CouplingBridge или null.</param>
-    public void SetCouplingBridge(CouplingBridge couplingBridge)
-    {
-      _couplingBridge = couplingBridge;
-    }
-
     #endregion
 
     #region Основные методы
@@ -406,18 +395,6 @@ namespace ISIDA.Psychic
                 1, wakeNodeId, baseId, emotionId, _problemTreeSystem, wakeCtx);
             }
             WakeUppingActivation = false;
-          }
-
-          // Первичный AOE по Niche (фаза B+): после UpdateStateOnly на этом пульсе.
-          if (_couplingBridge != null &&
-              _couplingBridge.TryFinalizePrimaryNicheAoe(_gomeostasSystem, _gomeostasSystem.Calculator, out NicheAoeResult nicheAoe))
-          {
-            bool finalizeNiche = _couplingBridge.IsActive && _couplingBridge.EffectivePhase >= TriadPhase.C;
-            _automatismResultTracker.MarkNichePrimaryAoeOutcome(
-                nicheAoe.AutomatizmId,
-                nicheAoe.Outcome,
-                nicheAoe.Assessment,
-                finalizeNiche);
           }
 
           // Оценка автоматизма по ответу оператора: только здесь, на пульсе после стимула (не в SensorActivation).
@@ -1585,17 +1562,6 @@ namespace ISIDA.Psychic
           if (AppGlobalState.EvolutionStage >= 2)
           {
             AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
-
-            if (_couplingBridge != null && _couplingBridge.IsNichePrimaryAoeActive)
-            {
-              var snapshot = _gomeostasSystem.GetAllParameters()
-                  .ToDictionary(p => p.Id, p => p.Value);
-              _couplingBridge.OnAutomatizmExecuted(
-                  automatizm.ID,
-                  GlobalTimer.GlobalPulsCount,
-                  snapshot,
-                  AppGlobalState.CurrentOverallState);
-            }
           }
           _currentAutomatizmId = automatizm.ID;
         }
@@ -1773,18 +1739,13 @@ namespace ISIDA.Psychic
       int assessmentBeforeMerge = assessment;
       assessment = MergeOperatorAssessmentWithPultInfluence(assessment, operatorResponseImageId);
 
-      bool nichePrimaryMode = _couplingBridge != null && _couplingBridge.IsNichePrimaryAoeActive;
-      bool ritualScaffold = _influenceActionSystem.LastAppliedAssessmentType == AssessmentType.RitualScaffold;
-      bool ritualViolation = _influenceActionSystem.LastAppliedAssessmentType == AssessmentType.RitualViolation;
-      bool updateOperatorUsefulness = !nichePrimaryMode && !ritualScaffold && !ritualViolation;
-
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
           true,
           assessment,
           responseTime,
           operatorResponseImageId,
-          updateOperatorUsefulness);
+          updateUsefulness: true);
 
       // Триггер «Игнор симбионта»: негативный эффект при отрицательной оценке оператора
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)

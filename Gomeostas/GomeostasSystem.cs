@@ -1,6 +1,5 @@
 using ISIDA.Actions;
 using ISIDA.Common;
-using ISIDA.Niche;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
 using System;
@@ -30,10 +29,6 @@ namespace ISIDA.Gomeostas
     private ResearchLogger _researchLogger;
     private HomeostasisOverallState _currentOverallState = HomeostasisOverallState.Normal;
     private EvolutionStageService _evolutionStageService;
-    private readonly bool _detachedNicheHost;
-
-    /// <summary>True для отдельного экземпляра гомеостаза Niche (не влияет на AppGlobalState Creature).</summary>
-    public bool IsDetachedNicheHost => _detachedNicheHost;
 
     #region Инициализация класса
 
@@ -51,10 +46,8 @@ namespace ISIDA.Gomeostas
     /// </summary>
     public GomeostasSystem(
         InformationEnvironmentSystem informationEnvironmentSystem,
-        string gomeostasFolderPath = null,
-        bool detachedNicheHost = false)
+        string gomeostasFolderPath = null)
     {
-      _detachedNicheHost = detachedNicheHost;
       try
       {
         // Используем переданные пути или вычисляем стандартные 
@@ -71,8 +64,7 @@ namespace ISIDA.Gomeostas
         // Инициализация детектора новизны
         _previousOverallState = HomeostasisOverallState.Normal;
         _previousActiveStyleIds = new List<int>();
-        if (!_detachedNicheHost)
-          AppGlobalState.IsNewConditions = false;
+        AppGlobalState.IsNewConditions = false;
 
         EnsureDataDirectory();
         LoadAgentData();
@@ -190,9 +182,6 @@ namespace ISIDA.Gomeostas
     /// </summary>
     internal void UpdateStateOnly()
     {
-      if (_detachedNicheHost)
-        return;
-
       _lock.EnterWriteLock();
       try
       {
@@ -2144,25 +2133,10 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Происхождение последнего пакетного обновления параметров с хоста/Niche (для лога диады, §6.3).
-    /// </summary>
-    public StimulusOrigin LastHostBatchUpdateOrigin { get; private set; } = StimulusOrigin.Unknown;
-
-    /// <summary>
     /// Атомарное обновление значений нескольких параметров на одном захвате блокировки записи (полный снимок среды SW).
     /// </summary>
     /// <param name="values">ID параметра → новое значение.</param>
     public void HostBatchUpdateParameterValues(IReadOnlyDictionary<int, float> values)
-    {
-      HostBatchUpdateParameterValues(values, StimulusOrigin.Unknown);
-    }
-
-    /// <summary>
-    /// Атомарное обновление параметров Creature с разметкой происхождения для исследователя (не для восприятия).
-    /// </summary>
-    /// <param name="values">ID параметра → новое значение.</param>
-    /// <param name="origin">Источник изменения (Niche, Operator и т.д.).</param>
-    public void HostBatchUpdateParameterValues(IReadOnlyDictionary<int, float> values, StimulusOrigin origin)
     {
       if (values == null || values.Count == 0)
         return;
@@ -2170,10 +2144,7 @@ namespace ISIDA.Gomeostas
       _lock.EnterWriteLock();
       try
       {
-        if (!_detachedNicheHost)
-          EnsureAgentState(AgentCheck.NotDead);
-        else if (_agentState.IsDead)
-          return;
+        EnsureAgentState(AgentCheck.NotDead);
 
         foreach (var kv in values)
         {
@@ -2182,99 +2153,11 @@ namespace ISIDA.Gomeostas
             continue;
           p.Value = kv.Value;
         }
-        LastHostBatchUpdateOrigin = origin;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
-    }
-
-    /// <summary>
-    /// Такт Niche-симбионта: дрейф Speed и contour без обновления AppGlobalState Creature.
-    /// </summary>
-    internal void DetachedNichePulseUpdate(bool speedDriftEnabled, IReadOnlyDictionary<int, float> contourDeltas)
-    {
-      if (!_detachedNicheHost)
-        return;
-
-      _lock.EnterWriteLock();
-      try
-      {
-        if (_agentState.IsDead)
-          return;
-
-        foreach (var param in _agentState.Parameters)
-        {
-          if (speedDriftEnabled && Math.Abs(param.Speed) > 0.0001f)
-          {
-            float delta100 = param.Speed / 100f;
-            param.Value = ClampFloat(param.Value + delta100, 0f, 100f);
-          }
-
-          if (contourDeltas != null && contourDeltas.TryGetValue(param.Id, out float cd))
-            param.Value = ClampFloat(param.Value + cd, 0f, 100f);
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>Coupling/рефлекс: дельта к параметру Niche-симбионта.</summary>
-    internal void DetachedApplyParameterDelta(int paramId, float delta)
-    {
-      if (!_detachedNicheHost || Math.Abs(delta) < 0.0001f)
-        return;
-
-      _lock.EnterWriteLock();
-      try
-      {
-        if (_agentState.IsDead)
-          return;
-
-        var p = _agentState.GetParameter(paramId);
-        if (p == null)
-          return;
-
-        p.Value = ClampFloat(p.Value + delta, 0f, 100f);
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>Срез гомеостаза Niche для сопоставления рефлексов (без AppGlobalState Creature).</summary>
-    public NicheHomeostasisSlice DetachedGetHomeostasisSlice()
-    {
-      if (!_detachedNicheHost)
-        throw new InvalidOperationException("DetachedGetHomeostasisSlice только для Niche-симбионта.");
-
-      _lock.EnterWriteLock();
-      try
-      {
-        UpdateActiveStyles(false);
-        return new NicheHomeostasisSlice
-        {
-          BaseStateId = (int)_currentOverallState,
-          ActiveStyleIds = GetActiveStyles().Select(s => s.Id).ToList()
-        };
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Фиксирует происхождение прямого влияния на параметры (Operator через InfluenceActionSystem).
-    /// </summary>
-    /// <param name="origin">Источник изменения.</param>
-    public void MarkDirectParameterInfluenceOrigin(StimulusOrigin origin)
-    {
-      LastHostBatchUpdateOrigin = origin;
     }
 
     /// <summary>
@@ -2371,28 +2254,6 @@ namespace ISIDA.Gomeostas
       if (v < lo) return lo;
       if (v > hi) return hi;
       return v;
-    }
-
-    /// <summary>
-    /// Мягкий сброс Creature для диады: параметры → NormaWell (§6.12 CreatureSoft).
-    /// </summary>
-    public void RestoreParametersToNormForDyadReset()
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        if (_agentState?.Parameters == null)
-          return;
-
-        foreach (var p in _agentState.Parameters)
-          p.Value = ClampValueToParameterRange(p, p.NormaWell);
-
-        MarkDirectParameterInfluenceOrigin(StimulusOrigin.Unknown);
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
     }
 
     /// <summary>
@@ -2801,8 +2662,7 @@ namespace ISIDA.Gomeostas
           if (ActiveStyles[i] != null && ActiveStyles[i].Id == styleId)
             ActiveStyles[i] = null;
         }
-        if (!_detachedNicheHost)
-          AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
+        AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
         // БЫСТРОЕ УДАЛЕНИЕ ЧЕРЕЗ ИНДЕКСЫ:
         // Удаляем из антагонистов других стилей
@@ -2872,8 +2732,7 @@ namespace ISIDA.Gomeostas
         if (i >= ActiveStyles.Length) break;
         ActiveStyles[i++] = style;
       }
-      if (!_detachedNicheHost)
-        AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
+      AppGlobalState.UpdateActiveStyles(ActiveStyles.Where(s => s != null));
 
       var finalStylesForLogs = finalStylesWithWeights.Select(sw => new BehaviorStyle
       {

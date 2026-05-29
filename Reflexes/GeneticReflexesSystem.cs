@@ -25,11 +25,7 @@ namespace ISIDA.Reflexes
     private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
     private ReflexChainsSystem _reflexChainsSystem;
-    private readonly bool _detachedNicheHost;
     private bool _disposed = false;
-
-    /// <summary>Отдельный экземпляр для Niche-симбионта.</summary>
-    public bool IsDetachedNicheHost => _detachedNicheHost;
 
     #region Привязка к ReflexTreeSystem через события
 
@@ -126,48 +122,14 @@ namespace ISIDA.Reflexes
       _instance = new GeneticReflexesSystem(gomeostas, reflexesFolderPath);
     }
 
-    /// <summary>
-    /// Отдельный экземпляр БР для Niche (Data/Niche/Reflexes), без singleton Creature.
-    /// </summary>
-    public static GeneticReflexesSystem CreateDetachedForNicheHost(
-        GomeostasSystem gomeostas,
-        string reflexesFolderPath,
-        AdaptiveActionsSystem nicheAdaptiveActions,
-        InfluenceActionSystem nicheInfluenceActions)
-    {
-      if (gomeostas == null) throw new ArgumentNullException(nameof(gomeostas));
-      if (nicheAdaptiveActions == null) throw new ArgumentNullException(nameof(nicheAdaptiveActions));
-      if (nicheInfluenceActions == null) throw new ArgumentNullException(nameof(nicheInfluenceActions));
-
-      return new GeneticReflexesSystem(
-          gomeostas,
-          reflexesFolderPath,
-          nicheAdaptiveActions,
-          nicheInfluenceActions,
-          detachedNicheHost: true);
-    }
-
     private readonly GomeostasSystem _gomeostas;
     private GeneticReflexesSystem(
         GomeostasSystem gomeostas,
-        string reflexesFolderPath = null,
-        AdaptiveActionsSystem adaptiveActions = null,
-        InfluenceActionSystem influenceActions = null,
-        bool detachedNicheHost = false)
+        string reflexesFolderPath = null)
     {
-      _detachedNicheHost = detachedNicheHost;
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
-
-      if (_detachedNicheHost)
-      {
-        _adaptiveActionsSystem = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));
-        _influenceActionSystem = influenceActions ?? throw new ArgumentNullException(nameof(influenceActions));
-      }
-      else
-      {
-        _influenceActionSystem = InfluenceActionSystem.Instance;
-        _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
-      }
+      _influenceActionSystem = InfluenceActionSystem.Instance;
+      _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
 
       // Установка путей
       _reflexesFolderPath = string.IsNullOrWhiteSpace(reflexesFolderPath)
@@ -175,11 +137,8 @@ namespace ISIDA.Reflexes
             : reflexesFolderPath;
 
       _gomeostas.StyleDeleted += OnStyleDeleted;
-      if (!_detachedNicheHost)
-      {
-        _influenceActionSystem.InfluenceActionDeleted += OnInfluenceActionDeleted;
-        _adaptiveActionsSystem.AdaptiveActionDeleted += OnAdaptiveActionDeleted;
-      }
+      _influenceActionSystem.InfluenceActionDeleted += OnInfluenceActionDeleted;
+      _adaptiveActionsSystem.AdaptiveActionDeleted += OnAdaptiveActionDeleted;
 
       try
       {
@@ -385,7 +344,7 @@ namespace ISIDA.Reflexes
         List<int> level3,
         List<int> adaptiveActions)
     {
-      if (!_detachedNicheHost && AppGlobalState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       var warnings = new List<string>();
@@ -471,7 +430,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     public string[] UpdateGeneticReflex(GeneticReflex reflex)
     {
-      if (!_detachedNicheHost && AppGlobalState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (reflex == null)
@@ -649,7 +608,7 @@ namespace ISIDA.Reflexes
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveGeneticReflex(int reflexId)
     {
-      if (!_detachedNicheHost && AppGlobalState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       if (!_geneticReflexes.ContainsKey(reflexId))
@@ -1012,7 +971,7 @@ namespace ISIDA.Reflexes
     /// <returns>Кортеж (успех, сообщение об ошибке)</returns>
     public (bool Success, string ErrorMessage) SaveGeneticReflexes(bool IsValidate = true)
     {
-      if (!_detachedNicheHost && AppGlobalState.EvolutionStage > 0)
+      if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
 
       _lock.EnterWriteLock();

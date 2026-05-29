@@ -1,6 +1,5 @@
 using ISIDA.Actions;
 using ISIDA.Common;
-using ISIDA.Niche;
 using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using System;
@@ -115,8 +114,6 @@ namespace ISIDA.Common
     private static ConditionedReflexesSystem _conditionedReflexesSystem;
     private static ConditionedReflexFormationService _reflexFormationService;
     private static PsychicSystem _psychicSystem;
-    private static CouplingBridge _couplingBridge;
-    private static TriadOrchestrator _triadOrchestrator;
 
     private static bool HasConditionedReflexesSystem => _conditionedReflexesSystem != null;
     private static bool HasReflexFormationService => _reflexFormationService != null;
@@ -166,24 +163,6 @@ namespace ISIDA.Common
     /// </summary>
     public static bool ArePulseSystemsReady =>
         _gomeostas != null && _actionsSystem != null;
-
-    /// <summary>
-    /// Подключает оркестратор триады для обработки такта до гомеостаза Creature.
-    /// </summary>
-    /// <param name="orchestrator">TriadOrchestrator или null.</param>
-    public static void SetTriadOrchestrator(TriadOrchestrator orchestrator)
-    {
-      _triadOrchestrator = orchestrator;
-    }
-
-    /// <summary>
-    /// Подключает мост coupling host-Niche (fallback, если оркестратор не задан).
-    /// </summary>
-    /// <param name="couplingBridge">CouplingBridge или null.</param>
-    public static void SetCouplingBridge(CouplingBridge couplingBridge)
-    {
-      _couplingBridge = couplingBridge;
-    }
 
     /// <summary>
     /// Инициализирует системы, участвующие в пульсации.
@@ -284,8 +263,6 @@ namespace ISIDA.Common
         _conditionedReflexesSystem = null;
         _reflexFormationService = null;
         _psychicSystem = null;
-        _couplingBridge = null;
-        _triadOrchestrator = null;
 
         // Очищаем подписки на события
         OnPulseCompleted = null;
@@ -552,18 +529,6 @@ namespace ISIDA.Common
           catch (Exception themeEx)
           {
             Logger.Warning($"ThinkingThemePulseResolver: {themeEx.Message}");
-          }
-
-          try
-          {
-            if (_triadOrchestrator != null)
-              _triadOrchestrator.ProcessTriadPulse(GlobalPulsCount);
-            else
-              _couplingBridge?.ProcessPulseBeforeGomeostasis(GlobalPulsCount);
-          }
-          catch (Exception triadEx)
-          {
-            Logger.Warning($"CouplingBridge: {triadEx.Message}");
           }
 
           try
