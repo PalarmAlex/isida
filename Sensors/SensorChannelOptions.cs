@@ -15,7 +15,7 @@ namespace ISIDA.Sensors
         atomicTokens: false,
         filterGarbageWords: true);
 
-    /// <summary>Командный канал: атомарные контуры из DefaultCommandPrimaries, CommandWords.dat / CommandPhrases.dat.</summary>
+    /// <summary>Командный канал: атомарные токены команд внешней среды (CommandWords.dat / CommandPhrases.dat и первичники).</summary>
     public static readonly SensorChannelOptions Command = new SensorChannelOptions(
         wordsTreeName: "CommandWords",
         phrasesTreeName: "CommandPhrases",

@@ -79,6 +79,7 @@ public static class AppGlobalState
   #region Пульт — режим наблюдения
 
   private static bool _observationMode = false;
+  private static bool _hostEnvironmentDegraded = false;
   private static bool _homeostasisPulseSpeedDriftEnabled = true;
 
   #endregion
@@ -784,6 +785,7 @@ public static class AppGlobalState
 
   /// <summary>
   /// Режим наблюдения: при true воздействия с пульта не меняют параметры гомеостаза симбионта.
+  /// Исходящие автоматизмы и рефлексы при этом исполняются (в отличие от <see cref="HostEnvironmentDegraded"/>).
   /// </summary>
   public static bool ObservationMode
   {
@@ -797,6 +799,27 @@ public static class AppGlobalState
     {
       _lock.EnterWriteLock();
       try { _observationMode = value; }
+      finally { _lock.ExitWriteLock(); }
+    }
+  }
+
+  /// <summary>
+  /// Внешняя среда хоста в режиме деградации (выставляет интеграционный хост по своим метрикам доступности).
+  /// При true исходящие адаптивные/моторные действия агента не исполняются; входящие стимулы и запись гомеостаза от хоста допускаются.
+  /// Не связан с авторитарной записью сенсоров и не подменяет <see cref="ObservationMode"/>.
+  /// </summary>
+  public static bool HostEnvironmentDegraded
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _hostEnvironmentDegraded; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _hostEnvironmentDegraded = value; }
       finally { _lock.ExitWriteLock(); }
     }
   }

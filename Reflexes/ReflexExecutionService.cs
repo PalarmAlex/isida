@@ -152,6 +152,9 @@ namespace ISIDA.Reflexes
       if (actionIds == null || !actionIds.Any())
         return (false, "Нет действий для выполнения");
 
+      if (AppGlobalState.HostEnvironmentDegraded)
+        return (false, "Исполнение подавлено: внешняя среда хоста в режиме деградации");
+
       var results = new List<string>();
       var successfulActions = new List<int>();
 

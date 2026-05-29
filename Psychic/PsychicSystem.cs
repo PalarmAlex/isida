@@ -1522,6 +1522,12 @@ namespace ISIDA.Psychic
         return false;
       }
 
+      if (AppGlobalState.HostEnvironmentDegraded)
+      {
+        Logger.Info($"Автоматизм ID={automatizm.ID} не выполнен: внешняя среда хоста в режиме деградации.");
+        return false;
+      }
+
       if (_automatismExecutionService == null)
       {
         Logger.Warning("Сервис выполнения автоматизмов не установлен");

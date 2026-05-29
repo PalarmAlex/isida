@@ -89,7 +89,8 @@ namespace ISIDA.Sensors
     public VerbalSensorChannel VerbalChannel { get; private set; }
 
     /// <summary>
-    /// Командный сенсорный канал (атомарные контуры команд)
+    /// Командный сенсорный канал: атомарные токены команд из внешней среды хоста
+    /// (редактор, таблица, САПР и т. п. — по данным интеграции, не только вербальная речь).
     /// </summary>
     public VerbalSensorChannel CommandChannel { get; private set; }
 

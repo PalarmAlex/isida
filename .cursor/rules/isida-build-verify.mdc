@@ -1,0 +1,34 @@
+---
+description: Обязательная пересборка isida после правок C#
+alwaysApply: true
+---
+
+# isida: проверка сборкой
+
+После **любых** правок, затрагивающих компиляцию (`*.cs`, `isida.csproj`, новые/удалённые `Compile`), **до завершения задачи** выполни пересборку и исправь все ошибки компиляции. Не оставляй пользователю по одной ошибке в IDE.
+
+## Когда собирать
+
+- Завершил фичу, рефакторинг, новый класс в `Environment/`, `Gomeostas/`, `Psychic/` и т.д.
+- Добавил или переименовал файл — **явно** пропиши в `isida.csproj` (проект не SDK-style).
+- Менял публичные API, используемые в AIStudio — после isida пересобери AIStudio.
+
+## Команда сборки
+
+Из корня репозитория isida:
+
+```powershell
+dotnet build "D:\ISIDA\Programms\isida\isida.csproj" -c Debug --no-restore
+```
+
+Если `dotnet build` недоступен — MSBuild:
+
+```powershell
+& "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" `
+  "D:\ISIDA\Programms\isida\isida.csproj" `
+  /t:Build /p:Configuration=Debug /v:minimal
+```
+
+## Завершение задачи
+
+Считай задачу по коду выполненной только если сборка **Debug** прошла без ошибок (предупреждения — по ситуации, новые не игнорировать без причины).

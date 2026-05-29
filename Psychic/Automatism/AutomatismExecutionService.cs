@@ -214,6 +214,9 @@ namespace ISIDA.Psychic.Automatism
     {
       try
       {
+        if (AppGlobalState.HostEnvironmentDegraded)
+          return (false, "Исполнение подавлено: внешняя среда хоста в режиме деградации");
+
         if (!AreDependenciesSet)
           return (false, "Зависимости AutomatismExecutionService не установлены. Вызовите InitializeWithDependencies()");
 
@@ -315,6 +318,9 @@ namespace ISIDA.Psychic.Automatism
 
       if (!AreDependenciesSet)
         return (false, "Зависимости AutomatismExecutionService не установлены. Вызовите InitializeWithDependencies()");
+
+      if (AppGlobalState.HostEnvironmentDegraded)
+        return (false, "Исполнение подавлено: внешняя среда хоста в режиме деградации");
 
       var results = new List<string>();
       var successfulActions = new List<int>();
