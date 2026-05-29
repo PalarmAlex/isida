@@ -242,6 +242,7 @@ namespace ISIDA.Psychic
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
         }
         else if (!purposeGenetic.VeryActual &&
+                 AppGlobalState.TeachingMode &&
                  AppGlobalState.EvolutionStage == 2 &&
                  AppGlobalState.CurActiveVerbalId != 0 &&
                  _mirrorAutomatizmService != null &&

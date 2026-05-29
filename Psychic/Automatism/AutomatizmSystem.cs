@@ -245,15 +245,28 @@ namespace ISIDA.Psychic.Automatism
         int actionsImageId,
         bool checkUnicum = true)
     {
+      return CreateNewAutomatizm(branchId, actionsImageId, checkUnicum, AutomatizmConsolidationService.AutomatizmCreationRole.Default);
+    }
+
+    /// <summary>
+    /// Создает новый автоматизм с заданной ролью (сдвиг/эхо) для стартовой полезности на стадиях 2–3.
+    /// </summary>
+    public (int Id, Automatizm Automatizm) CreateNewAutomatizm(
+        int branchId,
+        int actionsImageId,
+        bool checkUnicum,
+        AutomatizmConsolidationService.AutomatizmCreationRole role)
+    {
       int evolutionStage = AppGlobalState.EvolutionStage;
-      int usefulness = 0;
+      int usefulness;
 
       if (evolutionStage < 2)
         throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
-      else if (evolutionStage == 2)
-        usefulness = 3;
-      else if (evolutionStage == 3)
-        usefulness = 2;
+
+      if (evolutionStage <= 3)
+        usefulness = AutomatizmConsolidationService.GetInitialUsefulness(role, evolutionStage);
+      else
+        usefulness = AutomatizmConsolidationService.GetInitialUsefulness(role, evolutionStage);
 
       if (actionsImageId == 0)
         return (0, null);
@@ -411,7 +424,15 @@ namespace ISIDA.Psychic.Automatism
         {
           if (!_automatizmsById.TryGetValue(automatizmId, out var automatizm))
             return;
-          ReconcileStaffAfterNegativeUsefulnessNoLock(automatizm.BranchID);
+
+          int branchId = automatizm.BranchID;
+          ReconcileStaffAfterNegativeUsefulnessNoLock(branchId);
+
+          if (automatizm.Usefulness < 0 &&
+              (AppGlobalState.EvolutionStage == 2 || AppGlobalState.EvolutionStage == 3))
+          {
+            DeleteAutomatizmWithCascadeNoLock(automatizmId);
+          }
         }
         finally
         {
@@ -422,6 +443,89 @@ namespace ISIDA.Psychic.Automatism
       {
         Logger.Error(ex.Message);
       }
+    }
+
+    /// <summary>
+    /// Удаляет автоматизм и неиспользуемую цепочку (стадии 2–3). Вызывать под блокировкой записи.
+    /// </summary>
+    private void DeleteAutomatizmWithCascadeNoLock(int id)
+    {
+      if (!_automatizmsById.TryGetValue(id, out var automatizm))
+        return;
+
+      int chainId = automatizm.NextID;
+      DeleteAutomatizmCoreNoLock(id);
+
+      if (chainId > 0 && !IsChainReferencedByOtherAutomatizmsNoLock(chainId, 0))
+      {
+        try
+        {
+          _automatizmChainsSystem?.RemoveAutomatizmChainNoBlock(chainId, silent: true);
+        }
+        catch (Exception ex)
+        {
+          Logger.Warning($"Не удалось удалить цепочку {chainId} при очистке автоматизма: {ex.Message}");
+        }
+      }
+    }
+
+    private bool IsChainReferencedByOtherAutomatizmsNoLock(int chainId, int exceptAutomatizmId)
+    {
+      foreach (var a in _automatizmsById.Values)
+      {
+        if (a.ID == exceptAutomatizmId)
+          continue;
+        if (a.NextID == chainId)
+          return true;
+      }
+      return false;
+    }
+
+    private void DeleteAutomatizmCoreNoLock(int id)
+    {
+      if (!_automatizmsById.TryGetValue(id, out var automatizm))
+        return;
+
+      _automatizmsById.Remove(id);
+      _automatizmSuccessFromId.Remove(id);
+      _unicumBranchActionsToId.Remove((automatizm.BranchID, automatizm.ActionsImageID));
+
+      if (_automatizmBelief2FromTreeNodeId.TryGetValue(automatizm.BranchID, out var belief2Cached) &&
+          belief2Cached != null && belief2Cached.ID == automatizm.ID)
+      {
+        _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
+        foreach (var kvp in _automatizmsById)
+        {
+          if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2)
+          {
+            _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = kvp.Value;
+            break;
+          }
+        }
+      }
+
+      if (automatizm.BranchID > 1000000 && automatizm.BranchID < 2000000)
+      {
+        var imgId = automatizm.BranchID - 1000000;
+        if (_automatizmFromActionId.ContainsKey(imgId))
+        {
+          _automatizmFromActionId[imgId].Remove(automatizm);
+          if (_automatizmFromActionId[imgId].Count == 0)
+            _automatizmFromActionId.Remove(imgId);
+        }
+      }
+      else if (automatizm.BranchID > 2000000)
+      {
+        var imgId = automatizm.BranchID - 2000000;
+        if (_automatizmFromPhraseId.ContainsKey(imgId))
+        {
+          _automatizmFromPhraseId[imgId].Remove(automatizm);
+          if (_automatizmFromPhraseId[imgId].Count == 0)
+            _automatizmFromPhraseId.Remove(imgId);
+        }
+      }
+
+      OnAutomatizmDeleted(id);
     }
 
     /// <summary>

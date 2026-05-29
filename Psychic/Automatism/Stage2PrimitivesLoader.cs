@@ -254,7 +254,8 @@ namespace ISIDA.Psychic.Automatism
           partPhraseIds,
           new List<int>(),
           toneId,
-          moodId);
+          moodId,
+          bypassTeachingGate: true);
 
       return (echoId > 0, echoId > 0 ? null : "Other");
     }

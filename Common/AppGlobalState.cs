@@ -1,6 +1,7 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -79,6 +80,8 @@ public static class AppGlobalState
   #region Пульт — режим наблюдения
 
   private static bool _observationMode = false;
+  private static bool _teachingMode = false;
+  private static bool _assessmentAppliedThisPulse = false;
   private static bool _hostEnvironmentDegraded = false;
   private static bool _homeostasisPulseSpeedDriftEnabled = true;
 
@@ -801,6 +804,68 @@ public static class AppGlobalState
       try { _observationMode = value; }
       finally { _lock.ExitWriteLock(); }
     }
+  }
+
+  /// <summary>
+  /// Режим обучения оператора (sticky): включается настроением «Учитель» (MoodId=4) на пульте, выключается любым другим валидным настроением стимула.
+  /// Разрешает запись отзеркаливания на стадиях 2 и 4+ (на стадии 3 зеркало работает и без флага).
+  /// </summary>
+  public static bool TeachingMode
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _teachingMode; }
+      finally { _lock.ExitReadLock(); }
+    }
+  }
+
+  /// <summary>
+  /// На текущем пульсе уже применена оценка оператора к полезности — затухание консолидации на этом пульсе не выполняется.
+  /// </summary>
+  public static bool AssessmentAppliedThisPulse
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _assessmentAppliedThisPulse; }
+      finally { _lock.ExitReadLock(); }
+    }
+  }
+
+  /// <summary>
+  /// Обновляет sticky-флаг <see cref="TeachingMode"/> по настроению стимула с пульта (не ответа симбионта).
+  /// </summary>
+  public static void UpdateTeachingModeFromStimulusMood(int moodId)
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      if (moodId == ActionsImagesSystem.TeacherMoodId)
+        _teachingMode = true;
+      else if (ActionsImagesSystem.IsValidMoodId(moodId))
+        _teachingMode = false;
+    }
+    finally
+    {
+      _lock.ExitWriteLock();
+    }
+  }
+
+  /// <summary>Сброс флага оценки в начале обработки пульса психики.</summary>
+  public static void ResetAssessmentAppliedThisPulse()
+  {
+    _lock.EnterWriteLock();
+    try { _assessmentAppliedThisPulse = false; }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Отметить, что на этом пульсе была применена оценка оператора (±).</summary>
+  public static void MarkAssessmentAppliedThisPulse()
+  {
+    _lock.EnterWriteLock();
+    try { _assessmentAppliedThisPulse = true; }
+    finally { _lock.ExitWriteLock(); }
   }
 
   /// <summary>

@@ -73,6 +73,9 @@ namespace ISIDA.Psychic.Automatism
 
     private const string ActionsImagesFileName = "action_images";
     private const int PrefixActionIdValue = 10000000; // если ID действия больше prefixActionIdValue, то это цепочка действий
+
+    /// <summary>ID настроения «Учитель» на пульте — включает sticky <see cref="AppGlobalState.TeachingMode"/>.</summary>
+    public const int TeacherMoodId = 4;
     private static readonly Dictionary<int, (string Description, bool IsThreatening)> _toneDictionary =
       new Dictionary<int, (string, bool)>
       {

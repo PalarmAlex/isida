@@ -368,18 +368,7 @@ namespace ISIDA.Psychic.Automatism
     /// </summary>
     private void UpdateAutomatizmStatistics(int automatizmId, bool success)
     {
-      try
-      {
-        var automatizm = _automatizmSystem.GetAutomatizmById(automatizmId);
-        if (automatizm == null)
-          return;
-
-        automatizm.Count++;
-      }
-      catch (Exception ex)
-      {
-        Logger.Warning(ex.Message);
-      }
+      // Count на стадиях 2–3 наращивается только при консолидации (оценка оператора ≥ 0), не при каждом выполнении.
     }
 
     #endregion

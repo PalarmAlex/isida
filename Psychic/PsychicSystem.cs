@@ -374,6 +374,8 @@ namespace ISIDA.Psychic
         // Обработка тиков при бодрствовании
         if (!IsSleeping)
         {
+          AppGlobalState.ResetAssessmentAppliedThisPulse();
+
           // Осознание при включении и бодрствовании
           if (AppGlobalState.EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
           {
@@ -424,6 +426,8 @@ namespace ISIDA.Psychic
             }
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
+
+          AutomatizmConsolidationService.ApplyDecayOnPulse(_automatizmSystem, _mirrorAutomatizmService, pulseCount);
 
           // Диспетчеризация циклов — только стадия 4+ (сброс для <4 уже в начале метода).
           if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
@@ -614,6 +618,9 @@ namespace ISIDA.Psychic
 
       try
       {
+        if (activationType >= 2)
+          AppGlobalState.UpdateTeachingModeFromStimulusMood(moodId);
+
         if (actionIdList != null && actionIdList.Count > 0)
           AppGlobalState.RecordStimulusInfluenceActions(actionIdList);
 
@@ -1782,7 +1789,41 @@ namespace ISIDA.Psychic
         return mirrorAutomatizmIdEarly;
       }
 
+      if (AppGlobalState.EvolutionStage >= 4 &&
+          AppGlobalState.TeachingMode &&
+          assessment >= 0 &&
+          IsTeachingStimulusSignificantForMirror(operatorResponseImageId))
+      {
+        var evaluatedAtmz = _automatizmSystem.GetAutomatizmById(automatizmIdToEvaluate);
+        if (evaluatedAtmz != null && operatorResponseImageId > 0 && _automatizmTreeSystem != null)
+        {
+          var branchNode = _automatizmTreeSystem.GetNodeById(evaluatedAtmz.BranchID);
+          if (branchNode != null)
+          {
+            int anchorNodeId = GetTreeNodeIdForResponseActionsImage(
+                evaluatedAtmz.ActionsImageID,
+                branchNode.BaseID,
+                branchNode.EmotionID,
+                branchNode.ActivityID);
+            if (anchorNodeId > 0)
+              _mirrorAutomatizmService.TryCreateTeachingShiftAutomatizm(anchorNodeId, operatorResponseImageId);
+          }
+        }
+      }
+
       return 0;
+    }
+
+    /// <summary>
+    /// Достаточная значимость стимула оператора для авторитарной записи сдвига на стадиях 4+ (Teacher).
+    /// </summary>
+    private static bool IsTeachingStimulusSignificantForMirror(int operatorResponseActionsImageId)
+    {
+      if (operatorResponseActionsImageId <= 0)
+        return false;
+      if (Math.Abs(AppGlobalState.CurrentStimulsEffect) > ObjectImportanceService.MinSignificantImportance)
+        return true;
+      return false;
     }
 
     /// <summary>
