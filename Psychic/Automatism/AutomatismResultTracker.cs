@@ -569,16 +569,7 @@ namespace ISIDA.Psychic
             _episodicRulesService.FixTeacherRule(operatorResponseActionsImageId, result.ActionsImageId, AppGlobalState.CurrentStimulsEffect);
 
           if (updateUsefulness)
-          {
-            int stage = AppGlobalState.EvolutionStage;
-            if (stage == 2 || stage == 3)
-              AutomatizmConsolidationService.ApplyOperatorAssessmentStagesTwoThree(_automatizmSystem, automatizmId, assessment);
-            else
-            {
-              AppGlobalState.MarkAssessmentAppliedThisPulse();
-              UpdateAutomatizmUsefulness(automatizmId, assessment);
-            }
-          }
+            UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(result);
         }
         else
@@ -600,16 +591,7 @@ namespace ISIDA.Psychic
 
           _lastAutomatizmResults[automatizmId] = newResult;
           if (updateUsefulness)
-          {
-            int stage = AppGlobalState.EvolutionStage;
-            if (stage == 2 || stage == 3)
-              AutomatizmConsolidationService.ApplyOperatorAssessmentStagesTwoThree(_automatizmSystem, automatizmId, assessment);
-            else
-            {
-              AppGlobalState.MarkAssessmentAppliedThisPulse();
-              UpdateAutomatizmUsefulness(automatizmId, assessment);
-            }
-          }
+            UpdateAutomatizmUsefulness(automatizmId, assessment);
           FinishTracking(newResult);
         }
       }

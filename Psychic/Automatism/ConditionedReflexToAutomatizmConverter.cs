@@ -596,16 +596,12 @@ namespace ISIDA.Psychic
     {
       try
       {
-        if (AppGlobalState.EvolutionStage == 2 || AppGlobalState.EvolutionStage == 3)
-        {
-          automatizm.Count = AutomatizmConsolidationService.CountFromAssociationStrength(reflex.AssociationStrength);
-          automatizm.Usefulness = 1;
-        }
+        if (AppGlobalState.EvolutionStage == 2)
+          automatizm.Usefulness = 3;
         else
-        {
           automatizm.Usefulness = 2;
-          automatizm.Count = 1;
-        }
+
+        automatizm.Count = 1;
         automatizm.Energy = 5;
         automatizm.Belief = 1;
 

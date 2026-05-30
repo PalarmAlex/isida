@@ -352,7 +352,12 @@ namespace ISIDA.Psychic.Automatism
           return 0;
         }
 
-        teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 0);
+        int shiftUsefulness = AutomatizmConsolidationService.GetInitialUsefulness(
+            AutomatizmConsolidationService.AutomatizmCreationRole.Shift,
+            AppGlobalState.EvolutionStage);
+        if (teacherAutomatizm.Usefulness < shiftUsefulness)
+          teacherAutomatizm.Usefulness = shiftUsefulness;
+        teacherAutomatizm.Count = Math.Max(teacherAutomatizm.Count, 1);
         _automatizmSystem.SetAutomatizmBelief(teacherAutomatizm, 2);
 
         bool continueCycle = CanMirrorStimulusParts(

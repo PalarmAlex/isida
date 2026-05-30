@@ -547,7 +547,7 @@ namespace ISIDA.Actions
     /// </summary>
     /// <param name="actionIdList">Список ID воздействий, как в <see cref="ApplyMultipleInfluenceActions"/>.</param>
     /// <returns>True, если список не null и содержит хотя бы один элемент.</returns>
-    public static bool OperatorStimulusHasHomeostasisActionComponents(IList<int> actionIdList)
+    public static bool OperatorStimulusHasHomeostasisActionComponents(IReadOnlyCollection<int> actionIdList)
     {
       return actionIdList != null && actionIdList.Count > 0;
     }

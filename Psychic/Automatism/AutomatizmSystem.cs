@@ -249,7 +249,8 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Создает новый автоматизм с заданной ролью (сдвиг/эхо) для стартовой полезности на стадиях 2–3.
+    /// Создаёт автоматизм с ролью зеркала (эхо S→S / «сдвиг» Sₙ₋₁→Sₙ) для стартовой полезности на 2–3 стадиях.
+    /// Belief=2 (штатный) при необходимости задаётся отдельно через <see cref="SetAutomatizmBelief"/>.
     /// </summary>
     public (int Id, Automatizm Automatizm) CreateNewAutomatizm(
         int branchId,
@@ -258,15 +259,11 @@ namespace ISIDA.Psychic.Automatism
         AutomatizmConsolidationService.AutomatizmCreationRole role)
     {
       int evolutionStage = AppGlobalState.EvolutionStage;
-      int usefulness;
 
       if (evolutionStage < 2)
         throw new InvalidOperationException("Автоматизмы доступны только начиная со стадии 2");
 
-      if (evolutionStage <= 3)
-        usefulness = AutomatizmConsolidationService.GetInitialUsefulness(role, evolutionStage);
-      else
-        usefulness = AutomatizmConsolidationService.GetInitialUsefulness(role, evolutionStage);
+      int usefulness = AutomatizmConsolidationService.GetInitialUsefulness(role, evolutionStage);
 
       if (actionsImageId == 0)
         return (0, null);

@@ -374,8 +374,6 @@ namespace ISIDA.Psychic
         // Обработка тиков при бодрствовании
         if (!IsSleeping)
         {
-          AppGlobalState.ResetAssessmentAppliedThisPulse();
-
           // Осознание при включении и бодрствовании
           if (AppGlobalState.EvolutionStage > 3 && PulseCount > 4 && WakeUppingActivation)
           {
@@ -426,8 +424,6 @@ namespace ISIDA.Psychic
             }
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
-
-          AutomatizmConsolidationService.ApplyDecayOnPulse(_automatizmSystem, _mirrorAutomatizmService, pulseCount);
 
           // Диспетчеризация циклов — только стадия 4+ (сброс для <4 уже в начале метода).
           if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
@@ -1745,6 +1741,7 @@ namespace ISIDA.Psychic
       int operatorResponseImageId = _mirrorAutomatizmService?.GetPendingOperatorResponseActionsImageId() ?? 0;
       int assessmentBeforeMerge = assessment;
       assessment = MergeOperatorAssessmentWithPultInfluence(assessment, operatorResponseImageId);
+      bool updateUsefulness = ShouldUpdateUsefulnessFromOperatorResponse(operatorResponseImageId);
 
       _automatismResultTracker.MarkOperatorRecognition(
           automatizmIdToEvaluate,
@@ -1752,7 +1749,7 @@ namespace ISIDA.Psychic
           assessment,
           responseTime,
           operatorResponseImageId,
-          updateUsefulness: true);
+          updateUsefulness: updateUsefulness);
 
       // Триггер «Игнор симбионта»: негативный эффект при отрицательной оценке оператора
       if (assessment < 0 && _understandingTreeSystem != null && _problemTreeSystem != null)
@@ -1823,6 +1820,33 @@ namespace ISIDA.Psychic
         return false;
       if (Math.Abs(AppGlobalState.CurrentStimulsEffect) > ObjectImportanceService.MinSignificantImportance)
         return true;
+      return false;
+    }
+
+    /// <summary>
+    /// Менять полезность автоматизма только при гомеостатических воздействиях с пульта (кнопки влияния),
+    /// а не при одних вербальных стимулах в окне ожидания оценки.
+    /// </summary>
+    private bool ShouldUpdateUsefulnessFromOperatorResponse(int operatorResponseActionsImageId)
+    {
+      if (operatorResponseActionsImageId <= 0)
+        return false;
+
+      if (_actionsImagesSystem != null)
+      {
+        var actionsImg = _actionsImagesSystem.GetActionsImage(operatorResponseActionsImageId);
+        if (actionsImg?.ActIdList != null &&
+            InfluenceActionSystem.OperatorStimulusHasHomeostasisActionComponents(actionsImg.ActIdList))
+          return true;
+      }
+
+      if (_influenceActionsImagesSystem != null)
+      {
+        var ids = _influenceActionsImagesSystem.GetInfluenceActionIds(operatorResponseActionsImageId);
+        if (InfluenceActionSystem.OperatorStimulusHasHomeostasisActionComponents(ids))
+          return true;
+      }
+
       return false;
     }
 
