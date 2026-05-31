@@ -75,12 +75,17 @@ namespace ISIDA.Common
 
     // Писатели в файлы
     private readonly string _logFilePath;
-    private readonly StreamWriter _jsonlWriter;
-    private readonly StreamWriter _csvWriter;
-    private readonly StreamWriter _parametersJsonlWriter;
-    private readonly StreamWriter _parametersCsvWriter;
-    private readonly StreamWriter _stylesJsonlWriter;
-    private readonly StreamWriter _stylesCsvWriter;
+    private readonly string _csvPath;
+    private readonly string _parametersJsonlPath;
+    private readonly string _parametersCsvPath;
+    private readonly string _stylesJsonlPath;
+    private readonly string _stylesCsvPath;
+    private StreamWriter _jsonlWriter;
+    private StreamWriter _csvWriter;
+    private StreamWriter _parametersJsonlWriter;
+    private StreamWriter _parametersCsvWriter;
+    private StreamWriter _stylesJsonlWriter;
+    private StreamWriter _stylesCsvWriter;
     private bool _enabled = false;
     private readonly object _lock = new object();
     private bool _disposed = false;
@@ -485,36 +490,27 @@ namespace ISIDA.Common
       if (!Directory.Exists(logDir))
         Directory.CreateDirectory(logDir);
 
+      _logFilePath = Path.Combine(logDir, $"{logFileName}.jsonl");
+      _csvPath = Path.Combine(logDir, $"{logFileName}.csv");
+      _parametersJsonlPath = Path.Combine(logDir, $"{logFileName}_Parameters.jsonl");
+      _parametersCsvPath = Path.Combine(logDir, $"{logFileName}_Parameters.csv");
+      _stylesJsonlPath = Path.Combine(logDir, $"{logFileName}_Styles.jsonl");
+      _stylesCsvPath = Path.Combine(logDir, $"{logFileName}_Styles.csv");
+
       // Инициализация JSONL writers (только если выбран JsonL формат)
       if (format.HasFlag(LogFormat.JsonL))
       {
-        _logFilePath = Path.Combine(logDir, $"{logFileName}.jsonl");
-        _jsonlWriter = new StreamWriter(_logFilePath, append: !clearOnStart, Encoding.UTF8);
-        _jsonlWriter.AutoFlush = true;
-
-        var parametersJsonlPath = Path.Combine(logDir, $"{logFileName}_Parameters.jsonl");
-        _parametersJsonlWriter = new StreamWriter(parametersJsonlPath, append: !clearOnStart, Encoding.UTF8);
-        _parametersJsonlWriter.AutoFlush = true;
-
-        var stylesJsonlPath = Path.Combine(logDir, $"{logFileName}_Styles.jsonl");
-        _stylesJsonlWriter = new StreamWriter(stylesJsonlPath, append: !clearOnStart, Encoding.UTF8);
-        _stylesJsonlWriter.AutoFlush = true;
+        _jsonlWriter = OpenLogWriter(_logFilePath, clearOnStart);
+        _parametersJsonlWriter = OpenLogWriter(_parametersJsonlPath, clearOnStart);
+        _stylesJsonlWriter = OpenLogWriter(_stylesJsonlPath, clearOnStart);
       }
 
       // Инициализация CSV writers (только если выбран Csv формат)
       if (format.HasFlag(LogFormat.Csv))
       {
-        var csvPath = Path.Combine(logDir, $"{logFileName}.csv");
-        _csvWriter = new StreamWriter(csvPath, append: !clearOnStart, Encoding.UTF8);
-        _csvWriter.AutoFlush = true;
-
-        var parametersCsvPath = Path.Combine(logDir, $"{logFileName}_Parameters.csv");
-        _parametersCsvWriter = new StreamWriter(parametersCsvPath, append: !clearOnStart, Encoding.UTF8);
-        _parametersCsvWriter.AutoFlush = true;
-
-        var stylesCsvPath = Path.Combine(logDir, $"{logFileName}_Styles.csv");
-        _stylesCsvWriter = new StreamWriter(stylesCsvPath, append: !clearOnStart, Encoding.UTF8);
-        _stylesCsvWriter.AutoFlush = true;
+        _csvWriter = OpenLogWriter(_csvPath, clearOnStart);
+        _parametersCsvWriter = OpenLogWriter(_parametersCsvPath, clearOnStart);
+        _stylesCsvWriter = OpenLogWriter(_stylesCsvPath, clearOnStart);
       }
 
       // Инициализация начального состояния
@@ -1262,6 +1258,106 @@ namespace ISIDA.Common
         _enabled = false;
         Flush();
       }
+    }
+
+    /// <summary>Область файлов логов для временного освобождения дескрипторов.</summary>
+    public enum LogFileMaintenanceScope
+    {
+      /// <summary>AgentLogs.csv / AgentLogs.jsonl.</summary>
+      Agent,
+      /// <summary>AgentLogs_Styles.csv / AgentLogs_Styles.jsonl.</summary>
+      Styles,
+      /// <summary>AgentLogs_Parameters.csv / AgentLogs_Parameters.jsonl.</summary>
+      Parameters
+    }
+
+    /// <summary>
+    /// Сбрасывает буферы, закрывает writers указанной области, выполняет обслуживание файлов и открывает writers снова.
+    /// </summary>
+    public void RunLogFileMaintenance(LogFileMaintenanceScope scope, Action maintenanceAction)
+    {
+      if (maintenanceAction == null)
+        throw new ArgumentNullException(nameof(maintenanceAction));
+
+      lock (_lock)
+      {
+        if (_disposed)
+          throw new ObjectDisposedException(nameof(ResearchLogger));
+
+        bool wasEnabled = _enabled;
+        _enabled = false;
+        Flush();
+
+        ReleaseWritersForScope(scope);
+        try
+        {
+          maintenanceAction();
+        }
+        finally
+        {
+          ReopenWritersForScope(scope);
+          _enabled = wasEnabled;
+        }
+      }
+    }
+
+    private static StreamWriter OpenLogWriter(string path, bool clearOnStart)
+    {
+      var writer = new StreamWriter(path, append: !clearOnStart, Encoding.UTF8);
+      writer.AutoFlush = true;
+      return writer;
+    }
+
+    private static void DisposeWriter(ref StreamWriter writer)
+    {
+      writer?.Dispose();
+      writer = null;
+    }
+
+    private void ReleaseWritersForScope(LogFileMaintenanceScope scope)
+    {
+      switch (scope)
+      {
+        case LogFileMaintenanceScope.Agent:
+          DisposeWriter(ref _csvWriter);
+          DisposeWriter(ref _jsonlWriter);
+          break;
+        case LogFileMaintenanceScope.Styles:
+          DisposeWriter(ref _stylesCsvWriter);
+          DisposeWriter(ref _stylesJsonlWriter);
+          break;
+        case LogFileMaintenanceScope.Parameters:
+          DisposeWriter(ref _parametersCsvWriter);
+          DisposeWriter(ref _parametersJsonlWriter);
+          break;
+      }
+    }
+
+    private void ReopenWritersForScope(LogFileMaintenanceScope scope)
+    {
+      switch (scope)
+      {
+        case LogFileMaintenanceScope.Agent:
+          ReopenWriter(ref _csvWriter, _csvPath, _currentFormat.HasFlag(LogFormat.Csv));
+          ReopenWriter(ref _jsonlWriter, _logFilePath, _currentFormat.HasFlag(LogFormat.JsonL));
+          break;
+        case LogFileMaintenanceScope.Styles:
+          ReopenWriter(ref _stylesCsvWriter, _stylesCsvPath, _currentFormat.HasFlag(LogFormat.Csv));
+          ReopenWriter(ref _stylesJsonlWriter, _stylesJsonlPath, _currentFormat.HasFlag(LogFormat.JsonL));
+          break;
+        case LogFileMaintenanceScope.Parameters:
+          ReopenWriter(ref _parametersCsvWriter, _parametersCsvPath, _currentFormat.HasFlag(LogFormat.Csv));
+          ReopenWriter(ref _parametersJsonlWriter, _parametersJsonlPath, _currentFormat.HasFlag(LogFormat.JsonL));
+          break;
+      }
+    }
+
+    private static void ReopenWriter(ref StreamWriter writer, string path, bool enabledForFormat)
+    {
+      if (!enabledForFormat || string.IsNullOrEmpty(path))
+        return;
+
+      writer = OpenLogWriter(path, clearOnStart: false);
     }
 
     /// <summary>
