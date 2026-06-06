@@ -1331,6 +1331,11 @@ namespace ISIDA.Gomeostas
       /// Текст вставки в конец промпта для ИИ (шаблон с плейсхолдерами [stileCombination], [AdaptiveActionList], [InfluenceActionList]).
       /// </summary>
       public string PromptSuffix { get; set; }
+
+      /// <summary>
+      /// Идентификатор зарегистрированного пакета среды; пусто — без среды.
+      /// </summary>
+      public string AdapterId { get; set; }
     }
 
     /// <summary>
@@ -1718,6 +1723,11 @@ namespace ISIDA.Gomeostas
       /// Текст вставки в конец промпта для ИИ (шаблон с плейсхолдерами [stileCombination], [AdaptiveActionList], [InfluenceActionList]).
       /// </summary>
       public string PromptSuffix { get; set; }
+
+      /// <summary>
+      /// Идентификатор зарегистрированного пакета среды (<c>Adapters\{id}</c>); пусто — без среды.
+      /// </summary>
+      public string AdapterId { get; set; }
     }
 
     /// <summary>
@@ -1963,12 +1973,29 @@ namespace ISIDA.Gomeostas
           SpecialTaboos = _agentState.SpecialTaboos,
           SpecialTaboosValues = _agentState.SpecialTaboosValues?.AsReadOnly(),
           AdditionalWishes = _agentState.AdditionalWishes,
-          PromptSuffix = _agentState.PromptSuffix
+          PromptSuffix = _agentState.PromptSuffix,
+          AdapterId = _agentState.AdapterId
         };
       }
       finally
       {
         _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Задаёт идентификатор пакета среды симбионта (пустая строка — без адаптера).
+    /// </summary>
+    public void SetAdapterId(string adapterId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _agentState.AdapterId = (adapterId ?? string.Empty).Trim();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
     
@@ -3158,6 +3185,8 @@ namespace ISIDA.Gomeostas
               }
               _agentState.PromptSuffix = sb.ToString();
             }
+            else if (parts[0] == "AdapterId")
+              _agentState.AdapterId = (parts.Length >= 2 ? parts[1] : string.Empty).Trim();
           }
         }
       }
@@ -3375,6 +3404,9 @@ namespace ISIDA.Gomeostas
             .Replace("\r", MultilinePlaceholder);
           lines.Add($"PromptSuffix|{oneLine}");
         }
+
+        if (!string.IsNullOrWhiteSpace(_agentState.AdapterId))
+          lines.Add($"AdapterId|{_agentState.AdapterId.Trim()}");
 
         var result = FileValidator.SafeSaveFile(
             GetAgentPropertiesPath(),

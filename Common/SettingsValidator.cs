@@ -461,6 +461,7 @@ namespace ISIDA.Common
       sb.AppendLine("");
       sb.AppendLine("Logs");
       sb.AppendLine("BootData");
+      sb.AppendLine("  Environment");
       sb.AppendLine("Settings");
       sb.AppendLine("  (рекомендуется размещать копию Settings.xml при переносе настроек между машинами)");
       sb.AppendLine("Data");
@@ -504,7 +505,10 @@ namespace ISIDA.Common
       var rootChildren = new List<ProjectDirectoryTemplateNode>
       {
         new ProjectDirectoryTemplateNode("Logs"),
-        new ProjectDirectoryTemplateNode("BootData"),
+        new ProjectDirectoryTemplateNode("BootData", new List<ProjectDirectoryTemplateNode>
+        {
+          new ProjectDirectoryTemplateNode("Environment")
+        }),
         settings,
         data
       };

@@ -201,7 +201,7 @@ namespace ISIDA.Common
           throw new InvalidOperationException("GlobalTimer: системы не инициализированы. Вызовите InitializeSystems().");
 
         if (AppGlobalState.EvolutionStage < 1)
-          throw new InvalidOperationException("Запуск пульсации разрешен только начиная со стадии 1");
+          throw new InvalidOperationException("Запуск пульсации разрешен только начиная со стадии 1. Переключите стадию в свойствах симбионта.");
 
         IsPulsationRunning = true;
         PulsationStateChanged?.Invoke();
