@@ -53,11 +53,18 @@ namespace ISIDA.Common
       public const string ReflexChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
 
       // Гомеостатические воздействия
-      public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты|EnvironmentMetricProbeKey";
+      public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты";
       public const string InfluenceActionsBenefit = "# Воздействие: paramId1:effect1;paramId2:effect2";
       public const string InfluenceAntagonists = "# Антагонисты: id1,id2,id3";
-      public const string InfluenceActionsEnvironmentProbeKey =
-          "# EnvironmentMetricProbeKey: ключ пробы метрики среды для хоста; пусто — только оператор/Studio";
+      public const string InfluenceActionsPressureRulesFileNote =
+          "# Связь с контуром среды (ProbeKey): см. файл EnvironmentPressureRules.dat";
+
+      // Правила давления среды (ProbeKey → воздействие)
+      public const string EnvironmentPressureRulesFormat = "# Формат: RuleId|ProbeKey|Имя|Описание|Influences|Antagonists";
+      public const string EnvironmentPressureRulesProbeKey =
+          "# ProbeKey: ключ пробы метрики среды (сопоставление с contour InputSnapshot)";
+      public const string EnvironmentPressureRulesInfluences = "# Influences: paramId1:effect1;paramId2:effect2";
+      public const string EnvironmentPressureRulesAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Адаптивные действия
       public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
@@ -595,6 +602,64 @@ namespace ISIDA.Common
           return false;
 
         if (parts.Length < 5)
+          return false;
+
+        if (parts.Length > 5)
+          return false;
+
+        return true;
+      }
+
+      return true; // только шапка — допустимо
+    }
+
+    #endregion
+
+    #region IsValidEnvironmentPressureRulesFile
+
+    /// <summary>
+    /// Проверяет валидность файла правил давления среды по пути
+    /// </summary>
+    public static bool IsValidEnvironmentPressureRulesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+
+      try
+      {
+        var lines = File.ReadLines(filePath).ToList();
+        return IsValidEnvironmentPressureRulesFile(lines);
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла правил давления среды.
+    /// Разрешает файлы, содержащие только шапку (комментарии #).
+    /// </summary>
+    public static bool IsValidEnvironmentPressureRulesFile(IEnumerable<string> lines)
+    {
+      if (lines == null)
+        return false;
+
+      var lineList = lines.ToList();
+      if (lineList.Count < 1)
+        return false;
+
+      foreach (var line in lineList)
+      {
+        var trimmed = line?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#", StringComparison.Ordinal))
+          continue;
+
+        var parts = trimmed.Split('|');
+        if (parts.Length < 6)
+          return false;
+
+        if (!int.TryParse(parts[0], out _))
           return false;
 
         return true;

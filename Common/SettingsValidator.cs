@@ -49,6 +49,9 @@ namespace ISIDA.Common
         case "HigherOrderStrengthReductionCoefficient":
           return ValidateHigherOrderStrengthReductionCoefficient((float)value);
 
+        case "EnvironmentPressureRulesFilePath":
+          return ValidateEnvironmentPressureRulesFilePath(value?.ToString());
+
         default:
           return (true, string.Empty);
       }
@@ -398,25 +401,47 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Ключ пробы метрики среды в строке InfluenceActions (пустая строка допустима).
+    /// Ключ пробы метрики среды (<c>ProbeKey</c> в <c>EnvironmentPressureRules.dat</c>). Пустая строка допустима.
     /// </summary>
-    public static (bool isValid, string errorMessage) ValidateEnvironmentMetricProbeKey(string key)
+    public static (bool isValid, string errorMessage) ValidateEnvironmentProbeKey(string key)
     {
       if (string.IsNullOrWhiteSpace(key))
         return (true, string.Empty);
 
       string t = key.Trim();
       if (t.Length > 128)
-        return (false, "EnvironmentMetricProbeKey: длина не более 128 символов после обрезки пробелов.");
+        return (false, "ProbeKey: длина не более 128 символов после обрезки пробелов.");
 
       if (t.IndexOf('|') >= 0)
-        return (false, "EnvironmentMetricProbeKey: символ «|» запрещён (разделитель полей файла).");
+        return (false, "ProbeKey: символ «|» запрещён (разделитель полей файла).");
 
       foreach (char c in t)
       {
         if (char.IsControl(c))
-          return (false, "EnvironmentMetricProbeKey: управляющие символы запрещены.");
+          return (false, "ProbeKey: управляющие символы запрещены.");
       }
+
+      return (true, string.Empty);
+    }
+
+    /// <summary>Псевдоним <see cref="ValidateEnvironmentProbeKey"/> (legacy-имя).</summary>
+    public static (bool isValid, string errorMessage) ValidateEnvironmentMetricProbeKey(string key) =>
+        ValidateEnvironmentProbeKey(key);
+
+    /// <summary>
+    /// Путь к файлу правил давления среды (<c>EnvironmentPressureRules.dat</c>).
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidateEnvironmentPressureRulesFilePath(string path)
+    {
+      if (string.IsNullOrWhiteSpace(path))
+        return (false, "EnvironmentPressureRulesFilePath: путь не задан.");
+
+      string t = path.Trim();
+      if (t.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+        return (false, "EnvironmentPressureRulesFilePath: недопустимые символы в пути.");
+
+      if (!string.Equals(Path.GetExtension(t), ".dat", StringComparison.OrdinalIgnoreCase))
+        return (false, "EnvironmentPressureRulesFilePath: ожидается файл с расширением .dat.");
 
       return (true, string.Empty);
     }
@@ -474,8 +499,10 @@ namespace ISIDA.Common
       sb.AppendLine("    Reports");
       sb.AppendLine("");
       sb.AppendLine("Ключи путей в конфигурации студии: SettingsPath, LogsFolderPath, BootDataFolderPath,");
-      sb.AppendLine("DataGomeostasFolderPath, DataActionsFolderPath, SensorsFolderPath, ReflexesFolderPath,");
-      sb.AppendLine("PsychicDataFolderPath, ScenarioReportsFolderPath (относительно корня: Data\\Scenarios\\Reports).");
+      sb.AppendLine("DataGomeostasFolderPath, DataActionsFolderPath, EnvironmentPressureRulesFilePath,");
+      sb.AppendLine("SensorsFolderPath, ReflexesFolderPath, PsychicDataFolderPath,");
+      sb.AppendLine("ScenarioReportsFolderPath (относительно корня: Data\\Scenarios\\Reports).");
+      sb.AppendLine("EnvironmentPressureRulesFilePath — по умолчанию Data\\Actions\\EnvironmentPressureRules.dat.");
       return sb.ToString();
     }
 
