@@ -35,20 +35,16 @@ namespace ISIDA.Psychic.Understanding
     public static bool IsInitialized => _instance != null;
 
     /// <summary>Инициализировать экземпляр</summary>
-    public static void InitializeInstance(string psychicDataPath = null)
+    public static void InitializeInstance(string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("SituationTypeSystem уже инициализирован.");
-      _instance = new SituationTypeSystem(psychicDataPath);
+      _instance = new SituationTypeSystem(dataFolderPath);
     }
 
-    private SituationTypeSystem(string psychicDataPath)
+    private SituationTypeSystem(string dataFolderPath)
     {
-      _dataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Understanding")
-          : Path.Combine(psychicDataPath, "Understanding");
+      _dataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Understanding");
       EnsureDirectory();
       var path = Path.Combine(_dataPath, FileName);
       if (!File.Exists(path))

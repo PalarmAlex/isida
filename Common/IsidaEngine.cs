@@ -21,35 +21,15 @@ namespace ISIDA.Common
   public class IsidaConfig
   {
     /// <summary>
-    /// Директория с данными психики (образы действий оператора и симбионта ИИ)
-    /// </summary>
-    public string PsychicDataFolder { get; set; }
-
-    /// <summary>
     /// Базовая директория для всех файлов системы ISIDA
     /// </summary>
     /// <value>По умолчанию: %ProgramData%\ISIDA</value>
     public string BaseDirectory { get; set; }
 
     /// <summary>
-    /// Директория с данными системы гомеостаза
+    /// Корневая директория данных ISIDA (<c>Data</c>); подкаталоги разрешаются через <see cref="IsidaDataPaths"/>.
     /// </summary>
-    public string GomeostasFolder { get; set; }
-
-    /// <summary>
-    /// Директория с данными адаптивных действий
-    /// </summary>
-    public string ActionsFolder { get; set; }
-
-    /// <summary>
-    /// Директория с данными сенсорной системы
-    /// </summary>
-    public string SensorsFolder { get; set; }
-
-    /// <summary>
-    /// Директория с данными рефлексов
-    /// </summary>
-    public string ReflexesFolder { get; set; }
+    public string DataFolder { get; set; }
 
     /// <summary>
     /// Директория для сохранения логов
@@ -177,11 +157,7 @@ namespace ISIDA.Common
     /// <returns>Текущий экземпляр конфигурации для цепочки вызовов</returns>
     public IsidaConfig WithDefaultFolders()
     {
-      GomeostasFolder = Path.Combine(BaseDirectory, "DataGomeostas");
-      ActionsFolder = Path.Combine(BaseDirectory, "DataActions");
-      SensorsFolder = Path.Combine(BaseDirectory, "Sensors");
-      ReflexesFolder = Path.Combine(BaseDirectory, "Reflexes");
-      PsychicDataFolder = Path.Combine(BaseDirectory, "Data", "Psychic");
+      DataFolder = Path.Combine(BaseDirectory, IsidaDataPaths.DataFolderName);
       LogsFolder = Path.Combine(BaseDirectory, "Logs");
       BootDataFolder = Path.Combine(BaseDirectory, "BootData");
       return this;
@@ -193,16 +169,8 @@ namespace ISIDA.Common
     /// <exception cref="ArgumentException">Выбрасывается при отсутствии обязательных параметров</exception>
     public void Validate()
     {
-      if (string.IsNullOrEmpty(GomeostasFolder))
-        throw new ArgumentException("GomeostasFolder не указан");
-      if (string.IsNullOrEmpty(ActionsFolder))
-        throw new ArgumentException("ActionsFolder не указан");
-      if (string.IsNullOrEmpty(SensorsFolder))
-        throw new ArgumentException("SensorsFolder не указан");
-      if (string.IsNullOrEmpty(ReflexesFolder))
-        throw new ArgumentException("ReflexesFolder не указан");
-      if (string.IsNullOrEmpty(PsychicDataFolder))
-        throw new ArgumentException("PsychicDataFolder не указан");
+      if (string.IsNullOrEmpty(DataFolder))
+        throw new ArgumentException("DataFolder не указан");
       if (string.IsNullOrEmpty(LogsFolder))
         throw new ArgumentException("LogsFolder не указан");
       if (string.IsNullOrEmpty(BootDataFolder))
@@ -683,7 +651,7 @@ namespace ISIDA.Common
 
         // Шаг 3: Гомеостаз
         initializationStep = 3;
-        GomeostasSystem.InitializeInstance(context.InformationEnvironmentSystem, config.GomeostasFolder);
+        GomeostasSystem.InitializeInstance(context.InformationEnvironmentSystem, config.DataFolder);
         context.Gomeostas = GomeostasSystem.Instance;
         context.Gomeostas.DefaultStileId = config.DefaultStileId;
         context.Gomeostas.CompareLevel = config.CompareLevel;
@@ -692,31 +660,31 @@ namespace ISIDA.Common
 
         // Шаг 4: Адаптивные действия
         initializationStep = 4;
-        AdaptiveActionsSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
+        AdaptiveActionsSystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.AdaptiveActions = AdaptiveActionsSystem.Instance;
         context.AdaptiveActions.ReflexActionDisplayDuration = config.ReflexActionDisplayDuration;
         context.AdaptiveActions.DefaultAdaptiveActionId = config.DefaultAdaptiveActionId;
 
         // Шаг 5: Внешние действия
         initializationStep = 5;
-        InfluenceActionSystem.InitializeInstance(context.Gomeostas, config.ActionsFolder);
+        InfluenceActionSystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.InfluenceActions = InfluenceActionSystem.Instance;
 
         // Шаг 6: Образы внешних действий
         initializationStep = 6;
-        InfluenceActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        InfluenceActionsImagesSystem.InitializeInstance(config.DataFolder);
         context.InfluenceActionsImages = InfluenceActionsImagesSystem.Instance;
 
         // Шаг 7: Сенсорная система
         initializationStep = 7;
-        SensorySystem.InitializeInstance(context.Gomeostas, config.SensorsFolder);
+        SensorySystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.SensorySystem = SensorySystem.Instance;
         context.SensorySystem.VerbalRecognitionThreshold = config.RecognitionThreshold;
         context.SensorySystem.CommandRecognitionThreshold = config.RecognitionThreshold;
 
         // Шаг 8: Безусловные рефлексы
         initializationStep = 8;
-        GeneticReflexesSystem.InitializeInstance(context.Gomeostas, config.ReflexesFolder);
+        GeneticReflexesSystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.GeneticReflexes = GeneticReflexesSystem.Instance;
 
         // Шаг 9: Система цепочек рефлексов
@@ -806,12 +774,12 @@ namespace ISIDA.Common
 
         // Шаг 18: Система образов действий оператора и симбионта ИИ
         initializationStep = 18;
-        ActionsImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        ActionsImagesSystem.InitializeInstance(config.DataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
 
         // Шаг 19: Система дерева автоматизмов
         initializationStep = 19;
-        AutomatizmTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        AutomatizmTreeSystem.InitializeInstance(config.DataFolder);
         context.AutomatizmTree = AutomatizmTreeSystem.Instance;
 
         // Создать базовую структуру дерева, если она пустая
@@ -820,26 +788,26 @@ namespace ISIDA.Common
 
         // Шаг 19a: Справочник типов ситуаций и образы ситуаций (для Understanding)
         initializationStep = 20;
-        Psychic.Understanding.SituationTypeSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.SituationTypeSystem.InitializeInstance(config.DataFolder);
         context.SituationTypeSystem = Psychic.Understanding.SituationTypeSystem.Instance;
-        Psychic.Understanding.SituationImageSystem.InitializeInstance(config.PsychicDataFolder, context.SituationTypeSystem);
+        Psychic.Understanding.SituationImageSystem.InitializeInstance(config.DataFolder, context.SituationTypeSystem);
         context.SituationImageSystem = Psychic.Understanding.SituationImageSystem.Instance;
 
         // Шаг 20: Образы тем и целей (для дерева проблем, 4 уровня)
         initializationStep = 21;
-        Psychic.Understanding.ThemeImageSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.ThemeImageSystem.InitializeInstance(config.DataFolder);
         Psychic.Understanding.ThemeImageSystem.Instance.DefaultThemeTypeId = config.DefaultThemeTypeId;
-        Psychic.Understanding.PurposeImageSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.PurposeImageSystem.InitializeInstance(config.DataFolder);
 
         // Шаг 21: Дерево проблем (для эпизодической памяти)
         initializationStep = 22;
-        Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.ProblemTreeSystem.InitializeInstance(config.DataFolder);
         context.ProblemTree = Psychic.Understanding.ProblemTreeSystem.Instance;
         context.AutomatizmTree.SetProblemTree(context.ProblemTree);
 
         // Шаг 22: Дерево понимания ситуации (Understanding)
         initializationStep = 23;
-        Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.UnderstandingTreeSystem.InitializeInstance(config.DataFolder);
         context.UnderstandingTreeSystem = Psychic.Understanding.UnderstandingTreeSystem.Instance;
         context.UnderstandingTreeSystem.SetDependencies(
           context.SituationImageSystem,
@@ -847,25 +815,25 @@ namespace ISIDA.Common
           Psychic.Understanding.ThemeImageSystem.Instance,
           Psychic.Understanding.PurposeImageSystem.Instance);
 
-        Psychic.Understanding.MentalEpisodicTreeSystem.InitializeInstance(config.PsychicDataFolder);
+        Psychic.Understanding.MentalEpisodicTreeSystem.InitializeInstance(config.DataFolder);
         context.MentalEpisodicTreeSystem = Psychic.Understanding.MentalEpisodicTreeSystem.Instance;
 
         // Шаг 24: Система автоматизмов
         initializationStep = 24;
-        AutomatizmSystem.InitializeInstance(config.PsychicDataFolder);
+        AutomatizmSystem.InitializeInstance(config.DataFolder);
         context.AutomatizmSystem = AutomatizmSystem.Instance;
 
         // Шаг 25: Система эмоций
         initializationStep = 25;
-        EmotionsImageSystem.InitializeInstance(config.PsychicDataFolder);
+        EmotionsImageSystem.InitializeInstance(config.DataFolder);
         context.EmotionsImageSystem = EmotionsImageSystem.Instance;
 
         // Шаг 25: Система вербальных образов
         initializationStep = 25;
-        VerbalBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        VerbalBrocaImagesSystem.InitializeInstance(config.DataFolder);
         context.VerbalBrocaImagesSystem = VerbalBrocaImagesSystem.Instance;
 
-        CommandBrocaImagesSystem.InitializeInstance(config.PsychicDataFolder);
+        CommandBrocaImagesSystem.InitializeInstance(config.DataFolder);
         context.CommandBrocaImagesSystem = CommandBrocaImagesSystem.Instance;
 
         // Шаг 26: Сервис отслеживания выполнения резульатов автоматизмов
@@ -876,7 +844,7 @@ namespace ISIDA.Common
         // Шаг 27: Моторная эпизодическая память
         initializationStep = 27;
         Psychic.Memory.Episodic.EpisodicMemorySystem.InitializeInstance(
-          config.PsychicDataFolder,
+          config.DataFolder,
           context.AutomatizmTree,
           context.ProblemTree,
           context.UnderstandingTreeSystem,

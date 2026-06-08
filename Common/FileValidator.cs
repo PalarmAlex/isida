@@ -60,11 +60,10 @@ namespace ISIDA.Common
           "# Связь с контуром среды (ProbeKey): см. файл EnvironmentPressureRules.dat";
 
       // Правила давления среды (ProbeKey → воздействие)
-      public const string EnvironmentPressureRulesFormat = "# Формат: RuleId|ProbeKey|Имя|Описание|Influences|Antagonists";
+      public const string EnvironmentPressureRulesFormat = "# Формат: RuleId|ProbeKey|Имя|Описание|Influences";
       public const string EnvironmentPressureRulesProbeKey =
           "# ProbeKey: ключ пробы метрики среды (сопоставление с contour InputSnapshot)";
       public const string EnvironmentPressureRulesInfluences = "# Influences: paramId1:effect1;paramId2:effect2";
-      public const string EnvironmentPressureRulesAntagonists = "# Антагонисты: id1,id2,id3";
 
       // Адаптивные действия
       public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
@@ -649,6 +648,12 @@ namespace ISIDA.Common
       if (lineList.Count < 1)
         return false;
 
+      string firstLine = lineList
+          .Select(line => line?.Trim())
+          .FirstOrDefault(trimmed => !string.IsNullOrWhiteSpace(trimmed));
+      if (!string.Equals(firstLine, FileHeaders.EnvironmentPressureRulesFormat, StringComparison.Ordinal))
+        return false;
+
       foreach (var line in lineList)
       {
         var trimmed = line?.Trim();
@@ -656,7 +661,7 @@ namespace ISIDA.Common
           continue;
 
         var parts = trimmed.Split('|');
-        if (parts.Length < 6)
+        if (parts.Length != 5)
           return false;
 
         if (!int.TryParse(parts[0], out _))

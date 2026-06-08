@@ -102,6 +102,7 @@
     <Compile Include="Common\IsidaEngine.cs" />
     <Compile Include="Common\Logger.cs" />
     <Compile Include="Common\ResearchLogger.cs" />
+    <Compile Include="Common\IsidaDataPaths.cs" />
     <Compile Include="Common\SettingsValidator.cs" />
     <Compile Include="Gomeostas\GomeostasSystem.cs" />
     <Compile Include="Gomeostas\HomeostasisCalculator.cs" />

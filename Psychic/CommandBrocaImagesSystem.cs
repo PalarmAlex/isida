@@ -34,22 +34,18 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Инициализирует глобальный экземпляр системы образов команды
     /// </summary>
-    /// <param name="psychicDataPath">Путь к каталогу данных психики</param>
-    public static void InitializeInstance(string psychicDataPath = null)
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c></param>
+    public static void InitializeInstance(string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("CommandBrocaImagesSystem уже инициализирован.");
 
-      _instance = new CommandBrocaImagesSystem(psychicDataPath);
+      _instance = new CommandBrocaImagesSystem(dataFolderPath);
     }
 
-    private CommandBrocaImagesSystem(string psychicDataPath = null)
+    private CommandBrocaImagesSystem(string dataFolderPath = null)
     {
-      _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic")
-          : Path.Combine(psychicDataPath);
+      _psychicDataPath = IsidaDataPaths.ResolvePsychicFolder(dataFolderPath);
       try
       {
         EnsureDataDirectory();

@@ -46,7 +46,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     public static bool IsInitialized => _instance != null;
 
     /// <summary>Инициализирует глобальный экземпляр системы эпизодической памяти</summary>
-    /// <param name="psychicDataPath">Путь к данным психики (или null для стандартного)</param>
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c> (или null для стандартного)</param>
     /// <param name="automatizmTree">Система дерева автоматизмов</param>
     /// <param name="problemTree">Система дерева проблем</param>
     /// <param name="understandingTree">Дерево понимания ситуации (ключ ветки эпизодов)</param>
@@ -54,7 +54,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     /// <param name="gomeostas">Система гомеостаза</param>
     /// <param name="actionsImages">Система образов действий</param>
     public static void InitializeInstance(
-        string psychicDataPath,
+        string dataFolderPath,
         AutomatizmTreeSystem automatizmTree,
         ProblemTreeSystem problemTree,
         UnderstandingTreeSystem understandingTree,
@@ -66,7 +66,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         throw new InvalidOperationException("EpisodicMemorySystem уже инициализирован.");
 
       _instance = new EpisodicMemorySystem(
-          psychicDataPath,
+          dataFolderPath,
           automatizmTree,
           problemTree,
           understandingTree,
@@ -76,7 +76,7 @@ namespace ISIDA.Psychic.Memory.Episodic
     }
 
     private EpisodicMemorySystem(
-        string psychicDataPath,
+        string dataFolderPath,
         AutomatizmTreeSystem automatizmTree,
         ProblemTreeSystem problemTree,
         UnderstandingTreeSystem understandingTree,
@@ -84,11 +84,7 @@ namespace ISIDA.Psychic.Memory.Episodic
         GomeostasSystem gomeostas,
         ActionsImagesSystem actionsImages)
     {
-      _dataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? System.IO.Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Memory", "Episodic")
-          : System.IO.Path.Combine(psychicDataPath, "Memory", "Episodic");
+      _dataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Memory", "Episodic");
 
       _automatizmTree = automatizmTree ?? throw new ArgumentNullException(nameof(automatizmTree));
       _understandingTree = understandingTree;

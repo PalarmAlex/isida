@@ -34,21 +34,17 @@ namespace ISIDA.Psychic.Understanding
         throw new InvalidOperationException("MentalEpisodicTreeSystem не инициализирован.");
 
     /// <summary>Инициализирует систему загрузкой из каталога данных психики.</summary>
-    /// <param name="psychicDataFolder">Корень данных психики (родитель каталога Understanding).</param>
-    public static void InitializeInstance(string psychicDataFolder)
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c>.</param>
+    public static void InitializeInstance(string dataFolderPath)
     {
       if (_instance != null)
         throw new InvalidOperationException("MentalEpisodicTreeSystem уже инициализирован.");
-      _instance = new MentalEpisodicTreeSystem(psychicDataFolder);
+      _instance = new MentalEpisodicTreeSystem(dataFolderPath);
     }
 
-    private MentalEpisodicTreeSystem(string psychicDataFolder)
+    private MentalEpisodicTreeSystem(string dataFolderPath)
     {
-      _dataPath = string.IsNullOrWhiteSpace(psychicDataFolder)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Understanding")
-          : Path.Combine(psychicDataFolder, "Understanding");
+      _dataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Understanding");
       EnsureDirectory();
       Load();
       if (_nodes.Count == 0)

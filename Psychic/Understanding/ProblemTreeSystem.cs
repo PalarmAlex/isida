@@ -33,22 +33,18 @@ namespace ISIDA.Psychic.Understanding
     public static bool IsInitialized => _instance != null;
 
     /// <summary>Инициализирует глобальный экземпляр системы дерева проблем</summary>
-    /// <param name="psychicDataPath">Путь к данным психики или null для стандартного</param>
-    public static void InitializeInstance(string psychicDataPath = null)
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c> или null для стандартного</param>
+    public static void InitializeInstance(string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("ProblemTreeSystem уже инициализирован.");
 
-      _instance = new ProblemTreeSystem(psychicDataPath);
+      _instance = new ProblemTreeSystem(dataFolderPath);
     }
 
-    private ProblemTreeSystem(string psychicDataPath = null)
+    private ProblemTreeSystem(string dataFolderPath = null)
     {
-      _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Understanding")
-          : Path.Combine(psychicDataPath, "Understanding");
+      _psychicDataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Understanding");
 
       try
       {

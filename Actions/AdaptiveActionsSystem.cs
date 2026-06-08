@@ -47,30 +47,30 @@ namespace ISIDA.Actions
     /// Должен быть вызван один раз при старте приложения, после инициализации GomeostasSystem.
     /// </summary>
     /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
-    /// <param name="actionsFolderPath">Путь к папке с данными действий. Если null — используется путь по умолчанию </param>
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c>. Если null — используется путь по умолчанию.</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null)
+        string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("AdaptiveActionsSystem уже инициализирован.");
 
-      _instance = new AdaptiveActionsSystem(gomeostas, actionsFolderPath);
+      _instance = new AdaptiveActionsSystem(gomeostas, dataFolderPath);
     }
 
     private readonly GomeostasSystem _gomeostas;
 
+    /// <summary>Имя подкаталога данных действий внутри <c>Data</c>.</summary>
+    public const string ActionsSubfolder = IsidaDataPaths.ActionsSubfolder;
+
     private AdaptiveActionsSystem(
         GomeostasSystem gomeostas,
-        string actionsFolderPath = null)
+        string dataFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
 
-      // Установка путей
-      _actionsFolderPath = string.IsNullOrWhiteSpace(actionsFolderPath)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Actions")
-            : actionsFolderPath;
+      _actionsFolderPath = IsidaDataPaths.ResolveActionsFolder(dataFolderPath);
       try
       {
         EnsureDataDirectory();

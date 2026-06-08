@@ -149,25 +149,26 @@ namespace ISIDA.Sensors
     /// Инициализирует глобальный экземпляр системы
     /// </summary>
     /// <param name="gomeostasSystem">Ссылка на класс гомеостаза</param>
-    /// <param name="sensorsFolderPath">Путь к директории сенсоров (если null - используется путь по умолчанию)</param>
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c> (если null — используется путь по умолчанию)</param>
     /// <exception cref="InvalidOperationException">Выбрасывается если система уже инициализирована</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostasSystem,
-        string sensorsFolderPath = null)
+        string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("SensorySystem уже инициализирован");
 
-      _instance = new SensorySystem(gomeostasSystem, sensorsFolderPath);
+      _instance = new SensorySystem(gomeostasSystem, dataFolderPath);
     }
+
+    /// <summary>Имя подкаталога данных сенсоров внутри <c>Data</c>.</summary>
+    public const string SensorsSubfolder = IsidaDataPaths.SensorsSubfolder;
 
     private SensorySystem(
       GomeostasSystem gomeostasSystem,
-      string sensorsFolderPath)
+      string dataFolderPath)
     {
-      _sensorsFolderPath = string.IsNullOrWhiteSpace(sensorsFolderPath)
-          ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Sensors")
-          : sensorsFolderPath;
+      _sensorsFolderPath = IsidaDataPaths.ResolveSensorsFolder(dataFolderPath);
 
       _gomeostas = gomeostasSystem ?? throw new ArgumentNullException(nameof(gomeostasSystem));
 

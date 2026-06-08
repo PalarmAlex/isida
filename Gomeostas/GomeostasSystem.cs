@@ -41,19 +41,19 @@ namespace ISIDA.Gomeostas
           throw new ArgumentNullException(nameof(perceptionImagesSystem));
     }
 
+    /// <summary>Имя подкаталога данных гомеостаза внутри <c>Data</c>.</summary>
+    public const string GomeostasSubfolder = IsidaDataPaths.GomeostasSubfolder;
+
     /// <summary>
     /// Инициализирует новый экземпляр системы гомеостаза с указанными или стандартными путями к данным.
     /// </summary>
     public GomeostasSystem(
         InformationEnvironmentSystem informationEnvironmentSystem,
-        string gomeostasFolderPath = null)
+        string dataFolderPath = null)
     {
       try
       {
-        // Используем переданные пути или вычисляем стандартные 
-        GomeostasFolderPath = gomeostasFolderPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "ISIDA", "Data", "Gomeostas");
+        GomeostasFolderPath = IsidaDataPaths.ResolveGomeostasFolder(dataFolderPath);
 
         _informationEnvironmentSystem = informationEnvironmentSystem ?? throw new ArgumentNullException(nameof(informationEnvironmentSystem));
 
@@ -115,13 +115,13 @@ namespace ISIDA.Gomeostas
     /// Должен быть вызван один раз при старте приложения.
     /// </summary>
     /// <param name="informationEnvironmentSystem">Система управления инфо-картиной симбионта</param>
-    /// <param name="gomeostasFolderPath">Путь к каталогу данных гомеостаза. Если null, используется путь по умолчанию.</param>
-    public static void InitializeInstance(InformationEnvironmentSystem informationEnvironmentSystem, string gomeostasFolderPath = null)
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c>. Если null, используется путь по умолчанию.</param>
+    public static void InitializeInstance(InformationEnvironmentSystem informationEnvironmentSystem, string dataFolderPath = null)
     {
       if (Instance != null)
         throw new InvalidOperationException("Instance уже инициализирован.");
 
-      Instance = new GomeostasSystem(informationEnvironmentSystem, gomeostasFolderPath);
+      Instance = new GomeostasSystem(informationEnvironmentSystem, dataFolderPath);
     }
 
     #endregion

@@ -472,7 +472,8 @@ namespace ISIDA.Common
       "Logs",
       "Data",
       "BootData",
-      "Settings"
+      "Settings",
+      "Scenarios"
     };
 
     /// <summary>
@@ -495,13 +496,15 @@ namespace ISIDA.Common
       sb.AppendLine("  Sensors");
       sb.AppendLine("  Reflexes");
       sb.AppendLine("  Psychic");
-      sb.AppendLine("  Scenarios");
-      sb.AppendLine("    Reports");
+      sb.AppendLine("Scenarios");
+      sb.AppendLine("  Reports");
       sb.AppendLine("");
       sb.AppendLine("Ключи путей в конфигурации студии: SettingsPath, LogsFolderPath, BootDataFolderPath,");
-      sb.AppendLine("DataGomeostasFolderPath, DataActionsFolderPath, EnvironmentPressureRulesFilePath,");
-      sb.AppendLine("SensorsFolderPath, ReflexesFolderPath, PsychicDataFolderPath,");
-      sb.AppendLine("ScenarioReportsFolderPath (относительно корня: Data\\Scenarios\\Reports).");
+      sb.AppendLine("DataFolderPath, ScenarioReportsFolderPath,");
+      sb.AppendLine("EnvironmentPressureRulesFilePath.");
+      sb.AppendLine("DataFolderPath — корень Data (подкаталоги Gomeostas, Actions и т.д. задаются в коде).");
+      sb.AppendLine("Scenarios — реестры и строки сценариев на уровне корня ISIDA (не внутри Data).");
+      sb.AppendLine("ScenarioReportsFolderPath — относительно корня: Scenarios\\Reports.");
       sb.AppendLine("EnvironmentPressureRulesFilePath — по умолчанию Data\\Actions\\EnvironmentPressureRules.dat.");
       return sb.ToString();
     }
@@ -512,18 +515,17 @@ namespace ISIDA.Common
     /// <returns>Корневой узел с заполненными дочерними элементами.</returns>
     public static ProjectDirectoryTemplateNode GetProjectDirectoryTemplateRoot()
     {
-      var reports = new ProjectDirectoryTemplateNode("Reports");
-      var scenarios = new ProjectDirectoryTemplateNode("Scenarios", new List<ProjectDirectoryTemplateNode> { reports });
       var dataChildren = new List<ProjectDirectoryTemplateNode>
       {
         new ProjectDirectoryTemplateNode("Gomeostas"),
         new ProjectDirectoryTemplateNode("Actions"),
         new ProjectDirectoryTemplateNode("Sensors"),
         new ProjectDirectoryTemplateNode("Reflexes"),
-        new ProjectDirectoryTemplateNode("Psychic"),
-        scenarios
+        new ProjectDirectoryTemplateNode("Psychic")
       };
       var data = new ProjectDirectoryTemplateNode("Data", dataChildren);
+      var reports = new ProjectDirectoryTemplateNode("Reports");
+      var scenarios = new ProjectDirectoryTemplateNode("Scenarios", new List<ProjectDirectoryTemplateNode> { reports });
       var settingsChildren = new List<ProjectDirectoryTemplateNode>
       {
         new ProjectDirectoryTemplateNode("Settings.xml")
@@ -537,7 +539,8 @@ namespace ISIDA.Common
           new ProjectDirectoryTemplateNode("Environment")
         }),
         settings,
-        data
+        data,
+        scenarios
       };
       return new ProjectDirectoryTemplateNode("Корень проекта данных", rootChildren);
     }
@@ -572,52 +575,26 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Определяет корень проекта по пути к каталогу данных гомеостаза: ожидается «...\Data\Gomeostas».
+    /// Определяет корень проекта по пути к каталогу <c>Data</c>.
     /// </summary>
-    /// <param name="dataGomeostasFolderPath">Полный путь к каталогу Gomeostas.</param>
+    /// <param name="dataFolderPath">Полный путь к каталогу Data.</param>
     /// <param name="projectRoot">При успехе — корень проекта данных.</param>
     /// <returns>True, если корень определён.</returns>
-    public static bool TryGetProjectRootFromDataGomeostasPath(string dataGomeostasFolderPath, out string projectRoot)
-    {
-      projectRoot = null;
-      if (string.IsNullOrWhiteSpace(dataGomeostasFolderPath))
-        return false;
-
-      try
-      {
-        string trimmed = dataGomeostasFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        string full = Path.GetFullPath(trimmed);
-        if (!string.Equals(Path.GetFileName(full), "Gomeostas", StringComparison.OrdinalIgnoreCase))
-          return false;
-
-        string dataDir = Path.GetDirectoryName(full);
-        if (string.IsNullOrEmpty(dataDir))
-          return false;
-
-        if (!string.Equals(Path.GetFileName(dataDir), "Data", StringComparison.OrdinalIgnoreCase))
-          return false;
-
-        projectRoot = Path.GetDirectoryName(dataDir);
-        return !string.IsNullOrEmpty(projectRoot);
-      }
-      catch
-      {
-        return false;
-      }
-    }
+    public static bool TryGetProjectRootFromDataFolderPath(string dataFolderPath, out string projectRoot) =>
+        IsidaDataPaths.TryGetProjectRootFromDataFolderPath(dataFolderPath, out projectRoot);
 
     /// <summary>
-    /// Пытается определить корень проекта сначала по каталогу настроек, затем по пути гомеостаза.
+    /// Пытается определить корень проекта сначала по каталогу настроек, затем по пути Data.
     /// </summary>
     /// <param name="settingsFolderPath">Путь к каталогу Settings.</param>
-    /// <param name="dataGomeostasFolderPath">Путь к каталогу Data\Gomeostas.</param>
+    /// <param name="dataFolderPath">Путь к каталогу Data.</param>
     /// <param name="projectRoot">Корень проекта данных.</param>
     /// <returns>True, если удалось определить корень.</returns>
-    public static bool TryInferProjectRoot(string settingsFolderPath, string dataGomeostasFolderPath, out string projectRoot)
+    public static bool TryInferProjectRoot(string settingsFolderPath, string dataFolderPath, out string projectRoot)
     {
       if (TryGetProjectRootFromSettingsPath(settingsFolderPath, out projectRoot))
         return true;
-      return TryGetProjectRootFromDataGomeostasPath(dataGomeostasFolderPath, out projectRoot);
+      return TryGetProjectRootFromDataFolderPath(dataFolderPath, out projectRoot);
     }
 
     /// <summary>
@@ -670,18 +647,10 @@ namespace ISIDA.Common
           return new[] { "Logs" };
         case "BootDataFolderPath":
           return new[] { "BootData" };
-        case "DataGomeostasFolderPath":
-          return new[] { "Data", "Gomeostas" };
-        case "DataActionsFolderPath":
-          return new[] { "Data", "Actions" };
-        case "SensorsFolderPath":
-          return new[] { "Data", "Sensors" };
-        case "ReflexesFolderPath":
-          return new[] { "Data", "Reflexes" };
-        case "PsychicDataFolderPath":
-          return new[] { "Data", "Psychic" };
+        case "DataFolderPath":
+          return new[] { "Data" };
         case "ScenarioReportsFolderPath":
-          return new[] { "Data", "Scenarios", "Reports" };
+          return new[] { "Scenarios", "Reports" };
         default:
           return null;
       }

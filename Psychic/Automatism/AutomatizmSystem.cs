@@ -100,21 +100,17 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Инициализирует глобальный экземпляр системы автоматизмов
     /// </summary>
-    public static void InitializeInstance(string psychicDataPath = null)
+    public static void InitializeInstance(string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("AutomatizmSystem уже инициализирован.");
 
-      _instance = new AutomatizmSystem(psychicDataPath);
+      _instance = new AutomatizmSystem(dataFolderPath);
     }
 
-    private AutomatizmSystem(string psychicDataPath = null)
+    private AutomatizmSystem(string dataFolderPath = null)
     {
-      _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Automatism")
-          : Path.Combine(psychicDataPath, "Automatism");
+      _psychicDataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Automatism");
 
       try
       {

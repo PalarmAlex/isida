@@ -101,11 +101,11 @@ namespace ISIDA.Reflexes
     /// Должен быть вызван один раз при старте приложения, после инициализации GomeostasSystem.
     /// </summary>
     /// <param name="gomeostas">Инициализированный экземпляр GomeostasSystem, управляющий параметрами гомеостаза</param>
-    /// <param name="reflexesFolderPath">Путь к папке с данными рефлексов. Если null — используется путь по умолчанию </param>
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c>. Если null — используется путь по умолчанию.</param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
     public static void InitializeInstance(
         GomeostasSystem gomeostas,
-        string reflexesFolderPath = null)
+        string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("GeneticReflexesSystem уже инициализирован.");
@@ -119,22 +119,22 @@ namespace ISIDA.Reflexes
       if (!SensorySystem.IsInitialized)
         throw new InvalidOperationException("SensorySystem должен быть инициализирован перед GeneticReflexesSystem для работы с WordId");
 
-      _instance = new GeneticReflexesSystem(gomeostas, reflexesFolderPath);
+      _instance = new GeneticReflexesSystem(gomeostas, dataFolderPath);
     }
+
+    /// <summary>Имя подкаталога данных рефлексов внутри <c>Data</c>.</summary>
+    public const string ReflexesSubfolder = IsidaDataPaths.ReflexesSubfolder;
 
     private readonly GomeostasSystem _gomeostas;
     private GeneticReflexesSystem(
         GomeostasSystem gomeostas,
-        string reflexesFolderPath = null)
+        string dataFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
       _influenceActionSystem = InfluenceActionSystem.Instance;
       _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
 
-      // Установка путей
-      _reflexesFolderPath = string.IsNullOrWhiteSpace(reflexesFolderPath)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ISIDA", "Data", "Reflexes")
-            : reflexesFolderPath;
+      _reflexesFolderPath = IsidaDataPaths.ResolveReflexesFolder(dataFolderPath);
 
       _gomeostas.StyleDeleted += OnStyleDeleted;
       _influenceActionSystem.InfluenceActionDeleted += OnInfluenceActionDeleted;

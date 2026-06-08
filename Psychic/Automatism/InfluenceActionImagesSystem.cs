@@ -37,23 +37,19 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Инициализирует глобальный экземпляр системы образов действий
     /// </summary>
-    /// <param name="psychicDataPath">Путь к каталогу данных психики</param>
+    /// <param name="dataFolderPath">Путь к корню каталога <c>Data</c></param>
     /// <exception cref="InvalidOperationException">Выбрасывается, если система уже была инициализирована ранее</exception>
-    public static void InitializeInstance(string psychicDataPath = null)
+    public static void InitializeInstance(string dataFolderPath = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("InfluenceActionsImagesSystem уже инициализирован.");
 
-      _instance = new InfluenceActionsImagesSystem(psychicDataPath);
+      _instance = new InfluenceActionsImagesSystem(dataFolderPath);
     }
 
-    private InfluenceActionsImagesSystem(string psychicDataPath = null)
+    private InfluenceActionsImagesSystem(string dataFolderPath = null)
     {
-      _psychicDataPath = string.IsNullOrWhiteSpace(psychicDataPath)
-          ? Path.Combine(
-              Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-              "ISIDA", "Data", "Psychic", "Automatism")
-          : Path.Combine(psychicDataPath, "Automatism");
+      _psychicDataPath = IsidaDataPaths.ResolvePsychicSubmoduleFolder(dataFolderPath, "Automatism");
       try
       {
         EnsureDataDirectory();
