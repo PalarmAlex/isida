@@ -12,7 +12,7 @@ namespace ISIDA.Scenarios
   {
     private readonly AdaptiveActionsSystem _adaptiveActions;
 
-    /// <param name="adaptiveActions">Подсистема адаптивных действий (длительность отображения рефлекса и др.).</param>
+    /// <param name="adaptiveActions">Подсистема моторных действий (длительность отображения рефлекса и др.).</param>
     public OperatorScenarioEngine(AdaptiveActionsSystem adaptiveActions)
     {
       _adaptiveActions = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));

@@ -34,11 +34,11 @@ namespace ISIDA.Common
           "# VisualColorId: 0 белый, 1 чёрный, 2–8 спектр (см. AgentVisualColor); столбец опционален в старых файлах (как 0)";
 
       // Безусловные рефлексы
-      public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|Level3|Адаптивные действия|ReflexChainID";
+      public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|Level3|Моторные действия|ReflexChainID";
       public const string GeneticReflexesLevel1 = "# Level1: Интегральное базовое состояние гомеостаза: -1: 0: 1";
       public const string GeneticReflexesLevel2 = "# Level2: Контексты реагирования: id1,id2,id3";
       public const string GeneticReflexesLevel3 = "# Level3: Гомеостатические воздействия: id1,id2,id3";
-      public const string GeneticReflexesActions = "# Адаптивные действия: id1,id2,id3";
+      public const string GeneticReflexesActions = "# Моторные действия: id1,id2,id3";
       public const string GeneticReflexesChain = "# ReflexChainID: ID цепочки рефлексов (0 если нет)";
 
       // Цепочки безусловных рефлексов
@@ -65,7 +65,7 @@ namespace ISIDA.Common
           "# ProbeKey: ключ пробы метрики среды (сопоставление с contour InputSnapshot)";
       public const string EnvironmentPressureRulesInfluences = "# Influences: paramId1:effect1;paramId2:effect2";
 
-      // Адаптивные действия
+      // Моторные действия
       public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
       public const string TargetParameters = "# Target параметры: id1,id2,id3";
@@ -489,7 +489,7 @@ namespace ISIDA.Common
     #region IsValidActionsFile
 
     /// <summary>
-    /// Проверяет валидность файла адаптивных действий по пути
+    /// Проверяет валидность файла моторных действий по пути
     /// </summary>
     public static bool IsValidActionsFile(string filePath)
     {
@@ -508,7 +508,7 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Проверяет валидность содержимого файла адаптивных действий
+    /// Проверяет валидность содержимого файла моторных действий
     /// Разрешает файлы, содержащие только шапку (комментарии #)
     /// </summary>
     public static bool IsValidActionsFile(IEnumerable<string> lines)

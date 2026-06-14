@@ -17,7 +17,7 @@ namespace ISIDA.Common
   /// Централизованно управляет обновлением состояния симбионта, включая:
   /// - обновление параметров гомеостаза
   /// - пересчёт активных стилей
-  /// - реакцию на отклонения (через адаптивные действия)
+  /// - реакцию на отклонения (через моторные действия)
   /// Клиент вызывает Start()/Stop() — всё остальное происходит внутри.
   /// </summary>
   public static class GlobalTimer
@@ -169,7 +169,7 @@ namespace ISIDA.Common
     /// Должен быть вызван один раз при старте приложения, до Start().
     /// </summary>
     /// <param name="gomeostas">Система гомеостаза</param>
-    /// <param name="actionsSystem">Система адаптивных действий</param>
+    /// <param name="actionsSystem">Система моторных действий</param>
     /// <param name="reflexesActivator">Система запуска условных и безусловных рефлексов</param>
     /// <param name="psychicSystem">Система запуска психики</param>
     public static void InitializeSystems(

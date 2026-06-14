@@ -326,7 +326,7 @@ namespace ISIDA.Common
     }
     #endregion
 
-    #region Адаптивные действия
+    #region Моторные действия
     
     /// <summary>
     /// Валидация значения интенсивности действия

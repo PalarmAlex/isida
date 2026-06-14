@@ -19,7 +19,7 @@ using static ISIDA.Gomeostas.GomeostasSystem;
 namespace ISIDA.Actions
 {
   /// <summary>
-  /// Система управления адаптивными действиями симбионта
+  /// Система управления моторных действиями симбионта
   /// </summary>
   public sealed class AdaptiveActionsSystem : IDisposable
   {
@@ -31,7 +31,7 @@ namespace ISIDA.Actions
     private static AdaptiveActionsSystem _instance;
 
     /// <summary>
-    /// Глобальный экземпляр системы адаптивных действий. Должен быть инициализирован через InitializeInstance()
+    /// Глобальный экземпляр системы моторных действий. Должен быть инициализирован через InitializeInstance()
     /// </summary>
     public static AdaptiveActionsSystem Instance => _instance ?? 
       throw new InvalidOperationException("AdaptiveActionsSystem не инициализирован. Вызовите InitializeInstance() с путями.");
@@ -42,7 +42,7 @@ namespace ISIDA.Actions
     public static bool IsInitialized => _instance != null;
 
     /// <summary>
-    /// Инициализирует глобальный экземпляр системы адаптивных действий с указанными путями к данным и шаблонам, 
+    /// Инициализирует глобальный экземпляр системы моторных действий с указанными путями к данным и шаблонам, 
     /// а также ссылкой на систему гомеостаза, на которую действия будут оказывать влияние
     /// Должен быть вызван один раз при старте приложения, после инициализации GomeostasSystem.
     /// </summary>
@@ -94,7 +94,7 @@ namespace ISIDA.Actions
         Path.Combine(_actionsFolderPath, $"{ActionsFileName}.dat");
 
     /// <summary>
-    /// Представляет адаптивное действие симбионта
+    /// Представляет моторное действие симбионта
     /// </summary>
     public class AdaptiveAction
     {
@@ -249,13 +249,13 @@ namespace ISIDA.Actions
     private readonly Dictionary<int, int> _activeActionPhrasesImageId = new Dictionary<int, int>();
 
     /// <summary>
-    /// Событие удаления адаптивного действия
+    /// Событие удаления моторного действия
     /// </summary>
     public event Action<int> AdaptiveActionDeleted;
 
     private int _defaultAdaptiveActionId = 0;
     /// <summary>
-    /// ID существующего адаптивного действия по умолчанию
+    /// ID существующего моторного действия по умолчанию
     /// </summary>
     /// 
     public int DefaultAdaptiveActionId
@@ -295,9 +295,9 @@ namespace ISIDA.Actions
     #region Управление действиями
 
     /// <summary>
-    /// (Internal) Возвращает список активных адаптивных действий.
+    /// (Internal) Возвращает список активных моторных действий.
     /// </summary>
-    /// <returns>Копия списка активных адаптивных действий</returns>
+    /// <returns>Копия списка активных моторных действий</returns>
     internal List<AdaptiveAction> GetActiveAdaptiveActionsList()
     {
       _lock.EnterReadLock();
@@ -329,9 +329,9 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// (Internal) Возвращает список всех адаптивных действий.
+    /// (Internal) Возвращает список всех моторных действий.
     /// </summary>
-    /// <returns>Копия списка всех адаптивных действий</returns>
+    /// <returns>Копия списка всех моторных действий</returns>
     internal List<AdaptiveAction> GetAllAdaptiveActionsList()
     {
       _lock.EnterReadLock();
@@ -346,7 +346,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Получает список всех адаптивных действий
+    /// Получает список всех моторных действий
     /// </summary>
     /// <returns>ReadOnlyCollection всех действий</returns>
     public ReadOnlyCollection<AdaptiveAction> GetAllAdaptiveActions()
@@ -362,7 +362,7 @@ namespace ISIDA.Actions
       }
     }
 
-    /// <summary>Возвращает адаптивное действие по ID.</summary>
+    /// <summary>Возвращает моторное действие по ID.</summary>
     /// <param name="actionId">ID действия.</param>
     /// <returns>Действие или null, если не найдено.</returns>
     public AdaptiveAction GetAdaptiveAction(int actionId)
@@ -380,7 +380,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Возвращает адаптивное действие с указанным <see cref="AdaptiveAction.InfluenceActionId"/> (связь для отзеркаливания).
+    /// Возвращает моторное действие с указанным <see cref="AdaptiveAction.InfluenceActionId"/> (связь для отзеркаливания).
     /// </summary>
     /// <param name="influenceActionId">ID воздействия с пульта (InfluenceAction).</param>
     /// <returns>AdaptiveAction или null, если связи нет.</returns>
@@ -416,7 +416,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Преобразует список ID действий с пульта (InfluenceAction) в ID адаптивных действий (AdaptiveAction)
+    /// Преобразует список ID действий с пульта (InfluenceAction) в ID моторных действий (AdaptiveAction)
     /// по полю InfluenceActionId. Если для InfluenceAction нет связи — ID пропускается.
     /// </summary>
     public List<int> ConvertInfluenceActionIdsToAdaptiveActionIds(List<int> influenceActionIds)
@@ -470,7 +470,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Добавляет новое адаптивное действие
+    /// Добавляет новое моторное действие
     /// </summary>
     /// <param name="name">Наименование действия</param>
     /// <param name="description">Описание действия</param>
@@ -491,10 +491,10 @@ namespace ISIDA.Actions
         int influenceActionId = 0)
     {
       if (AppGlobalState.EvolutionStage > 0)
-        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+        throw new InvalidOperationException("Работа с моторными действиями разрешена только в стадии 0");
 
       if (string.IsNullOrWhiteSpace(name))
-        throw new ArgumentException("Наименование действия не может быть пустым", nameof(name));
+        throw new ArgumentException("Наименование моторного действия не может быть пустым", nameof(name));
 
       // Создаем временный объект для валидации
       var tempAction = new AdaptiveAction
@@ -549,7 +549,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Обновляет существующее адаптивное действие
+    /// Обновляет существующее моторное действие
     /// </summary>
     /// <param name="action">Обновляемое действие</param>
     /// <param name="strictValidation">Флаг строгой проверки параметров</param>
@@ -560,7 +560,7 @@ namespace ISIDA.Actions
     public string[] UpdateAction(AdaptiveAction action, bool strictValidation = false)
     {
       if (AppGlobalState.EvolutionStage > 0)
-        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+        throw new InvalidOperationException("Работа с моторными действиями разрешена только в стадии 0");
 
       if (action == null)
         throw new ArgumentNullException(nameof(action));
@@ -595,20 +595,20 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Удаляет адаптивное действие по указанному ID
+    /// Удаляет моторное действие по указанному ID
     /// </summary>
     /// <param name="actionId">ID удаляемого действия</param>
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveAction(int actionId)
     {
       if (AppGlobalState.EvolutionStage > 0)
-        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+        throw new InvalidOperationException("Работа с моторными действиями разрешена только в стадии 0");
 
       if (!_actions.ContainsKey(actionId))
-        throw new InvalidOperationException($"Адаптивное действие c ID: {actionId} не найдено.");
+        throw new InvalidOperationException($"Моторное действие c ID: {actionId} не найдено.");
 
       if (actionId == _defaultAdaptiveActionId)
-        throw new InvalidOperationException($"Адаптивное действие {_actions[actionId].Name} задано действием по умолчанию и запрещёно для удаления.");
+        throw new InvalidOperationException($"Моторное действие {_actions[actionId].Name} задано действием по умолчанию и запрещёно для удаления.");
 
       _lock.EnterWriteLock();
       try
@@ -831,7 +831,7 @@ namespace ISIDA.Actions
     #region Валидация и коррекция антагонистов
 
     /// <summary>
-    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий в переданной коллекции
+    /// Автоматически исправляет асимметричные антагонистические связи для моторных действий в переданной коллекции
     /// </summary>
     /// <param name="actions">Коллекция действий для исправления</param>
     /// <returns>Количество исправленных связей</returns>
@@ -862,7 +862,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Автоматически исправляет асимметричные антагонистические связи для адаптивных действий в текущих данных
+    /// Автоматически исправляет асимметричные антагонистические связи для моторных действий в текущих данных
     /// </summary>
     /// <returns>Количество исправленных связей</returns>
     public int FixActionAntagonistSymmetry()
@@ -883,7 +883,7 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Находит адаптивные действия с асимметричными антагонистическими связями
+    /// Находит моторные действия с асимметричными антагонистическими связями
     /// </summary>
     /// <returns>Список проблемных действий</returns>
     public List<AdaptiveAction> FindAsymmetricActions(IEnumerable<AdaptiveAction> actions)
@@ -1052,7 +1052,7 @@ namespace ISIDA.Actions
     public (bool Success, string ErrorMessage) SaveActions(bool IsValidate = true)
     {
       if (AppGlobalState.EvolutionStage > 0)
-        throw new InvalidOperationException("Работа с адаптивными действиями разрешена только в стадии 0");
+        throw new InvalidOperationException("Работа с моторными действиями разрешена только в стадии 0");
 
       _lock.EnterWriteLock();
       try
@@ -1106,7 +1106,7 @@ namespace ISIDA.Actions
             lines,
             content => IsValidActionsFile(string.Join(Environment.NewLine, content)),
             minLinesCount: minLinesCount,
-            fileDescription: "адаптивных действий");
+            fileDescription: "моторных действий");
 
         return result;
       }
@@ -1121,9 +1121,9 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Валидация адаптивных действий
+    /// Валидация моторных действий
     /// </summary>
-    /// <param name="adaptiveActions">Список адаптивных действий</param>
+    /// <param name="adaptiveActions">Список моторных действий</param>
     /// <param name="isForDeletion">При установке True валидация удаления, по умолчанию False - валидация обновления</param>
     /// <returns>True если валидация успешна, иначе False</returns>
     public (bool IsValid, string Errors, string Warnings) ValidateAction(IEnumerable<AdaptiveAction> adaptiveActions, bool isForDeletion = false)
@@ -1148,13 +1148,13 @@ namespace ISIDA.Actions
         {
           if (!existingIds.Contains(action.Id))
           {
-            errorMessage = $"Адаптивное действие c ID: {action.Id} не найдено";
+            errorMessage = $"Моторное действие c ID: {action.Id} не найдено";
             return (false, errorMessage, "");
           }
 
           if (action.Id == _defaultAdaptiveActionId)
           {
-            errorMessage = $"Адаптивное действие {_actions[action.Id].Name} задано действием по умолчанию и запрещёно для удаления";
+            errorMessage = $"Моторное действие {_actions[action.Id].Name} задано действием по умолчанию и запрещёно для удаления";
             return (false, errorMessage, "");
           }
         }

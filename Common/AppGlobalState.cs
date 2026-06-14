@@ -710,7 +710,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Текущие активные адаптивные действия симбионта
+  /// Текущие активные моторные действия симбионта
   /// </summary>
   public static IReadOnlyList<AdaptiveActionsSystem.AdaptiveAction> ActiveAdaptiveActions
   {
@@ -735,7 +735,7 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Внутренний метод для обновления активных адаптивных действий
+  /// Внутренний метод для обновления активных моторных действий
   /// </summary>
   internal static void UpdateActiveAdaptiveActions(IEnumerable<AdaptiveActionsSystem.AdaptiveAction> actions)
   {
@@ -756,7 +756,7 @@ public static class AppGlobalState
   #region Эволюция и время жизни - Свойства и методы
 
   /// <summary>
-  /// Адаптивное действие по умолчанию
+  /// Моторное действие по умолчанию
   /// </summary>
   public static int DefaultAdaptiveActionId
   {
@@ -870,7 +870,7 @@ public static class AppGlobalState
 
   /// <summary>
   /// Внешняя среда хоста в режиме деградации (выставляет интеграционный хост по своим метрикам доступности).
-  /// При true исходящие адаптивные/моторные действия агента не исполняются; входящие стимулы и запись гомеостаза от хоста допускаются.
+  /// При true исходящие моторные действия симбионта не исполняются; входящие стимулы и запись гомеостаза от хоста допускаются.
   /// Не связан с авторитарной записью сенсоров и не подменяет <see cref="ObservationMode"/>.
   /// </summary>
   public static bool HostEnvironmentDegraded

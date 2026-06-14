@@ -204,7 +204,7 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Получает список активных адаптивных действий
+    /// Получает список активных моторных действий
     /// </summary>
     public List<int> GetActiveAdaptiveActionsOfReflexes()
     {

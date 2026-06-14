@@ -12,7 +12,7 @@ namespace ISIDA.Common
     public const string DataFolderName = "Data";
     /// <summary>Подкаталог данных гомеостаза.</summary>
     public const string GomeostasSubfolder = "Gomeostas";
-    /// <summary>Подкаталог адаптивных и внешних действий.</summary>
+    /// <summary>Подкаталог моторных и внешних действий.</summary>
     public const string ActionsSubfolder = "Actions";
     /// <summary>Подкаталог вербальных сенсоров.</summary>
     public const string SensorsSubfolder = "Sensors";

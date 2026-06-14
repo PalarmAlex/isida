@@ -91,7 +91,7 @@ namespace ISIDA.Common
     public int ReflexActionDisplayDuration { get; set; } = 2;
 
     /// <summary>
-    /// Идентификатор адаптивного действия по умолчанию
+    /// Идентификатор моторного действия по умолчанию
     /// </summary>
     public int DefaultAdaptiveActionId { get; set; } = 0;
 
@@ -228,7 +228,7 @@ namespace ISIDA.Common
     public SensorySystem SensorySystem { get; internal set; }
 
     /// <summary>
-    /// Система адаптивных действий
+    /// Система моторных действий
     /// </summary>
     public AdaptiveActionsSystem AdaptiveActions { get; internal set; }
 
@@ -658,7 +658,7 @@ namespace ISIDA.Common
         context.Gomeostas.DifSensorPar = config.DifSensorPar;
         context.Gomeostas.DynamicTime = config.DynamicTime;
 
-        // Шаг 4: Адаптивные действия
+        // Шаг 4: моторные действия
         initializationStep = 4;
         AdaptiveActionsSystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.AdaptiveActions = AdaptiveActionsSystem.Instance;

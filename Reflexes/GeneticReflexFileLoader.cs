@@ -380,7 +380,7 @@ namespace ISIDA.Reflexes
           string.Equals(a.Name, actionStr.Trim(), StringComparison.OrdinalIgnoreCase));
       if (action == null)
       {
-        Logger.Warning($"Адаптивное действие не найдено: {actionStr}");
+        Logger.Warning($"Моторное действие не найдено: {actionStr}");
         return false;
       }
       actionId = action.Id;

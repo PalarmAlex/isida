@@ -458,7 +458,7 @@ namespace ISIDA.Common
     /// <param name="gomeostas">Система гомеостаза</param>
     /// <param name="perception">Система образов восприятия</param>
     /// <param name="reflexesActivator">Активатор рефлексов</param>
-    /// <param name="adaptiveActions">Адаптивные действия</param> 
+    /// <param name="adaptiveActions">Моторные действия</param> 
     /// <param name="logsDirectory">Каталог логов</param>  
     /// <param name="logFileName">Имя файла логов (без расширения)</param>
     /// <param name="format">Форматы сохранения логов</param>

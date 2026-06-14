@@ -88,7 +88,7 @@ namespace ISIDA.Reflexes
       /// <summary>ID цепочки, к которой принадлежит звено</summary>
       public int ChainID { get; set; }
 
-      /// <summary>ID адаптивного действия для выполнения</summary>
+      /// <summary>ID моторного действия для выполнения</summary>
       public int ActionId { get; set; }
 
       /// <summary>ID следующего звена при успешном выполнении</summary>
@@ -206,11 +206,11 @@ namespace ISIDA.Reflexes
       foreach (var link in links)
       {
         if (!allActions.Any(a => a.Id == link.ActionId))
-          warnings.Add($"Адаптивное действие с ID {link.ActionId} не существует");
+          warnings.Add($"Моторное действие с ID {link.ActionId} не существует");
 
         int duplicateCount = links.Count(l => l.ActionId == link.ActionId);
         if (duplicateCount > 1)
-          warnings.Add($"Действие {link.ActionId} повторяется {duplicateCount} раз в цепочке");
+          warnings.Add($"Моторное действие {link.ActionId} повторяется {duplicateCount} раз в цепочке");
       }
 
       // Проверяем наличие конечных звеньев
@@ -323,7 +323,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>Проверяет, используется ли действие в цепочках</summary>
-    /// <param name="actionId">ID адаптивного действия</param>
+    /// <param name="actionId">ID моторного действия</param>
     /// <returns>True если действие используется в цепочках</returns>
     public bool IsActionUsedInChains(int actionId)
     {
@@ -361,7 +361,7 @@ namespace ISIDA.Reflexes
 
     /// <summary>Добавляет звено к существующей цепочке</summary>
     /// <param name="chainId">ID цепочки</param>
-    /// <param name="actionId">ID адаптивного действия</param>
+    /// <param name="actionId">ID моторного действия</param>
     /// <param name="successNextLink">ID следующего звена при успехе</param>
     /// <param name="failureNextLink">ID следующего звена при неудаче</param>
     /// <param name="description">Описание звена</param>
@@ -380,7 +380,7 @@ namespace ISIDA.Reflexes
 
         var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
         if (!allActions.Any(a => a.Id == actionId))
-          warnings.Add($"Адаптивное действие с ID {actionId} не существует");
+          warnings.Add($"Моторное действие с ID {actionId} не существует");
 
         if (successNextLink != 0)
         {
@@ -442,7 +442,7 @@ namespace ISIDA.Reflexes
 
         var allActions = _adaptiveActionsSystem.GetAllAdaptiveActionsList();
         if (!allActions.Any(a => a.Id == actionId))
-          warnings.Add($"Адаптивное действие с ID {actionId} не существует");
+          warnings.Add($"Моторное действие с ID {actionId} не существует");
 
         if (successNextLink != 0 && successNextLink != linkId)
         {
@@ -572,7 +572,7 @@ namespace ISIDA.Reflexes
       foreach (var link in chain.Links)
       {
         if (!allActions.Any(a => a.Id == link.ActionId))
-          issues.Add($"Адаптивное действие {link.ActionId} в звене {link.ID} не существует");
+          issues.Add($"Моторное действие {link.ActionId} в звене {link.ID} не существует");
 
         if (link.SuccessNextLink != 0 && link.SuccessNextLink <= link.ID)
           issues.Add($"Звено {link.ID} ссылается на предыдущее звено {link.SuccessNextLink}");

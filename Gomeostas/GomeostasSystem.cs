@@ -1,4 +1,4 @@
-using ISIDA.Actions;
+﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic;
 using ISIDA.Reflexes;
@@ -191,7 +191,7 @@ namespace ISIDA.Gomeostas
           return;
         }
 
-        var previousOverallState = _previousOverallState; 
+        var previousOverallState = _previousOverallState;
         var previousActiveStyleIds = new List<int>(_previousActiveStyleIds);
 
         if (_agentState.IsFirstPulse)
@@ -408,7 +408,7 @@ namespace ISIDA.Gomeostas
 
       return true;
     }
-    
+
     private List<BehaviorStyle> FindUnpairedStylesForValidation(List<BehaviorStyle> styles)
     {
       var unpaired = new List<BehaviorStyle>();
@@ -1014,7 +1014,7 @@ namespace ISIDA.Gomeostas
         get => _speed;
         set
         {
-          if(value == 0)
+          if (value == 0)
             throw new ArgumentOutOfRangeException(nameof(value), "Значение не может быть равно 0");
 
           var validation = SettingsValidator.ValidateSpeedParam(value);
@@ -1447,7 +1447,7 @@ namespace ISIDA.Gomeostas
         var validation = SettingsValidator.ValidateDynamicTime(value);
         if (!validation.isValid)
           throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-        
+
         _dynamicTime = value;
       }
     }
@@ -1463,7 +1463,7 @@ namespace ISIDA.Gomeostas
         var validation = SettingsValidator.ValidateDifSensorPar(value);
         if (!validation.isValid)
           throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-        
+
         _difSensorPar = value;
       }
     }
@@ -1998,13 +1998,13 @@ namespace ISIDA.Gomeostas
         _lock.ExitWriteLock();
       }
     }
-    
+
     /// <summary>
     /// Добавляет новый параметр гомеостаза
     /// </summary>
     public (int ParamId, string[] Warnings) AddParameter(
         string name, string description,
-        float initialValue, int weight, 
+        float initialValue, int weight,
         int normaWell, int speed,
         bool _isVital = false,
         float _criticalMinValue = 0f,
@@ -2072,7 +2072,7 @@ namespace ISIDA.Gomeostas
         var parameter = _agentState.GetParameter(paramId);
         if (parameter != null && parameter.IsVital)
           throw new InvalidOperationException($"Параметр '{parameter.Name}' является системным, его нельзя удалять");
-        
+
         _agentState.RemoveParameter(paramId);
       }
       finally
@@ -2657,7 +2657,7 @@ namespace ISIDA.Gomeostas
     /// <param name="styleId">ID стиля для удаления</param>
     /// <returns>True, если стиль был успешно удален, иначе False</returns>
     public bool RemoveBehaviorStyle(int styleId)
-    {  
+    {
       if (_agentState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа со стилями реагирования разрешена только в стадии 0");
 
@@ -2731,7 +2731,7 @@ namespace ISIDA.Gomeostas
     /// <summary>
     /// Обновляет активные стили поведения на основе текущего состояния параметров
     /// </summary>
-   internal void UpdateActiveStyles(bool pulsAdd = false)
+    internal void UpdateActiveStyles(bool pulsAdd = false)
     {
       var (dominant_param, dominantZone, dominanceScore) = _calculator.FindDominantParameter(
         _agentState.Parameters, _dynamicTime, _difSensorPar);
@@ -3116,7 +3116,7 @@ namespace ISIDA.Gomeostas
             {
               _agentState.Lifetime = lifetime;
               AppGlobalState.Lifetime = lifetime;
-            }              
+            }
             else if (parts[0] == "EvolutionStage" && int.TryParse(parts[1], out int stage))
             {
               _agentState.EvolutionStage = stage;

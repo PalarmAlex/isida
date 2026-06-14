@@ -217,7 +217,7 @@ namespace ISIDA.Reflexes
       public List<int> Level3 { get; set; } = new List<int>();
 
       /// <summary>
-      /// Адаптивные действия рефлекса
+      /// Моторные действия рефлекса
       /// </summary>
       public List<int> AdaptiveActions { get; set; } = new List<int>();
 
@@ -334,7 +334,7 @@ namespace ISIDA.Reflexes
     /// <param name="level1">Первый уровень дерева триггера рефлекса: Интегральное базовое состояние гомеостаза</param>
     /// <param name="level2">Второй уровень дерева триггера рефлекса: Контексты реагирования</param>
     /// <param name="level3">Третий уровень дерева триггера рефлекса: Внешние гомеостатические воздействия</param>
-    /// <param name="adaptiveActions">Адаптивные действия рефлекса</param>
+    /// <param name="adaptiveActions">Моторные действия рефлекса</param>
     /// <returns>ID созданного рефлекса и массив предупреждений (если были скорректированы значения)</returns>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях в влияниях или затратах (вне диапазона -10..+10)</exception>    
@@ -711,7 +711,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Обработчик удаления адаптивного действия
+    /// Обработчик удаления моторного действия
     /// </summary>
     private void OnAdaptiveActionDeleted(int actionId)
     {
@@ -1201,9 +1201,9 @@ namespace ISIDA.Reflexes
       }
 
       if (!adaptiveActions.Any())
-        return (false, $"Список адаптивных действий рефлекса не может быть пустым");
+        return (false, $"Список моторных действий рефлекса не может быть пустым");
 
-      // Проверка AdaptiveActions - адаптивные действия
+      // Проверка AdaptiveActions - моторные действия
       if (adaptiveActions != null)
       {
         var adaptiveSystem = AdaptiveActionsSystem.Instance;
@@ -1212,7 +1212,7 @@ namespace ISIDA.Reflexes
 
         if (invalidActionIds.Any())
           return (false,
-              $"Найдены несуществующие ID адаптивных действий: {string.Join(", ", invalidActionIds)}");
+              $"Найдены несуществующие ID моторных действий: {string.Join(", ", invalidActionIds)}");
 
         // Проверка на дубликаты
         if (adaptiveActions.Count != adaptiveActions.Distinct().Count())
@@ -1227,7 +1227,7 @@ namespace ISIDA.Reflexes
 
         if (actionConflicts.Any())
           return (false,
-              $"Конфликты адаптивных действий: {string.Join("; ", actionConflicts.Select(c => c.Message))}");
+              $"Конфликты моторных действий: {string.Join("; ", actionConflicts.Select(c => c.Message))}");
       }
 
       return (true, string.Empty);

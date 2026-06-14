@@ -139,7 +139,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Выполняет последовательность адаптивных действий рефлекса с указанием источника
+    /// Выполняет последовательность моторных действий рефлекса с указанием источника
     /// </summary>
     /// <param name="actionIds">Список ID действий для выполнения</param>
     /// <param name="activationSource">Источник активации действий</param>
@@ -199,7 +199,7 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Выполняет адаптивное действие по его ID с указанием источника
+    /// Выполняет моторное действие по его ID с указанием источника
     /// </summary>
     /// <param name="actionId">ID действия</param>
     /// <param name="activationSource">Источник активации</param>
@@ -237,7 +237,7 @@ namespace ISIDA.Reflexes
     /// Получает список действий для безусловного рефлекса
     /// </summary>
     /// <param name="reflexId">ID безусловного рефлекса</param>
-    /// <returns>Список ID адаптивных действий</returns>
+    /// <returns>Список ID моторных действий</returns>
     public List<int> GetActionsForGeneticReflex(int reflexId)
     {
       try
@@ -288,7 +288,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     /// <param name="reflexId">ID рефлекса</param>
     /// <param name="isConditioned">True для условного рефлекса, False для безусловного</param>
-    /// <returns>Список ID адаптивных действий</returns>
+    /// <returns>Список ID моторных действий</returns>
     public List<int> GetActionsForReflex(int reflexId, bool isConditioned = false)
     {
       if (isConditioned)
@@ -312,7 +312,7 @@ namespace ISIDA.Reflexes
     /// Получает список действий для условного рефлекса из исходного безусловного рефлекса
     /// </summary>
     /// <param name="conditionedReflexId">ID условного рефлекса</param>
-    /// <returns>Список ID адаптивных действий или пустой список</returns>
+    /// <returns>Список ID моторных действий или пустой список</returns>
     public List<int> GetActionsForConditionedReflexFromSource(int conditionedReflexId)
     {
       try
