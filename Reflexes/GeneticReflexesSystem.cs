@@ -50,20 +50,24 @@ namespace ISIDA.Reflexes
       /// <summary>Стили поведения</summary>
       public List<int> Level2 { get; }
 
-      /// <summary>Внешние воздействия</summary>
-      public List<int> Level3 { get; }
+      /// <summary>Внешние воздействия с пульта оператора (Level3 EA)</summary>
+      public List<int> InfluenceActionIds { get; }
+
+      /// <summary>Паттерны Command-канала среды (Level3 Command); порядок важен</summary>
+      public List<int> CommandPatternIds { get; }
 
       /// <summary>ID цепочки рефлексов</summary>
       public int ReflexChainID { get; }
 
       /// <summary>Создает аргументы события</summary>
       public GeneticReflexCreatedEventArgs(int reflexId, int level1, List<int> level2,
-          List<int> level3, int reflexChainID = 0)
+          List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0)
       {
         ReflexId = reflexId;
         Level1 = level1;
         Level2 = level2;
-        Level3 = level3;
+        InfluenceActionIds = influenceActionIds;
+        CommandPatternIds = commandPatternIds;
         ReflexChainID = reflexChainID;
       }
     }
@@ -212,9 +216,14 @@ namespace ISIDA.Reflexes
       public List<int> Level2 { get; set; } = new List<int>();
 
       /// <summary>
-      /// Третий уровень дерева триггера рефлекса: Гомеостатические воздействия
+      /// Третий уровень дерева триггера: воздействия с пульта оператора (InfluenceActions.dat)
       /// </summary>
-      public List<int> Level3 { get; set; } = new List<int>();
+      public List<int> InfluenceActionIds { get; set; } = new List<int>();
+
+      /// <summary>
+      /// Третий уровень дерева триггера: паттерны Command-канала среды (CommandPhrases.dat); порядок важен
+      /// </summary>
+      public List<int> CommandPatternIds { get; set; } = new List<int>();
 
       /// <summary>
       /// Моторные действия рефлекса
@@ -333,7 +342,8 @@ namespace ISIDA.Reflexes
     /// </summary>
     /// <param name="level1">Первый уровень дерева триггера рефлекса: Интегральное базовое состояние гомеостаза</param>
     /// <param name="level2">Второй уровень дерева триггера рефлекса: Контексты реагирования</param>
-    /// <param name="level3">Третий уровень дерева триггера рефлекса: Внешние гомеостатические воздействия</param>
+    /// <param name="influenceActionIds">Воздействия с пульта оператора (Level3 EA)</param>
+    /// <param name="commandPatternIds">Паттерны Command-канала среды (Level3 Command); порядок важен</param>
     /// <param name="adaptiveActions">Моторные действия рефлекса</param>
     /// <returns>ID созданного рефлекса и массив предупреждений (если были скорректированы значения)</returns>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
@@ -341,7 +351,8 @@ namespace ISIDA.Reflexes
     public (int ActionId, string[] Warnings) AddGeneticReflex(
         int level1,
         List<int> level2,
-        List<int> level3,
+        List<int> influenceActionIds,
+        List<int> commandPatternIds,
         List<int> adaptiveActions)
     {
       if (AppGlobalState.EvolutionStage > 0)
@@ -349,7 +360,8 @@ namespace ISIDA.Reflexes
 
       var warnings = new List<string>();
 
-      var validationResult = ValidateGeneticReflexParameters(level1, level2, level3, adaptiveActions);
+      var validationResult = ValidateGeneticReflexParameters(
+          level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
       if (!validationResult.IsValid)
       {
         warnings.Add(validationResult.ErrorMessage);
@@ -361,7 +373,8 @@ namespace ISIDA.Reflexes
       {
         Level1 = level1,
         Level2 = level2?.OrderBy(x => x).ToList() ?? new List<int>(),
-        Level3 = level3?.OrderBy(x => x).ToList() ?? new List<int>(),
+        InfluenceActionIds = influenceActionIds?.OrderBy(x => x).ToList() ?? new List<int>(),
+        CommandPatternIds = commandPatternIds?.ToList() ?? new List<int>(),
         AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
       };
 
@@ -373,7 +386,7 @@ namespace ISIDA.Reflexes
 
         if (isDuplicate)
         {
-          string strErr = $"Безусловный рефлекс c указанными уровняим Level1, Level2, Level3, AdaptiveAction уже существует. Дублирование запрещено.";
+          string strErr = $"Безусловный рефлекс c указанными уровнями Level1, Level2, Level3 (EA+Command), AdaptiveAction уже существует. Дублирование запрещено.";
           warnings.Add(strErr);
           throw new ArgumentException(strErr);
         }
@@ -394,7 +407,8 @@ namespace ISIDA.Reflexes
           Id = newId,
           Level1 = level1,
           Level2 = level2 ?? new List<int>(),
-          Level3 = level3 ?? new List<int>(),
+          InfluenceActionIds = influenceActionIds ?? new List<int>(),
+          CommandPatternIds = commandPatternIds ?? new List<int>(),
           AdaptiveActions = adaptiveActions ?? new List<int>()
         };
 
@@ -407,7 +421,7 @@ namespace ISIDA.Reflexes
 
       try
       {
-        OnGeneticReflexCreated(newId, level1, level2, level3);
+        OnGeneticReflexCreated(newId, level1, level2, influenceActionIds, commandPatternIds);
       }
       catch (Exception ex)
       {
@@ -419,9 +433,10 @@ namespace ISIDA.Reflexes
 
     /// <summary>Вызывает событие создания рефлекса</summary>
     private void OnGeneticReflexCreated(int reflexId, int level1, List<int> level2,
-        List<int> level3, int reflexChainID = 0)
+        List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0)
     {
-      var args = new GeneticReflexCreatedEventArgs(reflexId, level1, level2, level3, reflexChainID);
+      var args = new GeneticReflexCreatedEventArgs(
+          reflexId, level1, level2, influenceActionIds, commandPatternIds, reflexChainID);
       GeneticReflexCreated?.Invoke(args);
     }
 
@@ -452,7 +467,8 @@ namespace ISIDA.Reflexes
           Id = originalReflex.Id,
           Level1 = originalReflex.Level1,
           Level2 = new List<int>(originalReflex.Level2),
-          Level3 = new List<int>(originalReflex.Level3),
+          InfluenceActionIds = new List<int>(originalReflex.InfluenceActionIds),
+          CommandPatternIds = new List<int>(originalReflex.CommandPatternIds),
           AdaptiveActions = new List<int>(originalReflex.AdaptiveActions),
           ReflexChainID = originalReflex.ReflexChainID
         };
@@ -467,7 +483,8 @@ namespace ISIDA.Reflexes
       var validationResult = ValidateGeneticReflexParameters(
           reflex.Level1,
           reflex.Level2,
-          reflex.Level3,
+          reflex.InfluenceActionIds,
+          reflex.CommandPatternIds,
           reflex.AdaptiveActions);
 
       if (!validationResult.IsValid)
@@ -487,7 +504,8 @@ namespace ISIDA.Reflexes
         {
           Level1 = reflex.Level1,
           Level2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>(),
-          Level3 = reflex.Level3?.OrderBy(x => x).ToList() ?? new List<int>(),
+          InfluenceActionIds = reflex.InfluenceActionIds?.OrderBy(x => x).ToList() ?? new List<int>(),
+          CommandPatternIds = reflex.CommandPatternIds?.ToList() ?? new List<int>(),
           AdaptiveActions = reflex.AdaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
         };
 
@@ -501,7 +519,7 @@ namespace ISIDA.Reflexes
 
           if (isDuplicate)
           {
-            string strErr = $"Безусловный рефлекс с указанными уровнями Level1, Level2, Level3 уже существует. Дублирование запрещено.";
+            string strErr = $"Безусловный рефлекс с указанными уровнями Level1, Level2, Level3 (EA+Command) уже существует. Дублирование запрещено.";
             warnings.Add(strErr);
             throw new ArgumentException(strErr);
           }
@@ -533,7 +551,8 @@ namespace ISIDA.Reflexes
         // Сохраняем параметры для создания нового рефлекса
         int level1 = reflex.Level1;
         List<int> level2 = reflex.Level2?.ToList() ?? new List<int>();
-        List<int> level3 = reflex.Level3?.ToList() ?? new List<int>();
+        List<int> influenceActionIds = reflex.InfluenceActionIds?.ToList() ?? new List<int>();
+        List<int> commandPatternIds = reflex.CommandPatternIds?.ToList() ?? new List<int>();
         List<int> adaptiveActions = reflex.AdaptiveActions?.ToList() ?? new List<int>();
 
         // Удаляем старый рефлекс (это вызовет событие удаления и очистит ссылки в дереве)
@@ -545,7 +564,8 @@ namespace ISIDA.Reflexes
         }
 
         // Создаем новый рефлекс с теми же параметрами
-        var (newReflexId, createWarnings) = AddGeneticReflex(level1, level2, level3, adaptiveActions);
+        var (newReflexId, createWarnings) = AddGeneticReflex(
+            level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
 
         warnings.AddRange(createWarnings);
 
@@ -573,7 +593,8 @@ namespace ISIDA.Reflexes
 
             // Обновляем ID в дереве рефлексов
             OnGeneticReflexDeleted(newReflexId);
-            OnGeneticReflexCreated(oldReflexId, level1, level2, level3, reflex.ReflexChainID);
+            OnGeneticReflexCreated(
+                oldReflexId, level1, level2, influenceActionIds, commandPatternIds, reflex.ReflexChainID);
           }
         }
         finally
@@ -699,9 +720,9 @@ namespace ISIDA.Reflexes
         // Удаляем ссылки на воздействие из всех рефлексов
         foreach (var reflex in _geneticReflexes.Values)
         {
-          // Удаляем из Level3 (внешние воздействия)
-          if (reflex.Level3.Contains(actionId))
-            reflex.Level3.Remove(actionId);
+          // Удаляем из InfluenceActionIds (внешние воздействия с пульта)
+          if (reflex.InfluenceActionIds.Contains(actionId))
+            reflex.InfluenceActionIds.Remove(actionId);
         }
       }
       finally
@@ -904,7 +925,7 @@ namespace ISIDA.Reflexes
               continue;
 
             var parts = trimmedLine.Split('|');
-            if (parts.Length < 5)
+            if (parts.Length < 6)
               continue;
 
             if (!int.TryParse(parts[0], out int id))
@@ -914,15 +935,17 @@ namespace ISIDA.Reflexes
               continue;
 
             var level2 = parts.Length > 2 ? AddUtils.ParseIntList(parts[2]) : new List<int>();
-            var level3 = parts.Length > 3 ? AddUtils.ParseIntList(parts[3]) : new List<int>();
-            var adaptiveActions = parts.Length > 4 ? AddUtils.ParseIntList(parts[4]) : new List<int>();
+            var influenceActionIds = parts.Length > 3 ? AddUtils.ParseIntList(parts[3]) : new List<int>();
+            var commandPatternIds = parts.Length > 4 ? AddUtils.ParseIntList(parts[4]) : new List<int>();
+            var adaptiveActions = parts.Length > 5 ? AddUtils.ParseIntList(parts[5]) : new List<int>();
 
-            var validationResult = ValidateGeneticReflexParameters(level1, level2, level3, adaptiveActions);
+            var validationResult = ValidateGeneticReflexParameters(
+                level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
             if (!validationResult.IsValid)
               continue;
 
             int reflexChainID = 0;
-            if (parts.Length > 5 && int.TryParse(parts[5].Trim(), out int parsedChainId))
+            if (parts.Length > 6 && int.TryParse(parts[6].Trim(), out int parsedChainId))
               reflexChainID = parsedChainId;
 
             var reflex = new GeneticReflex
@@ -930,7 +953,8 @@ namespace ISIDA.Reflexes
               Id = id,
               Level1 = level1,
               Level2 = level2,
-              Level3 = level3,
+              InfluenceActionIds = influenceActionIds,
+              CommandPatternIds = commandPatternIds,
               AdaptiveActions = adaptiveActions,
               ReflexChainID = reflexChainID
             };
@@ -948,7 +972,8 @@ namespace ISIDA.Reflexes
                 FileHeaders.GeneticReflexesFormat,
                 FileHeaders.GeneticReflexesLevel1,
                 FileHeaders.GeneticReflexesLevel2,
-                FileHeaders.GeneticReflexesLevel3,
+                FileHeaders.GeneticReflexesInfluenceActionIds,
+                FileHeaders.GeneticReflexesCommandPatternIds,
                 FileHeaders.GeneticReflexesActions,
                 FileHeaders.GeneticReflexesChain
             };
@@ -987,7 +1012,8 @@ namespace ISIDA.Reflexes
             var validationResult = ValidateGeneticReflexParameters(
                 reflex.Level1,
                 reflex.Level2,
-                reflex.Level3,
+                reflex.InfluenceActionIds,
+                reflex.CommandPatternIds,
                 reflex.AdaptiveActions);
 
             if (!validationResult.IsValid)
@@ -1009,7 +1035,8 @@ namespace ISIDA.Reflexes
                               $"Рефлекс ID: {reflexesList[j].Id} дублирует рефлекс ID: {reflexesList[i].Id}. " +
                               $"Условия: Level1={reflexesList[i].Level1}, " +
                               $"Level2=[{string.Join(",", reflexesList[i].Level2.OrderBy(x => x))}], " +
-                              $"Level3=[{string.Join(",", reflexesList[i].Level3.OrderBy(x => x))}], " +
+                              $"InfluenceActionIds=[{string.Join(",", reflexesList[i].InfluenceActionIds.OrderBy(x => x))}], " +
+                              $"CommandPatternIds=[{string.Join(",", reflexesList[i].CommandPatternIds)}], " +
                               $"AdaptiveActions=[{string.Join(",", reflexesList[i].AdaptiveActions.OrderBy(x => x))}]";
                 return (false, errorMessage);
               }
@@ -1024,7 +1051,8 @@ namespace ISIDA.Reflexes
         FileHeaders.GeneticReflexesFormat,
         FileHeaders.GeneticReflexesLevel1,
         FileHeaders.GeneticReflexesLevel2,
-        FileHeaders.GeneticReflexesLevel3,
+        FileHeaders.GeneticReflexesInfluenceActionIds,
+        FileHeaders.GeneticReflexesCommandPatternIds,
         FileHeaders.GeneticReflexesActions,
         FileHeaders.GeneticReflexesChain
     };
@@ -1033,14 +1061,15 @@ namespace ISIDA.Reflexes
         {
           lines.Add($"{reflex.Id}|{reflex.Level1}|" +
                    $"{string.Join(",", reflex.Level2)}|" +
-                   $"{string.Join(",", reflex.Level3)}|" +
+                   $"{string.Join(",", reflex.InfluenceActionIds)}|" +
+                   $"{string.Join(",", reflex.CommandPatternIds)}|" +
                    $"{string.Join(",", reflex.AdaptiveActions)}|" +
                    $"{reflex.ReflexChainID}");
         }
 
-        var minLinesCount = 6;
-        if (lines.Count == 5)
-          minLinesCount = 5;
+        var minLinesCount = 7;
+        if (lines.Count == 7)
+          minLinesCount = 7;
 
         var result = SafeSaveFile(
             GetGeneticReflexesFilePath(),
@@ -1078,10 +1107,11 @@ namespace ISIDA.Reflexes
 
       foreach (var reflex in reflexes)
       {
-        // Создаем ключ по условиям триггера (Level1+Level2+Level3)
+        // Создаем ключ по условиям триггера (Level1+Level2+InfluenceActionIds+CommandPatternIds)
         var sortedLevel2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>();
-        var sortedLevel3 = reflex.Level3?.OrderBy(x => x).ToList() ?? new List<int>();
-        var key = $"{reflex.Level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedLevel3)}";
+        var sortedInfluenceIds = reflex.InfluenceActionIds?.OrderBy(x => x).ToList() ?? new List<int>();
+        var commandPatternIds = reflex.CommandPatternIds?.ToList() ?? new List<int>();
+        var key = $"{reflex.Level1}|{string.Join(",", sortedLevel2)}|{string.Join(",", sortedInfluenceIds)}|{string.Join(",", commandPatternIds)}";
 
         if (!seenReflexes.ContainsKey(key))
         {
@@ -1098,7 +1128,8 @@ namespace ISIDA.Reflexes
             duplicateMessages.Add(
                 $"Условия: Level1={reflex.Level1}, " +
                 $"Level2=[{string.Join(",", sortedLevel2)}], " +
-                $"Level3=[{string.Join(",", sortedLevel3)}] - " +
+                $"InfluenceActionIds=[{string.Join(",", sortedInfluenceIds)}], " +
+                $"CommandPatternIds=[{string.Join(",", commandPatternIds)}] - " +
                 $"рефлексы с ID: {duplicateIds}");
           }
         }
@@ -1120,7 +1151,8 @@ namespace ISIDA.Reflexes
       if (a == null || b == null) return false;
       if (a.Level1 != b.Level1) return false;
       if (!a.Level2.OrderBy(x => x).SequenceEqual(b.Level2.OrderBy(x => x))) return false;
-      if (!a.Level3.OrderBy(x => x).SequenceEqual(b.Level3.OrderBy(x => x))) return false;
+      if (!a.InfluenceActionIds.OrderBy(x => x).SequenceEqual(b.InfluenceActionIds.OrderBy(x => x))) return false;
+      if (!(a.CommandPatternIds ?? new List<int>()).SequenceEqual(b.CommandPatternIds ?? new List<int>())) return false;
       return true;
     }
 
@@ -1130,7 +1162,8 @@ namespace ISIDA.Reflexes
     private (bool IsValid, string ErrorMessage) ValidateGeneticReflexParameters(
         int level1,
         List<int> level2,
-        List<int> level3,
+        List<int> influenceActionIds,
+        List<int> commandPatternIds,
         List<int> adaptiveActions)
     {
       // Проверка Level1 - базовые состояния гомеостаза
@@ -1173,32 +1206,49 @@ namespace ISIDA.Reflexes
         return (false,
             $"Конфликты стилей поведения в Level2: {string.Join("; ", styleConflicts.Select(c => c.Message))}");
 
-      // Проверка Level3 - внешние воздействия
-      if (level3 != null && level3.Any())
+      // Проверка influence_action_ids — воздействия с пульта оператора
+      influenceActionIds = influenceActionIds ?? new List<int>();
+      if (influenceActionIds.Any())
       {
         var influenceSystem = InfluenceActionSystem.Instance;
         var allInfluenceActions = influenceSystem.GetAllInfluenceActions();
-        var invalidInfluenceIds = level3.Where(id => !allInfluenceActions.Any(a => a.Id == id)).ToList();
+        var invalidInfluenceIds = influenceActionIds.Where(id => !allInfluenceActions.Any(a => a.Id == id)).ToList();
 
         if (invalidInfluenceIds.Any())
           return (false,
-              $"Найдены несуществующие ID внешних воздействий в Level3: {string.Join(", ", invalidInfluenceIds)}");
+              $"Найдены несуществующие ID внешних воздействий в influence_action_ids: {string.Join(", ", invalidInfluenceIds)}");
 
-        // Проверка на дубликаты
-        if (level3.Count != level3.Distinct().Count())
-          return (false, "Level3 содержит дублирующиеся ID воздействий");
+        if (influenceActionIds.Count != influenceActionIds.Distinct().Count())
+          return (false, "influence_action_ids содержит дублирующиеся ID воздействий");
 
-        // Проверка на антагонистов
         var influenceAntagonists = allInfluenceActions
             .ToDictionary(a => a.Id, a => a.AntagonistInfluences ?? new List<int>());
 
-        var influenceConflicts = AntagonistValidator.ValidateAntagonists(level3,
+        var influenceConflicts = AntagonistValidator.ValidateAntagonists(influenceActionIds,
             id => influenceAntagonists.ContainsKey(id) ? influenceAntagonists[id] : new List<int>());
 
         if (influenceConflicts.Any())
           return (false,
-              $"Конфликты внешних воздействий в Level3: {string.Join("; ", influenceConflicts.Select(c => c.Message))}");
+              $"Конфликты внешних воздействий в influence_action_ids: {string.Join("; ", influenceConflicts.Select(c => c.Message))}");
       }
+
+      // Проверка command_pattern_ids — паттерны Command-канала среды (порядок сохраняется)
+      commandPatternIds = commandPatternIds ?? new List<int>();
+      if (commandPatternIds.Any())
+      {
+        var commandChannel = SensorySystem.Instance?.CommandChannel;
+        if (commandChannel == null)
+          return (false, "CommandChannel не инициализирован — невозможно проверить command_pattern_ids");
+
+        var invalidCommandIds = commandPatternIds
+            .Where(id => id <= 0 || string.IsNullOrEmpty(commandChannel.GetPhraseFromPhraseId(id)))
+            .ToList();
+
+        if (invalidCommandIds.Any())
+          return (false,
+              $"Найдены несуществующие ID паттернов Command в command_pattern_ids: {string.Join(", ", invalidCommandIds)}");
+      }
+
 
       if (!adaptiveActions.Any())
         return (false, $"Список моторных действий рефлекса не может быть пустым");
@@ -1241,7 +1291,8 @@ namespace ISIDA.Reflexes
       var validationResult = ValidateGeneticReflexParameters(
           reflex.Level1,
           reflex.Level2,
-          reflex.Level3,
+          reflex.InfluenceActionIds,
+          reflex.CommandPatternIds,
           reflex.AdaptiveActions);
 
       errorMessage = validationResult.ErrorMessage;
@@ -1259,7 +1310,8 @@ namespace ISIDA.Reflexes
       return ValidateGeneticReflexParameters(
           reflex.Level1,
           reflex.Level2,
-          reflex.Level3,
+          reflex.InfluenceActionIds,
+          reflex.CommandPatternIds,
           reflex.AdaptiveActions);
     }
 

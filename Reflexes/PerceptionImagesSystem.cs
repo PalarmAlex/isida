@@ -364,7 +364,7 @@ namespace ISIDA.Reflexes
       {
         InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
-        CommandPatternIdList = commandPatternIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
+        CommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>(),
         VisualColorId = visualColorId
       };
 
@@ -411,8 +411,7 @@ namespace ISIDA.Reflexes
                  newImage.InfluenceActionsList.OrderBy(x => x)) &&
              existing.PhraseIdList.OrderBy(x => x).SequenceEqual(
                  newImage.PhraseIdList.OrderBy(x => x)) &&
-             existing.CommandPatternIdList.OrderBy(x => x).SequenceEqual(
-                 newImage.CommandPatternIdList.OrderBy(x => x));
+             existing.CommandPatternIdList.SequenceEqual(newImage.CommandPatternIdList);
     }
 
     /// <summary>

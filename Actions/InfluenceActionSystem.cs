@@ -455,11 +455,11 @@ namespace ISIDA.Actions
             phraseIdList ?? new List<int>(),
             commandPatternIdList ?? new List<int>(),
             visualColorId);
-        // для стимула б/у рефлексов фразу, команду и цвет игнорируем
+        // для б/у рефлексов: EA + Command (порядок Command важен); фразу и цвет не включаем
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(
             actionIdList,
             new List<int>(),
-            new List<int>(),
+            commandPatternIdList ?? new List<int>(),
             AgentVisualColor.White);
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 

@@ -229,8 +229,9 @@ namespace ISIDA.Reflexes
         return (false, "State");
       if (!TryParseStyles(stylesStr, out List<int> level2) || level2 == null || level2.Count == 0)
         return (false, "Style");
-      if (!TryParseTrigger(triggerStr, out List<int> level3))
+      if (!TryParseTrigger(triggerStr, out List<int> influenceActionIds))
         return (false, "Trigger");
+      var commandPatternIds = new List<int>();
       if (!TryParseAction(actionStr, out int actionId))
         return (false, "Action");
 
@@ -242,11 +243,11 @@ namespace ISIDA.Reflexes
       var gr = GeneticReflexesSystem.Instance;
       try
       {
-        var (reflexId, _) = gr.AddGeneticReflex(level1, level2, level3, adaptiveActions);
+        var (reflexId, _) = gr.AddGeneticReflex(level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
         if (chainId.HasValue && reflexId > 0)
         {
           gr.AttachChainToReflex(reflexId, chainId.Value);
-          UpdateReflexTreeChainBinding(level1, level2, level3, chainId.Value);
+          UpdateReflexTreeChainBinding(level1, level2, influenceActionIds, commandPatternIds, chainId.Value);
         }
         return (true, null);
       }
@@ -268,7 +269,8 @@ namespace ISIDA.Reflexes
     /// привязывается к рефлексу (GeneticReflexesSystem), но узел дерева создаётся с ReflexChainID=0
     /// (событие GeneticReflexCreated вызывается до AttachChainToReflex). Поэтому нужно явно обновить узел.
     /// </summary>
-    private static void UpdateReflexTreeChainBinding(int level1, List<int> level2, List<int> level3, int chainId)
+    private static void UpdateReflexTreeChainBinding(
+        int level1, List<int> level2, List<int> influenceActionIds, List<int> commandPatternIds, int chainId)
     {
       if (!ReflexTreeSystem.IsInitialized || !PerceptionImagesSystem.IsInitialized)
       {
@@ -283,8 +285,14 @@ namespace ISIDA.Reflexes
           styleImageId = PerceptionImagesSystem.Instance.AddBehaviorStyleImage(level2);
 
         int actionImageId = 0;
-        if (level3 != null && level3.Any())
-          actionImageId = PerceptionImagesSystem.Instance.AddPerceptionImage(level3, new List<int>());
+        if ((influenceActionIds != null && influenceActionIds.Any()) ||
+            (commandPatternIds != null && commandPatternIds.Any()))
+        {
+          actionImageId = PerceptionImagesSystem.Instance.AddPerceptionImage(
+              influenceActionIds ?? new List<int>(),
+              new List<int>(),
+              commandPatternIdList: commandPatternIds ?? new List<int>());
+        }
 
         var (nodeId, node) = ReflexTreeSystem.Instance.FindReflexTreeNodeFromCondition(level1, styleImageId, actionImageId);
         if (node != null && nodeId > 0)
@@ -348,9 +356,9 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Парсит триггер. Если в ячейке указано "Нет" — рефлекс привязывается только к внутренним условиям гомеостаза (состояние + стили), без внешнего триггера.
     /// </summary>
-    private bool TryParseTrigger(string triggerStr, out List<int> level3)
+    private bool TryParseTrigger(string triggerStr, out List<int> influenceActionIds)
     {
-      level3 = new List<int>();
+      influenceActionIds = new List<int>();
       if (string.IsNullOrWhiteSpace(triggerStr))
         return true;
       // "Нет" = рефлекс без триггера, только состояние симбионта + комбинации стилей
@@ -365,7 +373,7 @@ namespace ISIDA.Reflexes
         Logger.Warning($"Внешнее воздействие не найдено: {triggerStr}");
         return false;
       }
-      level3.Add(action.Id);
+      influenceActionIds.Add(action.Id);
       return true;
     }
 

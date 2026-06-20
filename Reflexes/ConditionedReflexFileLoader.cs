@@ -327,7 +327,8 @@ namespace ISIDA.Reflexes
       return all.FirstOrDefault(r =>
           r.Level1 == level1 &&
           (r.Level2 != null && sortedLevel2.SequenceEqual(r.Level2.OrderBy(x => x))) &&
-          r.Level3 != null && r.Level3.Count == 1 && r.Level3[0] == influenceActionId);
+          r.InfluenceActionIds != null && r.InfluenceActionIds.Count == 1 && r.InfluenceActionIds[0] == influenceActionId &&
+          (r.CommandPatternIds == null || !r.CommandPatternIds.Any()));
     }
 
     /// <summary>Получает или добавляет фразу в дерево; возвращает phraseId или 0.</summary>

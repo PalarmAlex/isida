@@ -1200,17 +1200,28 @@ namespace ISIDA.Reflexes
           return false;
       }
 
-      // Проверка Level3 - пусковые стимулы
-      if (reflex.Level3 != null && reflex.Level3.Any())
+      // Проверка Level3 — составной триггер: EA (multiset) + Command (ordered)
+      var influenceIds = reflex.InfluenceActionIds;
+      if (influenceIds != null && influenceIds.Any())
       {
-        // Получаем текущие активные воздействия
         var currentTriggers = GetCurrentTriggerActionIDs();
         if (currentTriggers == null || !currentTriggers.Any())
           return false;
 
-        // Точное совпадение всех элементов Level3 с текущими триггерами
-        if (!reflex.Level3.All(trigger => currentTriggers.Contains(trigger)) ||
-            !currentTriggers.All(trigger => reflex.Level3.Contains(trigger)))
+        var reflexInfluence = influenceIds.OrderBy(x => x).ToList();
+        var currentInfluence = currentTriggers.OrderBy(x => x).ToList();
+        if (!reflexInfluence.SequenceEqual(currentInfluence))
+          return false;
+      }
+
+      var commandPatternIds = reflex.CommandPatternIds;
+      if (commandPatternIds != null && commandPatternIds.Any())
+      {
+        var currentCommands = _influenceActions.LastAppliedCommandPatternIdList;
+        if (currentCommands == null || !currentCommands.Any())
+          return false;
+
+        if (!commandPatternIds.SequenceEqual(currentCommands))
           return false;
       }
 

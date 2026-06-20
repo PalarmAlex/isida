@@ -119,9 +119,14 @@ namespace ISIDA.Reflexes
           if (e.Level2 != null && e.Level2.Any())
             styleImageId = _perceptionImagesSystem.AddBehaviorStyleImage(e.Level2);
 
-          if (e.Level3 != null && e.Level3.Any())
-            // фразу не передаем - рефлексы не учитывают вербальное воздействие
-            actionImageId = _perceptionImagesSystem.AddPerceptionImage(e.Level3, new List<int>());
+          if ((e.InfluenceActionIds != null && e.InfluenceActionIds.Any()) ||
+              (e.CommandPatternIds != null && e.CommandPatternIds.Any()))
+          {
+            actionImageId = _perceptionImagesSystem.AddPerceptionImage(
+                e.InfluenceActionIds ?? new List<int>(),
+                new List<int>(),
+                commandPatternIdList: e.CommandPatternIds ?? new List<int>());
+          }
         }
 
         int[] conditionArr = new int[] { e.Level1, styleImageId, actionImageId };
