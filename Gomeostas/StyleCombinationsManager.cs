@@ -63,7 +63,15 @@ namespace ISIDA.Gomeostas
 
       // Генерируем новые комбинации из привязок параметров
       var validCombinations = GenerateCombinationsFromParameterBindings();
-      _pendingStyleCombinationsSave = validCombinations;
+      if (forceRegenerate)
+      {
+        var saveResult = SaveStyleCombinations(validCombinations);
+        if (!saveResult.Success && !string.IsNullOrEmpty(saveResult.ErrorMessage))
+          Logger.Warning($"GenerateStyleCombinations: {saveResult.ErrorMessage}");
+        _pendingStyleCombinationsSave = null;
+      }
+      else
+        _pendingStyleCombinationsSave = validCombinations;
 
       return validCombinations;
     }

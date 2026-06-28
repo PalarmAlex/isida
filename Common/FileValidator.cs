@@ -54,11 +54,11 @@ namespace ISIDA.Common
       public const string ReflexChainsFailureDesc = "# FailureNext: ID следующего звена при неудаче";
 
       // Гомеостатические воздействия
-      public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты";
+      public const string InfluenceActionsFormat = "# Формат: ID|Имя|Описание|Воздействие|Антагонисты|ProbeKey";
       public const string InfluenceActionsBenefit = "# Воздействие: paramId1:effect1;paramId2:effect2";
       public const string InfluenceAntagonists = "# Антагонисты: id1,id2,id3";
-      public const string InfluenceActionsPressureRulesFileNote =
-          "# Связь с контуром среды (ProbeKey): см. файл EnvironmentPressureRules.dat";
+      public const string InfluenceActionsProbeKey =
+          "# ProbeKey: ключ из metric-probes.json; пусто — воздействие оператора с пульта";
 
       // Правила давления среды (ProbeKey → воздействие)
       public const string EnvironmentPressureRulesFormat = "# Формат: RuleId|ProbeKey|Имя|Описание|Influences";
@@ -604,7 +604,7 @@ namespace ISIDA.Common
         if (parts.Length < 5)
           return false;
 
-        if (parts.Length > 5)
+        if (parts.Length > 6)
           return false;
 
         return true;

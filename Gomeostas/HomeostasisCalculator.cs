@@ -828,6 +828,16 @@ namespace ISIDA.Gomeostas
     private bool IsBadZone(float value, float normaWell, float speed) =>
         (speed < 0 && value < normaWell) || (speed >= 0 && value > normaWell);
 
+    /// <summary>
+    /// Параметр в Bad-зоне относительно NormaWell и знака Speed.
+    /// </summary>
+    public bool IsParameterInBadZone(ParameterData param)
+    {
+      if (param == null)
+        return false;
+      return IsBadZone(param.Value, param.NormaWell, param.Speed);
+    }
+
     private float CalculateDeviation(float value, float normaWell, float speed) =>
         speed < 0 ? (value < normaWell ? normaWell - value : value - normaWell)
                  : (value > normaWell ? value - normaWell : normaWell - value);

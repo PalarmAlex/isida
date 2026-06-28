@@ -201,14 +201,14 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Валидация времени удержания состояний в сек
+    /// Валидация времени удержания состояний в пульсах
     /// </summary>
     /// <param name="value">Значение для валидации (int)</param>
     public static (bool isValid, string errorMessage) ValidateDynamicTime(int? value)
     {
       const string paramName = "Время удержания состояний";
-      const string range = "[5:100] сек";
-      return ValidateValueCustom(value, paramName, 5, 100, range);
+      const string range = "[2:100] пульсов";
+      return ValidateValueCustom(value, paramName, 2, 100, range);
     }
 
     /// <summary>
@@ -401,7 +401,7 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Ключ пробы метрики среды (<c>ProbeKey</c> в <c>EnvironmentPressureRules.dat</c>). Пустая строка допустима.
+    /// Ключ пробы метрики среды (<c>ProbeKey</c> в <c>InfluenceActions.dat</c>, schema <c>metric-probes.json</c>). Пустая строка допустима.
     /// </summary>
     public static (bool isValid, string errorMessage) ValidateEnvironmentProbeKey(string key)
     {

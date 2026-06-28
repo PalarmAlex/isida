@@ -156,6 +156,15 @@ namespace ISIDA.Actions
       /// Список ID воздействий-антагонистов, которые несовместимы с данным воздействием
       /// </summary>
       public List<int> AntagonistInfluences { get; set; } = new List<int>();
+
+      /// <summary>
+      /// Ключ пробы метрики среды из <c>metric-probes.json</c>; пусто — воздействие оператора с пульта.
+      /// </summary>
+      public string ProbeKey { get; set; } = string.Empty;
+
+      /// <summary>true, если воздействие привязано к метрике среды (непустой ProbeKey в InfluenceActions.dat).</summary>
+      public bool IsEnvironmentProbeAction =>
+          !string.IsNullOrWhiteSpace(ProbeKey);
     }
 
     #endregion
@@ -580,6 +589,9 @@ namespace ISIDA.Actions
         if (AppGlobalState.ObservationMode)
           return (true, string.Empty);
 
+        if (action.IsEnvironmentProbeAction)
+          return (true, string.Empty);
+
         var parameters = _gomeostas.GetAllParameters();
         bool isCriticalImpact = _gomeostas.Calculator.IsExternalImpactCritical(
             action.Influences, parameters);
@@ -643,6 +655,27 @@ namespace ISIDA.Actions
     public ReadOnlyCollection<GomeostasisInfluenceAction> GetAllInfluenceActions()
     {
       return new ReadOnlyCollection<GomeostasisInfluenceAction>(_influenceActions.Values.ToList());
+    }
+
+    /// <summary>Воздействия среды: непустой <see cref="GomeostasisInfluenceAction.ProbeKey"/>.</summary>
+    public ReadOnlyCollection<GomeostasisInfluenceAction> GetEnvironmentInfluenceActions()
+    {
+      return new ReadOnlyCollection<GomeostasisInfluenceAction>(
+          _influenceActions.Values
+              .Where(a => a.IsEnvironmentProbeAction)
+              .OrderBy(a => a.Id)
+              .ToList());
+    }
+
+    /// <summary>EA с указанным ProbeKey или null.</summary>
+    public GomeostasisInfluenceAction GetInfluenceActionByProbeKey(string probeKey)
+    {
+      if (string.IsNullOrWhiteSpace(probeKey))
+        return null;
+
+      string key = probeKey.Trim();
+      return _influenceActions.Values.FirstOrDefault(
+          a => string.Equals((a.ProbeKey ?? string.Empty).Trim(), key, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -797,11 +830,17 @@ namespace ISIDA.Actions
 
       foreach (var influence in influences)
       {
+        if (influence.IsEnvironmentProbeAction)
+          continue;
+
         foreach (var antagonistId in influence.AntagonistInfluences)
         {
           if (influenceDict.ContainsKey(antagonistId))
           {
             var antagonist = influenceDict[antagonistId];
+            if (antagonist.IsEnvironmentProbeAction)
+              continue;
+
             if (!antagonist.AntagonistInfluences.Contains(influence.Id))
             {
               if (!unpaired.Contains(influence))
@@ -880,6 +919,9 @@ namespace ISIDA.Actions
                   .ToList();
             }
 
+            if (parts.Length >= 6)
+              action.ProbeKey = parts[5].Trim();
+
             _influenceActions[action.Id] = action;
             if (action.Id > _lastGomeoActionId)
               _lastGomeoActionId = action.Id;
@@ -893,7 +935,7 @@ namespace ISIDA.Actions
             FileValidator.FileHeaders.InfluenceActionsFormat,
             FileValidator.FileHeaders.InfluenceActionsBenefit,
             FileValidator.FileHeaders.InfluenceAntagonists,
-            FileValidator.FileHeaders.InfluenceActionsPressureRulesFileNote
+            FileValidator.FileHeaders.InfluenceActionsProbeKey
           };
           File.WriteAllLines(path, lines);
           _influenceActions.Clear();
@@ -930,14 +972,15 @@ namespace ISIDA.Actions
             FileValidator.FileHeaders.InfluenceActionsFormat,
             FileValidator.FileHeaders.InfluenceActionsBenefit,
             FileValidator.FileHeaders.InfluenceAntagonists,
-            FileValidator.FileHeaders.InfluenceActionsPressureRulesFileNote
+            FileValidator.FileHeaders.InfluenceActionsProbeKey
           };
 
         foreach (var action in _influenceActions.Values.OrderBy(a => a.Id))
         {
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
                    $"{InfluencesToString(action.Influences)}|" +
-                   $"{string.Join(",", action.AntagonistInfluences)}");
+                   $"{string.Join(",", action.AntagonistInfluences)}|" +
+                   $"{(action.ProbeKey ?? string.Empty).Trim()}");
         }
         var linCount = 5;
         if (lines.Count == 4)
@@ -1006,6 +1049,23 @@ namespace ISIDA.Actions
         // Проверка: антагонисты ссылаются только на существующие ID
         foreach (var action in actions)
         {
+          if (!string.IsNullOrWhiteSpace(action.ProbeKey))
+          {
+            var probeCheck = SettingsValidator.ValidateEnvironmentProbeKey(action.ProbeKey);
+            if (!probeCheck.isValid)
+            {
+              errorMessage = $"Гомеостатическое воздействие с ID {action.Id}: {probeCheck.errorMessage}";
+              return false;
+            }
+
+            if (action.AntagonistInfluences.Count > 0)
+            {
+              errorMessage =
+                  $"Гомеостатическое воздействие с ID {action.Id}: при заданном ProbeKey антагонисты должны быть пусты.";
+              return false;
+            }
+          }
+
           var invalidAntagonist = action.AntagonistInfluences
               .FirstOrDefault(aid => !existingIds.Contains(aid));
 
@@ -1014,6 +1074,29 @@ namespace ISIDA.Actions
             errorMessage = $"Гомеостатическое воздействие с ID {action.Id} ссылается на несуществующий антагонист: {invalidAntagonist}";
             return false;
           }
+
+          foreach (int antagonistId in action.AntagonistInfluences)
+          {
+            var antagonist = actions.FirstOrDefault(a => a.Id == antagonistId);
+            if (antagonist != null && antagonist.IsEnvironmentProbeAction)
+            {
+              errorMessage =
+                  $"Гомеостатическое воздействие с ID {action.Id} не может иметь антагонистом воздействие среды ID {antagonistId}.";
+              return false;
+            }
+          }
+        }
+
+        var duplicateProbeKey = actions
+            .Where(a => !string.IsNullOrWhiteSpace(a.ProbeKey))
+            .GroupBy(a => a.ProbeKey.Trim(), StringComparer.Ordinal)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicateProbeKey != null)
+        {
+          errorMessage =
+              $"Дублирующийся ProbeKey «{duplicateProbeKey.Key}» у воздействий: " +
+              string.Join(", ", duplicateProbeKey.Select(a => a.Id));
+          return false;
         }
 
         // Проверка асимметричных антагонистов
