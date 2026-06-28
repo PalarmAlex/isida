@@ -598,15 +598,13 @@ namespace ISIDA.Psychic
       int moodId = 0,
       int visualColorId = 0)
     {
-      if (AppGlobalState.EvolutionStage < 2)
-      {
-        Logger.Warning($"Стадия развития {AppGlobalState.EvolutionStage} недостаточна для автоматизмов");
-        return false;
-      }
-
+      // Тип 1 (смена Level1/стилей) без операторского стимула — автоматизмы не задействуются на любой стадии.
       if ((actionIdList?.Count ?? 0) == 0 && (phraseIdList?.Count ?? 0) == 0 &&
           (commandPatternIdList?.Count ?? 0) == 0 &&
           visualColorId == AgentVisualColor.White)
+        return false;
+
+      if (AppGlobalState.EvolutionStage < 2)
         return false;
 
       if (!AgentVisualColor.IsValidCode(visualColorId))

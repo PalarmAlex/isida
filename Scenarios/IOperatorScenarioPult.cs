@@ -6,6 +6,12 @@ namespace ISIDA.Scenarios
   public interface IOperatorScenarioPult
   {
     /// <summary>Ошибка — непустая строка, успех — null.</summary>
-    string TryApplyScenarioStimulus(IReadOnlyList<int> actionIds, string phraseText, int toneId, int moodId, int visualColorId = 0);
+    string TryApplyScenarioStimulus(
+        IReadOnlyList<int> actionIds,
+        IReadOnlyList<ScenarioEnvironmentProbeEntry> environmentProbes,
+        string phraseText,
+        int toneId,
+        int moodId,
+        int visualColorId = 0);
   }
 }

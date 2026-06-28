@@ -72,8 +72,13 @@ namespace ISIDA.Scenarios
     public int VisualColorId { get; set; }
     /// <summary>Идентификаторы воздействий с пульта.</summary>
     public List<int> ActionIds { get; set; } = new List<int>();
+    /// <summary>Воздействия метрик среды: + — давление, − — отпускание.</summary>
+    public List<ScenarioEnvironmentProbeEntry> EnvironmentProbes { get; set; } =
+        new List<ScenarioEnvironmentProbeEntry>();
     /// <summary>Текст фразы для подачи симбионту.</summary>
     public string Phrase { get; set; } = "";
+
+    private string _environmentProbesDisplay = "";
 
     /// <summary>Названия выбранных воздействий через запятую (только для отображения).</summary>
     public string ActionNamesDisplay
@@ -131,6 +136,57 @@ namespace ISIDA.Scenarios
       }
     }
 
+    /// <summary>Подпись воздействий среды для таблицы шагов (имя и знак +/−).</summary>
+    public string EnvironmentProbesDisplay
+    {
+      get => _environmentProbesDisplay;
+      private set
+      {
+        if (_environmentProbesDisplay == value)
+          return;
+        _environmentProbesDisplay = value;
+        NotifyPropertyChanged(nameof(EnvironmentProbesDisplay));
+      }
+    }
+
+    /// <summary>Обновляет подпись воздействий среды по справочнику.</summary>
+    public void RefreshEnvironmentProbeNames(InfluenceActionSystem influenceActions)
+    {
+      if (EnvironmentProbes == null || EnvironmentProbes.Count == 0)
+      {
+        EnvironmentProbesDisplay = "";
+        return;
+      }
+      if (influenceActions == null)
+      {
+        EnvironmentProbesDisplay = ScenarioEnvironmentProbeFormat.Serialize(EnvironmentProbes);
+        return;
+      }
+      try
+      {
+        var lookup = new Dictionary<int, string>();
+        foreach (var a in influenceActions.GetAllInfluenceActions())
+        {
+          if (!lookup.ContainsKey(a.Id))
+            lookup[a.Id] = a.Name ?? "";
+        }
+        var parts = new List<string>();
+        foreach (var ep in EnvironmentProbes)
+        {
+          string sign = ep.IsPressure ? "+" : "−";
+          if (lookup.TryGetValue(ep.ActionId, out var name) && !string.IsNullOrEmpty(name))
+            parts.Add(sign + name);
+          else
+            parts.Add(sign + ep.ActionId.ToString(CultureInfo.InvariantCulture));
+        }
+        EnvironmentProbesDisplay = string.Join(", ", parts);
+      }
+      catch
+      {
+        EnvironmentProbesDisplay = ScenarioEnvironmentProbeFormat.Serialize(EnvironmentProbes);
+      }
+    }
+
     /// <summary>Событие изменения свойств (INotifyPropertyChanged).</summary>
     public event PropertyChangedEventHandler PropertyChanged;
 
@@ -184,6 +240,8 @@ namespace ISIDA.Scenarios
         MoodId = MoodId,
         VisualColorId = VisualColorId,
         ActionIds = ActionIds?.ToList() ?? new List<int>(),
+        EnvironmentProbes = EnvironmentProbes?.Select(e => e.Clone()).ToList()
+            ?? new List<ScenarioEnvironmentProbeEntry>(),
         Phrase = Phrase ?? "",
         ResetWaitingPeriod = ResetWaitingPeriod
       };

@@ -68,6 +68,8 @@ namespace ISIDA.Scenarios
         {
           if (row.ActionIds != null && row.ActionIds.Count > 0)
             return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается с воздействиями.";
+          if (row.EnvironmentProbes != null && row.EnvironmentProbes.Count > 0)
+            return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается с воздействиями среды.";
           if (!string.IsNullOrWhiteSpace(row.Phrase))
             return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): клик по плашке не сочетается с фразой.";
           if (row.ResetWaitingPeriod)
@@ -82,6 +84,8 @@ namespace ISIDA.Scenarios
         bool hasVisualColor = row.VisualColorId != AgentVisualColor.White;
         if (row.ResetWaitingPeriod && (hasPhrase || hasActions || hasVisualColor))
           return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с фразой, воздействиями или цветом фона.";
+        if (row.ResetWaitingPeriod && row.EnvironmentProbes != null && row.EnvironmentProbes.Count > 0)
+          return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): сброс ожидания не сочетается с воздействиями среды.";
         // Пустая строка пульта (без фразы, без воздействий, без сброса) допустима — маркер пульса только для ожидаемого лога.
 
         if (row.Phrase != null && row.Phrase.IndexOf('|') >= 0)
@@ -93,6 +97,33 @@ namespace ISIDA.Scenarios
           {
             if (!validIds.Contains(id))
               return $"Неизвестное воздействие с пульта ID={id} (шаг {row.StepIndex}, пульс {row.PulseWithinScenario}).";
+          }
+        }
+
+        if (row.EnvironmentProbes != null)
+        {
+          var envById = new Dictionary<int, InfluenceActionSystem.GomeostasisInfluenceAction>();
+          try
+          {
+            foreach (var a in influenceActions.GetAllInfluenceActions())
+            {
+              if (a.IsEnvironmentProbeAction && !envById.ContainsKey(a.Id))
+                envById[a.Id] = a;
+            }
+          }
+          catch
+          {
+            /* ignore */
+          }
+
+          foreach (var ep in row.EnvironmentProbes)
+          {
+            if (ep.ActionId <= 0)
+              return $"Шаг {row.StepIndex} (пульс {row.PulseWithinScenario}): некорректный ID воздействия среды.";
+            if (!validIds.Contains(ep.ActionId))
+              return $"Неизвестное воздействие среды ID={ep.ActionId} (шаг {row.StepIndex}, пульс {row.PulseWithinScenario}).";
+            if (!envById.ContainsKey(ep.ActionId))
+              return $"ID={ep.ActionId} не является воздействием метрики среды (шаг {row.StepIndex}, пульс {row.PulseWithinScenario}).";
           }
         }
 

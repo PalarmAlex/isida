@@ -21,6 +21,7 @@ namespace ISIDA.Scenarios
     private bool _skipAutomatizmChain;
     private bool _skipMainCycle;
     private bool _skipBackgroundCycles;
+    private bool _skipEnvironmentProbes;
 
     /// <summary>Не сравнивать столбец «Состояние» (ID базового состояния гомеостаза).</summary>
     public bool SkipState
@@ -127,6 +128,13 @@ namespace ISIDA.Scenarios
       set { if (_skipBackgroundCycles == value) return; _skipBackgroundCycles = value; OnPropertyChanged(); }
     }
 
+    /// <summary>Не сравнивать столбец «Воздействие от среды».</summary>
+    public bool SkipEnvironmentProbes
+    {
+      get => _skipEnvironmentProbes;
+      set { if (_skipEnvironmentProbes == value) return; _skipEnvironmentProbes = value; OnPropertyChanged(); }
+    }
+
     /// <summary>Создаёт независимую копию флагов столбцов.</summary>
     /// <returns>Новый экземпляр с теми же значениями галок.</returns>
     public ScenarioLogExpectationColumnSkips Clone()
@@ -147,7 +155,8 @@ namespace ISIDA.Scenarios
         SkipReflexChain = SkipReflexChain,
         SkipAutomatizmChain = SkipAutomatizmChain,
         SkipMainCycle = SkipMainCycle,
-        SkipBackgroundCycles = SkipBackgroundCycles
+        SkipBackgroundCycles = SkipBackgroundCycles,
+        SkipEnvironmentProbes = SkipEnvironmentProbes
       };
     }
 
@@ -178,6 +187,7 @@ namespace ISIDA.Scenarios
     private string _automatizmChainText = "-";
     private string _mainCycleText = "-";
     private string _backgroundCyclesText = "-";
+    private string _environmentProbesText = "-";
 
     /// <summary>Порядковый номер шага сценария (синхронизируется со строкой шагов).</summary>
     public int StepIndex
@@ -298,6 +308,13 @@ namespace ISIDA.Scenarios
       set { if (_backgroundCyclesText == value) return; _backgroundCyclesText = value ?? ""; OnPropertyChanged(); }
     }
 
+    /// <summary>Ожидаемое «Воздействие от среды» (+имя / −имя через запятую); «-» — пусто.</summary>
+    public string EnvironmentProbesText
+    {
+      get => _environmentProbesText;
+      set { if (_environmentProbesText == value) return; _environmentProbesText = value ?? ""; OnPropertyChanged(); }
+    }
+
     /// <summary>Глубокая копия строки ожиданий.</summary>
     /// <returns>Новый экземпляр с теми же текстовыми полями и номерами шага/пульса.</returns>
     public ScenarioLogExpectationRow Clone()
@@ -320,7 +337,8 @@ namespace ISIDA.Scenarios
         ReflexChainText = ReflexChainText ?? "",
         AutomatizmChainText = AutomatizmChainText ?? "",
         MainCycleText = MainCycleText ?? "",
-        BackgroundCyclesText = BackgroundCyclesText ?? ""
+        BackgroundCyclesText = BackgroundCyclesText ?? "",
+        EnvironmentProbesText = EnvironmentProbesText ?? ""
       };
     }
 

@@ -207,10 +207,11 @@ namespace ISIDA.Scenarios
 
           bool hasPhrase = !string.IsNullOrWhiteSpace(line.Phrase);
           bool hasActions = line.ActionIds != null && line.ActionIds.Count > 0;
+          bool hasEnvProbes = line.EnvironmentProbes != null && line.EnvironmentProbes.Count > 0;
           int colorStep = AgentVisualColor.IsValidCode(line.VisualColorId) ? line.VisualColorId : AgentVisualColor.White;
           bool hasVisualColor = colorStep != AgentVisualColor.White;
 
-          if (hasPhrase || hasActions || hasVisualColor)
+          if (hasPhrase || hasActions || hasVisualColor || hasEnvProbes)
           {
             var pult = _getPult();
             if (pult == null)
@@ -221,6 +222,7 @@ namespace ISIDA.Scenarios
 
             var err = pult.TryApplyScenarioStimulus(
                 line.ActionIds,
+                line.EnvironmentProbes,
                 line.Phrase ?? "",
                 line.ToneId,
                 line.MoodId,
@@ -232,7 +234,7 @@ namespace ISIDA.Scenarios
               return;
             }
             ScenarioRunnerDiagnostics.Write(
-                $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0}");
+                $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0} среда={line.EnvironmentProbes?.Count ?? 0}");
           }
           else
           {

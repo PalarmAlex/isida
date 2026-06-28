@@ -79,6 +79,8 @@ namespace ISIDA.Reflexes
         if (ReflexTree.Children.Count == 0)
           CreateBasicReflexTree();
 
+        ReconcileGeneticReflexTreeImageIds();
+
         // Создаём узлы дерева для условных рефлексов, уже загруженных из файла (при загрузке событие не вызывалось — подписчиков ещё не было)
         _conditionedReflexesSystem.NotifyTreeOfLoadedReflexes();
       }
@@ -1342,6 +1344,113 @@ namespace ISIDA.Reflexes
       {
         Logger.Error(ex.Message);
       }
+    }
+
+    /// <summary>
+    /// После загрузки дерева подтягивает StyleID/ActionID узлов с б/у рефлексами
+    /// к актуальным ID образов из BehaviorStyleImages.dat и PerceptionImages.dat.
+    /// Нужно, если образы пересозданы (новые ID), а ReflexTree.dat остался со старыми ссылками.
+    /// </summary>
+    private void ReconcileGeneticReflexTreeImageIds()
+    {
+      var missingReflexes = new List<(GeneticReflexesSystem.GeneticReflex Reflex, int StyleImageId, int ActionImageId)>();
+      bool changed = false;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        var styleIdRemap = new Dictionary<int, int>();
+
+        foreach (var reflex in _geneticReflexesSystem.GetAllGeneticReflexes())
+        {
+          int styleImageId = ResolveStyleImageId(reflex.Level2);
+          int actionImageId = ResolveActionImageId(reflex);
+
+          var node = ReflexTreeFromID.FirstOrDefault(n => n != null && n.GeneticReflexID == reflex.Id);
+          if (node == null)
+          {
+            missingReflexes.Add((reflex, styleImageId, actionImageId));
+            continue;
+          }
+
+          if (node.StyleID != styleImageId)
+          {
+            if (node.StyleID > 0 && styleImageId > 0)
+              styleIdRemap[node.StyleID] = styleImageId;
+            node.StyleID = styleImageId;
+            changed = true;
+          }
+
+          if (node.ActionID != actionImageId)
+          {
+            node.ActionID = actionImageId;
+            changed = true;
+          }
+        }
+
+        foreach (var node in ReflexTreeFromID)
+        {
+          if (node == null || node.GeneticReflexID > 0)
+            continue;
+
+          if (node.StyleID > 0 && styleIdRemap.TryGetValue(node.StyleID, out int newStyleId) && node.StyleID != newStyleId)
+          {
+            node.StyleID = newStyleId;
+            changed = true;
+          }
+        }
+
+        if (changed)
+          SaveReflexTreeInternal();
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"ReconcileGeneticReflexTreeImageIds: {ex.Message}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      foreach (var (reflex, styleImageId, actionImageId) in missingReflexes)
+      {
+        try
+        {
+          int[] conditionArr = { reflex.Level1, styleImageId, actionImageId };
+          int treeNodeId = FindOrCreateNodeForReflex(conditionArr, reflex.Id, reflex.ReflexChainID);
+          if (treeNodeId > 0)
+            Logger.Info($"ReconcileGeneticReflexTreeImageIds: создан узел {treeNodeId} для б/у рефлекса {reflex.Id}");
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"ReconcileGeneticReflexTreeImageIds: б/у рефлекс {reflex.Id}: {ex.Message}");
+        }
+      }
+
+      if (changed || missingReflexes.Count > 0)
+        Logger.Info("ReconcileGeneticReflexTreeImageIds: дерево рефлексов синхронизировано с образами восприятия");
+    }
+
+    private int ResolveStyleImageId(List<int> level2)
+    {
+      if (level2 == null || !level2.Any())
+        return 0;
+
+      return _perceptionImagesSystem.AddBehaviorStyleImage(level2);
+    }
+
+    private int ResolveActionImageId(GeneticReflexesSystem.GeneticReflex reflex)
+    {
+      var influenceIds = reflex.InfluenceActionIds;
+      var commandIds = reflex.CommandPatternIds;
+      if ((influenceIds == null || !influenceIds.Any()) &&
+          (commandIds == null || !commandIds.Any()))
+        return 0;
+
+      return _perceptionImagesSystem.AddPerceptionImage(
+          influenceIds ?? new List<int>(),
+          new List<int>(),
+          commandPatternIdList: commandIds ?? new List<int>());
     }
 
     /// <summary>

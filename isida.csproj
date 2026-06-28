@@ -114,6 +114,7 @@
     <Compile Include="Scenarios\IOperatorScenarioPult.cs" />
     <Compile Include="Scenarios\OperatorScenarioEngine.cs" />
     <Compile Include="Scenarios\OperatorScenarioModels.cs" />
+    <Compile Include="Scenarios\ScenarioEnvironmentProbeFormat.cs" />
     <Compile Include="Scenarios\ScenarioLogExpectationModels.cs" />
     <Compile Include="Scenarios\OperatorScenarioRunner.cs" />
     <Compile Include="Scenarios\ScenarioRunnerDiagnostics.cs" />
