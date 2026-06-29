@@ -616,7 +616,11 @@ namespace ISIDA.Psychic
           AppGlobalState.UpdateTeachingModeFromStimulusMood(moodId);
 
         if (actionIdList != null && actionIdList.Count > 0)
-          AppGlobalState.RecordStimulusInfluenceActions(actionIdList);
+        {
+          var operatorStimulusIds = _influenceActionSystem.FilterOperatorStimulusActionIds(actionIdList);
+          if (operatorStimulusIds.Count > 0)
+            AppGlobalState.RecordStimulusInfluenceActions(operatorStimulusIds);
+        }
 
         int currentActivityId = CreateInfluenceActionsImage(actionIdList, true);
         (int currentEmotionId, _) = _emotionsImageSystem.CreateNewEmotionsImage(stileIdList, true);
@@ -651,8 +655,9 @@ namespace ISIDA.Psychic
 
         if (phraseIdList?.Any() == true || commandPatternIdList?.Any() == true)
         {
+          var operatorStimulusIds = _influenceActionSystem.FilterOperatorStimulusActionIds(actionIdList);
           var perceptionImageId = _perceptionImagesSystem.AddPerceptionImage(
-              actionIdList,
+              operatorStimulusIds,
               phraseIdListForStimulus ?? phraseIdList,
               visualColorId,
               commandPatternIdListForStimulus ?? commandPatternIdList);

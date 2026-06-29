@@ -104,6 +104,7 @@
     <Compile Include="Common\ResearchLogger.cs" />
     <Compile Include="Common\IsidaDataPaths.cs" />
     <Compile Include="Common\SettingsValidator.cs" />
+    <Compile Include="Common\TooltipMultilineText.cs" />
     <Compile Include="Gomeostas\GomeostasSystem.cs" />
     <Compile Include="Gomeostas\HomeostasisCalculator.cs" />
     <Compile Include="Gomeostas\StyleActivationCondition.cs" />

@@ -459,14 +459,15 @@ namespace ISIDA.Actions
           visualColorId = AgentVisualColor.White;
         LastAppliedVisualColorId = visualColorId;
         LastAppliedCommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>();
+        var operatorStimulusIds = FilterOperatorStimulusActionIds(actionIdList);
         ActiveCurTriggerStimulusID = CreatePerceptionImage(
-            actionIdList,
+            operatorStimulusIds,
             phraseIdList ?? new List<int>(),
             commandPatternIdList ?? new List<int>(),
             visualColorId);
         // для б/у рефлексов: EA + Command (порядок Command важен); фразу и цвет не включаем
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(
-            actionIdList,
+            operatorStimulusIds,
             new List<int>(),
             commandPatternIdList ?? new List<int>(),
             AgentVisualColor.White);
@@ -636,7 +637,7 @@ namespace ISIDA.Actions
           return 0;
 
         return _perceptionImagesSystem.AddPerceptionImage(
-            actionIdList,
+            FilterOperatorStimulusActionIds(actionIdList),
             phraseIdList,
             visualColorId,
             commandPatternIdList);
@@ -685,6 +686,32 @@ namespace ISIDA.Actions
     public ReadOnlyCollection<GomeostasisInfluenceAction> GetActiveInfluenceActions()
     {
       return new ReadOnlyCollection<GomeostasisInfluenceAction>(_influenceActiveActions.ToList());
+    }
+
+    /// <summary>Исключает метрики среды (непустой ProbeKey) — они не входят в образ пускового стимула.</summary>
+    public List<int> FilterOperatorStimulusActionIds(IEnumerable<int> actionIds)
+    {
+      if (actionIds == null)
+        return new List<int>();
+      var result = new List<int>();
+      foreach (int id in actionIds)
+      {
+        if (id <= 0)
+          continue;
+        if (_influenceActions.TryGetValue(id, out var action) && action.IsEnvironmentProbeAction)
+          continue;
+        if (!result.Contains(id))
+          result.Add(id);
+      }
+      return result;
+    }
+
+    /// <summary>true, если действие — метрика среды (не операторский стимул).</summary>
+    public bool IsEnvironmentProbeActionId(int actionId)
+    {
+      return actionId > 0
+          && _influenceActions.TryGetValue(actionId, out var action)
+          && action.IsEnvironmentProbeAction;
     }
 
     /// <summary>Сумма модулей величин воздействия по параметрам гомеостаза (сравнение «значимости» воздействия).</summary>

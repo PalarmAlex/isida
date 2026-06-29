@@ -1,3 +1,4 @@
+using ISIDA.Actions;
 using ISIDA.Common;
 using System;
 using System.Collections.Generic;
@@ -125,7 +126,9 @@ namespace ISIDA.Reflexes
               (e.CommandPatternIds != null && e.CommandPatternIds.Any()))
           {
             actionImageId = _perceptionImagesSystem.AddPerceptionImage(
-                e.InfluenceActionIds ?? new List<int>(),
+                InfluenceActionSystem.IsInitialized
+                    ? InfluenceActionSystem.Instance.FilterOperatorStimulusActionIds(e.InfluenceActionIds)
+                    : (e.InfluenceActionIds ?? new List<int>()),
                 new List<int>(),
                 commandPatternIdList: e.CommandPatternIds ?? new List<int>());
           }
@@ -1447,8 +1450,11 @@ namespace ISIDA.Reflexes
           (commandIds == null || !commandIds.Any()))
         return 0;
 
+      var operatorInfluenceIds = InfluenceActionSystem.IsInitialized
+          ? InfluenceActionSystem.Instance.FilterOperatorStimulusActionIds(influenceIds)
+          : (influenceIds ?? new List<int>());
       return _perceptionImagesSystem.AddPerceptionImage(
-          influenceIds ?? new List<int>(),
+          operatorInfluenceIds,
           new List<int>(),
           commandPatternIdList: commandIds ?? new List<int>());
     }

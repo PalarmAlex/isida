@@ -321,6 +321,41 @@ namespace ISIDA.Sensors
       return _primarySensors.FirstOrDefault(x => x.Value == id).Key;
     }
 
+    /// <summary>
+    /// true — атомарный первичный токен уже зарегистрирован (командный канал).
+    /// </summary>
+    public bool HasPrimaryToken(string token)
+    {
+      if (!_options.AtomicTokens || string.IsNullOrWhiteSpace(token))
+        return false;
+
+      _lock.EnterReadLock();
+      try
+      {
+        return _primaryTokens.ContainsKey(token.Trim());
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Перечитывает файл первичников с диска в память канала.
+    /// </summary>
+    public void ReloadPrimarySensors()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        LoadPrimarySensors(_primarySensorsPath);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #endregion
 
     #region Внутренние операции со словами

@@ -169,6 +169,10 @@ namespace ISIDA.Common
       public bool InformationEnvironmentDanger { get; set; }
       /// <summary>Признак актуальной ситуации (<see cref="InformationEnvironmentSystem.InformationEnvironment.VeryActualSituation"/>).</summary>
       public bool InformationEnvironmentVeryActual { get; set; }
+      /// <summary>Ячейка «Среда»: id метрики и величина давления со знаком (например <c>1:+10</c>).</summary>
+      public string EnvironmentPressureCell { get; set; }
+      /// <summary>Подсказка для ячейки «Среда» (описания метрик из справочника).</summary>
+      public string EnvironmentPressureTooltip { get; set; }
     }
 
     /// <summary>
@@ -670,7 +674,9 @@ namespace ISIDA.Common
                   state.InformationEnvironmentDanger,
                   state.InformationEnvironmentVeryActual,
                   state.CurrentAutomatizmUsefulness,
-                  state.BackgroundThinkingCyclesJson);
+                  state.BackgroundThinkingCyclesJson,
+                  state.EnvironmentPressureCell,
+                  state.EnvironmentPressureTooltip);
             }
 
             _displayLogWriter?.WriteLog(
@@ -696,7 +702,9 @@ namespace ISIDA.Common
                 state.InformationEnvironmentDanger,
                 state.InformationEnvironmentVeryActual,
                 state.CurrentAutomatizmUsefulness,
-                state.BackgroundThinkingCyclesJson);
+                state.BackgroundThinkingCyclesJson,
+                state.EnvironmentPressureCell,
+                state.EnvironmentPressureTooltip);
           }
 
           WriteBoth();
@@ -881,6 +889,12 @@ namespace ISIDA.Common
         ["Актуально"] = state.InformationEnvironmentVeryActual ? "1" : "0",
         ["Полезность"] = logAutomatizmId && state.CurrentAutomatizmUsefulness.HasValue
             ? state.CurrentAutomatizmUsefulness.Value.ToString()
+            : "",
+        ["Среда"] = !string.Equals(state.EnvironmentPressureCell ?? "", _lastState.EnvironmentPressureCell ?? "", StringComparison.Ordinal)
+            ? (state.EnvironmentPressureCell ?? "") : "",
+        ["Среда_подсказка"] = !string.Equals(state.EnvironmentPressureCell ?? "", _lastState.EnvironmentPressureCell ?? "", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(state.EnvironmentPressureTooltip)
+            ? state.EnvironmentPressureTooltip
             : ""
       };
     }
@@ -1051,6 +1065,21 @@ namespace ISIDA.Common
           backgroundThinkingCyclesJson = bgS;
       }
 
+      string environmentPressureCell = null;
+      if (logEntry.TryGetValue("Среда", out var envCellObj) && envCellObj != null)
+      {
+        var envS = envCellObj.ToString();
+        if (!string.IsNullOrWhiteSpace(envS))
+          environmentPressureCell = envS;
+      }
+      string environmentPressureTooltip = null;
+      if (logEntry.TryGetValue("Среда_подсказка", out var envTipObj) && envTipObj != null)
+      {
+        var envTip = envTipObj.ToString();
+        if (!string.IsNullOrWhiteSpace(envTip))
+          environmentPressureTooltip = envTip;
+      }
+
       int? baseId = logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString())
           ? int.Parse(logEntry["Состояние"].ToString())
           : (int?)null;
@@ -1106,7 +1135,9 @@ namespace ISIDA.Common
               dangerForWriter,
               veryActualForWriter,
               autoUsefulnessSnap,
-              backgroundThinkingCyclesJson);
+              backgroundThinkingCyclesJson,
+              environmentPressureCell,
+              environmentPressureTooltip);
         }
 
         _displayLogWriter?.WriteLog(
@@ -1132,7 +1163,9 @@ namespace ISIDA.Common
             dangerForWriter,
             veryActualForWriter,
             autoUsefulnessSnap,
-            backgroundThinkingCyclesJson);
+            backgroundThinkingCyclesJson,
+            environmentPressureCell,
+            environmentPressureTooltip);
       }
 
       WriteBoth();
@@ -1482,6 +1515,14 @@ namespace ISIDA.Common
         state.InformationEnvironmentVeryActual = InformationEnvironmentSystem.Instance.CurrentInformationEnvironment.VeryActualSituation;
       }
 
+      state.EnvironmentPressureCell = string.Empty;
+      state.EnvironmentPressureTooltip = string.Empty;
+      if (AppGlobalState.TryGetEnvironmentProbeEntriesForPulse(pulse, out var envEntries) && envEntries.Length > 0)
+      {
+        state.EnvironmentPressureCell = BuildEnvironmentPressureCell(envEntries);
+        state.EnvironmentPressureTooltip = BuildEnvironmentPressureTooltip(envEntries);
+      }
+
       // Если автоматизм был активирован на предыдущем пульсе, сбрасываем его
       if (atmInfo.Pulse == pulse - 1)
         AppGlobalState.ResetAutomatizmInfo();
@@ -1577,7 +1618,46 @@ namespace ISIDA.Common
              _lastState.InformationEnvironmentVeryActual != current.InformationEnvironmentVeryActual ||
              _lastState.CurrentAutomatizmUsefulness != current.CurrentAutomatizmUsefulness ||
              !string.Equals(_lastState.BackgroundThinkingCyclesJson ?? "", current.BackgroundThinkingCyclesJson ?? "",
+                 StringComparison.Ordinal) ||
+             !string.Equals(_lastState.EnvironmentPressureCell ?? "", current.EnvironmentPressureCell ?? "",
                  StringComparison.Ordinal);
+    }
+
+    private static string BuildEnvironmentPressureCell(AppGlobalState.EnvironmentProbeLogEntry[] entries)
+    {
+      if (entries == null || entries.Length == 0)
+        return string.Empty;
+      return string.Join(", ", entries
+          .OrderBy(e => e.ActionId)
+          .Select(e => $"{e.ActionId}:{FormatSignedEnvironmentMagnitude(e.SignedMagnitude)}"));
+    }
+
+    private static string FormatSignedEnvironmentMagnitude(int magnitude)
+    {
+      if (magnitude > 0)
+        return "+" + magnitude;
+      return magnitude.ToString();
+    }
+
+    private static string BuildEnvironmentPressureTooltip(AppGlobalState.EnvironmentProbeLogEntry[] entries)
+    {
+      if (entries == null || entries.Length == 0 || !InfluenceActionSystem.IsInitialized)
+        return string.Empty;
+      var all = InfluenceActionSystem.Instance.GetAllInfluenceActions();
+      var sb = new StringBuilder();
+      foreach (var entry in entries.OrderBy(e => e.ActionId))
+      {
+        var action = all.FirstOrDefault(a => a.Id == entry.ActionId);
+        string block = TooltipMultilineText.FormatEnvironmentMetricBlock(
+            entry.ActionId,
+            FormatSignedEnvironmentMagnitude(entry.SignedMagnitude),
+            action?.Name,
+            action?.Description);
+        if (sb.Length > 0)
+          sb.AppendLine();
+        sb.Append(block);
+      }
+      return sb.ToString().TrimEnd();
     }
 
     /// <summary>Статус задачи цикла (ожидание оценки / нет решения / есть автоматизм решения) — как флаги матрицы циклов.</summary>

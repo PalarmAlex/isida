@@ -288,8 +288,11 @@ namespace ISIDA.Reflexes
         if ((influenceActionIds != null && influenceActionIds.Any()) ||
             (commandPatternIds != null && commandPatternIds.Any()))
         {
+          var operatorInfluenceIds = InfluenceActionSystem.IsInitialized
+              ? InfluenceActionSystem.Instance.FilterOperatorStimulusActionIds(influenceActionIds)
+              : (influenceActionIds ?? new List<int>());
           actionImageId = PerceptionImagesSystem.Instance.AddPerceptionImage(
-              influenceActionIds ?? new List<int>(),
+              operatorInfluenceIds,
               new List<int>(),
               commandPatternIdList: commandPatternIds ?? new List<int>());
         }

@@ -4,6 +4,7 @@ using ISIDA.Gomeostas;
 using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 /// <summary>
@@ -1262,6 +1263,64 @@ public static class AppGlobalState
       _stimulusInfluenceActionIds.Clear();
     }
     finally { _lock.ExitWriteLock(); }
+  }
+
+  #endregion
+
+  #region Давление метрик среды (для лога / UI)
+
+  /// <summary>Запись давления или отпускания метрики среды на пульсе.</summary>
+  public sealed class EnvironmentProbeLogEntry
+  {
+    /// <summary>ID метрики среды из InfluenceActions.dat.</summary>
+    public int ActionId { get; set; }
+    /// <summary>Величина из справочника со знаком: «+» — давление, «−» — отпускание.</summary>
+    public int SignedMagnitude { get; set; }
+  }
+
+  private static int _environmentProbePulse;
+  private static readonly List<EnvironmentProbeLogEntry> _environmentProbeEntries = new List<EnvironmentProbeLogEntry>();
+
+  /// <summary>Зафиксировать метрику среды на текущем глобальном пульсе (накапливается без дубликатов id).</summary>
+  public static void RecordEnvironmentProbeAction(int actionId, int signedMagnitude)
+  {
+    if (actionId <= 0 || signedMagnitude == 0)
+      return;
+    int pulse = GlobalTimer.GlobalPulsCount;
+    _lock.EnterWriteLock();
+    try
+    {
+      if (_environmentProbePulse != pulse)
+      {
+        _environmentProbePulse = pulse;
+        _environmentProbeEntries.Clear();
+      }
+      int idx = _environmentProbeEntries.FindIndex(e => e.ActionId == actionId);
+      if (idx >= 0)
+        _environmentProbeEntries[idx].SignedMagnitude = signedMagnitude;
+      else
+        _environmentProbeEntries.Add(new EnvironmentProbeLogEntry { ActionId = actionId, SignedMagnitude = signedMagnitude });
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Снимок давления метрик среды для указанного глобального пульса (пустой, если на пульсе не было воздействий).</summary>
+  public static bool TryGetEnvironmentProbeEntriesForPulse(int pulse, out EnvironmentProbeLogEntry[] entries)
+  {
+    entries = Array.Empty<EnvironmentProbeLogEntry>();
+    if (pulse <= 0)
+      return false;
+    _lock.EnterReadLock();
+    try
+    {
+      if (_environmentProbePulse != pulse || _environmentProbeEntries.Count == 0)
+        return false;
+      entries = _environmentProbeEntries
+          .Select(e => new EnvironmentProbeLogEntry { ActionId = e.ActionId, SignedMagnitude = e.SignedMagnitude })
+          .ToArray();
+      return entries.Length > 0;
+    }
+    finally { _lock.ExitReadLock(); }
   }
 
   #endregion

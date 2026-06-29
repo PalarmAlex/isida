@@ -21,7 +21,9 @@ namespace ISIDA.Common
                  bool informationEnvironmentDanger = false,
                  bool informationEnvironmentVeryActual = false,
                  int? automatizmUsefulnessAtSnapshot = null,
-                 string backgroundThinkingCyclesJson = null);
+                 string backgroundThinkingCyclesJson = null,
+                 string environmentPressureCell = null,
+                 string environmentPressureTooltip = null);
 
     /// <summary>
     /// Записывает лог параметров гомеостаза
