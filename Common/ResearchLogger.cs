@@ -861,7 +861,10 @@ namespace ISIDA.Common
         ["Усл. рефлекс"] = reflexSuppressedByAutomatizm
             ? ""
             : (!AreReflexesEqual(_lastState.CurrentGeneticReflexID, _lastState.CurrentConditionReflexID, state.CurrentGeneticReflexID, state.CurrentConditionReflexID)
-                ? (state.CurrentConditionReflexID?.ToString() ?? "") : ""),
+                ? (state.CurrentConditionReflexID.HasValue && state.CurrentConditionReflexID.Value > 0
+                    ? state.CurrentConditionReflexID.Value.ToString()
+                    : "")
+                : ""),
         // Автоматизм — при смене ID или при смене полезности того же ID (иначе в строке была бы «Полезность» без номера).
         ["Автоматизм"] = logAutomatizmId ? state.CurrentAutomatizmID.ToString() : "",
         ["Цепочка РФ"] = reflexChainInfo,
@@ -1079,6 +1082,12 @@ namespace ISIDA.Common
         if (!string.IsNullOrWhiteSpace(envTip))
           environmentPressureTooltip = envTip;
       }
+      if (!string.IsNullOrWhiteSpace(environmentPressureCell) && string.IsNullOrWhiteSpace(environmentPressureTooltip) &&
+          AppGlobalState.TryGetEnvironmentProbeEntriesForPulse(pulseForWriter, out var envProbeEntries) &&
+          envProbeEntries.Length > 0)
+      {
+        environmentPressureTooltip = BuildEnvironmentPressureTooltip(envProbeEntries);
+      }
 
       int? baseId = logEntry.ContainsKey("Состояние") && !string.IsNullOrEmpty(logEntry["Состояние"].ToString())
           ? int.Parse(logEntry["Состояние"].ToString())
@@ -1092,9 +1101,10 @@ namespace ISIDA.Common
       int? genRef = logEntry.ContainsKey("Б/у рефлекс") && !string.IsNullOrEmpty(logEntry["Б/у рефлекс"].ToString())
           ? int.Parse(logEntry["Б/у рефлекс"].ToString())
           : (int?)null;
-      int? condRef = logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString())
-          ? int.Parse(logEntry["Усл. рефлекс"].ToString())
-          : (int?)null;
+      int? condRef = null;
+      if (logEntry.ContainsKey("Усл. рефлекс") && !string.IsNullOrEmpty(logEntry["Усл. рефлекс"].ToString()) &&
+          int.TryParse(logEntry["Усл. рефлекс"].ToString(), out int condParsed) && condParsed > 0)
+        condRef = condParsed;
       int? autoId = logEntry.ContainsKey("Автоматизм") && !string.IsNullOrEmpty(logEntry["Автоматизм"].ToString())
           ? int.Parse(logEntry["Автоматизм"].ToString())
           : (int?)null;
@@ -1867,7 +1877,8 @@ namespace ISIDA.Common
     {
       try
       {
-        return _reflexesActivator.ActiveConditionReflexID;
+        int id = _reflexesActivator.ActiveConditionReflexID;
+        return id > 0 ? (int?)id : null;
       }
       catch (Exception ex)
       {

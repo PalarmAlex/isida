@@ -1281,6 +1281,26 @@ public static class AppGlobalState
   private static int _environmentProbePulse;
   private static readonly List<EnvironmentProbeLogEntry> _environmentProbeEntries = new List<EnvironmentProbeLogEntry>();
 
+  /// <summary>Зафиксировать давление метрики среды (величина из справочника со знаком «+»).</summary>
+  public static void RecordEnvironmentProbePressure(int actionId)
+  {
+    if (actionId <= 0 || !InfluenceActionSystem.IsInitialized)
+      return;
+    int magnitude = InfluenceActionSystem.Instance.GetInfluenceMagnitudeSum(actionId);
+    if (magnitude > 0)
+      RecordEnvironmentProbeAction(actionId, magnitude);
+  }
+
+  /// <summary>Зафиксировать отпускание метрики среды (величина из справочника со знаком «−»).</summary>
+  public static void RecordEnvironmentProbeRelease(int actionId)
+  {
+    if (actionId <= 0 || !InfluenceActionSystem.IsInitialized)
+      return;
+    int magnitude = InfluenceActionSystem.Instance.GetInfluenceMagnitudeSum(actionId);
+    if (magnitude > 0)
+      RecordEnvironmentProbeAction(actionId, -magnitude);
+  }
+
   /// <summary>Зафиксировать метрику среды на текущем глобальном пульсе (накапливается без дубликатов id).</summary>
   public static void RecordEnvironmentProbeAction(int actionId, int signedMagnitude)
   {

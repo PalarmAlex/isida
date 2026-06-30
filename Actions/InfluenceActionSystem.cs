@@ -165,6 +165,11 @@ namespace ISIDA.Actions
       /// <summary>true, если воздействие привязано к метрике среды (непустой ProbeKey в InfluenceActions.dat).</summary>
       public bool IsEnvironmentProbeAction =>
           !string.IsNullOrWhiteSpace(ProbeKey);
+
+      /// <summary>
+      /// Активна ли метрика среды (опрос probe и давление на виталы). Для операторских EA всегда true.
+      /// </summary>
+      public bool IsActive { get; set; } = true;
     }
 
     #endregion
@@ -668,6 +673,44 @@ namespace ISIDA.Actions
               .ToList());
     }
 
+    /// <summary>Активные метрики среды (опрос и давление разрешены).</summary>
+    public ReadOnlyCollection<GomeostasisInfluenceAction> GetActiveEnvironmentInfluenceActions()
+    {
+      return new ReadOnlyCollection<GomeostasisInfluenceAction>(
+          _influenceActions.Values
+              .Where(a => a.IsEnvironmentProbeAction && a.IsActive)
+              .OrderBy(a => a.Id)
+              .ToList());
+    }
+
+    /// <summary>
+    /// Включает или выключает метрику среды. Сохраняет файл при стадии 0.
+    /// </summary>
+    public (bool Success, string ErrorMessage) TrySetEnvironmentMetricActive(int actionId, bool isActive)
+    {
+      if (actionId <= 0)
+        return (false, "Некорректный ID метрики.");
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_influenceActions.TryGetValue(actionId, out GomeostasisInfluenceAction action)
+            || !action.IsEnvironmentProbeAction)
+          return (false, "Метрика среды не найдена.");
+
+        action.IsActive = isActive;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      if (AppGlobalState.EvolutionStage == 0)
+        return SaveInfluenceActions(false);
+
+      return (true, null);
+    }
+
     /// <summary>EA с указанным ProbeKey или null.</summary>
     public GomeostasisInfluenceAction GetInfluenceActionByProbeKey(string probeKey)
     {
@@ -949,6 +992,9 @@ namespace ISIDA.Actions
             if (parts.Length >= 6)
               action.ProbeKey = parts[5].Trim();
 
+            if (parts.Length >= 7)
+              action.IsActive = ParseInfluenceActiveField(parts[6]);
+
             _influenceActions[action.Id] = action;
             if (action.Id > _lastGomeoActionId)
               _lastGomeoActionId = action.Id;
@@ -962,7 +1008,8 @@ namespace ISIDA.Actions
             FileValidator.FileHeaders.InfluenceActionsFormat,
             FileValidator.FileHeaders.InfluenceActionsBenefit,
             FileValidator.FileHeaders.InfluenceAntagonists,
-            FileValidator.FileHeaders.InfluenceActionsProbeKey
+            FileValidator.FileHeaders.InfluenceActionsProbeKey,
+            FileValidator.FileHeaders.InfluenceActionsActive
           };
           File.WriteAllLines(path, lines);
           _influenceActions.Clear();
@@ -999,7 +1046,8 @@ namespace ISIDA.Actions
             FileValidator.FileHeaders.InfluenceActionsFormat,
             FileValidator.FileHeaders.InfluenceActionsBenefit,
             FileValidator.FileHeaders.InfluenceAntagonists,
-            FileValidator.FileHeaders.InfluenceActionsProbeKey
+            FileValidator.FileHeaders.InfluenceActionsProbeKey,
+            FileValidator.FileHeaders.InfluenceActionsActive
           };
 
         foreach (var action in _influenceActions.Values.OrderBy(a => a.Id))
@@ -1007,9 +1055,10 @@ namespace ISIDA.Actions
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
                    $"{InfluencesToString(action.Influences)}|" +
                    $"{string.Join(",", action.AntagonistInfluences)}|" +
-                   $"{(action.ProbeKey ?? string.Empty).Trim()}");
+                   $"{(action.ProbeKey ?? string.Empty).Trim()}|" +
+                   $"{FormatInfluenceActiveField(action)}");
         }
-        var linCount = 5;
+        var linCount = 6;
         if (lines.Count == 4)
           linCount = 4; // для случая очистки всего кроме шапки
 
@@ -1172,6 +1221,29 @@ namespace ISIDA.Actions
     private string InfluencesToString(Dictionary<int, int> influences)
     {
       return string.Join(";", influences.Select(kv => $"{kv.Key}:{kv.Value}"));
+    }
+
+    private static bool ParseInfluenceActiveField(string raw)
+    {
+      if (string.IsNullOrWhiteSpace(raw))
+        return true;
+
+      string v = raw.Trim();
+      if (string.Equals(v, "false", StringComparison.OrdinalIgnoreCase)
+          || string.Equals(v, "0", StringComparison.Ordinal)
+          || string.Equals(v, "нет", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+      return true;
+    }
+
+    private static string FormatInfluenceActiveField(GomeostasisInfluenceAction action)
+    {
+      if (action == null)
+        return "true";
+      if (!action.IsEnvironmentProbeAction)
+        return action.IsActive ? "true" : "false";
+      return action.IsActive ? "true" : "false";
     }
 
     #endregion

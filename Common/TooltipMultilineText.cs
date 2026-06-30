@@ -42,11 +42,20 @@ namespace ISIDA.Common
       {
         if (descriptionLines.Count == 0)
           return;
-        sb.AppendLine();
-        if (descriptionLines.Count == 1)
-          sb.Append(Format(descriptionLines[0]));
+        if (descriptionLines.Count == 1 && !LooksLikeEnvironmentMetricDescription(descriptionLines[0]))
+        {
+          if (sb.Length > 0)
+            sb.AppendLine();
+          sb.Append(descriptionLines[0]);
+        }
         else
-          sb.Append(string.Join(Environment.NewLine, descriptionLines));
+        {
+          sb.AppendLine();
+          if (descriptionLines.Count == 1)
+            sb.Append(Format(descriptionLines[0]));
+          else
+            sb.Append(string.Join(Environment.NewLine, descriptionLines));
+        }
         descriptionLines.Clear();
       }
 
@@ -96,6 +105,20 @@ namespace ISIDA.Common
 
     private static readonly Regex EnvironmentMetricMagnitudeLineRegex =
         new Regex(@"^\d+:[+\-]?\d+$", RegexOptions.CultureInvariant);
+
+    private static bool LooksLikeEnvironmentMetricDescription(string line)
+    {
+      if (string.IsNullOrWhiteSpace(line))
+        return false;
+      line = line.Trim();
+      if (line.IndexOf("; ", StringComparison.Ordinal) >= 0)
+        return true;
+      if (line.StartsWith("Деталь:", StringComparison.Ordinal) ||
+          line.StartsWith("Сборка:", StringComparison.Ordinal) ||
+          line.StartsWith("Один критерий", StringComparison.Ordinal))
+        return true;
+      return line.Length > 96;
+    }
 
     private static string CollapseWhitespace(string text)
     {
