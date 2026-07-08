@@ -129,7 +129,10 @@ namespace ISIDA.Actions
       /// Влияние возддействия на параметры гомеостаза (положительное или отрицательное)
       /// </summary>
       /// <remarks>
-      /// Ключ - ID параметра, значение - величина воздействия (-10..+10)
+      /// Ключ — ID параметра, значение — величина воздействия (−10…+10).
+      /// Для метрик среды (непустой <see cref="ProbeKey"/>) при сохранении |значение| должно быть
+      /// больше <see cref="Gomeostas.GomeostasSystem.DifSensorPar"/>, иначе движок не зафиксирует
+      /// значимый «удар» и временное состояние Плохо/Хорошо.
       /// </remarks>
       public Dictionary<int, int> Influences
       {
@@ -1139,6 +1142,21 @@ namespace ISIDA.Actions
               errorMessage =
                   $"Гомеостатическое воздействие с ID {action.Id}: при заданном ProbeKey антагонисты должны быть пусты.";
               return false;
+            }
+
+            float minPressureMagnitude = _gomeostas.DifSensorPar;
+            foreach (KeyValuePair<int, int> inf in action.Influences)
+            {
+              if (inf.Value == 0)
+                continue;
+              if (Math.Abs(inf.Value) <= minPressureMagnitude)
+              {
+                errorMessage =
+                    $"Гомеостатическое воздействие с ID {action.Id}: величина давления на параметр {inf.Key} " +
+                    $"({inf.Value}) должна быть по модулю больше DifSensorPar ({minPressureMagnitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}), " +
+                    "чтобы в движке срабатывало временное состояние Плохо/Хорошо.";
+                return false;
+              }
             }
           }
 

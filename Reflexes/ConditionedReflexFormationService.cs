@@ -132,6 +132,9 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
+        if (geneticReflexId == 0)
+          TryStrengthenNeutralSequentialLink(pulse, stimulusImageId);
+
         var record = new StimulusRecord
         {
           Pulse = pulse,
@@ -152,6 +155,35 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Укрепляет CS₁→CS₂ при нейтральной последовательной паре в окне τ.
+    /// </summary>
+    private void TryStrengthenNeutralSequentialLink(int currentPulse, int currentImageId)
+    {
+      if (_lastConditionedStimulus == null || !SensoryAssociationSystem.IsInitialized)
+        return;
+
+      int prevPulse = _lastConditionedStimulus.Pulse;
+      int prevImageId = _lastConditionedStimulus.StimulusImageId;
+      int timeWindow = _conditionedReflexes.Settings.TimeWindowPulses;
+
+      if (prevPulse >= currentPulse)
+        return;
+
+      if (currentPulse > prevPulse + timeWindow)
+        return;
+
+      if (prevImageId == currentImageId)
+        return;
+
+      if (_lastUnconditionedStimulus != null &&
+          _lastUnconditionedStimulus.Pulse > prevPulse &&
+          _lastUnconditionedStimulus.Pulse < currentPulse)
+        return;
+
+      SensoryAssociationSystem.Instance.StrengthenLink(prevImageId, currentImageId);
     }
 
     /// <summary>
@@ -214,8 +246,10 @@ namespace ISIDA.Reflexes
         }
       }
 
-      // Применяем затухание ко всем условным рефлексам
+      // Применяем затухание ко всем условным рефлексам и сенсорным связям
       _conditionedReflexes.ApplyDecay();
+      if (SensoryAssociationSystem.IsInitialized)
+        SensoryAssociationSystem.Instance.ApplyDecay();
     }
 
     /// <summary>
@@ -347,71 +381,11 @@ namespace ISIDA.Reflexes
       if (_lastConditionedStimulus.StimulusImageId == reinforcingStimulusImageId)
         return;
 
-      ProcessSecondaryConditionedAssociation(
-          _lastConditionedStimulus,
-          parentReflex,
-          currentPulse,
-          authoritativeMode);
-    }
-
-    /// <summary>
-    /// Обрабатывает ассоциацию для вторичного условного рефлекса
-    /// </summary>
-    private void ProcessSecondaryConditionedAssociation(
-        StimulusRecord conditionedStimulus,
-        ConditionedReflexesSystem.ConditionedReflex parentConditionedReflex,
-        int currentPulse,
-        bool authoritativeMode)
-    {
-      try
+      if (SensoryAssociationSystem.IsInitialized)
       {
-        var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
-            .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
-            .ToList();
-
-        bool foundMatchingReflex = false;
-
-        foreach (var existingReflex in existingReflexes)
-        {
-          if (existingReflex.Level1 == conditionedStimulus.BaseState &&
-              existingReflex.Level2.OrderBy(x => x).SequenceEqual(GetCurrentStyleIds().OrderBy(x => x)) &&
-              existingReflex.ToneId == conditionedStimulus.ToneId &&
-              existingReflex.MoodId == conditionedStimulus.MoodId)
-          {
-            _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
-            foundMatchingReflex = true;
-            Logger.Info($"Усилен вторичный условный рефлекс ID={existingReflex.Id} " +
-                       $"(порядок {existingReflex.Order}) от условного {parentConditionedReflex.Id}");
-            break;
-          }
-        }
-
-        if (!foundMatchingReflex)
-        {
-          List<int> reflexStyles = GetCurrentStyleIds();
-
-          var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
-              level1: conditionedStimulus.BaseState,
-              level2: reflexStyles,
-              level3: conditionedStimulus.StimulusImageId,
-              sourceGeneticReflexId: parentConditionedReflex.SourceGeneticReflexId,
-              authoritativeMod: authoritativeMode,
-              toneId: conditionedStimulus.ToneId,
-              moodId: conditionedStimulus.MoodId,
-              sourceConditionedReflexId: parentConditionedReflex.Id);
-
-          if (newReflexId > 0)
-          {
-            int newOrder = parentConditionedReflex.Order + 1;
-            Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
-                       $"от условного {parentConditionedReflex.Id} " +
-                       $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
-          }
-        }
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
+        SensoryAssociationSystem.Instance.StrengthenLink(
+            _lastConditionedStimulus.StimulusImageId,
+            reinforcingStimulusImageId);
       }
     }
 

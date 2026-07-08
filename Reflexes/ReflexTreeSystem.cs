@@ -1,5 +1,6 @@
 using ISIDA.Actions;
 using ISIDA.Common;
+using ISIDA.Psychic.Automatism;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -102,12 +103,70 @@ namespace ISIDA.Reflexes
 
     private void OnGeneticReflexDeleted(int reflexId)
     {
+      if (ShouldPerformFullGeneticReflexesCascadeCleanup())
+      {
+        PerformFullGeneticReflexesCascadeCleanup();
+        return;
+      }
+
       RemoveGeneticReflexReferencesOptimized(reflexId);
     }
 
     private void OnMultipleGeneticReflexesDeleted(List<int> reflexIds)
     {
+      if (ShouldPerformFullGeneticReflexesCascadeCleanup())
+      {
+        PerformFullGeneticReflexesCascadeCleanup();
+        return;
+      }
+
       RemoveMultipleGeneticReflexReferences(reflexIds);
+    }
+
+    private bool ShouldPerformFullGeneticReflexesCascadeCleanup()
+    {
+      if (_geneticReflexesSystem.IsGeneticReflexesCascadeCleanupSuppressed)
+        return false;
+
+      return !_geneticReflexesSystem.GetAllGeneticReflexesList().Any();
+    }
+
+    /// <summary>
+    /// Полная каскадная очистка структур, связанных с безусловными рефлексами,
+    /// когда в системе не осталось ни одного безусловного рефлекса.
+    /// </summary>
+    private void PerformFullGeneticReflexesCascadeCleanup()
+    {
+      try
+      {
+        ClearReflexTreeCompletely();
+        _reflexChainsSystem.RemoveAllReflexChains();
+
+        var (chainsSaved, chainsError) = _reflexChainsSystem.SaveReflexChains();
+        if (!chainsSaved)
+          Logger.Warning($"Не удалось сохранить цепочки после полной очистки: {chainsError}");
+
+        _perceptionImagesSystem.ClearAllBehaviorStyleImages();
+        _perceptionImagesSystem.ClearAllPerceptionImages();
+
+        var (imagesSaved, imagesError) = _perceptionImagesSystem.SaveAllImages();
+        if (!imagesSaved)
+          Logger.Warning($"Не удалось сохранить образы восприятия после полной очистки: {imagesError}");
+
+        if (ActionsImagesSystem.IsInitialized)
+        {
+          ActionsImagesSystem.Instance.ClearAllActionsImages();
+          var (actionsImagesSaved, actionsImagesError) = ActionsImagesSystem.Instance.SaveAllActionsImages();
+          if (!actionsImagesSaved)
+            Logger.Warning($"Не удалось сохранить action_images после полной очистки: {actionsImagesError}");
+        }
+
+        Logger.Info("Выполнена полная каскадная очистка данных безусловных рефлексов");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"Ошибка полной каскадной очистки безусловных рефлексов: {ex.Message}");
+      }
     }
 
     private void OnGeneticReflexCreated(GeneticReflexesSystem.GeneticReflexCreatedEventArgs e)

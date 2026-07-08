@@ -25,6 +25,12 @@ namespace ISIDA.Common
       public const string ConditionedReflexesSourceConditioned = "# SourceConditionedReflexId: ID родительского условного рефлекса (0 для первичных)";
       public const string ConditionedReflexesOrder = "# Order: порядок рефлекса (1=первичный, 2=вторичный, 3=третичный)";
 
+      // Сенсорные ассоциации CS₁→CS₂
+      public const string SensoryAssociationsFormat =
+          "# SensoryAssociations: направленные сенсорные связи между образами восприятия";
+      public const string SensoryAssociationsFields =
+          "# Format: EarlierImageId|LaterImageId|Strength|LastStrengthen|BirthTime|MaxAchievedStrength";
+
       // Образы восприятия (пусковые стимулы для условных рефлексов)
       public const string PerceptionImagesFormat = "# ID|InfluenceActionsList|PhraseIdList|CommandPatternIdList|VisualColorId";
       public const string PerceptionImagesLists = "# Формат списков: id1,id2,id3";

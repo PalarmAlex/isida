@@ -243,6 +243,25 @@ namespace ISIDA.Reflexes
     private readonly Dictionary<int, GeneticReflex> _geneticReflexes = new Dictionary<int, GeneticReflex>();
     private readonly List<GeneticReflex> _activeGeneticReflexes = new List<GeneticReflex>();
     private int _lastGeneticReflexId = 0;
+    private int _cascadeCleanupSuppressCount = 0;
+
+    /// <summary>
+    /// Подавлена ли полная каскадная очистка (например, при промежуточном удалении в UpdateGeneticReflex).
+    /// </summary>
+    internal bool IsGeneticReflexesCascadeCleanupSuppressed => _cascadeCleanupSuppressCount > 0;
+
+    /// <summary>Временно подавляет полную каскадную очистку связанных структур.</summary>
+    internal void EnterGeneticReflexesCascadeCleanupSuppress()
+    {
+      _cascadeCleanupSuppressCount++;
+    }
+
+    /// <summary>Снимает подавление полной каскадной очистки.</summary>
+    internal void ExitGeneticReflexesCascadeCleanupSuppress()
+    {
+      if (_cascadeCleanupSuppressCount > 0)
+        _cascadeCleanupSuppressCount--;
+    }
 
     #endregion
 
@@ -546,6 +565,7 @@ namespace ISIDA.Reflexes
       }
 
       // Если условия изменились - удаляем и создаем заново
+      EnterGeneticReflexesCascadeCleanupSuppress();
       try
       {
         // Сохраняем параметры для создания нового рефлекса
@@ -608,6 +628,10 @@ namespace ISIDA.Reflexes
       {
         warnings.Add($"Ошибка при обновлении рефлекса: {ex.Message}");
         throw new InvalidOperationException($"Ошибка при обновлении рефлекса: {ex.Message}", ex);
+      }
+      finally
+      {
+        ExitGeneticReflexesCascadeCleanupSuppress();
       }
     }
 

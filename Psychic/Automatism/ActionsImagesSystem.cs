@@ -658,6 +658,22 @@ namespace ISIDA.Psychic.Automatism
       }
     }
 
+    /// <summary>
+    /// Сохраняет все образы действий (action_images.dat) на диск.
+    /// </summary>
+    public (bool Success, string ErrorMessage) SaveAllActionsImages()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        return SaveActionsImagesNoLock();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
     #endregion
 
     #region Работа с файлами

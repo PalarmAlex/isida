@@ -472,6 +472,8 @@ namespace ISIDA.Common
       SafeDispose(ReflexTree, "ReflexTree");
       SafeDispose(ReflexChains, "ReflexChains");
       SafeDispose(ConditionedReflexes, "ConditionedReflexes");
+      if (SensoryAssociationSystem.IsInitialized)
+        SafeDispose(SensoryAssociationSystem.Instance, "SensoryAssociationSystem");
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
@@ -715,6 +717,10 @@ namespace ISIDA.Common
             context.GeneticReflexes,
             context.PerceptionImages);
         context.ConditionedReflexes = ConditionedReflexesSystem.Instance;
+
+        SensoryAssociationSystem.InitializeInstance(
+            context.GeneticReflexes,
+            context.ConditionedReflexes);
 
         // Шаг 13: Дерево рефлексов
         initializationStep = 13;

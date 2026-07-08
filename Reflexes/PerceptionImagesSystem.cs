@@ -730,6 +730,22 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Сохраняет все образы восприятия и стилей поведения на диск.
+    /// </summary>
+    public (bool Success, string ErrorMessage) SaveAllImages()
+    {
+      try
+      {
+        SaveAll();
+        return (true, string.Empty);
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+    }
+
+    /// <summary>
     /// Сохраняет все данные образов
     /// </summary>
     internal void SaveAll()

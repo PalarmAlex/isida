@@ -75,10 +75,9 @@ namespace ISIDA.Reflexes
   /// <summary>
   /// Система управления условными рефлексами симбионта.
   /// Активация по пусковому образу (<see cref="ConditionedReflex.Level3"/>) использует иерархию
-  /// «полный / частичный стимул» через отношение подмножества на <see cref="PerceptionImagesSystem.PerceptionImage"/>  
-  /// (обобщение по структуре образа). Это не отдельная ассоциативная сеть «стимул–стимул» в смысле
-  /// сенсорной прекондиции с явным хранением пар CS–CS; перенос и частичное срабатывание следуют из
-  /// совместимости признаков действие / фраза / цвет в одном дереве образов восприятия.
+  /// «бедный / богатый стимул» через отношение подмножества на <see cref="PerceptionImagesSystem.PerceptionImage"/>
+  /// при наличии выученной направленной связи CS₁→CS₂ в <see cref="SensoryAssociationSystem"/>
+  /// (крепость ≥ γ). Точное совпадение обрабатывается деревом рефлексов без гейта связи.
   /// </summary>
   public sealed class ConditionedReflexesSystem : IDisposable
   {
@@ -1059,8 +1058,18 @@ namespace ISIDA.Reflexes
             {
               var img = allImages.FirstOrDefault(i => i.Id == r.Level3);
               if (img == null) return false;
-              return PerceptionImagesSystem.GetTriggerSpecificityTier(img) == reflexTier &&
-                     PerceptionImagesSystem.StimulusImagesHierarchyCompatible(S, img);
+              if (PerceptionImagesSystem.GetTriggerSpecificityTier(img) != reflexTier)
+                return false;
+              if (PerceptionImagesSystem.PerceptionImagesEqual(S, img))
+                return false;
+              if (!PerceptionImagesSystem.StimulusImagesHierarchyCompatible(S, img))
+                return false;
+              if (IsPoorStimulusRichReflex(S, img))
+              {
+                return SensoryAssociationSystem.IsInitialized &&
+                       SensoryAssociationSystem.Instance.IsLinkActivatable(S.Id, r.Level3);
+              }
+              return false;
             })
             .ToList();
 
@@ -1227,6 +1236,29 @@ namespace ISIDA.Reflexes
     private int GetAgentLifetime()
     {
       return _currentAgentLifetime;
+    }
+
+    /// <summary>
+    /// Проверяет, является ли стимул S строго беднее пускового образа рефлекса (подмножество, не равенство).
+    /// </summary>
+    private static bool IsPoorStimulusRichReflex(
+        PerceptionImagesSystem.PerceptionImage stimulus,
+        PerceptionImagesSystem.PerceptionImage reflexTrigger)
+    {
+      if (stimulus == null || reflexTrigger == null)
+        return false;
+
+      if (PerceptionImagesSystem.PerceptionImagesEqual(stimulus, reflexTrigger))
+        return false;
+
+      int sColor = stimulus.VisualColorId;
+      int rColor = reflexTrigger.VisualColorId;
+      bool colorStimulusSubsetTrigger =
+          sColor == AgentVisualColor.White || sColor == rColor;
+
+      return colorStimulusSubsetTrigger &&
+          PerceptionImagesSystem.IsIntListSubset(stimulus.InfluenceActionsList, reflexTrigger.InfluenceActionsList) &&
+          PerceptionImagesSystem.IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList);
     }
 
     /// <summary>
