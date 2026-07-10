@@ -1239,6 +1239,25 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Пара CSₐ→CSᵦ относится к сенсорной прекондиции: более ранний образ строго беднее
+    /// последующего (подмножество модальностей). Такие пары учатся через
+    /// <see cref="SensoryAssociationSystem"/> и иерархический гейт, а не через вторичный CR.
+    /// </summary>
+    public bool IsSensoryPreconditioningPair(int earlierImageId, int laterImageId)
+    {
+      if (earlierImageId <= 0 || laterImageId <= 0 || earlierImageId == laterImageId)
+        return false;
+
+      var allImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
+      var earlier = allImages.FirstOrDefault(img => img.Id == earlierImageId);
+      var later = allImages.FirstOrDefault(img => img.Id == laterImageId);
+      if (earlier == null || later == null)
+        return false;
+
+      return IsPoorStimulusRichReflex(earlier, later);
+    }
+
+    /// <summary>
     /// Проверяет, является ли стимул S строго беднее пускового образа рефлекса (подмножество, не равенство).
     /// </summary>
     private static bool IsPoorStimulusRichReflex(

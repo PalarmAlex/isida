@@ -487,9 +487,9 @@ namespace ISIDA.Reflexes
 
         if (_activeCurTriggerStimulusID != 0)
         {
-          // Вторичное обусловливание: если эта фраза активировала у-рефлекс,
-          // проверяем, не было ли перед ней другой фразы (CS) во временном окне.
-          // Проверка до RecordStimulus, чтобы _lastConditionedStimulus ещё хранил предыдущий CS.
+          // Вторичное обусловливание: CSᵦ активировал у-рефлекс → для предшествующего CSₐ
+          // (вне пары «бедный⊂богатый») создаётся CR порядка ≥2. Пары сенсорной прекондиции
+          // обрабатываются только через SensoryAssociationSystem при RecordStimulus.
           if (_activeConditionReflexID != 0)
           {
             _reflexFormationService.CheckSecondaryConditioning(
