@@ -587,6 +587,7 @@ namespace ISIDA.Reflexes
                 // Логируем как активацию условного рефлекса
                 _activeConditionReflexID = conditionedReflexId;
                 _activeGeneticReflexID = conditionedReflex.SourceGeneticReflexId;
+                AppGlobalState.CurrentConditionedReflexID = conditionedReflexId;
                 _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
                 _lastReflexActivationPulse = pulseCount;
                 lastActivatedReflexId = conditionedReflexId;
@@ -607,6 +608,8 @@ namespace ISIDA.Reflexes
             if (result.Success)
             {
               _activeGeneticReflexID = reflexId;
+              // Б/у ответ — не оставляем ID у-рефлекса от прошлого эпизода.
+              AppGlobalState.CurrentConditionedReflexID = 0;
               _lastReflexActivationPulse = pulseCount;
               lastActivatedReflexId = reflexId;
               lastWasConditioned = false;

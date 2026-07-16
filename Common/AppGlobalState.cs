@@ -55,6 +55,8 @@ public static class AppGlobalState
   private static List<int> _conditionReflexesActions = new List<int>();
   private static int _lastDetectedReflexNodeId = 0; // Для валидации изменений
   private static int _currentGeneticReflexID = 0; // ID безусловного рефлекса, чьи действия в GeneticReflexesActions
+  /// <summary>ID условного рефлекса, активировавшего моторный ответ (для адаптера среды до снимка в UI).</summary>
+  private static int _currentConditionedReflexID = 0;
 
   #endregion
 
@@ -586,6 +588,27 @@ public static class AppGlobalState
       _lock.EnterReadLock();
       try { return _currentGeneticReflexID; }
       finally { _lock.ExitReadLock(); }
+    }
+  }
+
+  /// <summary>
+  /// ID условного рефлекса, который активировал моторные действия (G_AD) в текущем эпизоде.
+  /// Адаптер среды снимает значение при открытии формы и сразу обнуляет.
+  /// Также обнуляется при успешной активации безусловного рефлекса.
+  /// </summary>
+  public static int CurrentConditionedReflexID
+  {
+    get
+    {
+      _lock.EnterReadLock();
+      try { return _currentConditionedReflexID; }
+      finally { _lock.ExitReadLock(); }
+    }
+    set
+    {
+      _lock.EnterWriteLock();
+      try { _currentConditionedReflexID = value > 0 ? value : 0; }
+      finally { _lock.ExitWriteLock(); }
     }
   }
 

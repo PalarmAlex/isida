@@ -762,6 +762,51 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Сбрасывает крепость условного рефлекса к начальной (как при создании без authoritative).
+    /// Обычно ниже порога активации γ — рефлекс перестаёт срабатывать, пока снова не окрепнет.
+    /// </summary>
+    /// <param name="reflexId">ID условного рефлекса</param>
+    /// <returns>Успех, сообщение, новая крепость (или −1 при ошибке)</returns>
+    public (bool Success, string Message, float NewStrength) ResetAssociationStrengthToInitial(int reflexId)
+    {
+      if (AppGlobalState.EvolutionStage < 1)
+        return (false, "Условные рефлексы доступны только начиная со стадии 1", -1f);
+
+      if (reflexId <= 0)
+        return (false, "Некорректный ID условного рефлекса", -1f);
+
+      float newStrength;
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_conditionedReflexes.TryGetValue(reflexId, out var reflex))
+          return (false, $"Условный рефлекс ID={reflexId} не найден", -1f);
+
+        float reductionCoeff = GetReductionCoefficientForOrder(reflex.Order);
+        newStrength = (_settings.MinAssociationStrength + 0.1f) / reductionCoeff;
+        if (newStrength < 0f)
+          newStrength = 0f;
+        if (newStrength > _settings.MaxAssociationStrength)
+          newStrength = _settings.MaxAssociationStrength;
+
+        float oldStrength = reflex.AssociationStrength;
+        reflex.AssociationStrength = newStrength;
+        Logger.Info(
+            $"Крепость у-рефлекса ID={reflexId} сброшена оператором: {oldStrength:F3} → {newStrength:F3}");
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      var save = SaveConditionedReflexes();
+      if (!save.Success)
+        return (false, "Крепость изменена в памяти, но не сохранена: " + (save.ErrorMessage ?? "ошибка записи"), newStrength);
+
+      return (true, $"Крепость условного рефлекса ID={reflexId} понижена до {newStrength.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}", newStrength);
+    }
+
+    /// <summary>
     /// Усиливает крепость одного рефлекса (без блокировки, вызывается внутри write-lock)
     /// </summary>
     private void StrengthenReflexInternal(ConditionedReflex reflex)
