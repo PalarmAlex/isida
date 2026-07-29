@@ -46,6 +46,15 @@ namespace ISIDA.Common
         case "MinAssociationStrength":
           return ValidateMinAssociationStrength((float)value);
 
+        case "PassiveDecayProtectionRatio":
+          return ValidatePassiveDecayProtectionRatio((float)value);
+
+        case "PassiveDecayHalfLifePulses":
+          return ValidatePassiveDecayHalfLifePulses((int)value);
+
+        case "ActiveExtinctionRate":
+          return ValidateActiveExtinctionRate((float)value);
+
         case "HigherOrderStrengthReductionCoefficient":
           return ValidateHigherOrderStrengthReductionCoefficient((float)value);
 
@@ -110,13 +119,43 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Валидация коэффициента затухания η
+    /// Валидация коэффициента затухания η (сенсорные ассоциации)
     /// </summary>
     public static (bool isValid, string errorMessage) ValidateDecayRate(float? value)
     {
       const string paramName = "Коэффициент затухания";
       const string range = "[0.95:0.99]";
       return ValidateValueCustom(value, paramName, 0.95f, 0.99f, range);
+    }
+
+    /// <summary>
+    /// Валидация доли от γ для защиты от пассивного забывания
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidatePassiveDecayProtectionRatio(float? value)
+    {
+      const string paramName = "Доля порога защиты от пассивного затухания";
+      const string range = "[1.0:2.0]";
+      return ValidateValueCustom(value, paramName, 1.0f, 2.0f, range);
+    }
+
+    /// <summary>
+    /// Валидация периода полураспада пассивного забывания (пульсы)
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidatePassiveDecayHalfLifePulses(int? value)
+    {
+      const string paramName = "Период полураспада пассивного затухания";
+      const string range = "[3600:604800] пульсов";
+      return ValidateValueCustom(value, paramName, 3600, 604800, range);
+    }
+
+    /// <summary>
+    /// Валидация скорости активного угасания α_ext
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidateActiveExtinctionRate(float? value)
+    {
+      const string paramName = "Скорость активного угасания";
+      const string range = "[0.01:0.2]";
+      return ValidateValueCustom(value, paramName, 0.01f, 0.2f, range);
     }
 
     /// <summary>

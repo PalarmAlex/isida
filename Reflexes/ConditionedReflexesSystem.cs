@@ -14,60 +14,64 @@ using static ISIDA.Common.FileValidator;
 /*
 МАТЕМАТИЧЕСКАЯ МОДЕЛЬ УСЛОВНЫХ РЕФЛЕКСОВ
 
-Основана на модели Рескорла-Вагнера с экспоненциальным затуханием:
+Основана на модели Рескорла–Вагнера (обучение и активное угасание) с отдельным
+медленным пассивным забыванием только для незакреплённых следов.
 
-1. Образование ассоциации (модель Рескорла-Вагнера):
-   C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
+1. Образование ассоциации (Rescorla–Wagner, λ = β):
+   C(k) = C(k-1) + α·(β − C(k-1))
    где:
-     C_ij ∈ [0, β] - крепость связи между стимулами
-     α ∈ (0,1) - коэффициент обучения (скорость приближения к асимптоте)
-     β = 1.0 - асимптотический максимум крепости
-     k - номер подтверждённой пары стимулов
+     C ∈ [0, β] — крепость связи
+     α ∈ (0,1) — коэффициент обучения
+     β = 1.0 — асимптотический максимум
+     k — номер подтверждённой пары CS–US (или вторичного подкрепления)
 
-2. Затухание связи:
-   C_ij(t+1) = η^(1/C_ij(t)) * C_ij(t)
-   где η ∈ (0,1) - коэффициент затухания
-   Чем прочнее рефлекс (выше C_ij), тем медленнее затухание
+2. Активное угасание (Rescorla–Wagner, λ = 0):
+   C ← C + α_ext·(0 − C)
+   Применяется только когда предъявлен CS (первый стимул пары), а US (второй)
+   не пришёл в окне τ. Действует на все УР с данным Level3, включая сильные.
+   Классическая RW не содержит пассивного decay по календарю — только trial-based
+   обновление при предъявлении CS.
 
-3. Активация рефлекса:
-   Условный рефлекс активируется при C_ij > γ, где γ ∈ (0,1) - порог автономной активации
+3. Пассивное забывание (расширение модели, не часть классической RW):
+   C ← C · 0.5^(Δ / T½)
+   где Δ — число пульсов жизни агента с прошлого применения (пропорционально,
+   без гейта «каждый N-й пульс»; короткие сессии суммируются).
+   Пассивное затухание НЕ применяется, если
+     MaxAchievedStrength ≥ γ · PassiveDecayProtectionRatio
+   (закреплённый след защищён от «гниения» просто от тиканья пульсации).
+   Для незащищённых T½ = PassiveDecayHalfLifePulses (для порядка ≥2 делится на K).
 
-4. Временное окно корреляции:
-   Стимулы S₁ и S₂ считаются коррелированными, если интервал между ними ≤ τ
+4. Активация:
+   УР активируется при C ≥ γ (и при компаунде — по правилам суммации/конкуренции).
 
-5. Управление временем жизни:
-   - Базовое время жизни: T_base
-   - Прочные рефлексы (MaxAchievedStrength > 0.8) живут в 10 раз дольше
-   - Расчетное время: T_calculated = T_base * (1 + MaxAchievedStrength * 10)
-   - Рефлекс удаляется при C_ij < C_min ИЛИ времени без активации > T_calculated
+5. Временное окно корреляции:
+   CS и US коррелированы, если интервал между ними ≤ τ пульсов.
 
-6. Прочность рефлекса:
-   - MaxAchievedStrength отслеживает максимальную достигнутую крепость
-   - IsEstablished = (MaxAchievedStrength > 0.8) - флаг установившегося рефлекса
+6. Удаление:
+   Рефлекс удаляется при C < C_min.
 
-7. Высшие порядки условных рефлексов (second/third-order conditioning):
-   Коэффициент понижения K ∈ [1.2, 3.0]:
-   - Первичный (порядок 1): образуется от безусловного. Без понижения.
-   - Вторичный (порядок 2): образуется от условного 1-го порядка.
-     α' = α/K, η' = η^K, начальная крепость /= K
-   - Третичный (порядок 3): образуется от условного 2-го порядка.
-     α' = α/(K·2), η' = η^(K·2), начальная крепость /= (K·2)
-   - При усилении родительского рефлекса каскадно усиливаются дочерние.
+7. Прочность / консолидация:
+   MaxAchievedStrength — максимум достигнутой крепости (не снижается при decay).
+   IsEstablished = (MaxAchievedStrength > 0.8).
+   Защита от пассива использует порог γ·PassiveDecayProtectionRatio (по умолчанию ≈0.8).
 
-8. Суммация крепости при компаундном стимуле (Rescorla, 1997; Weiss, 1972):
-   При совместном предъявлении S₁ и S₂, если оба имеют у-рефлексы
-   к одному безусловному ответу (одинаковый SourceGeneticReflexId):
-   C_combined = min(1.0, Σ C_i)
-   Рефлекс активируется, если C_combined ≥ γ (даже если каждый C_i < γ по отдельности)
+8. Высшие порядки (second/third-order conditioning):
+   K ∈ [1.2, 3.0]:
+   - Порядок 1: от безусловного, без понижения.
+   - Порядок 2: α' = α/K, начальная C /= K, пассивный T½ /= K.
+   - Порядок 3: α' = α/(K·2), начальная C /= (K·2), пассивный T½ /= (K·2).
+   - При усилении родителя каскадно усиливаются дочерние.
 
-9. Конкурентное подавление / смешанный ответ (Kamin, 1969; Bouton & Nelson, 1994):
-   При совместном предъявлении S₁ и S₂ с у-рефлексами к разным безусловным ответам:
-   θ = min(C₁, C₂) / max(C₁, C₂) — отношение крепостей
-   Если θ ≥ θ_comp → оба ответа активируются (смешанный ответ)
-   Если θ < θ_comp → активируется только сильнейший (конкурентное подавление)
+9. Суммация при компаунде (Rescorla, 1997; Weiss, 1972):
+   C_combined = min(1.0, Σ C_i); активация при C_combined ≥ γ.
+
+10. Конкурентное подавление / смешанный ответ (Kamin, 1969; Bouton & Nelson, 1994):
+    θ = min(C₁,C₂)/max(C₁,C₂); при θ ≥ θ_comp — оба ответа, иначе только сильнейший.
 
 Параметры по умолчанию:
-   α = 0.2, β = 1.0, η = 0.98, γ = 0.6, τ = 500 мс, C_min = 0.1, T_base = 1000, K = 1.5, θ_comp = 0.7
+   α = 0.2, β = 1.0, γ = 0.6, τ = 5 пульсов, C_min = 0.1, K = 1.5, θ_comp = 0.8,
+   PassiveDecayProtectionRatio = 1.33, PassiveDecayHalfLifePulses = 86400, α_ext = 0.05
+   (DecayRate η сохранён для сенсорных ассоциаций CS→CS, не для пассива УР.)
 */
 
 namespace ISIDA.Reflexes
@@ -256,7 +260,7 @@ namespace ISIDA.Reflexes
       }
 
       /// <summary>
-      /// Коэффициент затухания η (0.95-0.99)
+      /// Коэффициент затухания η для совместимости; пассив УР задаётся системными half-life настройками.
       /// </summary>
       public float DecayRate
       {
@@ -340,54 +344,46 @@ namespace ISIDA.Reflexes
       }
 
       /// <summary>
-      /// Применяет затухание с учетом прочности рефлекса
+      /// Синхронизирует MaxAchievedStrength с текущей крепостью (создание / загрузка).
       /// </summary>
-      public void ApplyDecay()
+      public void SyncMaxAchievedFromCurrent()
       {
-        // Применяем затухание только на каждом 100-м пульсе
-        int currentPulse = GetAgentLifetime();
-        if (currentPulse % 100 != 0)
+        if (AssociationStrength > MaxAchievedStrength)
+          MaxAchievedStrength = AssociationStrength;
+      }
+
+      /// <summary>
+      /// Пассивное забывание: C ← C · 0.5^(Δ/T½), только если след не закреплён.
+      /// </summary>
+      public void ApplyPassiveDecay(int deltaPulses, int halfLifePulses, float protectionThreshold)
+      {
+        if (deltaPulses <= 0 || halfLifePulses <= 0)
           return;
 
-        // Затухание: чем прочнее рефлекс, тем медленнее затухание
-        // Используем формулу: C(t+1) = η^(C(t)) * C(t)
-        // где η ∈ (0,1) - коэффициент затухания
-        float strengthFactor = Math.Max(0.1f, AssociationStrength);
+        if (MaxAchievedStrength >= protectionThreshold)
+          return;
 
-        // Для слабых рефлексов (strength < 0.3) используем более сильное затухание
-        // Для средних (0.3-0.7) - умеренное
-        // Для прочных (>0.7) - очень слабое затухание
-        float effectiveDecayRate;
-
-        if (AssociationStrength > 0.8f)
-          // Прочные рефлексы: почти не затухают
-          effectiveDecayRate = 0.998f;
-        else if (AssociationStrength > 0.4f)
-          // Средние рефлексы: умеренное затухание
-          // decayRate^strengthFactor: при strength=0.5, decayRate=0.98
-          // effectiveDecayRate = 0.98^0.5 ≈ 0.99
-          effectiveDecayRate = (float)Math.Pow(_decayRate, strengthFactor);
-        else
-          // Слабые рефлексы: нормальное затухание
-          effectiveDecayRate = (float)Math.Pow(_decayRate, Math.Sqrt(strengthFactor));
-
-        // Для вторичных/третичных: ускоренное затухание
+        double effectiveHalfLife = halfLifePulses;
         if (Order > 1)
         {
           float reductionCoeff = Instance.GetReductionCoefficientForOrder(Order);
-          effectiveDecayRate = (float)Math.Pow(effectiveDecayRate, reductionCoeff);
+          effectiveHalfLife = Math.Max(1.0, halfLifePulses / reductionCoeff);
         }
 
-        // Применяем затухание
-        float oldStrength = AssociationStrength;
-        AssociationStrength *= effectiveDecayRate;
+        float factor = (float)Math.Pow(0.5, deltaPulses / effectiveHalfLife);
+        AssociationStrength *= factor;
+      }
 
-        // Обновляем максимальную достигнутую прочность
-        if (AssociationStrength > MaxAchievedStrength)
-          MaxAchievedStrength = AssociationStrength;
+      /// <summary>
+      /// Активное угасание (RW, λ=0): C ← C + α_ext·(0 − C).
+      /// </summary>
+      public void ApplyActiveExtinction(float activeExtinctionRate)
+      {
+        if (activeExtinctionRate <= 0f)
+          return;
 
-        //Debug.WriteLine($"ApplyDecay: ID={Id}, Old={oldStrength:F3}, New={AssociationStrength:F3}, " +
-        //               $"DecayRate={effectiveDecayRate:F5}, Pulse={currentPulse}");
+        float alpha = Math.Min(1f, Math.Max(0f, activeExtinctionRate));
+        AssociationStrength = AssociationStrength + alpha * (0f - AssociationStrength);
       }
 
       /// <summary>
@@ -447,7 +443,8 @@ namespace ISIDA.Reflexes
       public float MaxAssociationStrength { get; set; } = 1.0f;
 
       /// <summary>
-      /// Коэффициент затухания η (0.95-0.99)
+      /// Коэффициент затухания η для сенсорных ассоциаций CS→CS (0.95-0.99).
+      /// Пассивное забывание УР задаётся PassiveDecayHalfLifePulses.
       /// </summary>
       public float DecayRate { get; set; } = 0.98f;
 
@@ -467,9 +464,24 @@ namespace ISIDA.Reflexes
       public int TimeWindowPulses { get; set; } = 5;
 
       /// <summary>
+      /// Доля от γ: MaxAchievedStrength ≥ γ·ratio → пассивное забывание не применяется.
+      /// </summary>
+      public float PassiveDecayProtectionRatio { get; set; } = 1.33f;
+
+      /// <summary>
+      /// Период полураспада пассивного забывания незащищённых УР (пульсы жизни агента).
+      /// </summary>
+      public int PassiveDecayHalfLifePulses { get; set; } = 86400;
+
+      /// <summary>
+      /// Скорость активного угасания α_ext при CS без US (0.01-0.2).
+      /// </summary>
+      public float ActiveExtinctionRate { get; set; } = 0.05f;
+
+      /// <summary>
       /// Коэффициент понижения крепости для вторичных условных рефлексов (1.2-3.0).
       /// Для третичных автоматически удваивается.
-      /// Влияет на начальную крепость, скорость обучения и скорость затухания.
+      /// Влияет на начальную крепость, скорость обучения и пассивный half-life.
       /// </summary>
       public float HigherOrderStrengthReductionCoefficient { get; set; } = 1.5f;
 
@@ -522,6 +534,8 @@ namespace ISIDA.Reflexes
     private readonly List<ConditionedReflex> _activeConditionedReflexes = new List<ConditionedReflex>();
     private readonly ConditionedReflexSettings _settings = new ConditionedReflexSettings();
     private int _lastConditionedReflexId = 0;
+    /// <summary>Lifetime на момент последнего пассивного decay (−1 = ещё не синхронизирован).</summary>
+    private int _lastPassiveDecayLifetime = -1;
 
     /// <summary>
     /// Получает текущие настройки системы условных рефлексов
@@ -716,6 +730,7 @@ namespace ISIDA.Reflexes
           ToneId = toneId,
           MoodId = moodId
         };
+        conditionedReflex.SyncMaxAchievedFromCurrent();
 
         _conditionedReflexes.Add(newId, conditionedReflex);
         level2Copy = level2?.ToList();
@@ -841,26 +856,39 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Применяет затухание ко всем условным рефлексам
+    /// Пассивное забывание незащищённых УР пропорционально Δ пульсов жизни.
     /// </summary>
     public void ApplyDecay()
     {
       _lock.EnterWriteLock();
       try
       {
+        int now = GetAgentLifetime();
+        if (_lastPassiveDecayLifetime < 0)
+        {
+          _lastPassiveDecayLifetime = now;
+          return;
+        }
+
+        int delta = now - _lastPassiveDecayLifetime;
+        if (delta <= 0)
+          return;
+
+        float protectionThreshold =
+            _settings.ActivationThreshold * _settings.PassiveDecayProtectionRatio;
+        int halfLife = _settings.PassiveDecayHalfLifePulses;
         var reflexesToRemove = new List<int>();
 
         foreach (var reflex in _conditionedReflexes.Values)
         {
-          // Применяем затухание с учетом прочности
-          reflex.ApplyDecay();
+          reflex.ApplyPassiveDecay(delta, halfLife, protectionThreshold);
 
-          // Проверяем на удаление
-          if (reflex.ShouldBeRemoved(GetAgentLifetime()))
+          if (reflex.ShouldBeRemoved(now))
             reflexesToRemove.Add(reflex.Id);
         }
 
-        // Удаление ослабленных рефлексов
+        _lastPassiveDecayLifetime = now;
+
         foreach (var id in reflexesToRemove)
         {
           _conditionedReflexes.Remove(id);
@@ -871,6 +899,54 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+    }
+
+    /// <summary>
+    /// Активное угасание всех УР с данным пусковым образом (CS без US в окне τ).
+    /// </summary>
+    public void ApplyActiveExtinctionForStimulus(int stimulusImageId, int toneId = 0, int moodId = 0)
+    {
+      if (stimulusImageId <= 0)
+        return;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        float alphaExt = _settings.ActiveExtinctionRate;
+        var reflexesToRemove = new List<int>();
+        int now = GetAgentLifetime();
+
+        foreach (var reflex in _conditionedReflexes.Values)
+        {
+          if (reflex.Level3 != stimulusImageId)
+            continue;
+          if (reflex.ToneId != toneId || reflex.MoodId != moodId)
+            continue;
+
+          reflex.ApplyActiveExtinction(alphaExt);
+
+          if (reflex.ShouldBeRemoved(now))
+            reflexesToRemove.Add(reflex.Id);
+        }
+
+        foreach (var id in reflexesToRemove)
+        {
+          _conditionedReflexes.Remove(id);
+          _activeConditionedReflexes.RemoveAll(r => r.Id == id);
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Порог пассивной защиты: γ · PassiveDecayProtectionRatio.
+    /// </summary>
+    public float GetPassiveDecayProtectionThreshold()
+    {
+      return _settings.ActivationThreshold * _settings.PassiveDecayProtectionRatio;
     }
 
     /// <summary>
@@ -1231,7 +1307,7 @@ namespace ISIDA.Reflexes
         _lock.ExitWriteLock();
       }
     }
-
+    
     /// <summary>
     /// Обновляет время жизни симбионта (вызывается из GlobalTimer при каждом пульсе)
     /// </summary>
@@ -1240,7 +1316,9 @@ namespace ISIDA.Reflexes
       try
       {
         _currentAgentLifetime = AppGlobalState.Lifetime;
-        ApplyDecay(); // Затухание применяется на каждом пульсе
+        ApplyDecay();
+        if (ConditionedReflexFormationService.IsInitialized)
+          ConditionedReflexFormationService.Instance.ProcessPendingExtinction(_currentAgentLifetime);
       }
       catch (Exception ex)
       {
@@ -1562,6 +1640,7 @@ namespace ISIDA.Reflexes
               SourceConditionedReflexId = parts.Length > 10 && int.TryParse(parts[10], out int scrid) ? scrid : 0,
               Order = parts.Length > 11 && int.TryParse(parts[11], out int ord) ? ord : 1
             };
+            reflex.SyncMaxAchievedFromCurrent();
 
             _conditionedReflexes[id] = reflex;
             if (id > _lastConditionedReflexId)
@@ -1646,9 +1725,21 @@ namespace ISIDA.Reflexes
             case "ActivationThreshold":
               _settings.ActivationThreshold = float.Parse(value);
               break;
+            case "MinAssociationStrength":
+              _settings.MinAssociationStrength = float.Parse(value);
+              break;
             case "TimeWindowPulses":
             case "TimeWindowMs":
               _settings.TimeWindowPulses = int.Parse(value);
+              break;
+            case "PassiveDecayProtectionRatio":
+              _settings.PassiveDecayProtectionRatio = float.Parse(value);
+              break;
+            case "PassiveDecayHalfLifePulses":
+              _settings.PassiveDecayHalfLifePulses = int.Parse(value);
+              break;
+            case "ActiveExtinctionRate":
+              _settings.ActiveExtinctionRate = float.Parse(value);
               break;
             case "HigherOrderStrengthReductionCoefficient":
               _settings.HigherOrderStrengthReductionCoefficient = float.Parse(value);
@@ -1730,9 +1821,13 @@ namespace ISIDA.Reflexes
           {
             "# Настройки системы условных рефлексов",
             "# LearningRate: коэффициент обучения α (0.1-0.3)",
-            "# DecayRate: коэффициент затухания η (0.95-0.99)",
+            "# DecayRate: η для сенсорных ассоциаций CS→CS (0.95-0.99); пассив УР — PassiveDecayHalfLifePulses",
             "# ActivationThreshold: порог активации γ (0.5-0.7)",
+            "# MinAssociationStrength: минимальная крепость C_min (0.01-0.3)",
             "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
+            "# PassiveDecayProtectionRatio: доля от γ; MaxAchieved ≥ γ·ratio → без пассивного decay (1.0-2.0)",
+            "# PassiveDecayHalfLifePulses: полураспад пассивного забывания незащищённых УР (3600-604800)",
+            "# ActiveExtinctionRate: α_ext активного угасания при CS без US (0.01-0.2)",
             "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)",
             "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)",
             "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)"
@@ -1741,7 +1836,11 @@ namespace ISIDA.Reflexes
         lines.Add($"LearningRate={_settings.LearningRate}");
         lines.Add($"DecayRate={_settings.DecayRate}");
         lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
+        lines.Add($"MinAssociationStrength={_settings.MinAssociationStrength}");
         lines.Add($"TimeWindowPulses={_settings.TimeWindowPulses}");
+        lines.Add($"PassiveDecayProtectionRatio={_settings.PassiveDecayProtectionRatio}");
+        lines.Add($"PassiveDecayHalfLifePulses={_settings.PassiveDecayHalfLifePulses}");
+        lines.Add($"ActiveExtinctionRate={_settings.ActiveExtinctionRate}");
         lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
         lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
         lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");

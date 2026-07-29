@@ -18,6 +18,7 @@ namespace ISIDA.Reflexes
   /// <item><description>Вторичное обусловливание — CR порядка ≥2 на CS1 при активации CR на CS2
   /// (CS2 как обусловленный подкрепитель); только для пар вне отношения «бедный⊂богатый».</description></item>
   /// </list>
+  /// Активное угасание (RW, λ=0): если после CS в окне τ не пришёл US — ослабление УР с данным Level3.
   /// </summary>
   public sealed class ConditionedReflexFormationService : IDisposable
   {
@@ -117,6 +118,14 @@ namespace ISIDA.Reflexes
     // Последний условный стимул
     private StimulusRecord _lastConditionedStimulus = null;
 
+    /// <summary>Ожидается ли US после последнего CS (для активного угасания).</summary>
+    private bool _pendingCsAwaitingUs;
+
+    private int _pendingCsPulse;
+    private int _pendingCsStimulusImageId;
+    private int _pendingCsToneId;
+    private int _pendingCsMoodId;
+
     /// <summary>
     /// Добавление стимула в историю
     /// </summary>
@@ -136,6 +145,11 @@ namespace ISIDA.Reflexes
         int toneId = 0,
         int moodId = 0)
     {
+      int extinguishImageId = 0;
+      int extinguishToneId = 0;
+      int extinguishMoodId = 0;
+      bool doExtinguish = false;
+
       _lock.EnterWriteLock();
       try
       {
@@ -154,14 +168,78 @@ namespace ISIDA.Reflexes
         };
 
         if (geneticReflexId > 0)
+        {
           _lastUnconditionedStimulus = record;
+          // US в окне после pending CS — подкрепление, угасание отменяется
+          if (_pendingCsAwaitingUs &&
+              _pendingCsPulse < pulse &&
+              pulse - _pendingCsPulse <= _conditionedReflexes.Settings.TimeWindowPulses)
+          {
+            _pendingCsAwaitingUs = false;
+          }
+        }
         else
+        {
+          // Новый CS до истечения окна предыдущего без US → угасание предыдущего
+          if (_pendingCsAwaitingUs && pulse > _pendingCsPulse)
+          {
+            extinguishImageId = _pendingCsStimulusImageId;
+            extinguishToneId = _pendingCsToneId;
+            extinguishMoodId = _pendingCsMoodId;
+            _pendingCsAwaitingUs = false;
+            doExtinguish = true;
+          }
+
           _lastConditionedStimulus = record;
+          _pendingCsAwaitingUs = true;
+          _pendingCsPulse = pulse;
+          _pendingCsStimulusImageId = stimulusImageId;
+          _pendingCsToneId = toneId;
+          _pendingCsMoodId = moodId;
+        }
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      if (doExtinguish)
+        _conditionedReflexes.ApplyActiveExtinctionForStimulus(extinguishImageId, extinguishToneId, extinguishMoodId);
+    }
+
+    /// <summary>
+    /// Если окно τ после CS истекло без US — активное угасание (RW, λ=0).
+    /// </summary>
+    internal void ProcessPendingExtinction(int currentPulse)
+    {
+      int imageId = 0;
+      int toneId = 0;
+      int moodId = 0;
+      bool shouldExtinguish = false;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (!_pendingCsAwaitingUs)
+          return;
+
+        int timeWindow = _conditionedReflexes.Settings.TimeWindowPulses;
+        if (currentPulse <= _pendingCsPulse + timeWindow)
+          return;
+
+        imageId = _pendingCsStimulusImageId;
+        toneId = _pendingCsToneId;
+        moodId = _pendingCsMoodId;
+        _pendingCsAwaitingUs = false;
+        shouldExtinguish = true;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      if (shouldExtinguish)
+        _conditionedReflexes.ApplyActiveExtinctionForStimulus(imageId, toneId, moodId);
     }
 
     /// <summary>
@@ -475,6 +553,11 @@ namespace ISIDA.Reflexes
       {
         _lastUnconditionedStimulus = null;
         _lastConditionedStimulus = null;
+        _pendingCsAwaitingUs = false;
+        _pendingCsPulse = 0;
+        _pendingCsStimulusImageId = 0;
+        _pendingCsToneId = 0;
+        _pendingCsMoodId = 0;
       }
       finally
       {

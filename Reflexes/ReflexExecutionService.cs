@@ -126,10 +126,8 @@ namespace ISIDA.Reflexes
         // Выполняем действия рефлекса с указанием источника
         var result = ExecuteAdaptiveActions(actions, ActionActivationSource.ConditionedReflex);
 
-        // Усиление ассоциации при успешном выполнении
-        if (result.Success)
-          _conditionedReflexesSystem.StrengthenAssociation(conditionReflexId);
-
+        // Усиление ассоциации — только при подтверждённой паре CS–US (FormationService),
+        // не при одном лишь выполнении ответа на CS (иначе гасится активное угасание RW).
         return result;
       }
       catch (Exception ex)
