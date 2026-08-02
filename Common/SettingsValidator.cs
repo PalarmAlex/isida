@@ -46,11 +46,9 @@ namespace ISIDA.Common
         case "MinAssociationStrength":
           return ValidateMinAssociationStrength((float)value);
 
-        case "PassiveDecayProtectionRatio":
-          return ValidatePassiveDecayProtectionRatio((float)value);
-
-        case "PassiveDecayHalfLifePulses":
-          return ValidatePassiveDecayHalfLifePulses((int)value);
+        case "InitialLifetimePulses":
+        case "BaseInactivationTime":
+          return ValidateInitialLifetimePulses((int)value);
 
         case "ActiveExtinctionRate":
           return ValidateActiveExtinctionRate((float)value);
@@ -99,13 +97,21 @@ namespace ISIDA.Common
     #region Условные рефлексы
 
     /// <summary>
-    /// Валидация базового времени жизни без активации
+    /// Валидация начального лимита простоя УР (пульсы жизни)
+    /// </summary>
+    public static (bool isValid, string errorMessage) ValidateInitialLifetimePulses(int? value)
+    {
+      const string paramName = "Начальный лимит простоя УР";
+      const string range = "[3600:604800] пульсов";
+      return ValidateValueCustom(value, paramName, 3600, 604800, range);
+    }
+
+    /// <summary>
+    /// Устаревший алиас ValidateInitialLifetimePulses.
     /// </summary>
     public static (bool isValid, string errorMessage) ValidateBaseInactivationTime(int? value)
     {
-      const string paramName = "Базовое время жизни без активации";
-      const string range = "[100:10000] пульсов";
-      return ValidateValueCustom(value, paramName, 100, 10000, range);
+      return ValidateInitialLifetimePulses(value);
     }
 
     /// <summary>
@@ -126,26 +132,6 @@ namespace ISIDA.Common
       const string paramName = "Коэффициент затухания";
       const string range = "[0.95:0.99]";
       return ValidateValueCustom(value, paramName, 0.95f, 0.99f, range);
-    }
-
-    /// <summary>
-    /// Валидация доли от γ для защиты от пассивного забывания
-    /// </summary>
-    public static (bool isValid, string errorMessage) ValidatePassiveDecayProtectionRatio(float? value)
-    {
-      const string paramName = "Доля порога защиты от пассивного затухания";
-      const string range = "[1.0:2.0]";
-      return ValidateValueCustom(value, paramName, 1.0f, 2.0f, range);
-    }
-
-    /// <summary>
-    /// Валидация периода полураспада пассивного забывания (пульсы)
-    /// </summary>
-    public static (bool isValid, string errorMessage) ValidatePassiveDecayHalfLifePulses(int? value)
-    {
-      const string paramName = "Период полураспада пассивного затухания";
-      const string range = "[3600:604800] пульсов";
-      return ValidateValueCustom(value, paramName, 3600, 604800, range);
     }
 
     /// <summary>

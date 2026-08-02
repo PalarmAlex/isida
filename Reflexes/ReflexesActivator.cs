@@ -584,6 +584,8 @@ namespace ISIDA.Reflexes
               var result = _reflexExecutionService.ExecuteConditionedReflex(conditionedReflex.Id);
               if (result.Success)
               {
+                _conditionedReflexes.NotifyConditionedReflexActivated(conditionedReflex.Id);
+
                 // Логируем как активацию условного рефлекса
                 _activeConditionReflexID = conditionedReflexId;
                 _activeGeneticReflexID = conditionedReflex.SourceGeneticReflexId;

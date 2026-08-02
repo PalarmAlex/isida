@@ -331,7 +331,7 @@ namespace ISIDA.Reflexes
         }
       }
 
-      // Применяем затухание ко всем условным рефлексам и сенсорным связям
+      // Удаляет протухшие УР; сенсорные связи CS→CS по-прежнему точатся η
       _conditionedReflexes.ApplyDecay();
       if (SensoryAssociationSystem.IsInitialized)
         SensoryAssociationSystem.Instance.ApplyDecay();

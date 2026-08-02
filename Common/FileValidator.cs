@@ -15,7 +15,7 @@ namespace ISIDA.Common
     internal static class FileHeaders
     {
       // Условные рефлексы
-      public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId|ToneId|MoodId|SourceConditionedReflexId|Order";
+      public const string ConditionedReflexesFormat = "# ID|Level1|Level2|Level3|AssociationStrength|LastActivation|BirthTime|SourceGeneticReflexId|ToneId|MoodId|SourceConditionedReflexId|Order|LifetimePulses|ExpiresAt";
       public const string ConditionedReflexesLevel1 = "# Level1: -1:Плохо, 0:Норма, 1:Хорошо";
       public const string ConditionedReflexesLevel2 = "# Level2: id1,id2,id3 (ID стилей поведения)";
       public const string ConditionedReflexesLevel3 = "# Level3: ID образа пускового стимула";
@@ -24,6 +24,7 @@ namespace ISIDA.Common
       public const string ConditionedReflexesMoodId = "# MoodId: 0=Нормальное, 1=Хорошее, 2=Плохое, 3=Игривое, 4=Учитель, 5=Агрессивное, 6=Защитное, 7=Протест";
       public const string ConditionedReflexesSourceConditioned = "# SourceConditionedReflexId: ID родительского условного рефлекса (0 для первичных)";
       public const string ConditionedReflexesOrder = "# Order: порядок рефлекса (1=первичный, 2=вторичный, 3=третичный)";
+      public const string ConditionedReflexesLifetime = "# LifetimePulses|ExpiresAt: лимит простоя и абсолютный Lifetime протухания";
 
       // Сенсорные ассоциации CS₁→CS₂
       public const string SensoryAssociationsFormat =
