@@ -1,5 +1,7 @@
 using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
@@ -768,6 +770,59 @@ namespace ISIDA.Actions
       finally
       {
         _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Сообщить хостом о завершении моторного выполнения действия.
+    /// Убирает действие из активных и переснимает «до»-снимок для оценки через дельту состояния.
+    /// </summary>
+    /// <param name="actionId">ID моторного действия, завершённого хостом.</param>
+    public void NotifyMotorCompleted(int actionId)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        // Убрать из активных действий — мотор завершён
+        _activeActions.RemoveAll(a => a.Id == actionId);
+        _activeActionPhrases.Remove(actionId);
+        _activeActionPhrasesImageId.Remove(actionId);
+        AppGlobalState.UpdateActiveAdaptiveActions(_activeActions);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      // Переснять «до»-снимок и перезапустить таймер ожидания через AutomatismResultTracker
+      if (AutomatismResultTracker.IsInitialized)
+      {
+        int automatizmId = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+        if (automatizmId <= 0)
+        {
+          // Fallback: найти автоматизм, содержащий этот actionId
+          var atmzSystem = AutomatizmSystem.Instance;
+          var allAtmz = atmzSystem?.GetAllAutomatizms();
+          if (allAtmz != null)
+          {
+            var actionsImagesSystem = ActionsImagesSystem.Instance;
+            foreach (var atmz in allAtmz)
+            {
+              if (atmz == null) continue;
+              var img = actionsImagesSystem?.GetActionsImage(atmz.ActionsImageID);
+              if (img?.ActIdList != null && img.ActIdList.Contains(actionId))
+              {
+                automatizmId = atmz.ID;
+                break;
+              }
+            }
+          }
+        }
+
+        if (automatizmId > 0)
+          AutomatismResultTracker.Instance.NotifyMotorCompleted(automatizmId);
+        else
+          Logger.Warning($"NotifyMotorCompleted: cannot resolve automatizmId for actionId={actionId}");
       }
     }
 

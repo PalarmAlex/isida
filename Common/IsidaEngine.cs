@@ -71,6 +71,13 @@ namespace ISIDA.Common
     public int DefaultStileId { get; set; } = 0;
 
     /// <summary>
+    /// Коды стилей Поиск/Игра для стадии 2 (механизм случайной пробы).
+    /// Список ID стилей через запятую; пустая строка отключает ограничение.
+    /// Адаптеры передают своё значение из настроек через <see cref="IsidaConfig"/>.
+    /// </summary>
+    public string Stage2SearchPlayStyleIds { get; set; } = "3,5,7";
+
+    /// <summary>
     /// Порог начала изменения глобального состояния симбионта
     /// </summary>
     public int CompareLevel { get; set; } = 100;
@@ -343,6 +350,11 @@ namespace ISIDA.Common
     public OrientationReflexSystem OrientationReflex { get; internal set; }
 
     /// <summary>
+    /// Сессия наблюдения моторных действий оператора (механизм 2 стадии 2)
+    /// </summary>
+    public OperatorMotorObservationSession OperatorMotorObservationSession { get; internal set; }
+
+    /// <summary>
     /// Справочник типов ситуаций
     /// </summary>
     public Psychic.Understanding.SituationTypeSystem SituationTypeSystem { get; internal set; }
@@ -481,8 +493,9 @@ namespace ISIDA.Common
       SafeDispose(EvolutionStageService, "EvolutionStageService");
       SafeDispose(Gomeostas, "Gomeostas");
       SafeDispose(InfluenceActions, "InfluenceActions");
-      SafeDispose(AutomatismExecution, "AutomatismExecution");
+SafeDispose(AutomatismExecution, "AutomatismExecution");
       SafeDispose(OrientationReflex, "OrientationReflex");
+      SafeDispose(OperatorMotorObservationSession, "OperatorMotorObservationSession");
       SafeDispose(InformationEnvironmentSystem, "InformationEnvironmentSystem");
       AgentSleepOrchestrator.Reset();
 
@@ -887,6 +900,9 @@ namespace ISIDA.Common
           context.AdaptiveActions);
         context.PurposeGeneticImageSystem = PurposeGeneticImageSystem.Instance;
 
+        // Устанавливаем InfluenceActionSystem для проверки активных probe-Ea.
+        context.PurposeGeneticImageSystem.SetInfluenceActionSystem(context.InfluenceActions);
+
         // Шаг 30: Класс для загрузки автоматизмов из файла
         initializationStep = 30;
         AutomatizmFileLoader.InitializeInstance(config.BootDataFolder);
@@ -907,13 +923,24 @@ namespace ISIDA.Common
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
 
-        // Шаг 33: Система управления цепочками автоматизмов
+        // Шаг 33: Сессия наблюдения моторных действий оператора (механизм 2 стадии 2)
         initializationStep = 33;
+        OperatorMotorObservationSession.InitializeInstance(
+            context.AdaptiveActions,
+            context.ActionsImages,
+            context.AutomatizmSystem,
+            context.InfluenceActions,
+            context.InfluenceActionsImages,
+            context.AutomatizmTree);
+        context.OperatorMotorObservationSession = OperatorMotorObservationSession.Instance;
+
+        // Шаг 34: Система управления цепочками автоматизмов
+        initializationStep = 34;
         AutomatizmChainsSystem.InitializeInstance(context.AutomatizmSystem);
         context.AutomatizmChainsSystem = AutomatizmChainsSystem.Instance;
 
-        // Шаг 34: Сервис выполнения автоматизмов
-        initializationStep = 34;
+        // Шаг 35: Сервис выполнения автоматизмов
+        initializationStep = 35;
         AutomatismExecutionService.InitializeWithDependencies(
             context.AutomatizmSystem,
             context.PsychicSystem,
@@ -948,8 +975,8 @@ namespace ISIDA.Common
             config.ThinkingCycleMainMaxAgePulses,
             config.ThinkingCycleBackgroundFadeTargetPulses);
 
-        // Шаг 35: Сервис конвертирования условных рефлексов в автоматизмы
-        initializationStep = 35;
+        // Шаг 36: Сервис конвертирования условных рефлексов в автоматизмы
+        initializationStep = 36;
         ConditionedReflexToAutomatizmConverter.InitializeInstance(
             context.ConditionedReflexes,
             context.GeneticReflexes,
@@ -972,8 +999,9 @@ namespace ISIDA.Common
           context.MirrorAutomatizmService,
           context.VerbalBrocaImagesSystem,
           context.SensorySystem);
+        context.PurposeGeneticImageSystem.SetStage2SearchPlayStyleIds(
+          config.Stage2SearchPlayStyleIds);
 
-        // Шаг 33a: Загрузчик базовых примитивов по шаблону (стадия 2)
         context.Stage2PrimitivesLoader = new Stage2PrimitivesLoader(
           context.Gomeostas,
           context.EmotionsImageSystem,
@@ -983,8 +1011,8 @@ namespace ISIDA.Common
           context.ActionsImages,
           context.MirrorAutomatizmService);
 
-        // Шаг 36: Сервис переключения стадий эволюции (ссылки на системы Understanding передаём явно, без перекрёстных обращений через Instance)
-        initializationStep = 36;
+        // Шаг 37: Сервис переключения стадий эволюции (ссылки на системы Understanding передаём явно, без перекрёстных обращений через Instance)
+        initializationStep = 37;
         EvolutionStageService.InitializeInstance(
             context.AutomatizmSystem,
             context.ConditionedReflexes,

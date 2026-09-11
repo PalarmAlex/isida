@@ -164,11 +164,14 @@ namespace ISIDA.Psychic.Automatism
         {
           int finalEvaluation;
 
-          // Если оператор не дал ни одной оценки, используем +1 по умолчанию
+          // На стадии 2 дефолт 0 (без изменения Usefulness), иначе +1
+          int defaultEvaluation = AppGlobalState.EvolutionStage == 2 ? 0 : 1;
+
+          // Если оператор не дал ни одной оценки, используем дефолт
           if (!chain.OperatorEvaluated)
           {
-            finalEvaluation = 1;
-            Logger.Info($"Время ожидания оценки истекло, оператор не менял переключатель, установлена полезность=1");
+            finalEvaluation = defaultEvaluation;
+            Logger.Info($"Время ожидания оценки истекло, оператор не менял переключатель, установлена полезность={finalEvaluation}");
           }
           else
           {

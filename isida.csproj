@@ -165,6 +165,7 @@
     <Compile Include="Psychic\Importance\ExtremImportance.cs" />
     <Compile Include="Psychic\Importance\ObjectImportanceService.cs" />
     <Compile Include="Psychic\OrientationReflexSystem.cs" />
+    <Compile Include="Psychic\OperatorMotorObservationSession.cs" />
     <Compile Include="Psychic\PsychicSystem.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCycleContext.cs" />
     <Compile Include="Psychic\Thinking\ThinkingCycleInfo.cs" />

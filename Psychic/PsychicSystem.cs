@@ -425,6 +425,12 @@ namespace ISIDA.Psychic
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
 
+          // Механизм 2 стадии 2: ObservationSession — наблюдение моторики оператора
+          if (AppGlobalState.EvolutionStage == 2 && OperatorMotorObservationSession.IsInitialized)
+          {
+            ProcessOperatorMotorObservationSession(pulseCount);
+          }
+
           // Диспетчеризация циклов — только стадия 4+ (сброс для <4 уже в начале метода).
           if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
           {
@@ -1621,10 +1627,34 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Сброс глобальных переменных по истечении времени ожидания
+    /// Сброс глобальных переменных по истечении времени ожидания.
+    /// На стадии 2+ перед сбросом — оценить автоматизм по дельте состояния (ответ среды),
+    /// если оператор не ответил в окно ожидания.
     /// </summary>
     private void ResetAutomatizmWaitingState()
     {
+      // Ответ среды: при истечении таймера на стадии 2+ — оценить автоматизм по дельте
+      // PreviousState/CurrentState, если оператор не ответил и результат ещё не завершён.
+      if (_currentAutomatizmId > 0 && AppGlobalState.EvolutionStage >= 2)
+      {
+        try
+        {
+          var lastResult = _automatismResultTracker.GetLastResult(_currentAutomatizmId);
+          if (lastResult != null && !lastResult.RecognizedByOperator && lastResult.EndPulse == 0)
+          {
+            _automatismResultTracker.FinishTracking(lastResult);
+            Logger.Info(
+                $"ResetAutomatizmWaitingState: environment response evaluation for " +
+                $"automatizm ID={_currentAutomatizmId}, delta={lastResult.UsefulnessDelta}, " +
+                $"result={lastResult.Result}");
+          }
+        }
+        catch (Exception ex)
+        {
+          Logger.Error($"ResetAutomatizmWaitingState: evaluation error for automatizm ID={_currentAutomatizmId}: {ex.Message}");
+        }
+      }
+
       if (AppGlobalState.EvolutionStage >= 4 && _episodicMemorySystem != null)
         _episodicMemorySystem.SetInterruption();
       AppGlobalState.ResetWaitingForOperatorEvaluation();
@@ -1812,6 +1842,148 @@ namespace ISIDA.Psychic
       }
 
       return 0;
+    }
+
+    /// <summary>
+    /// Механизм 2 стадии 2: сессия наблюдения моторных действий оператора.
+    /// Вызывается из ProcessPsychicPulse на каждом пульсе.
+    /// </summary>
+    private void ProcessOperatorMotorObservationSession(int pulseCount)
+    {
+      try
+      {
+        var session = OperatorMotorObservationSession.Instance;
+
+        // 1. Если сессия не активна — проверить, нужно ли открыть (rising-edge Bad)
+        if (!session.IsActive)
+        {
+          // Открываем только при переходе в Bad (rising-edge), а не при каждом пульсе в Bad.
+          // Это предотвращает ложные сессии при уже стабильно плохом состоянии.
+          bool focusInBad = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
+          bool hasDominantParam = AppGlobalState.DominantParam > 0;
+
+          if (focusInBad && hasDominantParam)
+          {
+            // Проверяем, был ли предыдущий пульс не-Bad (rising-edge)
+            bool prevNotBad = !session.WasInBadZone; // На момент открытия сессии WasInBadZone=false
+            if (prevNotBad)
+            {
+              // Проверяем, есть ли usable automatizm в системе для доминирующего параметра.
+              // Проверяем по AutomatizmSystem (существующие atmz), а не по AdaptiveActionsSystem
+              // (активные моторы текущего пульса — они пусты в момент rising-edge).
+              bool hasUsableAutomatizm = false;
+              if (AutomatizmSystem.IsInitialized && ActionsImagesSystem.IsInitialized)
+              {
+                var allAtmz = AutomatizmSystem.Instance.GetAllAutomatizms();
+                var actionsImages = ActionsImagesSystem.Instance;
+                var adaptiveActions = AdaptiveActionsSystem.Instance;
+                var dominantParam = AppGlobalState.DominantParam;
+
+                if (allAtmz != null)
+                {
+                  hasUsableAutomatizm = allAtmz.Any(atmz =>
+                  {
+                    if (atmz.Usefulness < 0 || atmz.ActionsImageID <= 0) return false;
+                    var actImg = actionsImages.GetActionsImage(atmz.ActionsImageID);
+                    if (actImg?.ActIdList == null) return false;
+                    return actImg.ActIdList.Any(actId =>
+                    {
+                      var action = adaptiveActions.GetAdaptiveAction(actId);
+                      return action?.TargetGomeoParamIdArr?.Contains(dominantParam) == true;
+                    });
+                  });
+                }
+              }
+
+              if (!hasUsableAutomatizm)
+              {
+                session.OpenSession();
+              }
+            }
+          }
+          return;
+        }
+
+        // 2. Если сессия активна — проверить, ушёл ли focus из Bad
+        if (session.FocusExitedBadZone())
+        {
+          // Focus ушёл из Bad — создаём автоматизм по последнему зафиксированному мотору
+          int lastMotorPulse = session.LastMotorPulse;
+          if (lastMotorPulse > 0)
+          {
+            // Используем ID мотора (G_AD), записанный в сессии при RecordOperatorMotor.
+            // Это правильный actionId, а не ID probe-EA.
+            int actionId = session.LastMotorActionId;
+
+            if (actionId > 0)
+            {
+              int automatizmId = session.CreateAutomatizmFromMotor(actionId);
+              if (automatizmId > 0)
+              {
+                session.CloseSessionSuccessfully(automatizmId);
+                Logger.Info($"OperatorMotorObservationSession: created automatizm {automatizmId} after focus exit from Bad");
+                return;
+              }
+            }
+          }
+          session.CloseSessionTimeout();
+          return;
+        }
+
+        // 3. Проверить post-motor wait — истёк ли таймер
+        int waitDurationPulses = AppGlobalState.WaitingPeriodForActionsVal; // Используем существующий конфиг
+        if (session.IsPostMotorWaitExpired(waitDurationPulses))
+        {
+          // Таймаут — мотор не привёл к улучшению, закрываем сессию
+          session.CloseSessionTimeout();
+          Logger.Info($"OperatorMotorObservationSession: closed due to post-motor wait timeout");
+          return;
+        }
+
+        // 4. Проверить, был ли зафиксирован новый мотор от оператора
+        // Это происходит через RegisterOperatorResponse в MirrorAutomatizmService
+        // На этом пульсе проверяем, есть ли новый G_AD в активных действиях
+        CheckAndRecordOperatorMotor(session);
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"ProcessOperatorMotorObservationSession: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Проверить и зафиксировать новый мотор от оператора в сессии наблюдения.
+    /// </summary>
+    private void CheckAndRecordOperatorMotor(OperatorMotorObservationSession session)
+    {
+      try
+      {
+        if (!session.IsActive)
+          return;
+
+        // Проверяем активные G_AD от оператора
+        var allActions = AdaptiveActionsSystem.Instance.GetAllAdaptiveActions();
+        var newMotors = allActions.Where(a =>
+            a.TargetGomeoParamIdArr != null &&
+            a.TargetGomeoParamIdArr.Contains(session.FocusParameterId) &&
+            a.ActivationPulse >= session.LastMotorPulse);
+
+        foreach (var motor in newMotors)
+        {
+          // Записываем мотор в сессию
+          var probeActionIds = _influenceActionSystem.GetAllInfluenceActions()
+              .Where(ia => ia.IsActive)
+              .Select(ia => ia.Id)
+              .ToList();
+
+          session.RecordOperatorMotor(motor.Id, probeActionIds);
+          Logger.Info($"OperatorMotorObservationSession: recorded motor actionId={motor.Id} pulse={GlobalTimer.GlobalPulsCount}");
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"CheckAndRecordOperatorMotor: {ex.Message}");
+      }
     }
 
     /// <summary>
