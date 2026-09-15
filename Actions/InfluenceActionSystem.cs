@@ -481,9 +481,16 @@ namespace ISIDA.Actions
             AgentVisualColor.White);
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
+        // Зрительный канал (цвет сцены) — модальность контекста CS (подмешан в
+        // ActiveCurTriggerStimulusID через CreatePerceptionImage), различает «деталь / сборка /
+        // чертёж» в образе у-рефлекса. Но цвет НЕ должен превращать в CS нажатие кнопки
+        // гомеостаза: кнопка — это US (безусловный рефлекс). Иначе каждый EA-стимул при
+        // открытом документе (цвет != белый) зажигал CS-путь и писал CS на том же пульсе, что
+        // и US, затирая pending-CS и блокируя association (строгое CS.Pulse < US.Pulse) —
+        // из-за чего условные рефлексы перестали создаваться.
         bool verbalReflexPath = phraseIdList?.Any() == true
             || commandPatternIdList?.Any() == true
-            || visualColorId != AgentVisualColor.White;
+            || (visualColorId != AgentVisualColor.White && actionIdList?.Any() != true);
         if (verbalReflexPath)
           PhraseStimulusActivated?.Invoke(GlobalTimer.GlobalPulsCount, actionIdList, phraseIdList, toneId, moodId, authoritativeMode);
         if (actionIdList?.Any() == true)

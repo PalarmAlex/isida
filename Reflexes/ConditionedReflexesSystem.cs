@@ -911,7 +911,18 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Продлевает TTL условного рефлекса после успешной активации (без изменения C).
+    /// Скорость слабого подкрепления при успешной активации (доля от α).
+    /// Успешный отклик — не полное подкрепление (US не предъявлен), но частичное
+    /// подтверждение предсказания: C подрастает, угасание откладывается.
+    /// </summary>
+    private const float ActivationReinforcementFraction = 0.25f;
+
+    /// <summary>
+    /// Реакция на успешную активацию условного рефлекса: продлевает TTL и
+    /// добавляет слабое подкрепление C ← C + α_rein·(β − C), α_rein = α/4.
+    /// Отклик на CS — частичное подтверждение предсказания, поэтому связь
+    /// чуть крепнет. MaxAchievedStrength не повышается, чтобы не «перекрыть»
+    /// реальное подкрепление US.
     /// </summary>
     public void NotifyConditionedReflexActivated(int reflexId)
     {
@@ -922,7 +933,16 @@ namespace ISIDA.Reflexes
       try
       {
         if (_conditionedReflexes.TryGetValue(reflexId, out var reflex))
+        {
           reflex.RenewLifetime(GetAgentLifetime());
+
+          // C ← C + α_rein·(β − C), α_rein = α/4 (с понижением по порядку)
+          float reductionCoeff = GetReductionCoefficientForOrder(reflex.Order);
+          float alphaRein = (_settings.LearningRate * ActivationReinforcementFraction) / reductionCoeff;
+          reflex.AssociationStrength = Math.Min(
+              _settings.MaxAssociationStrength,
+              reflex.AssociationStrength + alphaRein * (_settings.MaxAssociationStrength - reflex.AssociationStrength));
+        }
       }
       finally
       {
