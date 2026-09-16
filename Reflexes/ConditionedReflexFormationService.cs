@@ -136,6 +136,8 @@ namespace ISIDA.Reflexes
     /// <param name="geneticReflexId">ID исходного безусловного рефлекса (0 для условного стимула)</param>
     /// <param name="toneId">ID тона (для условного стимула — фраза с пульта). 0 — по умолчанию.</param>
     /// <param name="moodId">ID настроения (для условного стимула). 0 — по умолчанию.</param>
+    /// <param name="crFired">True — CS уже активировал УР (подтверждённое предсказание, угасание не запускается). 
+    /// False — CS без срабатывания, при отсутствии US в окне τ применяется активное угасание. False по умолчанию.</param>
     public void RecordStimulus(
         int pulse,
         int stimulusImageId,
@@ -143,7 +145,8 @@ namespace ISIDA.Reflexes
         int behaviorStyleImageId,
         int geneticReflexId = 0,
         int toneId = 0,
-        int moodId = 0)
+        int moodId = 0,
+        bool crFired = false)
     {
       int extinguishImageId = 0;
       int extinguishToneId = 0;
@@ -170,7 +173,6 @@ namespace ISIDA.Reflexes
         if (geneticReflexId > 0)
         {
           _lastUnconditionedStimulus = record;
-          // US в окне после pending CS — подкрепление, угасание отменяется
           if (_pendingCsAwaitingUs &&
               _pendingCsPulse < pulse &&
               pulse - _pendingCsPulse <= _conditionedReflexes.Settings.TimeWindowPulses)
@@ -180,7 +182,7 @@ namespace ISIDA.Reflexes
         }
         else
         {
-          // Новый CS до истечения окна предыдущего без US → угасание предыдущего
+          // Сначала закрываем ПРЕДЫДУЩИЙ pending CS, читаем его ID в локали ДО перезаписи.
           if (_pendingCsAwaitingUs && pulse > _pendingCsPulse)
           {
             extinguishImageId = _pendingCsStimulusImageId;
@@ -190,12 +192,19 @@ namespace ISIDA.Reflexes
             doExtinguish = true;
           }
 
+          // Всегда обновляем last CS — от него зависят вторичное обусловливание
+          // и сенсорная прекондиция.
           _lastConditionedStimulus = record;
-          _pendingCsAwaitingUs = true;
-          _pendingCsPulse = pulse;
-          _pendingCsStimulusImageId = stimulusImageId;
-          _pendingCsToneId = toneId;
-          _pendingCsMoodId = moodId;
+
+          // Новый CS помечаем pending ТОЛЬКО если он не подтверждён сработавшим CR.
+          if (!crFired)
+          {
+            _pendingCsAwaitingUs = true;
+            _pendingCsPulse = pulse;
+            _pendingCsStimulusImageId = stimulusImageId;
+            _pendingCsToneId = toneId;
+            _pendingCsMoodId = moodId;
+          }
         }
       }
       finally

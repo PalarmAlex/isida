@@ -511,7 +511,8 @@ namespace ISIDA.Reflexes
             _activeCurBaseStyleID,
             0,
             toneId,
-            moodId);
+            moodId,
+            crFired: _activeConditionReflexID != 0);
         }
 
         if (_activeConditionReflexID != 0)
