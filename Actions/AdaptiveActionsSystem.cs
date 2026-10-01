@@ -517,8 +517,11 @@ namespace ISIDA.Actions
         if (strictValidation)
           throw new InvalidOperationException(validationError);
 
-        var warnings = validationWarnings.Split('\n').Where(s => !string.IsNullOrEmpty(s)).ToArray();
-        return (0, warnings);
+        // В нестрогом режиме ошибки валидации возвращаются как предупреждения,
+        // иначе вызывающая сторона не узнаёт причину отказа.
+        var errors = validationError.Split('\n').Where(s => !string.IsNullOrEmpty(s));
+        var warnings = validationWarnings.Split('\n').Where(s => !string.IsNullOrEmpty(s));
+        return (0, errors.Concat(warnings).ToArray());
       }
 
       // Если есть только предупреждения

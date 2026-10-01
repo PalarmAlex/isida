@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- isida.csproj собран под .NET Framework 4.8 (не-SDK, MSBuild) -->
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Isida.Tests</AssemblyName>
+    <RootNamespace>Isida.Tests</RootNamespace>
+    <!-- Все пакеты уже в локальном кэше NuGet: без этого restore лезет в интернет
+         (аудит уязвимостей NU1900) и висит на таймаутах без сети. -->
+    <NuGetAuditEnabled>false</NuGetAuditEnabled>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+    <!-- isida.csproj (не-SDK) требует полную XML-документацию публичного API;
+         к тестам это правило не применяем. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- Ссылка на собранную библиотеку движка. Перед запуском тестов isida.dll должен быть
+       собран через MSBuild (см. README тестов): сам проект isida.csproj не-SDK и в этот
+       solution не входит. Ссылка HintPath-ом на выходную сборку Debug. -->
+  <ItemGroup>
+    <Reference Include="isida">
+      <HintPath>..\..\bin\Debug\isida.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

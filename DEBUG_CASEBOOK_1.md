@@ -74,6 +74,38 @@
 - **Проверка:** `MSBuild isida.csproj -t:Build -p:Configuration=Debug` → успешно, `bin\Debug\isida.dll` обновлён. Ручная: рефлекс с крепкостью выше γ не должен проваливаться за десятки импульсов без US (в логе — редкие строки пассивного угасания); рефлекс ниже γ угашает активнее по мере приближения к 0.
 - **Эвристики:** → E3.
 
+## Случай 3. `AddUtils.ParseIntList`/`ParseDoubleList`: пустые сегменты превращаются в `0`, а дробные значения ломаются на ru-RU
+
+- **Дата / сборка:** 2026-10-01, движок ISIDA (Debug). Найдено юнит-тестами `tests/Isida.Tests` (модуль `ISIDA.Common.AddUtils`).
+- **Симптом:** при разборе строк вида `"1,,2"` и `"1,2,,"` в списке появляются лишние нули (`[1,0,2]`, `[1,2,0,0]`). При культуре процесса ru-RU (десятичный разделитель — запятая) строка `"1,5"` разбирается как список `[1,5]`, а не как одно дробное значение `1.5`. Пользователь симптома напрямую не замечал — данные `.dat` содержат только целые числа, но логика парсинга неверна.
+- **Область:** `Common\AddUtils.cs` — методы `ParseIntList`, `ParseDoubleList` (используются при парсинге/сериализации `.dat`: `ActionsImages`, `PerceptionImages`, `GeneticReflexes`, `ConditionedReflexes`, `EmotionsImage`, `VerbalBroca`, `CommandBroca`, `InfluenceActionImages`; `ParseDoubleList` вызовов в движке не имеет).
+- **Гипотезы и проверки:**
+  1. *Вызов `Split(',', (char)StringSplitOptions.RemoveEmptyEntries)` удаляет пустые сегменты* — **опровергнуто тестами**: в net48 этот вызов связывается с перегрузкой `Split(params char[])` (значение enum `RemoveEmptyEntries == 1` приводится к `char '\u0001'`), то есть разделителями становятся `','` и `'\u0001'`, а **не** флаг удаления пустых записей. Пустые сегменты сохраняются и `int.Parse("")`/`double.Parse("")` → исключение, а `AddUtils` глушит его дефолтом `0`.
+  2. *Проблема только в пустых сегментах* — **опровергнуто**: `ParseDoubleList` дополнительно делит строку по запятой, что конфликтует с ru-RU, где запятая — десятичный разделитель.
+  3. *Правка нужна в вызывающем коде* — **опровергнуто**: ошибка локализована в самих `Parse*List`, все потребители используют их единообразно.
+- **Корень:**
+  - `Split(',', (char)StringSplitOptions.RemoveEmptyEntries)` — неверная перегрузка: вместо флага `StringSplitOptions` в `char[]`-перегрузку попадает символ `'\u0001'`; пустые сегменты не отбрасываются;
+  - `ParseDoubleList` разбирает по `','` в текущей культуре, поэтому ru-RU путает разделитель списка и десятичный разделитель.
+- **Доказательство:** юнит-тесты `AddUtilsTests` (net48): `ParseIntList("1,,2")` → `[1,0,2]`, `ParseIntList("1,2,,")` → `[1,2,0,0]`; `ParseDoubleList("1,5")` при `ru-RU` → `[1,5]`. Код: `Common\AddUtils.cs`, методы `ParseIntList`/`ParseDoubleList`.
+- **Исправление:** `Common\AddUtils.cs`: `Split(',', (char)StringSplitOptions.RemoveEmptyEntries)` → `Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)` в `ParseIntList` и `ParseDoubleList` (пустые сегменты теперь отбрасываются). `ParseDoubleList` разбирает числа через `double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, …)`, `DoubleListToString` сериализует через `ToString(CultureInfo.InvariantCulture)` — запятая остаётся только разделителем списка, точка — десятичным разделителем, независимо от текущей культуры.
+- **Проверка:** пересборка `isida.csproj` (Debug) → `bin\Debug\isida.dll` обновлён; `dotnet test` в `tests\Isida.Tests` → 199 тестов зелёные. Тесты `AddUtilsTests` обновлены: `ParseIntList("1,,2")` → `[1,2]`, `ParseIntList("1,2,,")` → `[1,2]`, `ParseDoubleList("1.5")` при ru-RU → `[1.5]`, `ParseDoubleList("1,5")` → `[1,5]`.
+- **Эвристики:** → E4.
+
+## Случай 4. `AdaptiveActionsSystem.AddAction`: в нестрогом режиме причина отказа (validationError) теряется, вызывающая сторона получает пустой список предупреждений
+
+- **Дата / сборка:** 2026-10-01, движок ISIDA (Debug). Найдено интеграционными тестами `tests/Isida.Tests` (`AdaptiveActionsSystemIntegrationTests`).
+- **Симптом:** `AddAction(..., strictValidation: false)` с заведомо невалидными данными (например, несуществующий `targetGomeoParamIdArr`) возвращает `(0, warnings)`, где `warnings` пуст — при этом причина отказа непуста (`validationError`). Пользователь/вызывающий код не может узнать, почему действие не создано; при `strictValidation: true` то же сообщение корректно попадает в исключение.
+- **Область:** `Actions\AdaptiveActionsSystem.cs`, метод `AddAction` (ветка обработки неуспешной `ValidateSingleAction`).
+- **Гипотезы и проверки:**
+  1. *Валидатор не заполняет `validationError`* — **опровергнуто кодом**: `ValidateSingleAction` складывает ошибки в `errors` и возвращает `errorMessage = string.Join("\n", errors)`; сообщение непусто.
+  2. *Ошибка локализована в `SettingsValidator.ValidateVigorAction`* — **опровергнуто**: падение `Vigor: 0` происходит раньше, в сеттере `AdaptiveAction.Vigor` (`ArgumentOutOfRangeException`, инвариант [1..10]), до мягкой ветки дело не доходит — это ожидаемое поведение инварианта, а не баг.
+  3. *Мягкая ветка теряет именно `validationError`* — **подтверждено кодом**: `return (0, validationWarnings.Split(...))` использует `validationWarnings`, тогда как все ошибки лежат в `validationError` (warnings-список валидатора всегда пуст).
+- **Корень:** в нестрогом режиме ошибки валидации возвращаются как предупреждения, но код берёт для этого `validationWarnings` (пустой) вместо `validationError`.
+- **Доказательство:** `AdaptiveActionsSystem.cs:515–523` до правки: `if (!ValidateSingleAction(...)) { if (strictValidation) throw ...; var warnings = validationWarnings.Split(...); return (0, warnings); }`. Тест `AddAction_UnknownTargetParameter_ReturnsZeroWithWarnings` до правки падал на `Assert.NotEmpty(warnings)`.
+- **Исправление:** `Actions\AdaptiveActionsSystem.cs`: в нестрогой ветке объединить `validationError` и `validationWarnings` (`errors.Concat(warnings).ToArray()`), чтобы причина отказа всегда доходила до вызывающей стороны.
+- **Проверка:** пересборка `isida.csproj` (Debug); `dotnet test --filter AdaptiveActionsSystemIntegrationTests` → зелёные. Тест `AddAction_InvalidVigor_ReturnsZeroWithWarnings` заменён на `AddAction_InvalidVigor_ThrowsFromInvariant` (фиксирует инвариант сеттера `Vigor`), добавлен `AddAction_UnknownTargetParameter_ReturnsZeroWithWarnings`.
+- **Эвристики:** → E5.
+
 ## Эвристики
 
 - **E1. Флаги «особого происхождения»/«авторитарности» не защищают запись от глобальных моделей забывания, если модель применяется по ключу стимула, а не по происхождению.** Активное угасание (RW, λ=0) выбирает УР по `Level3`/`ToneId`/`MoodId` и угашает **все** совпадения; происхождение рефлекса (ручная авторитарная запись, вторичный порядок) в критерии не участвует. Если рефлекс должен переживать отсутствие подкрепления иначе, чем «выученный», различие обязано быть **явным предикатом в критерии угасания/удаления**, а не подразумеваться. Диагностический признак: рефлекс, «созданный вручную и надёжно», тихо деградирует по той же кривой, что и выученные. См. случай 1.
@@ -81,9 +113,15 @@
 
 - **E3. Порог активации — естественная граница режимов угасания.** Угасание должно быть разнородным по обе стороны порога γ: активное (частое, при CS без US) — только ниже порога; выше — редкое пассивное. Обе ветви нелинейны по расстоянию до порога. Диагностический признак: «сильный» рефлекс деградирует той же скоростью, что и «слабый» — значит, порог не учтён в критерии угасания. См. случаи 1, 2.
 
+- **E4. Числовой парсинг/сериализация обязаны фиксировать культуру и не полагаться на неоднозначные перегрузки `Split`.** `Split(',', (char)StringSplitOptions.RemoveEmptyEntries)` в net48 — это НЕ удаление пустых записей, а `Split(params char[])` с разделителями `','` и `'\u0001'` (значение enum, приведённое к `char`). Признак: пустые сегменты превращаются в `0`/дефолт. Плюс при ru-RU запятая одновременно является разделителем списка и десятичным разделителем, поэтому `double.Parse`/`ToString` без `CultureInfo.InvariantCulture` дают взаимно несовместимые результаты. Диагностический признак: список разбирается «почти правильно», но с лишними нулями, а дробные значения распадаются на целые. См. случай 3.
+
+- **E5. Валидатор обязан возвращать причину отказа во всех режимах (строгом и мягком).** Если `Validate*` заполняет `errorMessage`/`warnings` раздельно, мягкая ветка вызывающего метода обязана агрегировать **оба** канала; иначе API тихо возвращает «отказ без объяснения». Диагностический признак: при `strictValidation: true` понятное исключение, при `false` — пустые warnings и код-сентинел (0). Отдельно: инварианты-сеттеры (например, `Vigor ∈ [1..10]`) срабатывают до мягкой валидации и всегда кидают исключение — это не баг, а контракт. См. случай 4.
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
 |---|---|---|---|
 | 1 | УР ID1/ID2 после авторитарной записи упали ниже порога без «Запретить» | Reflexes (ConditionedReflexesSystem) | Исправлен |
 | 2 | Угасание УР: активное только ниже γ, пассивное выше (нелинейно) | Reflexes (ConditionedReflexesSystem) | Изменение модели |
+| 3 | `ParseIntList`/`ParseDoubleList`: пустые сегменты → `0`, дробные ломаются на ru-RU | Common (AddUtils) | Исправлен |
+| 4 | `AddAction` (нестрогий режим): причина отказа теряется, warnings пусты | Actions (AdaptiveActionsSystem) | Исправлен |

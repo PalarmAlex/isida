@@ -1,0 +1,4 @@
+Запускать по очереди (Сборка движка (обязательно перед тестами — тесты ссылаются на bin\Debug\isida.dll)):
+
+dotnet restore "D:\Программы\ISIDA\Programms\isida\tests\Isida.Tests\Isida.Tests.csproj"
+dotnet test "D:\Программы\ISIDA\Programms\isida\tests\Isida.Tests\Isida.Tests.csproj" --no-restore

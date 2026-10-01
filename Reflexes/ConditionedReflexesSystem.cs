@@ -904,9 +904,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Удаляет УР с истёкшим TTL или крепостью ниже C_min (без ритмического точения C).
-    /// </summary>
-    /// <summary>
     /// Пассивное угасание: раз в PassiveDecayPeriodPulses пульсов, только для УР
     /// с крепостью не ниже порога γ. Чем выше C — тем меньше скорость угасания.
     /// </summary>
@@ -958,6 +955,9 @@ namespace ISIDA.Reflexes
       }
     }
 
+    /// <summary>
+    /// Применяет пассивное угасание «сильных» УР и удаляет протухшие/ослабевшие рефлексы.
+    /// </summary>
     public void ApplyDecay()
     {
       ApplyPassiveDecay();

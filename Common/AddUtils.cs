@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace ISIDA.Common
@@ -19,7 +20,7 @@ namespace ISIDA.Common
       if (string.IsNullOrWhiteSpace(listStr))
         return new List<int>();
 
-      return listStr.Split(',', (char)StringSplitOptions.RemoveEmptyEntries)
+      return listStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
           .Select(s => int.TryParse(s.Trim(), out int result) ? result : 0)
           .ToList();
     }
@@ -44,8 +45,8 @@ namespace ISIDA.Common
       if (string.IsNullOrWhiteSpace(listStr))
         return new List<double>();
 
-      return listStr.Split(',', (char)StringSplitOptions.RemoveEmptyEntries)
-          .Select(s => double.TryParse(s.Trim(), out double result) ? result : 0.0)
+      return listStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+          .Select(s => double.TryParse(s.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double result) ? result : 0.0)
           .ToList();
     }
 
@@ -56,7 +57,9 @@ namespace ISIDA.Common
     /// <returns>Строка в формате "1.5,2.3,3.7"</returns>
     public static string DoubleListToString(List<double> list)
     {
-      return list != null && list.Count > 0 ? string.Join(",", list) : string.Empty;
+      return list != null && list.Count > 0
+          ? string.Join(",", list.Select(d => d.ToString(CultureInfo.InvariantCulture)))
+          : string.Empty;
     }
 
     /// <summary>
