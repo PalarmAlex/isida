@@ -70,8 +70,6 @@ using static ISIDA.Common.FileValidator;
    α = 0.2, β = 1.0, γ = 0.6, τ = 5 пульсов, C_min = 0.1, K = 1.5, θ_comp = 0.8,
    InitialLifetimePulses = 86400, α_ext = 0.05
    (DecayRate η — только для сенсорных ассоциаций CS→CS.)
-   Угасание нелинейно: активное — только ниже порога γ (тем быстрее, чем ниже C),
-   пассивное — только выше порога γ (раз в PassiveDecayPeriodPulses пульсов, тем медленнее, чем выше C).
 */
 
 namespace ISIDA.Reflexes
@@ -169,16 +167,6 @@ namespace ISIDA.Reflexes
       private float _activationThreshold = 0.6f;
       private int _timeWindowPulses = 5;
       private float _minAssociationStrength = 0.1f;
-
-      /// <summary>
-      /// Период пассивного угасания в пульсах (по умолчанию 1 раз в 1000 пульсов).
-      /// </summary>
-      public int PassiveDecayPeriodPulses { get; set; } = 1000;
-
-      /// <summary>
-      /// Накопленный счётчик пульсов жизни для пассивного угасания.
-      /// </summary>
-      public int PassiveDecayAccumulator { get; set; }
 
       /// <summary>
       /// Уникальный идентификатор рефлекса
@@ -347,9 +335,12 @@ namespace ISIDA.Reflexes
       /// </summary>
       public void StrengthenAssociation()
       {
-        // Поправка на порядок (α/K) уже учтена в StrengthenReflexInternal
-        // через GetReductionCoefficientForOrder — здесь повторно не делим.
         float effectiveLearningRate = Instance.Settings.LearningRate;
+        if (Order > 1)
+        {
+          float reductionCoeff = Instance.GetReductionCoefficientForOrder(Order);
+          effectiveLearningRate /= reductionCoeff;
+        }
 
         // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
         float beta = 1.0f; // асимптотический максимум
@@ -400,28 +391,15 @@ namespace ISIDA.Reflexes
       }
 
       /// <summary>
-      /// Активное угасание (RW, λ=0): C ← C + α_ext·(0 − C), нелинейное по крепости.
-      /// Чем ниже C относительно порога γ — тем больше скорость угасания.
-      /// Применяется только к УР с крепостью ниже порога (γ).
+      /// Активное угасание (RW, λ=0): C ← C + α_ext·(0 − C).
       /// </summary>
       public void ApplyActiveExtinction(float activeExtinctionRate)
       {
-        float gamma = Instance.Settings.ActivationThreshold;
-
-        // Выше порога активное угасание не применяется — там действует пассивное.
-        if (AssociationStrength >= gamma)
+        if (activeExtinctionRate <= 0f)
           return;
 
         float alpha = Math.Min(1f, Math.Max(0f, activeExtinctionRate));
-        float gammaSafe = gamma > 1e-6f ? gamma : 1f;
-
-        // Нелинейный множитель: чем ниже C от порога, тем выше скорость (от 1× до 3×).
-        float drop = Math.Min(1f, Math.Max(0f, (gamma - AssociationStrength) / gammaSafe));
-        float alphaEffective = alpha * (1f + 2f * drop);
-
-        AssociationStrength = AssociationStrength + alphaEffective * (0f - AssociationStrength);
-        if (AssociationStrength < 0f)
-          AssociationStrength = 0f;
+        AssociationStrength = AssociationStrength + alpha * (0f - AssociationStrength);
       }
 
       /// <summary>
@@ -519,11 +497,6 @@ namespace ISIDA.Reflexes
       /// Скорость активного угасания α_ext при CS без US (0.01-0.2).
       /// </summary>
       public float ActiveExtinctionRate { get; set; } = 0.05f;
-
-      /// <summary>
-      /// Период пассивного угасания в пульсах (по умолчанию 1 раз в 1000).
-      /// </summary>
-      public int PassiveDecayPeriodPulses { get; set; } = 1000;
 
       /// <summary>
       /// Коэффициент понижения крепости для вторичных условных рефлексов (1.2-3.0).
@@ -906,61 +879,8 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Удаляет УР с истёкшим TTL или крепостью ниже C_min (без ритмического точения C).
     /// </summary>
-    /// <summary>
-    /// Пассивное угасание: раз в PassiveDecayPeriodPulses пульсов, только для УР
-    /// с крепостью не ниже порога γ. Чем выше C — тем меньше скорость угасания.
-    /// </summary>
-    public void ApplyPassiveDecay()
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        int now = GetAgentLifetime();
-        float gamma = _settings.ActivationThreshold;
-        float baseRate = 1f - _settings.DecayRate;
-
-        foreach (var reflex in _conditionedReflexes.Values)
-        {
-          if (reflex.AssociationStrength < gamma)
-            continue;
-
-          int period = _settings.PassiveDecayPeriodPulses > 0 ? _settings.PassiveDecayPeriodPulses : 1000;
-
-          if (reflex.PassiveDecayAccumulator <= 0)
-          {
-            reflex.PassiveDecayAccumulator = now;
-            continue;
-          }
-
-          int delta = now - reflex.PassiveDecayAccumulator;
-          if (delta < period)
-            continue;
-
-          int steps = delta / period;
-          reflex.PassiveDecayAccumulator += steps * period;
-
-          // Чем выше C над порогом — тем меньше доля угасания (линейно, до 0 у максимума).
-          float above = Math.Min(1f, Math.Max(0f, (reflex.AssociationStrength - gamma) / (1f - gamma)));
-          float factor = 1f - above;
-          float rate = Math.Min(1f, Math.Max(0f, baseRate * factor)) * steps;
-
-          float oldStrength = reflex.AssociationStrength;
-          reflex.AssociationStrength = reflex.AssociationStrength * (1f - rate);
-          if (reflex.AssociationStrength < _settings.MinAssociationStrength)
-            reflex.AssociationStrength = _settings.MinAssociationStrength;
-
-          Logger.Info($"Крепость у-рефлекса ID={reflex.Id} угашена пассивно: {oldStrength:F3} → {reflex.AssociationStrength:F3}");
-        }
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
     public void ApplyDecay()
     {
-      ApplyPassiveDecay();
       RemoveExpiredReflexes();
     }
 
@@ -1055,13 +975,7 @@ namespace ISIDA.Reflexes
           if (reflex.ToneId != toneId || reflex.MoodId != moodId)
             continue;
 
-          // Активное угасание — только ниже порога; выше порога действует пассивное.
-          if (reflex.AssociationStrength >= _settings.ActivationThreshold)
-            continue;
-
-          float oldStrength = reflex.AssociationStrength;
           reflex.ApplyActiveExtinction(alphaExt);
-          Logger.Info($"Крепость у-рефлекса ID={reflex.Id} угашена активным угасанием: {oldStrength:F3} → {reflex.AssociationStrength:F3}");
 
           if (reflex.ShouldBeRemoved(now))
             reflexesToRemove.Add(reflex.Id);
@@ -1465,14 +1379,7 @@ namespace ISIDA.Reflexes
     {
       try
       {
-        int previousLifetime = _currentAgentLifetime;
         _currentAgentLifetime = AppGlobalState.Lifetime;
-
-        // Пассивное угасание: настраиваемая периодичность, по умолчанию раз в 1000 пульсов.
-        int period = _settings.PassiveDecayPeriodPulses > 0 ? _settings.PassiveDecayPeriodPulses : 1000;
-        if (_currentAgentLifetime - previousLifetime >= period)
-          ApplyPassiveDecay();
-
         RemoveExpiredReflexes();
         if (ConditionedReflexFormationService.IsInitialized)
           ConditionedReflexFormationService.Instance.ProcessPendingExtinction(_currentAgentLifetime);
@@ -1798,7 +1705,6 @@ namespace ISIDA.Reflexes
               Order = parts.Length > 11 && int.TryParse(parts[11], out int ord) ? ord : 1
             };
             reflex.SyncMaxAchievedFromCurrent();
-            reflex.PassiveDecayAccumulator = reflex.LastActivation;
 
             if (parts.Length > 13 &&
                 int.TryParse(parts[12], out int lifetimePulses) &&
@@ -1916,9 +1822,6 @@ namespace ISIDA.Reflexes
             case "ActiveExtinctionRate":
               _settings.ActiveExtinctionRate = float.Parse(value);
               break;
-            case "PassiveDecayPeriodPulses":
-              _settings.PassiveDecayPeriodPulses = int.Parse(value);
-              break;
             case "HigherOrderStrengthReductionCoefficient":
               _settings.HigherOrderStrengthReductionCoefficient = float.Parse(value);
               break;
@@ -2006,7 +1909,6 @@ namespace ISIDA.Reflexes
             "# TimeWindowPulses: временное окно корреляции в пульсах (1-10)",
             "# InitialLifetimePulses: начальный лимит простоя УР; при активации удваивается (3600-604800)",
             "# ActiveExtinctionRate: α_ext активного угасания при CS без US (0.01-0.2)",
-            "# PassiveDecayPeriodPulses: период пассивного угасания в пульсах (>=1, по умолчанию 1000)",
             "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)",
             "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)",
             "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)"
@@ -2019,7 +1921,6 @@ namespace ISIDA.Reflexes
         lines.Add($"TimeWindowPulses={_settings.TimeWindowPulses}");
         lines.Add($"InitialLifetimePulses={_settings.InitialLifetimePulses}");
         lines.Add($"ActiveExtinctionRate={_settings.ActiveExtinctionRate}");
-        lines.Add($"PassiveDecayPeriodPulses={_settings.PassiveDecayPeriodPulses}");
         lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
         lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
         lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");
