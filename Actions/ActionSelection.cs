@@ -17,7 +17,7 @@ namespace ISIDA.Actions
     public int Id { get; set; }
 
     /// <summary>
-    /// Наименование действия
+    /// Наименование  действия
     /// </summary>
     public string Name { get; set; }
 
