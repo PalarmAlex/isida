@@ -10,7 +10,14 @@
   - MSBuild: `/c/Program Files/Microsoft Visual Studio/18/Professional/MSBuild/Current/Bin/MSBuild.exe`
   - чистая сборка: `-t:Rebuild`
 
-## Текущая задача (выполнена в прошлом чате)
+## Текущая задача (выполнена в этом чате)
+Конкурентный слой обучения у-рефлексов (ΣV / Kamin blocking) — лечение «мусорных» рефлексов в SolidWorks-адаптере:
+- `ConditionedReflexSettings.EnableCompetitiveLearning` (по умолчанию `true`), `CompetitionSuppressionCoefficient` (0..1, по умолчанию `1.0`); парсинг/сохранение в `ConditionedReflexSettings.dat`.
+- `ConditionedReflexesSystem.StrengthenAssociationWithRate(id, rate)` — усиление с явной подавленной скоростью.
+- `ConditionedReflexFormationService.ComputeCompetitionSuppression` — ΣV по конкурентам (UR-источник для первичных, родительский CR для вторичных); `suppression = min(1, ΣV/β)·coeff`.
+- `ProcessConditionedAssociation`/`ProcessSecondaryConditionedAssociation`: `suppression ≥ 1` → блокировка (Kamin blocking); иначе `α_eff = α/K(order)·(1 − suppression)`. Авторитарная запись подавлению не подвергается.
+
+## Предыдущая задача
 Нелинейное угасание условных рефлексов (УР):
 - Активное угасание — только для рефлексов ниже порога γ (`ActivationThreshold`, по умолчанию 0.6).
 - Выше γ — медленное пассивное угасание раз в `PassiveDecayPeriodPulses` (по умолчанию 1000) пульсов.

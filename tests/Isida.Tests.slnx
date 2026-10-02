@@ -1,3 +1,3 @@
 <Solution>
-  <Project Path="Isida.Tests.csproj" />
+  <Project Path="Isida.Tests/Isida.Tests.csproj" />
 </Solution>

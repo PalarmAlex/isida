@@ -544,6 +544,21 @@ namespace ISIDA.Reflexes
       /// true — предпочитать условный рефлекс с меньшим ID; false — с большим ID.
       /// </summary>
       public bool TieBreakPreferSmallerReflexId { get; set; } = true;
+
+      /// <summary>
+      /// Включает конкурентный слой обучения (Kamin blocking / ΣV в ошибке Рескорла–Вагнера):
+      /// подкрепление λ при CS→US распределяется с учётом того, что тот же US уже
+      /// предсказывается другими, более крепкими CS в пределах окна τ. Если false —
+      /// прежнее поведение: каждый CS обучается независимо полным α·(β−C) (модель без ΣV).
+      /// </summary>
+      public bool EnableCompetitiveLearning { get; set; } = true;
+
+      /// <summary>
+      /// Доля подавления подкрепления конкурирующими CS (0..1), если
+      /// <see cref="EnableCompetitiveLearning"/> включён. 0 — блокировки нет;
+      /// 1 — полностью подавляющий конкурент гасит подкрепление шумового CS.
+      /// </summary>
+      public float CompetitionSuppressionCoefficient { get; set; } = 1.0f;
     }
 
     /// <summary>
@@ -815,6 +830,33 @@ namespace ISIDA.Reflexes
         if (_conditionedReflexes.TryGetValue(reflexId, out var reflex))
         {
           StrengthenReflexInternal(reflex);
+          CascadeStrengthenChildren(reflex.Id);
+        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Усиливает ассоциацию условного рефлекса по модели Рескорла–Вагнера с явно заданной
+    /// скоростью обучения (используется конкурентным слоем: α_eff = α/K · (1 − подавление)).
+    /// Каскадно усиливает дочерние рефлексы их штатной скоростью.
+    /// </summary>
+    public void StrengthenAssociationWithRate(int reflexId, float effectiveLearningRate)
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_conditionedReflexes.TryGetValue(reflexId, out var reflex))
+        {
+          float rate = Math.Min(1f, Math.Max(0f, effectiveLearningRate));
+          reflex.AssociationStrength = reflex.AssociationStrength +
+              rate * (_settings.MaxAssociationStrength - reflex.AssociationStrength);
+          reflex.AssociationStrength = Math.Min(reflex.AssociationStrength, _settings.MaxAssociationStrength);
+          reflex.SyncMaxAchievedFromCurrent();
+          reflex.RenewLifetime(GetAgentLifetime());
           CascadeStrengthenChildren(reflex.Id);
         }
       }
@@ -1401,30 +1443,37 @@ namespace ISIDA.Reflexes
       if (AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
+      bool removed;
       _lock.EnterWriteLock();
       try
       {
         if (!_conditionedReflexes.ContainsKey(reflexId))
           return false;
 
-        var removed = _conditionedReflexes.Remove(reflexId);
+        removed = _conditionedReflexes.Remove(reflexId);
         if (removed)
-        {
           _activeConditionedReflexes.RemoveAll(r => r.Id == reflexId);
-          OnConditionedReflexDeleted(reflexId);
-        }
-
-        return removed;
-      }
-      catch (Exception ex)
-      {
-        Logger.Error(ex.Message);
-        return false;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие — вне write-lock: подписчик (ReflexTreeSystem) обращается к
+      // GetAllConditionedReflexes(), которому нужен read-lock.
+      if (removed)
+      {
+        try
+        {
+          OnConditionedReflexDeleted(reflexId);
+        }
+        catch (Exception ex)
+        {
+          Logger.Error(ex.Message);
+        }
+      }
+
+      return removed;
     }
 
     internal bool removeAllConditionedReflexes = false;
@@ -1438,24 +1487,35 @@ namespace ISIDA.Reflexes
       if (!removeAllConditionedReflexes && AppGlobalState.EvolutionStage < 1)
         throw new InvalidOperationException("Условные рефлексы доступны только начиная со стадии 1");
 
+      List<int> deletedReflexIds;
       _lock.EnterWriteLock();
       try
       {
-        var deletedReflexIds = _conditionedReflexes.Keys.ToList();
+        deletedReflexIds = _conditionedReflexes.Keys.ToList();
 
         _conditionedReflexes.Clear();
         _activeConditionedReflexes.Clear();
         _lastConditionedReflexId = 0;
-
-        if (deletedReflexIds.Any())
-          OnMultipleConditionedReflexesDeleted(deletedReflexIds);
-
-        return true;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие — вне write-lock (см. RemoveConditionedReflex).
+      if (deletedReflexIds.Any())
+      {
+        try
+        {
+          OnMultipleConditionedReflexesDeleted(deletedReflexIds);
+        }
+        catch (Exception ex)
+        {
+          Logger.Error(ex.Message);
+        }
+      }
+
+      return true;
     }
     
     /// <summary>
@@ -1930,6 +1990,14 @@ namespace ISIDA.Reflexes
                   value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
                   value == "1";
               break;
+            case "EnableCompetitiveLearning":
+              _settings.EnableCompetitiveLearning =
+                  value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                  value == "1";
+              break;
+            case "CompetitionSuppressionCoefficient":
+              _settings.CompetitionSuppressionCoefficient = float.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+              break;
           }
         }
       }
@@ -2009,7 +2077,9 @@ namespace ISIDA.Reflexes
             "# PassiveDecayPeriodPulses: период пассивного угасания в пульсах (>=1, по умолчанию 1000)",
             "# HigherOrderStrengthReductionCoefficient: коэфф. понижения крепости вторичных (1.2-3.0)",
             "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)",
-            "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)"
+            "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)",
+            "# EnableCompetitiveLearning: конкурентный слой обучения (ΣV / Kamin blocking) — true/false",
+            "# CompetitionSuppressionCoefficient: доля подавления подкрепления конкурирующими CS (0..1)"
           };
 
         lines.Add($"LearningRate={_settings.LearningRate}");
@@ -2023,6 +2093,8 @@ namespace ISIDA.Reflexes
         lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
         lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
         lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");
+        lines.Add($"EnableCompetitiveLearning={_settings.EnableCompetitiveLearning}");
+        lines.Add($"CompetitionSuppressionCoefficient={_settings.CompetitionSuppressionCoefficient.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

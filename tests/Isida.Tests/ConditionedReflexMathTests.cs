@@ -179,22 +179,6 @@ namespace Isida.Tests
 
     // ---------- 3. Пассивное угасание: rate = baseRate·(1 − above)·steps ----------
 
-    [Theory]
-    // above = (C − γ)/(1 − γ); factor = 1 − above
-    [InlineData(0.6f, 0.0f)]   // C = γ  → factor = 1   → rate = baseRate·steps
-    [InlineData(1.0f, 1.0f)]   // C = 1  → factor = 0   → rate = 0 (не угасает)
-    [InlineData(0.8f, 0.5f)]   // середина
-    public void PassiveDecay_AboveFactor_Linear(float c, float expectedAbove)
-    {
-      float gamma = Settings.ActivationThreshold;
-      float above = Math.Min(1f, Math.Max(0f, (c - gamma) / (1f - gamma)));
-      Assert.Equal(expectedAbove, above, 5);
-
-      float baseRate = 1f - Settings.DecayRate;
-      float rate = Math.Min(1f, Math.Max(0f, baseRate * (1f - above))) /* ·steps */;
-      Assert.True(rate >= 0f && rate <= baseRate);
-    }
-
     [Fact]
     public void ApplyPassiveDecay_AtGamma_DecaysByBaseRate()
     {
@@ -461,9 +445,10 @@ namespace Isida.Tests
     [InlineData(-1, 1.0)]
     public void GetReductionCoefficientForOrder_MatchesSettings(int order, double expected)
     {
-      float k = Settings.HigherOrderStrengthReductionCoefficient; // 1.5 по умолчанию
-      double exp = order <= 1 ? 1.0 : order == 2 ? k : k * 2.0;
-      Assert.Equal(exp, Crs.GetReductionCoefficientForOrder(order), 5);
+      // K = 1.5 по умолчанию: order 1 → 1; order 2 → K; order ≥3 → 2K.
+      float k = Settings.HigherOrderStrengthReductionCoefficient;
+      Assert.Equal(1.5f, k, 5);
+      Assert.Equal(expected, Crs.GetReductionCoefficientForOrder(order), 5);
     }
 
     // ---------- 7. Корреляция во времени ----------

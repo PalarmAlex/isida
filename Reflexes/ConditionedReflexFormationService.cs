@@ -357,11 +357,23 @@ namespace ISIDA.Reflexes
     {
       try
       {
+        // Конкурентный слой (ΣV / Kamin blocking): если тот же US уже предсказывается
+        // другими CS в тех же условиях, подкрепление шумового CS подавляется.
+        // Авторитарная запись оператора от подавления защищена — это явное подтверждение.
+        float suppression = authoritativeMode
+            ? 0f
+            : ComputeCompetitionSuppression(conditionedStimulus, unconditionedStimulus.GeneticReflexId, 0);
+        if (suppression >= 1f)
+        {
+          Logger.Info(
+              $"Обучение CS (Level3={conditionedStimulus.StimulusImageId}) заблокировано конкурентом " +
+              $"от UR {unconditionedStimulus.GeneticReflexId}");
+          return;
+        }
+
         var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
             .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
             .ToList();
-
-        bool foundMatchingReflex = false;
 
         foreach (var existingReflex in existingReflexes)
         {
@@ -370,48 +382,118 @@ namespace ISIDA.Reflexes
               existingReflex.ToneId == conditionedStimulus.ToneId &&
               existingReflex.MoodId == conditionedStimulus.MoodId)
           {
-            _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
-            foundMatchingReflex = true;
-            Logger.Info($"Усилен условный рефлекс ID={existingReflex.Id}");
-            break;
+            if (suppression > 0f)
+            {
+              _conditionedReflexes.StrengthenAssociationWithRate(
+                  existingReflex.Id, GetCompetitiveLearningRate(suppression, existingReflex.Order));
+              Logger.Info($"Усилен (подавлён конкурентом) условный рефлекс ID={existingReflex.Id}");
+            }
+            else
+            {
+              _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
+              Logger.Info($"Усилен условный рефлекс ID={existingReflex.Id}");
+            }
+            return;
           }
         }
 
-        if (!foundMatchingReflex)
+        List<int> reflexStyles = new List<int>();
+
+        if (unconditionedStimulus.GeneticReflexId > 0)
         {
-          List<int> reflexStyles = new List<int>();
+          var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
+              .FirstOrDefault(r => r.Id == unconditionedStimulus.GeneticReflexId);
 
-          if (unconditionedStimulus.GeneticReflexId > 0)
-          {
-            var geneticReflex = _geneticReflexes.GetAllGeneticReflexesList()
-                .FirstOrDefault(r => r.Id == unconditionedStimulus.GeneticReflexId);
+          if (geneticReflex != null)
+            reflexStyles = geneticReflex.Level2?.ToList() ?? new List<int>();
+        }
+        else
+        {
+          // Если нет ID безусловного рефлекса, берем текущие стили
+          reflexStyles = GetCurrentStyleIds();
+        }
 
-            if (geneticReflex != null)
-              reflexStyles = geneticReflex.Level2?.ToList() ?? new List<int>();
-          }
-          else
-          {
-            // Если нет ID безусловного рефлекса, берем текущие стили
-            reflexStyles = GetCurrentStyleIds();
-          }
+        var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
+            level1: conditionedStimulus.BaseState,
+            level2: reflexStyles,
+            level3: conditionedStimulus.StimulusImageId,
+            sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId,
+            authoritativeMod: authoritativeMode,
+            toneId: conditionedStimulus.ToneId,
+            moodId: conditionedStimulus.MoodId);
 
-          var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
-              level1: conditionedStimulus.BaseState,
-              level2: reflexStyles,
-              level3: conditionedStimulus.StimulusImageId,
-              sourceGeneticReflexId: unconditionedStimulus.GeneticReflexId,
-              authoritativeMod: authoritativeMode,
-              toneId: conditionedStimulus.ToneId,
-              moodId: conditionedStimulus.MoodId);
-
-          if (newReflexId > 0)
-            Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
+        if (newReflexId > 0)
+        {
+          Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
+          if (suppression > 0f)
+            _conditionedReflexes.StrengthenAssociationWithRate(
+                newReflexId, GetCompetitiveLearningRate(suppression, order: 1));
         }
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
       }
+    }
+
+    /// <summary>
+    /// Скорость обучения с учётом конкурентного подавления: α_eff = (α / K(order)) · (1 − suppression).
+    /// </summary>
+    private float GetCompetitiveLearningRate(float suppression, int order)
+    {
+      float reduction = _conditionedReflexes.GetReductionCoefficientForOrder(order);
+      float rate = (_conditionedReflexes.Settings.LearningRate / reduction) * (1f - suppression);
+      return Math.Min(1f, Math.Max(0f, rate));
+    }
+
+    /// <summary>
+    /// Вычисляет долю подавления подкрепления текущего CS конкурирующими CS в модели
+    /// Рескорла–Вагнера с ΣV (Kamin blocking). Конкуренты — другие активируемые УР с тем же
+    /// источником подкрепления в тех же условиях (Level1/Level2/Tone/Mood). Их суммарная
+    /// предсказательная сила ΣV нормируется на β: suppression = ΣV/β · коэффициент.
+    /// Для первичного обусловливания конкурентами считаются CR₁ того же UR
+    /// (<paramref name="sourceConditionedReflexId"/> = 0); для вторичного — CR того же
+    /// родительского CR (<paramref name="sourceConditionedReflexId"/> &gt; 0).
+    /// Возвращает 0, если конкурентный слой отключён или конкурентов нет.
+    /// </summary>
+    private float ComputeCompetitionSuppression(
+        StimulusRecord conditionedStimulus,
+        int sourceGeneticReflexId,
+        int sourceConditionedReflexId)
+    {
+      var settings = _conditionedReflexes.Settings;
+      if (!settings.EnableCompetitiveLearning)
+        return 0f;
+
+      if (sourceGeneticReflexId <= 0 && sourceConditionedReflexId <= 0)
+        return 0f;
+
+      float beta = settings.MaxAssociationStrength > 1e-6f ? settings.MaxAssociationStrength : 1f;
+      var styleIds = GetCurrentStyleIds();
+
+      float sumV = 0f;
+      foreach (var r in _conditionedReflexes.GetAllConditionedReflexes())
+      {
+        bool isCompetitor = sourceConditionedReflexId > 0
+            ? r.SourceConditionedReflexId == sourceConditionedReflexId
+            : r.SourceConditionedReflexId == 0 && r.SourceGeneticReflexId == sourceGeneticReflexId;
+        if (!isCompetitor) continue;
+        if (r.Level1 != conditionedStimulus.BaseState) continue;
+        if (r.ToneId != conditionedStimulus.ToneId || r.MoodId != conditionedStimulus.MoodId) continue;
+        if (!r.Level2.OrderBy(x => x).SequenceEqual(styleIds.OrderBy(x => x))) continue;
+        // Сам подкрепляемый CS конкурентом не является.
+        if (r.Level3 == conditionedStimulus.StimulusImageId) continue;
+        if (!r.CanBeActivated()) continue;
+
+        sumV += r.AssociationStrength;
+      }
+
+      if (sumV <= 0f)
+        return 0f;
+
+      float coeff = Math.Min(1f, Math.Max(0f, settings.CompetitionSuppressionCoefficient));
+      float predicted = Math.Min(1f, sumV / beta);
+      return Math.Min(1f, predicted * coeff);
     }
 
     /// <summary>
@@ -481,28 +563,44 @@ namespace ISIDA.Reflexes
               reinforcingStimulusImageId))
         return;
 
-      ProcessSecondaryConditionedAssociation(
+      bool reinforced = ProcessSecondaryConditionedAssociation(
           _lastConditionedStimulus,
           parentReflex,
           authoritativeMode);
+
+      // CSₐ получил вторичное подкрепление (активацией CR на CSᵦ) — снимаем у него
+      // ожидание US без активного угасания. Иначе при записи следующего стимула CSₐ
+      // закрывается как «CS без подкрепления» и только что созданный CR₂ активно
+      // угашается (регрессия «CR₂ не активируется»).
+      if (reinforced)
+        ConfirmPendingCsReinforced();
     }
 
     /// <summary>
     /// Вторичное обусловливание: CR на CSₐ, подкреплённый активацией CR на последующем CSᵦ.
     /// Активация — exact match по Level3; иерархия и SensoryAssociationSystem не задействуются.
     /// </summary>
-    private void ProcessSecondaryConditionedAssociation(
+    /// <returns>True, если CR₂ создан или усилен (CSₐ фактически подкреплён).</returns>
+    private bool ProcessSecondaryConditionedAssociation(
         StimulusRecord conditionedStimulus,
         ConditionedReflexesSystem.ConditionedReflex parentConditionedReflex,
         bool authoritativeMode)
     {
       try
       {
+        // Конкурентный слой (ΣV / Kamin blocking) для вторичного обусловливания:
+        // если тот же источник подкрепления уже предсказывается другими активируемыми CR
+        // в тех же условиях, подкрепление шумового CS₂ подавляется.
+        float suppression = authoritativeMode
+            ? 0f
+            : ComputeCompetitionSuppression(
+                conditionedStimulus,
+                sourceGeneticReflexId: 0,
+                sourceConditionedReflexId: parentConditionedReflex.Id);
+
         var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
             .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
             .ToList();
-
-        bool foundMatchingReflex = false;
 
         foreach (var existingReflex in existingReflexes)
         {
@@ -511,40 +609,75 @@ namespace ISIDA.Reflexes
               existingReflex.ToneId == conditionedStimulus.ToneId &&
               existingReflex.MoodId == conditionedStimulus.MoodId)
           {
-            _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
-            foundMatchingReflex = true;
+            if (suppression > 0f)
+            {
+              _conditionedReflexes.StrengthenAssociationWithRate(
+                  existingReflex.Id, GetCompetitiveLearningRate(suppression, existingReflex.Order));
+            }
+            else
+            {
+              _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
+            }
             Logger.Info($"Усилен вторичный условный рефлекс ID={existingReflex.Id} " +
                        $"(порядок {existingReflex.Order}) от условного {parentConditionedReflex.Id}");
-            break;
+            return true;
           }
         }
 
-        if (!foundMatchingReflex)
+        if (suppression >= 1f)
         {
-          List<int> reflexStyles = GetCurrentStyleIds();
-
-          var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
-              level1: conditionedStimulus.BaseState,
-              level2: reflexStyles,
-              level3: conditionedStimulus.StimulusImageId,
-              sourceGeneticReflexId: parentConditionedReflex.SourceGeneticReflexId,
-              authoritativeMod: authoritativeMode,
-              toneId: conditionedStimulus.ToneId,
-              moodId: conditionedStimulus.MoodId,
-              sourceConditionedReflexId: parentConditionedReflex.Id);
-
-          if (newReflexId > 0)
-          {
-            int newOrder = parentConditionedReflex.Order + 1;
-            Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
-                       $"от условного {parentConditionedReflex.Id} " +
-                       $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
-          }
+          Logger.Info(
+              $"Вторичное обучение CS (Level3={conditionedStimulus.StimulusImageId}) заблокировано конкурентом " +
+              $"от условного {parentConditionedReflex.Id}");
+          return false;
         }
+
+        List<int> reflexStyles = GetCurrentStyleIds();
+
+        var (newReflexId, warnings) = _conditionedReflexes.AddConditionedReflex(
+            level1: conditionedStimulus.BaseState,
+            level2: reflexStyles,
+            level3: conditionedStimulus.StimulusImageId,
+            sourceGeneticReflexId: parentConditionedReflex.SourceGeneticReflexId,
+            authoritativeMod: authoritativeMode,
+            toneId: conditionedStimulus.ToneId,
+            moodId: conditionedStimulus.MoodId,
+            sourceConditionedReflexId: parentConditionedReflex.Id);
+
+        if (newReflexId > 0)
+        {
+          int newOrder = parentConditionedReflex.Order + 1;
+          Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
+                     $"от условного {parentConditionedReflex.Id} " +
+                     $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
+          if (suppression > 0f)
+            _conditionedReflexes.StrengthenAssociationWithRate(
+                newReflexId, GetCompetitiveLearningRate(suppression, newOrder));
+        }
+
+        return true;
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Снимает у текущего pending-CS ожидание US без активного угасания.
+    /// Вызывается, когда CS получил вторичное подкрепление (активацию CR на последующем CS).
+    /// </summary>
+    private void ConfirmPendingCsReinforced()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _pendingCsAwaitingUs = false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 

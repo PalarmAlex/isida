@@ -39,8 +39,14 @@ dotnet test
 ## Структура
 
 - `Isida.Tests.csproj` — net48 + xUnit, ссылка на `isida.dll`.
-- `Isida.Tests.slnx` — solution для IDE.
+- `Isida.Tests.sln` — классическое решение **для Visual Studio** (используйте его при работе в IDE).
+- `Isida.Tests.slnx` — решение нового формата для `dotnet` CLI.
 - `*Tests.cs` — наборы тестов по модулям движка.
+
+> **Visual Studio:** открывайте `Isida.Tests.sln`, а не `.slnx`. NuGet-интеграция VS 17.14
+> не выполняет restore из `.slnx` и при сборке показывает «Произошел сбой операции,
+> так как не удалось загрузить подробности для проекта» (сама компиляция при этом
+> проходит). В `.sln` restore работает штатно.
 
 ## Покрытые модули
 
@@ -71,6 +77,8 @@ dotnet test
 | `ISIDA.Reflexes.PerceptionImagesSystem` (статические) | иерархия «часть — целое», подмножества, равенство образов |
 | `ISIDA.Reflexes.ConditionedReflexesSystem.ConditionedReflex` | валидаторы, TTL, MaxAchieved, пороги |
 | `ISIDA.Reflexes.ConditionedReflexesSystem` (интеграц.) | модель угасания УР на живом движке |
+| `ISIDA.Reflexes.ConditionedReflexFormationService` (интеграц.) | формирование CS→US, вторичное обусловливание, сенсорная прекондиция |
+| `ISIDA.Reflexes.ConditionedReflexFormationService` (ΣV) | конкурентное обучение: блокировка шумового CS окрепшим целевым, обратимость настройки |
 
 ## Интеграционные тесты
 
@@ -93,6 +101,19 @@ PerceptionImagesSystem → ConditionedReflexesSystem
 
 Синглтоны движка статические, поэтому интеграционные тесты объединены в коллекцию
 `EngineIntegration` с `DisableParallelization = true` и общей фикстурой.
+
+Помимо угасания, на живом движке проверяются:
+
+- `ConditionedReflexFormationServiceTests` — CS→US в окне τ, накопление C по RW,
+  активное угасание CS без US, «последний CS побеждает» при шуме, сенсорная
+  прекондиция против вторичного CR;
+- `CheckSecondaryConditioningTests` — вторичное обусловливание (порядки 2/3,
+  каскад, слабый/протухший родитель);
+- `CompetitiveLearningTests` — конкурентный слой ΣV: при включённом слое шумовой CS
+  не достигает порога, при выключенном учится независимо, авторитарная запись
+  не подавляется;
+- `SensoryAssociationSystemTests` / `ResolveHierarchicalConditionedActivationTests` —
+  второй канал (CS→CS) и иерархический гейт активации.
 
 ## Границы покрытия
 

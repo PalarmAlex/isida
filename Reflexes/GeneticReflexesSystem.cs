@@ -596,6 +596,8 @@ namespace ISIDA.Reflexes
         }
 
         // Меняем новый ID рефлекса на старый (сохраняем оригинальный ID)
+        bool idSwapped = false;
+        int chainIdForEvent = 0;
         _lock.EnterWriteLock();
         try
         {
@@ -611,15 +613,21 @@ namespace ISIDA.Reflexes
             if (oldReflexId > _lastGeneticReflexId)
               _lastGeneticReflexId = oldReflexId;
 
-            // Обновляем ID в дереве рефлексов
-            OnGeneticReflexDeleted(newReflexId);
-            OnGeneticReflexCreated(
-                oldReflexId, level1, level2, influenceActionIds, commandPatternIds, reflex.ReflexChainID);
+            idSwapped = true;
+            chainIdForEvent = newReflex.ReflexChainID;
           }
         }
         finally
         {
           _lock.ExitWriteLock();
+        }
+
+        // События — вне write-lock (см. RemoveGeneticReflex): подписчик берёт read-lock.
+        if (idSwapped)
+        {
+          OnGeneticReflexDeleted(newReflexId);
+          OnGeneticReflexCreated(
+              oldReflexId, level1, level2, influenceActionIds, commandPatternIds, chainIdForEvent);
         }
 
         return warnings.ToArray();
@@ -659,21 +667,24 @@ namespace ISIDA.Reflexes
       if (!_geneticReflexes.ContainsKey(reflexId))
         throw new KeyNotFoundException($"Безусловный рефлекс с ID {reflexId} не найден");
 
+      bool removed;
       _lock.EnterWriteLock();
       try
       {
-        bool removed = _geneticReflexes.Remove(reflexId);
+        removed = _geneticReflexes.Remove(reflexId);
         _activeGeneticReflexes.RemoveAll(a => a.Id == reflexId);
-
-        if (removed)
-          OnGeneticReflexDeleted(reflexId);
-
-        return removed;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие — вне write-lock: подписчик (ReflexTreeSystem) обращается к
+      // GetAllGeneticReflexesList(), которому нужен read-lock; иначе LockRecursionException.
+      if (removed)
+        OnGeneticReflexDeleted(reflexId);
+
+      return removed;
     }
 
     /// <summary>
@@ -682,12 +693,13 @@ namespace ISIDA.Reflexes
     /// <returns>True, если действие было успешно удалено, иначе False</returns>
     public bool RemoveAllGeneticReflex()
     {
+      List<int> deletedReflexIds;
+      bool removed = true;
       _lock.EnterWriteLock();
       try
       {
-        var deletedReflexIds = _geneticReflexes.Keys.ToList();
+        deletedReflexIds = _geneticReflexes.Keys.ToList();
 
-        bool removed = true;
         foreach (var reflexId in deletedReflexIds)
         {
           removed = _geneticReflexes.Remove(reflexId);
@@ -695,16 +707,17 @@ namespace ISIDA.Reflexes
             break;
           _activeGeneticReflexes.RemoveAll(a => a.Id == reflexId);
         }
-
-        if (removed && deletedReflexIds.Any())
-          OnMultipleGeneticReflexesDeleted(deletedReflexIds);
-
-        return removed;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие — вне write-lock (см. RemoveGeneticReflex): подписчик берёт read-lock.
+      if (removed && deletedReflexIds.Any())
+        OnMultipleGeneticReflexesDeleted(deletedReflexIds);
+
+      return removed;
     }
 
     /// <summary>

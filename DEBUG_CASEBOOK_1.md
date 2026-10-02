@@ -106,6 +106,27 @@
 - **Проверка:** пересборка `isida.csproj` (Debug); `dotnet test --filter AdaptiveActionsSystemIntegrationTests` → зелёные. Тест `AddAction_InvalidVigor_ReturnsZeroWithWarnings` заменён на `AddAction_InvalidVigor_ThrowsFromInvariant` (фиксирует инвариант сеттера `Vigor`), добавлен `AddAction_UnknownTargetParameter_ReturnsZeroWithWarnings`.
 - **Эвристики:** → E5.
 
+## Случай 5. «Мусорные» у-рефлексы в SolidWorks-адаптере: шумовой CS, предъявленный после окрепшего целевого, обучается наравне с ним (нет конкурентного слоя ΣV)
+
+- **Дата / сборка:** 2026-10-02, движок ISIDA (Debug).
+- **Симптом:** в адаптере SolidWorks нужные у-рефлексы «перебиваются» мусорными: шумовой CS, который предъявлялся после окрепшего целевого, рос по той же кривой, что и целевой, и тоже становился активируемым; побочные эффекты (сенсорная прекондиция) вызывали не к месту диалоговые формы; целевой у-рефлекс при нажатии стимула срабатывал не всегда. Гипотеза стороннего агента: отсутствует конкурентный слой обучения (ΣV в ошибке Рескорла–Вагнера).
+- **Область:** `Reflexes\ConditionedReflexFormationService.cs` (`ProcessConditionedAssociation`, `ProcessSecondaryConditionedAssociation`), `Reflexes\ConditionedReflexesSystem.cs` (`ConditionedReflexSettings`, `StrengthenAssociationWithRate`).
+- **Гипотезы и проверки:**
+  1. *Внутри одного испытания конкуренция есть («последний CS побеждает»)* — подтверждено: US подкрепляет только последний предшествующий CS (`_lastConditionedStimulus`), промежуточные шумовые CS не обучаются.
+  2. *Между испытаниями каждый CS обучается независимо полным α·(β−C)* — **подтверждено** тестом `CompetitiveLearningTests.Disabled_EachCsLearnsIndependently_NoBlocking` и ранее `SeparateTrials_EachCsLearnsIndependently_NoBlocking`: шумовой CS догоняет целевой, хотя тот «захватил» US раньше. Это и есть отсутствие ΣV.
+  3. *Достаточно запретить обучение при окрепшем конкуренте* — **опровергнуто как единственная мера**: жёсткий запрет создаёт «замороженные» мусорные CS, если конкурент позже протухнет. Нужна плавная ΣV-коррекция подкрепления.
+  4. *ΣV можно внести только в `StrengthenReflexInternal`* — **опровергнуто**: там нет контекста «какие CS конкурируют за один US в этом испытании»; корректная точка — сервис формирования, где известны `_lastConditionedStimulus`/`_lastUnconditionedStimulus` и условия (Level1/Level2/Tone/Mood).
+  5. *Авторитарная запись должна быть защищена от подавления* — подтверждено требованием: оператор явно подтверждает рефлекс, ΣV к нему не применяется.
+- **Корень:** в модели RW при CS→US использовалось полное подкрепление λ=β, без вычитания предсказательной силы уже существующих CS (ΣV). Поэтому шумовой CS получал α·(β−C) независимо от того, что тот же US уже предсказывался целевым CS.
+- **Доказательство:** `ConditionedReflexFormationService.ProcessConditionedAssociation` до правки: `StrengthenAssociation(existingReflex.Id)` / `AddConditionedReflex(...)` без учёта конкурентов; тест `CompetitiveLearningTests.Disabled_EachCsLearnsIndependently_NoBlocking` показывает `cTarget ≈ cNoise` при отключённом слое.
+- **Исправление:**
+  - `ConditionedReflexSettings`: новые поля `EnableCompetitiveLearning` (по умолчанию `true`) и `CompetitionSuppressionCoefficient` (0..1, по умолчанию `1.0`), с парсингом (`EnableCompetitiveLearning`, `CompetitionSuppressionCoefficient` через `InvariantCulture`) и сохранением в `ConditionedReflexSettings.dat`;
+  - `ConditionedReflexesSystem.StrengthenAssociationWithRate(reflexId, effectiveLearningRate)` — усиление с явной (подавленной) скоростью, каскад дочерних штатной скоростью;
+  - `ConditionedReflexFormationService.ComputeCompetitionSuppression(...)`: ΣV = сумма крепостей активируемых конкурентов с тем же источником (UR для первичных, родительский CR для вторичных) и теми же условиями; `suppression = min(1, ΣV/β) · coefficient`;
+  - при `suppression ≥ 1` обучение CS блокируется (Kamin blocking); иначе подкрепление идёт со скоростью `α_eff = α/K(order) · (1 − suppression)`. Авторитарная запись подавлению не подвергается.
+- **Проверка:** пересборка `isida.csproj` (Debug); `dotnet test` → 453/453. `CompetitiveLearningTests`: `Enabled_TargetBlocksNoise_NoiseStaysBelowThreshold`, `Disabled_EachCsLearnsIndependently_NoBlocking`, `AuthoritativeMode_NotSuppressed`, `LastCsWins_IntermediateNoise_NotLearned`, `NoisePairs_DoNotWeakenExistingTargetReflex`.
+- **Эвристики:** → E6.
+
 ## Эвристики
 
 - **E1. Флаги «особого происхождения»/«авторитарности» не защищают запись от глобальных моделей забывания, если модель применяется по ключу стимула, а не по происхождению.** Активное угасание (RW, λ=0) выбирает УР по `Level3`/`ToneId`/`MoodId` и угашает **все** совпадения; происхождение рефлекса (ручная авторитарная запись, вторичный порядок) в критерии не участвует. Если рефлекс должен переживать отсутствие подкрепления иначе, чем «выученный», различие обязано быть **явным предикатом в критерии угасания/удаления**, а не подразумеваться. Диагностический признак: рефлекс, «созданный вручную и надёжно», тихо деградирует по той же кривой, что и выученные. См. случай 1.
@@ -117,6 +138,8 @@
 
 - **E5. Валидатор обязан возвращать причину отказа во всех режимах (строгом и мягком).** Если `Validate*` заполняет `errorMessage`/`warnings` раздельно, мягкая ветка вызывающего метода обязана агрегировать **оба** канала; иначе API тихо возвращает «отказ без объяснения». Диагностический признак: при `strictValidation: true` понятное исключение, при `false` — пустые warnings и код-сентинел (0). Отдельно: инварианты-сеттеры (например, `Vigor ∈ [1..10]`) срабатывают до мягкой валидации и всегда кидают исключение — это не баг, а контракт. См. случай 4.
 
+- **E6. Конкурентный слой обучения (ΣV) — обязательная часть модели при нескольких CS на один US, иначе плодятся «мусорные» рефлексы.** Если подкрепление λ=β выдаётся каждому CS независимо от предсказательной силы уже существующих CS, любой шумовой CS, предъявленный позже, обучится наравне с целевым (Kamin blocking не воспроизводится). Корректная точка ΣV — там, где известно испытание целиком (сервис формирования), а не в атомарном усилении рефлекса. Авторитарная (ручная) запись — исключение: она должна обходить подавление. Диагностический признак: «нужный рефлекс перебивается мусорными», при этом внутри одного испытания «последний CS побеждает». См. случай 5.
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
@@ -125,3 +148,4 @@
 | 2 | Угасание УР: активное только ниже γ, пассивное выше (нелинейно) | Reflexes (ConditionedReflexesSystem) | Изменение модели |
 | 3 | `ParseIntList`/`ParseDoubleList`: пустые сегменты → `0`, дробные ломаются на ru-RU | Common (AddUtils) | Исправлен |
 | 4 | `AddAction` (нестрогий режим): причина отказа теряется, warnings пусты | Actions (AdaptiveActionsSystem) | Исправлен |
+| 5 | «Мусорные» у-рефлексы: шумовой CS учится наравне с целевым (нет ΣV) | Reflexes (ConditionedReflexFormationService) | Исправлен (новый слой) |

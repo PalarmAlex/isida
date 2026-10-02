@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ISIDA.Common;
+using ISIDA.Gomeostas;
 using ISIDA.Reflexes;
 using Xunit;
 
@@ -86,6 +87,23 @@ namespace Isida.Tests
       Assert.True(id > 0, "AddConditionedReflex вернул 0: " + string.Join("; ", warnings ?? new string[0]));
       return id;
     }
+
+    /// <summary>
+    /// Активирует эталонный стиль гомеостаза (<see cref="EngineFixture.SeedStyleId"/>).
+    /// Нужно для потока CS→US через <see cref="Formation"/>: сервис формирования ищет
+    /// существующий УР по совпадению Level2 с <c>AppGlobalState.ActiveStyles</c>, а создаёт
+    /// его с Level2 из исходного UR. Если активные стили пусты, поиск не находит уже
+    /// созданный рефлекс и повторные пары CS→US не усиливают его (C «залипает»).
+    /// </summary>
+    protected void ActivateSeedStyle()
+    {
+      var style = GomeostasSystem.Instance.GetAllBehaviorStyles()[Engine.SeedStyleId];
+      AppGlobalState.UpdateActiveStyles(new[] { style });
+    }
+
+    /// <summary>Список ID текущих активных стилей (как их видит сервис формирования).</summary>
+    protected static List<int> ActiveStyleIds() =>
+        AppGlobalState.ActiveStyles.Select(s => s.Id).ToList();
 
     /// <summary>
     /// Крепость после n шагов RW-усиления: Cₙ = β − (β − C₀)·(1 − α_eff)ⁿ,

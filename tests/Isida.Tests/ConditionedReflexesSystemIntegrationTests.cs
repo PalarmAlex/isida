@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using ISIDA.Common;
 using ISIDA.Reflexes;
 using Xunit;
 
@@ -9,49 +7,26 @@ namespace Isida.Tests
 {
   /// <summary>
   /// Интеграционные тесты модели угасания условных рефлексов (Случай 1/2 из DEBUG_CASEBOOK_1.md):
-  /// активное угасание только ниже порога γ; «сильные» (≥ γ) не угашают активно.
+  /// активное угасание только ниже порога γ; «сильные» (≥ γ) активно не угасают.
+  /// Наследует <see cref="EngineIntegrationTestBase"/> — детерминированные образы
+  /// (без <c>Environment.TickCount</c>) и изоляция состояния между тестами.
   /// </summary>
-  [Collection("EngineIntegration")]
-  public class ConditionedReflexesSystemIntegrationTests
+  public class ConditionedReflexesSystemIntegrationTests : EngineIntegrationTestBase
   {
-    private readonly EngineFixture _engine;
-
-    public ConditionedReflexesSystemIntegrationTests(EngineFixture engine)
-    {
-      _engine = engine;
-      AppGlobalState.EvolutionStage = 1;
-    }
-
-    private static int NewTriggerImage()
-    {
-      int actionId = Math.Abs(Environment.TickCount ^ Guid.NewGuid().GetHashCode()) % 100000 + 1;
-      int id = PerceptionImagesSystem.Instance.AddPerceptionImage(new List<int> { actionId }, null);
-      Assert.True(id > 0, "не удалось создать образ восприятия");
-      return id;
-    }
-
-    private static ConditionedReflexesSystem.ConditionedReflex Find(int reflexId) =>
-        ConditionedReflexesSystem.Instance.GetAllConditionedReflexes()
-            .FirstOrDefault(r => r.Id == reflexId);
-
-    private static int AddReflex(int trigger, bool authoritative) =>
-        ConditionedReflexesSystem.Instance.AddConditionedReflex(
-            0, new List<int>(), trigger, sourceGeneticReflexId: 1,
-            authoritativeMod: authoritative).ReflexId;
+    public ConditionedReflexesSystemIntegrationTests(EngineFixture engine) : base(engine) { }
 
     [Fact]
     public void AuthoritativeReflex_AboveThreshold_NotExtinguishedActively()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
       int id = AddReflex(trigger, authoritative: true);
-      Assert.True(id > 0);
 
       var reflex = Find(id);
       Assert.NotNull(reflex);
       float before = reflex.AssociationStrength;
-      Assert.True(before >= ConditionedReflexesSystem.Instance.Settings.ActivationThreshold);
+      Assert.True(before >= Settings.ActivationThreshold);
 
-      ConditionedReflexesSystem.Instance.ApplyActiveExtinctionForStimulus(trigger);
+      Crs.ApplyActiveExtinctionForStimulus(trigger);
 
       Assert.Equal(before, Find(id).AssociationStrength, 4);
       Assert.True(Find(id).CanBeActivated());
@@ -60,14 +35,14 @@ namespace Isida.Tests
     [Fact]
     public void WeakReflex_BelowThreshold_ExtinguishedActively()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
       int id = AddReflex(trigger, authoritative: false);
 
       var reflex = Find(id);
       float before = reflex.AssociationStrength;
-      Assert.True(before < ConditionedReflexesSystem.Instance.Settings.ActivationThreshold);
+      Assert.True(before < Settings.ActivationThreshold);
 
-      ConditionedReflexesSystem.Instance.ApplyActiveExtinctionForStimulus(trigger);
+      Crs.ApplyActiveExtinctionForStimulus(trigger);
 
       float after = Find(id).AssociationStrength;
       Assert.True(after < before, $"крепость должна упасть: {before} → {after}");
@@ -77,12 +52,12 @@ namespace Isida.Tests
     [Fact]
     public void Extinction_IgnoresOtherTrigger()
     {
-      int trigger = NewTriggerImage();
-      int otherTrigger = NewTriggerImage();
+      int trigger = NewActionImage();
+      int otherTrigger = NewActionImage();
       int id = AddReflex(trigger, authoritative: false);
 
       float before = Find(id).AssociationStrength;
-      ConditionedReflexesSystem.Instance.ApplyActiveExtinctionForStimulus(otherTrigger);
+      Crs.ApplyActiveExtinctionForStimulus(otherTrigger);
 
       Assert.Equal(before, Find(id).AssociationStrength, 4);
     }
@@ -90,12 +65,12 @@ namespace Isida.Tests
     [Fact]
     public void ActiveExtinction_OnReflex_IsNoOpAboveThreshold()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
       int id = AddReflex(trigger, authoritative: true);
 
       var reflex = Find(id);
       float before = reflex.AssociationStrength;
-      reflex.ApplyActiveExtinction(ConditionedReflexesSystem.Instance.Settings.ActiveExtinctionRate);
+      reflex.ApplyActiveExtinction(Settings.ActiveExtinctionRate);
 
       Assert.Equal(before, reflex.AssociationStrength, 4);
     }
@@ -103,25 +78,22 @@ namespace Isida.Tests
     [Fact]
     public void InitialLifetime_ComesFromSettings_AndDividesByOrder()
     {
-      var settings = ConditionedReflexesSystem.Instance.Settings;
-
-      Assert.Equal(settings.InitialLifetimePulses,
-          ConditionedReflexesSystem.Instance.GetInitialLifetimeForOrder(1));
+      Assert.Equal(Settings.InitialLifetimePulses, Crs.GetInitialLifetimeForOrder(1));
 
       int expectedSecondary = Math.Max(1,
-          (int)(settings.InitialLifetimePulses / settings.HigherOrderStrengthReductionCoefficient));
-      Assert.Equal(expectedSecondary, ConditionedReflexesSystem.Instance.GetInitialLifetimeForOrder(2));
+          (int)(Settings.InitialLifetimePulses / Settings.HigherOrderStrengthReductionCoefficient));
+      Assert.Equal(expectedSecondary, Crs.GetInitialLifetimeForOrder(2));
     }
 
     [Fact]
     public void AddConditionedReflex_Duplicate_ReturnsZero()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
       int first = AddReflex(trigger, authoritative: true);
       Assert.True(first > 0);
 
-      var (second, warnings) = ConditionedReflexesSystem.Instance.AddConditionedReflex(
-          0, new List<int>(), trigger, sourceGeneticReflexId: 1, authoritativeMod: true);
+      var (second, warnings) = Crs.AddConditionedReflex(
+          0, DefaultLevel2.ToList(), trigger, sourceGeneticReflexId: 1, authoritativeMod: true);
 
       Assert.Equal(0, second);
       Assert.Contains(warnings, w => w.Contains("уже существует"));
@@ -130,27 +102,27 @@ namespace Isida.Tests
     [Fact]
     public void RemoveConditionedReflex_RemovesFromAll()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
       int id = AddReflex(trigger, authoritative: true);
 
-      Assert.True(ConditionedReflexesSystem.Instance.RemoveConditionedReflex(id));
+      Assert.True(Crs.RemoveConditionedReflex(id));
       Assert.Null(Find(id));
     }
 
     [Fact]
     public void AddConditionedReflex_InvalidLevel1_Throws()
     {
-      int trigger = NewTriggerImage();
+      int trigger = NewActionImage();
 
-      Assert.Throws<ArgumentException>(() => ConditionedReflexesSystem.Instance.AddConditionedReflex(
-          5, new List<int>(), trigger, sourceGeneticReflexId: 1));
+      Assert.Throws<ArgumentException>(() => Crs.AddConditionedReflex(
+          5, DefaultLevel2.ToList(), trigger, sourceGeneticReflexId: 1));
     }
 
     [Fact]
     public void AddConditionedReflex_UnknownTrigger_Throws()
     {
-      Assert.Throws<ArgumentException>(() => ConditionedReflexesSystem.Instance.AddConditionedReflex(
-          0, new List<int>(), level3: 999999, sourceGeneticReflexId: 1));
+      Assert.Throws<ArgumentException>(() => Crs.AddConditionedReflex(
+          0, DefaultLevel2.ToList(), level3: 999999, sourceGeneticReflexId: 1));
     }
   }
 }
