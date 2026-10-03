@@ -123,6 +123,58 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void PartialSuppression_NoiseGrowsSlowerButNotBlocked()
+    {
+      // coefficient = 0.5: частичное подавление. Шумовой CS не блокируется полностью
+      // (растёт выше C_min), но идёт заметно медленнее целевого (α_eff = α·(1−suppression)).
+      // Это средний режим между Enabled (suppression→1, блокировка) и Disabled (0, независимость).
+      ActivateSeedStyle();
+      Settings.CompetitionSuppressionCoefficient = 0.5f;
+      int target = NewPhraseImage();
+      int noise = NewPhraseImage();
+      int us = Engine.SeedGeneticReflexId;
+
+      for (int i = 0; i < 6; i++)
+        FeedPair(target, us, 1 + i * 10);
+      float cTarget = StrengthOf(target);
+
+      for (int i = 0; i < 6; i++)
+        FeedPair(noise, us, 200 + i * 10);
+      float cNoise = StrengthOf(noise);
+
+      Assert.True(cNoise > Settings.MinAssociationStrength,
+          $"при частичном подавлении шумовый CS обязан всё же учиться: C={cNoise} ≤ C_min");
+      Assert.True(cNoise < cTarget,
+          $"но слабее целевого (частичное подавление): target={cTarget}, noise={cNoise}");
+    }
+
+    [Fact]
+    public void EnableCompetitiveLearning_RoundTripsThroughFile()
+    {
+      // Новый флаг + коэффициент обязаны переживать цикл Save → Load (иначе после
+      // рестарта движка конкурентный слой «включается сам» независимо от сохранённой настройки).
+      Settings.EnableCompetitiveLearning = false;
+      Settings.CompetitionSuppressionCoefficient = 0.5f;
+
+      var saveResult = Crs.SaveConditionedReflexSettings();
+      Assert.True(saveResult.Success, saveResult.ErrorMessage);
+
+      // Портим значения в памяти, затем реально перезагружаем из файла приватным
+      // LoadConditionedReflexSettings() — проверяем не текст файла, а восстановление настроек.
+      Settings.EnableCompetitiveLearning = true;
+      Settings.CompetitionSuppressionCoefficient = 1.0f;
+
+      typeof(ConditionedReflexesSystem)
+          .GetMethod("LoadConditionedReflexSettings",
+              System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+          ?.Invoke(Crs, null);
+
+      Assert.False(Settings.EnableCompetitiveLearning,
+          "EnableCompetitiveLearning=false обязан восстановиться из файла");
+      Assert.Equal(0.5f, Settings.CompetitionSuppressionCoefficient, 5);
+    }
+
+    [Fact]
     public void NoisePairs_DoNotWeakenExistingTargetReflex()
     {
       // Пока идут шумовые пары (и они блокируются), целевой рефлекс не угасает:

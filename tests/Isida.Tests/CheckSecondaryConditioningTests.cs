@@ -153,6 +153,52 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void IsSensoryPreconditioningPair_WhiteEarlier_IsPair()
+    {
+      // Цвет — часть предиката «беднее»: белый (White=0) у более раннего образа — wildcard,
+      // поэтому пара бедного действия остаётся прекондицией независимо от цвета богатого.
+      int action = Engine.NextSeed();
+      int poor = NewImage(actions: new[] { action }, color: ISIDA.Reflexes.AgentVisualColor.White);
+      int rich = NewImage(actions: new[] { action }, phrases: new[] { Engine.NextSeed() }, color: 3);
+
+      Assert.True(Crs.IsSensoryPreconditioningPair(poor, rich));
+    }
+
+    [Fact]
+    public void IsSensoryPreconditioningPair_DifferentNonWhiteColors_NotPair()
+    {
+      // Разные НЕбелые цвета → цвет не подмножество → прекондиции нет (пара не сенсорная).
+      int action = Engine.NextSeed();
+      int poor = NewImage(actions: new[] { action }, color: 1);
+      int rich = NewImage(actions: new[] { action }, phrases: new[] { Engine.NextSeed() }, color: 2);
+
+      Assert.False(Crs.IsSensoryPreconditioningPair(poor, rich));
+    }
+
+    [Fact]
+    public void IsSensoryPreconditioningPair_SameNonWhiteColor_IsPair()
+    {
+      // Совпадающий ненулевой цвет + подмножество модальностей → прекондиция есть.
+      int action = Engine.NextSeed();
+      int poor = NewImage(actions: new[] { action }, color: 3);
+      int rich = NewImage(actions: new[] { action }, phrases: new[] { Engine.NextSeed() }, color: 3);
+
+      Assert.True(Crs.IsSensoryPreconditioningPair(poor, rich));
+    }
+
+    [Fact]
+    public void IsSensoryPreconditioningPair_IdenticalImages_NotPair()
+    {
+      // Требование строгой бедности: равные образы (не подмножество, а равенство) — не пара.
+      int action = Engine.NextSeed();
+      int phrase = Engine.NextSeed();
+      int a = NewImage(actions: new[] { action }, phrases: new[] { phrase });
+      int b = NewImage(actions: new[] { action }, phrases: new[] { phrase });
+
+      Assert.False(Crs.IsSensoryPreconditioningPair(a, b));
+    }
+
+    [Fact]
     public void CheckSecondaryConditioning_WeakParent_NotCreated()
     {
       // Родительский CR слаб (C < γ ⇒ CanBeActivated == false) — вторичный не создаётся.

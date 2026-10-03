@@ -253,6 +253,9 @@ namespace Isida.Tests
     public void ApplyPassiveDecay_ClampedToMinStrength()
     {
       // Даже при агрессивном пассиве C не опускается ниже C_min (ниже — удаление, а не ноль).
+      // Мутацию Settings.PassiveDecayPeriodPulses НЕ оборачиваем в try/finally:
+      // EngineFixture.RestoreBaselineSettings() в ResetToCleanState следующего теста
+      // вернёт период к эталонному (см. CaptureBaselineSettings в EngineFixture).
       var settings = Settings;
       settings.PassiveDecayPeriodPulses = 1; // ускоряем: шаг угасания каждый пульс
       int trigger = NewActionImage();
@@ -389,6 +392,8 @@ namespace Isida.Tests
     public void CanBeActivated_Expired_False()
     {
       int trigger = NewActionImage();
+      // Мутацию InitialLifetimePulses восстанавливает RestoreBaselineSettings()
+      // в ResetToCleanState следующего теста (страховка EngineFixture), try/finally не нужен.
       Settings.InitialLifetimePulses = 100; // маленький TTL, чтобы проверить протухание
       int id = AddReflex(trigger, authoritative: true);
       var reflex = Find(id);
@@ -628,6 +633,48 @@ namespace Isida.Tests
 
       Assert.Equal(ConditionedReflexesSystem.CompoundActivationMode.CompetitiveSuppression, result.Mode);
       Assert.Empty(result.ReflexesToActivate);
+    }
+
+    [Fact]
+    public void ResolveCompound_ThreeGroups_RatioByTwoStrongest_MixedKeepsAboveGamma()
+    {
+      // 3 группы (3 разных UR). Алгоритм компаунда — двухгрупповой: ratio считается
+      // по двум сильнейшим лидерам (groupLeaders[0]/[1]), третий в ratio не участвует.
+      // Здесь ratio = 0.85/0.9 ≥ θ_comp → MixedResponse; в активацию попадают только
+      // лидеры с Eff ≥ γ, поэтому слабый третий (C = 0.3 < γ) отсекается порогом.
+      float theta = Settings.CompetitionStrengthRatioThreshold; // 0.8
+      int a = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      int b = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      int c = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      Find(a).AssociationStrength = 0.9f;
+      Find(b).AssociationStrength = 0.85f; // ratio = 0.85/0.9 ≈ 0.94 ≥ θ_comp
+      Find(c).AssociationStrength = 0.3f;  // ниже γ — в смешанный ответ не войдёт
+
+      var result = Crs.ResolveCompoundActivation(new List<ConditionedReflexesSystem.ConditionedReflex>
+          { Find(a), Find(b), Find(c) });
+
+      Assert.Equal(ConditionedReflexesSystem.CompoundActivationMode.MixedResponse, result.Mode);
+      Assert.Equal(new[] { a, b }, result.ReflexesToActivate.Select(r => r.Id).OrderBy(x => x));
+    }
+
+    [Fact]
+    public void ResolveCompound_ThreeGroups_WeakestOfTopTwoDecidesSuppression()
+    {
+      // Третий (самый слабый) лидер не «спасает» конкуренцию: ratio = второй/первый.
+      // Второй (0.4) сильно ниже первого (0.9) → θ < θ_comp → CompetitiveSuppression,
+      // активируется только сильнейший; третий (0.3) полностью игнорируется в расчёте.
+      int a = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      int b = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      int c = AddReflex(NewActionImage(), authoritative: true, sourceGeneticReflexId: Engine.NextSeed());
+      Find(a).AssociationStrength = 0.9f;
+      Find(b).AssociationStrength = 0.4f; // ratio = 0.4/0.9 ≈ 0.44 < θ_comp
+      Find(c).AssociationStrength = 0.3f;
+
+      var result = Crs.ResolveCompoundActivation(new List<ConditionedReflexesSystem.ConditionedReflex>
+          { Find(a), Find(b), Find(c) });
+
+      Assert.Equal(ConditionedReflexesSystem.CompoundActivationMode.CompetitiveSuppression, result.Mode);
+      Assert.Equal(new[] { a }, result.ReflexesToActivate.Select(r => r.Id));
     }
 
     [Fact]
