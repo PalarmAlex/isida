@@ -175,6 +175,58 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void NewSettings_RoundTripThroughFile_InvariantCulture()
+    {
+      // Параметры, вынесенные из кода в ConditionedReflexSettings.dat, обязаны переживать
+      // цикл Save → Load. Значения подобраны с дробной частью, чтобы поймать рассинхрон
+      // культуры: сериализация/парсинг идут через InvariantCulture (десятичный разделитель — точка).
+      Settings.InitialStrengthBonus = 0.15f;
+      Settings.AuthoritativeStrength = 0.92f;
+      Settings.EstablishedStrengthThreshold = 0.77f;
+      Settings.ActivationReinforcementFraction = 0.3f;
+      Settings.MaxLifetimePulsesCap = 123456;
+      Settings.PassiveDecayFallbackPeriodPulses = 250;
+      Settings.SensoryDecayPeriodPulses = 50;
+      Settings.SensoryStrengthFloor = 0.2f;
+      Settings.SensoryHighStrengthThreshold = 0.7f;
+      Settings.SensoryHighStrengthDecayRate = 0.99f;
+      Settings.SensoryMidStrengthThreshold = 0.35f;
+
+      var saveResult = Crs.SaveConditionedReflexSettings();
+      Assert.True(saveResult.Success, saveResult.ErrorMessage);
+
+      // Портим значения, затем реально перезагружаем из файла.
+      Settings.InitialStrengthBonus = 0f;
+      Settings.AuthoritativeStrength = 0f;
+      Settings.EstablishedStrengthThreshold = 0f;
+      Settings.ActivationReinforcementFraction = 0f;
+      Settings.MaxLifetimePulsesCap = 0;
+      Settings.PassiveDecayFallbackPeriodPulses = 0;
+      Settings.SensoryDecayPeriodPulses = 0;
+      Settings.SensoryStrengthFloor = 0f;
+      Settings.SensoryHighStrengthThreshold = 0f;
+      Settings.SensoryHighStrengthDecayRate = 0f;
+      Settings.SensoryMidStrengthThreshold = 0f;
+
+      typeof(ConditionedReflexesSystem)
+          .GetMethod("LoadConditionedReflexSettings",
+              System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+          ?.Invoke(Crs, null);
+
+      Assert.Equal(0.15f, Settings.InitialStrengthBonus, 5);
+      Assert.Equal(0.92f, Settings.AuthoritativeStrength, 5);
+      Assert.Equal(0.77f, Settings.EstablishedStrengthThreshold, 5);
+      Assert.Equal(0.3f, Settings.ActivationReinforcementFraction, 5);
+      Assert.Equal(123456, Settings.MaxLifetimePulsesCap);
+      Assert.Equal(250, Settings.PassiveDecayFallbackPeriodPulses);
+      Assert.Equal(50, Settings.SensoryDecayPeriodPulses);
+      Assert.Equal(0.2f, Settings.SensoryStrengthFloor, 5);
+      Assert.Equal(0.7f, Settings.SensoryHighStrengthThreshold, 5);
+      Assert.Equal(0.99f, Settings.SensoryHighStrengthDecayRate, 5);
+      Assert.Equal(0.35f, Settings.SensoryMidStrengthThreshold, 5);
+    }
+
+    [Fact]
     public void NoisePairs_DoNotWeakenExistingTargetReflex()
     {
       // Пока идут шумовые пары (и они блокируются), целевой рефлекс не угасает:

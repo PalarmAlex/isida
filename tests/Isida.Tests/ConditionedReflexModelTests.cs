@@ -8,52 +8,12 @@ namespace Isida.Tests
   /// <summary>
   /// Тесты поведения <c>ConditionedReflexesSystem.ConditionedReflex</c> в изоляции
   /// (доступен через <c>[InternalsVisibleTo("Isida.Tests")]</c>).
-  /// Проверяются сеттеры-валидаторы, TTL и пороги, где это не требует живого синглтона.
+  /// Проверяются TTL, пороги и значения настроек по умолчанию, где это не требует живого синглтона.
+  /// Параметры модели (α, β, γ, τ, C_min, ...) живут только в ConditionedReflexSettings —
+  /// на уровне экземпляра рефлекса их копий больше нет (см. DEBUG_CASEBOOK_1, E2).
   /// </summary>
   public class ConditionedReflexModelTests
   {
-    // ---------- Валидаторы настроек на уровне рефлекса ----------
-
-    [Fact]
-    public void LearningRate_OutOfRange_Throws()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex();
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.LearningRate = 0.05f);
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.LearningRate = 0.5f);
-    }
-
-    [Fact]
-    public void ActivationThreshold_OutOfRange_Throws()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex();
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.ActivationThreshold = 0.4f);
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.ActivationThreshold = 0.8f);
-    }
-
-    [Fact]
-    public void TimeWindowPulses_OutOfRange_Throws()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex();
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.TimeWindowPulses = 0);
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.TimeWindowPulses = 11);
-    }
-
-    [Fact]
-    public void MinAssociationStrength_OutOfRange_Throws()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex();
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.MinAssociationStrength = 0f);
-      Assert.Throws<ArgumentOutOfRangeException>(() => reflex.MinAssociationStrength = 0.5f);
-    }
-
-    [Fact]
-    public void LearningRate_InRange_Stored()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex();
-      reflex.LearningRate = 0.2f;
-      Assert.Equal(0.2f, reflex.LearningRate, 3);
-    }
-
     // ---------- TTL / ExpiresAt (чистая арифметика) ----------
 
     [Fact]
@@ -104,17 +64,10 @@ namespace Isida.Tests
       reflex.SyncMaxAchievedFromCurrent();
 
       Assert.Equal(0.9f, reflex.MaxAchievedStrength, 3);
-      Assert.True(reflex.IsEstablished);
     }
 
-    [Fact]
-    public void IsEstablished_FalseWhenNeverHigh()
-    {
-      var reflex = new ConditionedReflexesSystem.ConditionedReflex { AssociationStrength = 0.5f };
-      reflex.SyncMaxAchievedFromCurrent();
-
-      Assert.False(reflex.IsEstablished);
-    }
+    // Примечание: IsEstablished читает порог из Instance.Settings (живой синглтон),
+    // поэтому его поведение покрыто интеграционно в ConditionedReflexMathTests.
 
     // ---------- Модели параметров (значения по умолчанию) ----------
 
@@ -129,6 +82,19 @@ namespace Isida.Tests
       Assert.Equal(5, settings.TimeWindowPulses);
       Assert.Equal(0.05f, settings.ActiveExtinctionRate, 3);
       Assert.Equal(1000, settings.PassiveDecayPeriodPulses);
+
+      // Параметры, ранее захардкоженные в коде и вынесенные в настройки (см. аудит настроек УР):
+      Assert.Equal(0.1f, settings.InitialStrengthBonus, 3);
+      Assert.Equal(0.95f, settings.AuthoritativeStrength, 3);
+      Assert.Equal(0.8f, settings.EstablishedStrengthThreshold, 3);
+      Assert.Equal(0.25f, settings.ActivationReinforcementFraction, 3);
+      Assert.Equal(88473600, settings.MaxLifetimePulsesCap);
+      Assert.Equal(1000, settings.PassiveDecayFallbackPeriodPulses);
+      Assert.Equal(100, settings.SensoryDecayPeriodPulses);
+      Assert.Equal(0.1f, settings.SensoryStrengthFloor, 3);
+      Assert.Equal(0.8f, settings.SensoryHighStrengthThreshold, 3);
+      Assert.Equal(0.998f, settings.SensoryHighStrengthDecayRate, 3);
+      Assert.Equal(0.4f, settings.SensoryMidStrengthThreshold, 3);
     }
   }
 }

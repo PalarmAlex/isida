@@ -177,7 +177,9 @@ namespace ISIDA.Reflexes
     public void ApplyDecay()
     {
       int currentPulse = GetAgentLifetime();
-      if (currentPulse % 100 != 0)
+      // Период затухания — из настроек (ConditionedReflexSettings.dat), а не захардкожен.
+      int period = Settings.SensoryDecayPeriodPulses > 0 ? Settings.SensoryDecayPeriodPulses : 100;
+      if (period <= 0 || currentPulse % period != 0)
         return;
 
       _lock.EnterWriteLock();
@@ -298,13 +300,15 @@ namespace ISIDA.Reflexes
 
     private void ApplyDecayToLink(SensoryAssociation link)
     {
+      // Кривая затухания CS→CS целиком параметризуется настройками (ConditionedReflexSettings.dat):
+      // зоны крепости, эффективный коэффициент устойчивых связей и нижний предел для степени/корня.
       float decayRate = Settings.DecayRate;
-      float strengthFactor = Math.Max(0.1f, link.Strength);
+      float strengthFactor = Math.Max(Settings.SensoryStrengthFloor, link.Strength);
       float effectiveDecayRate;
 
-      if (link.Strength > 0.8f)
-        effectiveDecayRate = 0.998f;
-      else if (link.Strength > 0.4f)
+      if (link.Strength > Settings.SensoryHighStrengthThreshold)
+        effectiveDecayRate = Settings.SensoryHighStrengthDecayRate;
+      else if (link.Strength > Settings.SensoryMidStrengthThreshold)
         effectiveDecayRate = (float)Math.Pow(decayRate, strengthFactor);
       else
         effectiveDecayRate = (float)Math.Pow(decayRate, Math.Sqrt(strengthFactor));

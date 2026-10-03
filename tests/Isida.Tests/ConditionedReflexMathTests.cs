@@ -80,6 +80,21 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void IsEstablished_UsesSettingsThreshold()
+    {
+      // Порог консолидации читается из настроек, а не захаркожен: меняя
+      // EstablishedStrengthThreshold, меняем и момент, когда рефлекс «установившийся».
+      var reflex = NewReflex(c: 0.85f);
+      reflex.SyncMaxAchievedFromCurrent();
+
+      Settings.EstablishedStrengthThreshold = 0.8f;
+      Assert.True(reflex.IsEstablished);
+
+      Settings.EstablishedStrengthThreshold = 0.9f; // выше MaxAchieved=0.85
+      Assert.False(reflex.IsEstablished);
+    }
+
+    [Fact]
     public void SecondaryStrengthening_Order2_RateReducedByK()
     {
       // Вторичный УР (order=2) обучается медленнее: α' = α/K(2) < α/K(1).

@@ -164,16 +164,10 @@ namespace ISIDA.Reflexes
     /// </summary>
     public class ConditionedReflex
     {
-      private float _learningRate = 0.2f;
-      private float _decayRate = 0.98f;
-      private float _activationThreshold = 0.6f;
-      private int _timeWindowPulses = 5;
-      private float _minAssociationStrength = 0.1f;
-
-      /// <summary>
-      /// Период пассивного угасания в пульсах (по умолчанию 1 раз в 1000 пульсов).
-      /// </summary>
-      public int PassiveDecayPeriodPulses { get; set; } = 1000;
+      // ВНИМАНИЕ: все параметры модели (α, β, γ, τ, C_min, η, периоды) читаются
+      // ИСКЛЮЧИТЕЛЬНО из ConditionedReflexesSystem.Settings (ConditionedReflexSettings.dat).
+      // На уровне экземпляра рефлекса хранить их копии нельзя — это порождало рассинхрон
+      // «правка файла настроек ничего не меняет» (см. DEBUG_CASEBOOK_1, случай 1 / E2).
 
       /// <summary>
       /// Накопленный счётчик пульсов жизни для пассивного угасания.
@@ -263,84 +257,10 @@ namespace ISIDA.Reflexes
       public float MaxAchievedStrength { get; private set; }
 
       /// <summary>
-      /// Флаг установившегося рефлекса (когда-либо достигал высокой прочности)
+      /// Флаг установившегося рефлекса (когда-либо достигал высокой прочности).
+      /// Порог консолидации — из настроек (не захардкожен).
       /// </summary>
-      public bool IsEstablished => MaxAchievedStrength > 0.8f;
-
-      /// <summary>
-      /// Коэффициент обучения α (0.1-0.3)
-      /// </summary>
-      public float LearningRate
-      {
-        get => _learningRate;
-        set
-        {
-          var validation = SettingsValidator.ValidateLearningRate(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _learningRate = value;
-        }
-      }
-
-      /// <summary>
-      /// Коэффициент затухания η (на уровне УР не используется; η системы — для CS→CS).
-      /// </summary>
-      public float DecayRate
-      {
-        get => _decayRate;
-        set
-        {
-          var validation = SettingsValidator.ValidateDecayRate(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _decayRate = value;
-        }
-      }
-
-      /// <summary>
-      /// Порог активации γ (0.5-0.7)
-      /// </summary>
-      public float ActivationThreshold
-      {
-        get => _activationThreshold;
-        set
-        {
-          var validation = SettingsValidator.ValidateActivationThreshold(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _activationThreshold = value;
-        }
-      }
-
-      /// <summary>
-      /// Временное окно корреляции τ (пульсов)
-      /// </summary>
-      public int TimeWindowPulses
-      {
-        get => _timeWindowPulses;
-        set
-        {
-          var validation = SettingsValidator.ValidateTimeWindowPulses(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _timeWindowPulses = value;
-        }
-      }
-
-      /// <summary>
-      /// Минимальная крепость связи C_min (0.01-0.3)
-      /// </summary>
-      public float MinAssociationStrength
-      {
-        get => _minAssociationStrength;
-        set
-        {
-          var validation = SettingsValidator.ValidateMinAssociationStrength(value);
-          if (!validation.isValid)
-            throw new ArgumentOutOfRangeException(nameof(value), validation.errorMessage);
-          _minAssociationStrength = value;
-        }
-      }
+      public bool IsEstablished => MaxAchievedStrength > Instance.Settings.EstablishedStrengthThreshold;
 
       /// <summary>
       /// Усиливает ассоциацию по модели Рескорла-Вагнера
@@ -351,9 +271,11 @@ namespace ISIDA.Reflexes
         // через GetReductionCoefficientForOrder — здесь повторно не делим.
         float effectiveLearningRate = Instance.Settings.LearningRate;
 
-        // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1))
-        float beta = 1.0f; // асимптотический максимум
+        // C_ij(k) = C_ij(k-1) + α·(β - C_ij(k-1)); β — асимптотический максимум из настроек,
+        // как в StrengthenReflexInternal (иначе два пути усиления разойдутся при β≠1).
+        float beta = Instance.Settings.MaxAssociationStrength;
         AssociationStrength = AssociationStrength + effectiveLearningRate * (beta - AssociationStrength);
+        AssociationStrength = Math.Min(AssociationStrength, beta);
 
         if (AssociationStrength > MaxAchievedStrength)
           MaxAchievedStrength = AssociationStrength;
@@ -559,6 +481,71 @@ namespace ISIDA.Reflexes
       /// 1 — полностью подавляющий конкурент гасит подкрепление шумового CS.
       /// </summary>
       public float CompetitionSuppressionCoefficient { get; set; } = 1.0f;
+
+      /// <summary>
+      /// Прибавка к C_min при вычислении стартовой крепости нового УР:
+      /// C₀ = (C_min + InitialStrengthBonus) / K(order).
+      /// </summary>
+      public float InitialStrengthBonus { get; set; } = 0.1f;
+
+      /// <summary>
+      /// Крепость, присваиваемая рефлексу при авторитарной (ручной) записи оператора,
+      /// до понижающего коэффициента порядка: C₀ = AuthoritativeStrength / K(order).
+      /// </summary>
+      public float AuthoritativeStrength { get; set; } = 0.95f;
+
+      /// <summary>
+      /// Порог консолидации: MaxAchievedStrength выше этого значения ⇒ рефлекс «установившийся»
+      /// (IsEstablished).
+      /// </summary>
+      public float EstablishedStrengthThreshold { get; set; } = 0.8f;
+
+      /// <summary>
+      /// Доля α, используемая как слабое подкрепление при успешной активации УР
+      /// (α_rein = LearningRate · ActivationReinforcementFraction / K(order)).
+      /// </summary>
+      public float ActivationReinforcementFraction { get; set; } = 0.25f;
+
+      /// <summary>
+      /// Потолок удвоения TTL (LifetimePulses) при активации/усилении.
+      /// </summary>
+      public int MaxLifetimePulsesCap { get; set; } = 88473600;
+
+      /// <summary>
+      /// Резервный период пассивного угасания (пульсов), используемый, если
+      /// PassiveDecayPeriodPulses задан неверно (≤ 0).
+      /// </summary>
+      public int PassiveDecayFallbackPeriodPulses { get; set; } = 1000;
+
+      // ---------- Параметры сенсорных ассоциаций CS→CS (SensoryAssociationSystem) ----------
+
+      /// <summary>
+      /// Период затухания сенсорных связей CS→CS в пульсах (ApplyDecay срабатывает на кратных).
+      /// </summary>
+      public int SensoryDecayPeriodPulses { get; set; } = 100;
+
+      /// <summary>
+      /// Нижний предел эффективной крепости для расчёта кривой затухания CS→CS
+      /// (страховка от log/sqrt на нуле).
+      /// </summary>
+      public float SensoryStrengthFloor { get; set; } = 0.1f;
+
+      /// <summary>
+      /// Верхняя зона крепости CS→CS: выше порога связь считается устойчивой и точится
+      /// по SensoryHighStrengthDecayRate независимо от η.
+      /// </summary>
+      public float SensoryHighStrengthThreshold { get; set; } = 0.8f;
+
+      /// <summary>
+      /// Эффективный коэффициент затухания для устойчивых (высоких) связей CS→CS.
+      /// </summary>
+      public float SensoryHighStrengthDecayRate { get; set; } = 0.998f;
+
+      /// <summary>
+      /// Средняя зона крепости CS→CS: от этого порога до верхней — затухание по η^C,
+      /// ниже — по η^√C.
+      /// </summary>
+      public float SensoryMidStrengthThreshold { get; set; } = 0.4f;
     }
 
     /// <summary>
@@ -596,9 +583,6 @@ namespace ISIDA.Reflexes
     private readonly List<ConditionedReflex> _activeConditionedReflexes = new List<ConditionedReflex>();
     private readonly ConditionedReflexSettings _settings = new ConditionedReflexSettings();
     private int _lastConditionedReflexId = 0;
-
-    /// <summary>Потолок удвоения TTL (≈1024× от дефолтного T0).</summary>
-    private const int MaxLifetimePulsesCap = 88473600;
 
     /// <summary>
     /// Получает текущие настройки системы условных рефлексов
@@ -773,10 +757,11 @@ namespace ISIDA.Reflexes
 
         newId = ++_lastConditionedReflexId;
         int currentLifetime = GetAgentLifetime();
-        float _associationStrength = (_settings.MinAssociationStrength + 0.1f) / reductionCoeff;
+        float _associationStrength =
+            (_settings.MinAssociationStrength + _settings.InitialStrengthBonus) / reductionCoeff;
 
         if (authoritativeMod)
-          _associationStrength = 0.95f / reductionCoeff;
+          _associationStrength = _settings.AuthoritativeStrength / reductionCoeff;
 
         var conditionedReflex = new ConditionedReflex
         {
@@ -888,7 +873,7 @@ namespace ISIDA.Reflexes
           return (false, $"Условный рефлекс ID={reflexId} не найден", -1f);
 
         float reductionCoeff = GetReductionCoefficientForOrder(reflex.Order);
-        newStrength = (_settings.MinAssociationStrength + 0.1f) / reductionCoeff;
+        newStrength = (_settings.MinAssociationStrength + _settings.InitialStrengthBonus) / reductionCoeff;
         if (newStrength < 0f)
           newStrength = 0f;
         if (newStrength > _settings.MaxAssociationStrength)
@@ -963,7 +948,9 @@ namespace ISIDA.Reflexes
           if (reflex.AssociationStrength < gamma)
             continue;
 
-          int period = _settings.PassiveDecayPeriodPulses > 0 ? _settings.PassiveDecayPeriodPulses : 1000;
+          int period = _settings.PassiveDecayPeriodPulses > 0
+              ? _settings.PassiveDecayPeriodPulses
+              : _settings.PassiveDecayFallbackPeriodPulses;
 
           if (reflex.PassiveDecayAccumulator <= 0)
           {
@@ -1039,8 +1026,8 @@ namespace ISIDA.Reflexes
     /// Скорость слабого подкрепления при успешной активации (доля от α).
     /// Успешный отклик — не полное подкрепление (US не предъявлен), но частичное
     /// подтверждение предсказания: C подрастает, угасание откладывается.
+    /// Доля задаётся настройкой ActivationReinforcementFraction (не захардкожена).
     /// </summary>
-    private const float ActivationReinforcementFraction = 0.25f;
 
     /// <summary>
     /// Реакция на успешную активацию условного рефлекса: продлевает TTL и
@@ -1063,7 +1050,7 @@ namespace ISIDA.Reflexes
 
           // C ← C + α_rein·(β − C), α_rein = α/4 (с понижением по порядку)
           float reductionCoeff = GetReductionCoefficientForOrder(reflex.Order);
-          float alphaRein = (_settings.LearningRate * ActivationReinforcementFraction) / reductionCoeff;
+          float alphaRein = (_settings.LearningRate * _settings.ActivationReinforcementFraction) / reductionCoeff;
           reflex.AssociationStrength = Math.Min(
               _settings.MaxAssociationStrength,
               reflex.AssociationStrength + alphaRein * (_settings.MaxAssociationStrength - reflex.AssociationStrength));
@@ -1139,7 +1126,7 @@ namespace ISIDA.Reflexes
     /// </summary>
     internal int GetMaxLifetimePulsesCap()
     {
-      return MaxLifetimePulsesCap;
+      return _settings.MaxLifetimePulsesCap;
     }
 
     /// <summary>
@@ -1529,7 +1516,9 @@ namespace ISIDA.Reflexes
         _currentAgentLifetime = AppGlobalState.Lifetime;
 
         // Пассивное угасание: настраиваемая периодичность, по умолчанию раз в 1000 пульсов.
-        int period = _settings.PassiveDecayPeriodPulses > 0 ? _settings.PassiveDecayPeriodPulses : 1000;
+        int period = _settings.PassiveDecayPeriodPulses > 0
+            ? _settings.PassiveDecayPeriodPulses
+            : _settings.PassiveDecayFallbackPeriodPulses;
         if (_currentAgentLifetime - previousLifetime >= period)
           ApplyPassiveDecay();
 
@@ -1947,23 +1936,30 @@ namespace ISIDA.Reflexes
           var key = parts[0].Trim();
           var value = parts[1].Trim();
 
+          // Все числовые значения читаются через InvariantCulture: файл — машинный формат,
+          // десятичный разделитель обязан быть точкой независимо от культуры ОС
+          // (см. DEBUG_CASEBOOK_1, случай 3 / E4).
+          var inv = System.Globalization.CultureInfo.InvariantCulture;
+          float ParseF() => float.Parse(value, inv);
+          int ParseI() => int.Parse(value, inv);
+
           switch (key)
           {
             case "LearningRate":
-              _settings.LearningRate = float.Parse(value);
+              _settings.LearningRate = ParseF();
               break;
             case "DecayRate":
-              _settings.DecayRate = float.Parse(value);
+              _settings.DecayRate = ParseF();
               break;
             case "ActivationThreshold":
-              _settings.ActivationThreshold = float.Parse(value);
+              _settings.ActivationThreshold = ParseF();
               break;
             case "MinAssociationStrength":
-              _settings.MinAssociationStrength = float.Parse(value);
+              _settings.MinAssociationStrength = ParseF();
               break;
             case "TimeWindowPulses":
             case "TimeWindowMs":
-              _settings.TimeWindowPulses = int.Parse(value);
+              _settings.TimeWindowPulses = ParseI();
               break;
             case "PassiveDecayProtectionRatio":
             case "PassiveDecayHalfLifePulses":
@@ -1971,19 +1967,19 @@ namespace ISIDA.Reflexes
               break;
             case "InitialLifetimePulses":
             case "BaseInactivationTime":
-              _settings.InitialLifetimePulses = int.Parse(value);
+              _settings.InitialLifetimePulses = ParseI();
               break;
             case "ActiveExtinctionRate":
-              _settings.ActiveExtinctionRate = float.Parse(value);
+              _settings.ActiveExtinctionRate = ParseF();
               break;
             case "PassiveDecayPeriodPulses":
-              _settings.PassiveDecayPeriodPulses = int.Parse(value);
+              _settings.PassiveDecayPeriodPulses = ParseI();
               break;
             case "HigherOrderStrengthReductionCoefficient":
-              _settings.HigherOrderStrengthReductionCoefficient = float.Parse(value);
+              _settings.HigherOrderStrengthReductionCoefficient = ParseF();
               break;
             case "CompetitionStrengthRatioThreshold":
-              _settings.CompetitionStrengthRatioThreshold = float.Parse(value);
+              _settings.CompetitionStrengthRatioThreshold = ParseF();
               break;
             case "TieBreakPreferSmallerReflexId":
               _settings.TieBreakPreferSmallerReflexId =
@@ -1996,7 +1992,40 @@ namespace ISIDA.Reflexes
                   value == "1";
               break;
             case "CompetitionSuppressionCoefficient":
-              _settings.CompetitionSuppressionCoefficient = float.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+              _settings.CompetitionSuppressionCoefficient = ParseF();
+              break;
+            case "InitialStrengthBonus":
+              _settings.InitialStrengthBonus = ParseF();
+              break;
+            case "AuthoritativeStrength":
+              _settings.AuthoritativeStrength = ParseF();
+              break;
+            case "EstablishedStrengthThreshold":
+              _settings.EstablishedStrengthThreshold = ParseF();
+              break;
+            case "ActivationReinforcementFraction":
+              _settings.ActivationReinforcementFraction = ParseF();
+              break;
+            case "MaxLifetimePulsesCap":
+              _settings.MaxLifetimePulsesCap = ParseI();
+              break;
+            case "PassiveDecayFallbackPeriodPulses":
+              _settings.PassiveDecayFallbackPeriodPulses = ParseI();
+              break;
+            case "SensoryDecayPeriodPulses":
+              _settings.SensoryDecayPeriodPulses = ParseI();
+              break;
+            case "SensoryStrengthFloor":
+              _settings.SensoryStrengthFloor = ParseF();
+              break;
+            case "SensoryHighStrengthThreshold":
+              _settings.SensoryHighStrengthThreshold = ParseF();
+              break;
+            case "SensoryHighStrengthDecayRate":
+              _settings.SensoryHighStrengthDecayRate = ParseF();
+              break;
+            case "SensoryMidStrengthThreshold":
+              _settings.SensoryMidStrengthThreshold = ParseF();
               break;
           }
         }
@@ -2079,22 +2108,49 @@ namespace ISIDA.Reflexes
             "# CompetitionStrengthRatioThreshold: порог отношения крепостей θ_comp для конкурентного подавления (0.5-0.9)",
             "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)",
             "# EnableCompetitiveLearning: конкурентный слой обучения (ΣV / Kamin blocking) — true/false",
-            "# CompetitionSuppressionCoefficient: доля подавления подкрепления конкурирующими CS (0..1)"
+            "# CompetitionSuppressionCoefficient: доля подавления подкрепления конкурирующими CS (0..1)",
+            "# InitialStrengthBonus: прибавка к C_min в стартовой крепости C0=(C_min+bonus)/K",
+            "# AuthoritativeStrength: крепость авторитарной записи (до понижения по порядку)",
+            "# EstablishedStrengthThreshold: порог MaxAchievedStrength для IsEstablished",
+            "# ActivationReinforcementFraction: доля α при слабом подкреплении успешной активации",
+            "# MaxLifetimePulsesCap: потолок удвоения TTL при активации/усилении",
+            "# PassiveDecayFallbackPeriodPulses: резервный период пассива при PassiveDecayPeriodPulses<=0",
+            "# SensoryDecayPeriodPulses: период затухания сенсорных связей CS→CS (пульсы)",
+            "# SensoryStrengthFloor: нижний предел крепости для кривой затухания CS→CS",
+            "# SensoryHighStrengthThreshold: верхняя зона CS→CS (затухание по SensoryHighStrengthDecayRate)",
+            "# SensoryHighStrengthDecayRate: эффективный коэффициент затухания устойчивых связей CS→CS",
+            "# SensoryMidStrengthThreshold: средняя зона CS→CS (выше — η^C, ниже — η^√C)"
           };
 
-        lines.Add($"LearningRate={_settings.LearningRate}");
-        lines.Add($"DecayRate={_settings.DecayRate}");
-        lines.Add($"ActivationThreshold={_settings.ActivationThreshold}");
-        lines.Add($"MinAssociationStrength={_settings.MinAssociationStrength}");
-        lines.Add($"TimeWindowPulses={_settings.TimeWindowPulses}");
-        lines.Add($"InitialLifetimePulses={_settings.InitialLifetimePulses}");
-        lines.Add($"ActiveExtinctionRate={_settings.ActiveExtinctionRate}");
-        lines.Add($"PassiveDecayPeriodPulses={_settings.PassiveDecayPeriodPulses}");
-        lines.Add($"HigherOrderStrengthReductionCoefficient={_settings.HigherOrderStrengthReductionCoefficient}");
-        lines.Add($"CompetitionStrengthRatioThreshold={_settings.CompetitionStrengthRatioThreshold}");
+        // Все значения сериализуются через InvariantCulture (точка как десятичный разделитель) —
+        // формат файла не зависит от культуры ОС (см. DEBUG_CASEBOOK_1, случай 3 / E4).
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string F(float v) => v.ToString(inv);
+
+        lines.Add($"LearningRate={F(_settings.LearningRate)}");
+        lines.Add($"DecayRate={F(_settings.DecayRate)}");
+        lines.Add($"ActivationThreshold={F(_settings.ActivationThreshold)}");
+        lines.Add($"MinAssociationStrength={F(_settings.MinAssociationStrength)}");
+        lines.Add($"TimeWindowPulses={_settings.TimeWindowPulses.ToString(inv)}");
+        lines.Add($"InitialLifetimePulses={_settings.InitialLifetimePulses.ToString(inv)}");
+        lines.Add($"ActiveExtinctionRate={F(_settings.ActiveExtinctionRate)}");
+        lines.Add($"PassiveDecayPeriodPulses={_settings.PassiveDecayPeriodPulses.ToString(inv)}");
+        lines.Add($"HigherOrderStrengthReductionCoefficient={F(_settings.HigherOrderStrengthReductionCoefficient)}");
+        lines.Add($"CompetitionStrengthRatioThreshold={F(_settings.CompetitionStrengthRatioThreshold)}");
         lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");
         lines.Add($"EnableCompetitiveLearning={_settings.EnableCompetitiveLearning}");
-        lines.Add($"CompetitionSuppressionCoefficient={_settings.CompetitionSuppressionCoefficient.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        lines.Add($"CompetitionSuppressionCoefficient={F(_settings.CompetitionSuppressionCoefficient)}");
+        lines.Add($"InitialStrengthBonus={F(_settings.InitialStrengthBonus)}");
+        lines.Add($"AuthoritativeStrength={F(_settings.AuthoritativeStrength)}");
+        lines.Add($"EstablishedStrengthThreshold={F(_settings.EstablishedStrengthThreshold)}");
+        lines.Add($"ActivationReinforcementFraction={F(_settings.ActivationReinforcementFraction)}");
+        lines.Add($"MaxLifetimePulsesCap={_settings.MaxLifetimePulsesCap.ToString(inv)}");
+        lines.Add($"PassiveDecayFallbackPeriodPulses={_settings.PassiveDecayFallbackPeriodPulses.ToString(inv)}");
+        lines.Add($"SensoryDecayPeriodPulses={_settings.SensoryDecayPeriodPulses.ToString(inv)}");
+        lines.Add($"SensoryStrengthFloor={F(_settings.SensoryStrengthFloor)}");
+        lines.Add($"SensoryHighStrengthThreshold={F(_settings.SensoryHighStrengthThreshold)}");
+        lines.Add($"SensoryHighStrengthDecayRate={F(_settings.SensoryHighStrengthDecayRate)}");
+        lines.Add($"SensoryMidStrengthThreshold={F(_settings.SensoryMidStrengthThreshold)}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),
