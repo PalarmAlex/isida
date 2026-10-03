@@ -79,6 +79,9 @@ dotnet test
 | `ISIDA.Reflexes.ConditionedReflexesSystem` (интеграц.) | модель угасания УР на живом движке |
 | `ISIDA.Reflexes.ConditionedReflexFormationService` (интеграц.) | формирование CS→US, вторичное обусловливание, сенсорная прекондиция |
 | `ISIDA.Reflexes.ConditionedReflexFormationService` (ΣV) | конкурентное обучение: блокировка шумового CS окрепшим целевым, обратимость настройки |
+| `ISIDA.Psychic.OperatorMotorObservationSession` (интеграц.) | механизм 2 стадии 2: открытие сессии по rising-edge Bad без usable atmz, запись G_AD, post-motor wait, создание atmz по снятию проблемы (Usefulness=1), привязка к узлу ActivityID |
+| `ISIDA.Psychic.PurposeGeneticImageSystem` (интеграц.) | механизм 3 (случайная проба при Поиск/Игра, приоритет сессии), запрет пути A до стадии 3 |
+| `ISIDA.Psychic.Automatism.AutomatismResultTracker` (интеграц.) | оценка полезности ±1/0, Success/Error/Skipped, удаление atmz при отрицательной полезности на стадии 2 |
 
 ## Интеграционные тесты
 
@@ -124,7 +127,7 @@ PerceptionImagesSystem → ConditionedReflexesSystem
 Сознательно **не покрыты**:
 
 - прочие системы-оркестраторы (`IsidaEngine`, `PsychicSystem`, `ThinkingCyclesSystem`,
-  автоматизмы, цепочки) — требуют полного жизненного цикла и пульсации;
+  цепочки автоматизмов) — требуют полного жизненного цикла и пульсации;
 - загрузчики данных (`*FileLoader`) на реальных `.dat` из каталога проекта;
 - UI-модели/представления и подсистемы логов (`Logger`, `ResearchLogger`) —
   побочные эффекты на диск и WPF-зависимости.
