@@ -27,6 +27,14 @@ namespace ISIDA.Common
     private static Timer _timer;
     private static readonly object _timerLock = new object();
     private static bool _isRunning = false;
+
+    /// <summary>Сигнал «активного обработчика пульса нет»: signaled в простое и после
+    /// завершения <see cref="ProcessAgentPulse"/>, сбрасывается на время его выполнения.
+    /// Нужен, чтобы выгрузка (<see cref="ClearSystems()"/>) ждала реального конца пульса,
+    /// а не фиксированной паузы: иначе статические ссылки на системы обнуляются посреди
+    /// пульса и обработчик падает с NullReferenceException (см. DEBUG_CASEBOOK).</summary>
+    private static readonly ManualResetEventSlim _pulseCompletionSignal = new ManualResetEventSlim(true);
+
     private static ResearchLogger _researchLogger; // это нужно для корректной выгрузки в IsidaEngine!!!
 
     /// <summary>Ускорение пульса по календарю: 1 — базово ~1 с на цикл; &gt;1 укорачивает паузы (сценарии).</summary>
@@ -71,6 +79,9 @@ namespace ISIDA.Common
     private const int GreenDurationMs = 200;   // Яркая вспышка
     private const int FadeDurationMs = 300;    // Плавное затухание
     private const int GrayDurationMs = 500;    // Пауза после затухания (итого 1000мс = 1сек)
+
+    /// <summary>Сколько миллисекунд выгрузка (<see cref="ClearSystems"/>) ждёт конца активного пульса.</summary>
+    private const int PulseCompletionWaitTimeoutMs = 5000;
 
     /// <summary>
     /// Глобальный счетчик пульсов
@@ -248,10 +259,29 @@ namespace ISIDA.Common
     }
 
     /// <summary>
+    /// Ждёт фактического завершения активного обработчика пульса (см. <see cref="_pulseCompletionSignal"/>).
+    /// Нужен при выгрузке: после <see cref="Stop()"/> уже запущенный <see cref="ProcessAgentPulse"/>
+    /// может ещё выполняться вне <c>_timerLock</c>, и фиксированный <c>Thread.Sleep</c> это не покрывает
+    /// (пульс на стадии 2 длится дольше типовой паузы). Возвращает <c>true</c>, если активного пульса нет.
+    /// </summary>
+    /// <param name="timeoutMs">Максимальное ожидание в миллисекундах, чтобы выгрузка не зависла навсегда.</param>
+    /// <returns><c>true</c> — активного пульса нет; <c>false</c> — истёк таймаут, пульс ещё выполняется.</returns>
+    public static bool WaitForPulseCompletion(int timeoutMs)
+    {
+      return _pulseCompletionSignal.Wait(timeoutMs < 0 ? 0 : timeoutMs);
+    }
+
+    /// <summary>
     /// Очищает все ссылки на системы (вызывать при завершении приложения)
     /// </summary>
     public static void ClearSystems()
     {
+      // Ждём реального конца активного пульса ДО входа в _timerLock: ProcessAgentPulse берёт
+      // этот же лок для снимка систем, поэтому ожидание внутри дока дало бы взаимную блокировку.
+      // Без ожидания статические ссылки обнулялись посреди пульса → NullReferenceException (Случай 7).
+      if (!WaitForPulseCompletion(PulseCompletionWaitTimeoutMs))
+        Logger.Warning("ClearSystems: ожидание завершения пульса истекло по таймауту, продолжаем выгрузку");
+
       lock (_timerLock)
       {
         StopTimers(notifyUI: false);
@@ -338,6 +368,11 @@ namespace ISIDA.Common
           _gomeostas.PulseCount = GlobalPulsCount;
         }
 
+        // Отмечаем, что активный пульс начался, ровно перед входом в обработчик:
+        // _pulseCompletionSignal гарантированно вернётся в signaled в finally ProcessAgentPulse
+        // (любой путь выхода — успех, ранний return или исключение), поэтому выгрузка
+        // (ClearSystems) дождётся реального конца пульса, а не угадает по фиксированной паузе.
+        _pulseCompletionSignal.Reset();
         ProcessAgentPulse();
 
         // Фаза 4: Пауза и перезапуск таймера
@@ -510,6 +545,17 @@ namespace ISIDA.Common
     /// </summary>
     private static void ProcessAgentPulse()
     {
+      // Гонка при выгрузке: ClearSystems()/Stop() обнуляют статические ссылки на системы
+      // под _timerLock, тогда как тело пульса выполняется вне дока. Снимаем единовременный
+      // снимок ВСЕХ систем-участников под тем же _timerLock и дальше работаем только по
+      // локальным переменным — иначе _gomeostas/_reflexesActivator становятся null посреди
+      // пульса и обработчик падает с NullReferenceException (см. DEBUG_CASEBOOK, Случай 7).
+      GomeostasSystem gomeostas = null;
+      PsychicSystem psychic = null;
+      AdaptiveActionsSystem actions = null;
+      ReflexesActivator reflexesActivator = null;
+      ConditionedReflexesSystem crs = null;
+      ResearchLogger researchLogger = null;
       try
       {
         lock (_timerLock)
@@ -519,7 +565,23 @@ namespace ISIDA.Common
             Logger.Warning("Таймер остановлен, пропускаем пульс");
             return;
           }
+
+          gomeostas = _gomeostas;
+          psychic = _psychicSystem;
+          actions = _actionsSystem;
+          reflexesActivator = _reflexesActivator;
+          crs = _conditionedReflexesSystem;
+          researchLogger = _researchLogger;
         }
+
+        // Системы уже сброшены (ClearSystems отработал до того, как мы взяли лок) —
+        // штатно пропускаем пульс, НЕ считая это критической ошибкой.
+        if (gomeostas == null || reflexesActivator == null || psychic == null || actions == null)
+        {
+          Logger.Warning("Системы пульса уже сброшены, пропускаем пульс");
+          return;
+        }
+
         try
         {
           try
@@ -540,7 +602,7 @@ namespace ISIDA.Common
             Logger.Warning($"OnPulseBeforeGomeostasis: {hostEx.Message}");
           }
 
-          _gomeostas.UpdateStateOnly();
+          gomeostas.UpdateStateOnly();
         }
         catch (Exception gomeostasEx)
         {
@@ -577,14 +639,14 @@ namespace ISIDA.Common
         int sleepingType = 0;
         var currentStyles = AppGlobalState.ActiveStyles;
         var activetStyleIds = currentStyles.Select(s => s.Id).ToList();
-        _psychicSystem.ProcessPsychicPulse(activetStyleIds, GlobalPulsCount, sleepingType);
+        psychic.ProcessPsychicPulse(activetStyleIds, GlobalPulsCount, sleepingType);
 
         // Увеличение времени жизни в пульсах для условных рефлексов
-        if (!AppGlobalState.IsDead && HasConditionedReflexesSystem)
+        if (!AppGlobalState.IsDead && crs != null)
         {
           try
           {
-            _conditionedReflexesSystem.UpdateAgentLifetime();
+            crs.UpdateAgentLifetime();
           }
           catch (Exception conditionedEx)
           {
@@ -598,7 +660,7 @@ namespace ISIDA.Common
         {
           try
           {
-            _reflexesActivator.ProcessReflexPulse(GlobalPulsCount, AppGlobalState.IsSleeping);
+            reflexesActivator.ProcessReflexPulse(GlobalPulsCount, AppGlobalState.IsSleeping);
           }
           catch (Exception reflexEx)
           {
@@ -611,7 +673,7 @@ namespace ISIDA.Common
         // Иначе HTML-отчёт сценария (построенный сразу после последнего шага) не видит ОР/автоматизм за этот пульс.
         try
         {
-          _researchLogger?.FlushBufferedAgentRowToMemoryNow();
+          researchLogger?.FlushBufferedAgentRowToMemoryNow();
         }
         catch (Exception flushEx)
         {
@@ -622,7 +684,7 @@ namespace ISIDA.Common
         {
           try
           {
-            _actionsSystem.CleanupExpiredReflexActions();
+            actions.CleanupExpiredReflexActions();
           }
           catch (Exception actionEx)
           {
@@ -657,11 +719,19 @@ namespace ISIDA.Common
         try
         {
           AppGlobalState.IsNewConditions = false;
-          _reflexesActivator.ResetStates(GlobalPulsCount);
+          // null-guard по снимку: если системы уже сброшены (ClearSystems отработал
+          // во время пульса), второй NullReferenceException затирал бы первый в логе.
+          reflexesActivator?.ResetStates(GlobalPulsCount);
         }
         catch (Exception finalEx)
         {
           Logger.Error($"{finalEx.Message}");
+        }
+        finally
+        {
+          // Пульс завершён (успешно, по раннему return или по исключению) — разрешаем
+          // выгрузке (ClearSystems) считать, что обращений к системам больше не будет.
+          _pulseCompletionSignal.Set();
         }
       }
     }

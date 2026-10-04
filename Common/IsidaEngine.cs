@@ -435,7 +435,10 @@ namespace ISIDA.Common
       {
         ResearchLogger?.SuspendLogging();
         GlobalTimer.Stop();
-        Thread.Sleep(200);
+        // Ожидание фактического конца активного пульса берёт на себя ClearSystems()
+        // (WaitForPulseCompletion). Фиксированный Thread.Sleep(200) здесь не покрывал пульс
+        // стадии 2 (он длится дольше) и приводил к NullReferenceException в обработчике пульса
+        // после обнуления статических ссылок (см. DEBUG_CASEBOOK, Случай 7).
         SafeDispose(ResearchLogger, "ResearchLogger");
         GlobalTimer.ClearSystems();
       }
