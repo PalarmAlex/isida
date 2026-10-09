@@ -79,6 +79,7 @@ dotnet test
 | `ISIDA.Reflexes.ConditionedReflexesSystem` (интеграц.) | модель угасания УР на живом движке |
 | `ISIDA.Reflexes.ConditionedReflexFormationService` (интеграц.) | формирование CS→US, вторичное обусловливание, сенсорная прекондиция |
 | `ISIDA.Reflexes.ConditionedReflexFormationService` (ΣV) | конкурентное обучение: блокировка шумового CS окрепшим целевым, обратимость настройки |
+| `ISIDA.Reflexes.SensoryAssociationSystem` (интеграц.) | направленные CS→CS по Рескорла–Вагнеру: рост/затухание, порог γ, транзитивный обход цепей, гейт γ_tr, индекс исходящих рёбер |
 | `ISIDA.Psychic.OperatorMotorObservationSession` (интеграц.) | механизм 2 стадии 2: открытие сессии по rising-edge Bad без usable atmz, запись G_AD, post-motor wait, создание atmz по снятию проблемы (Usefulness=1), привязка к узлу ActivityID |
 | `ISIDA.Psychic.PurposeGeneticImageSystem` (интеграц.) | механизм 3 (случайная проба при Поиск/Игра, приоритет сессии), запрет пути A до стадии 3 |
 | `ISIDA.Psychic.Automatism.AutomatismResultTracker` (интеграц.) | оценка полезности ±1/0, Success/Error/Skipped, удаление atmz при отрицательной полезности на стадии 2 |
@@ -116,7 +117,12 @@ PerceptionImagesSystem → ConditionedReflexesSystem
   не достигает порога, при выключенном учится независимо, авторитарная запись
   не подавляется;
 - `SensoryAssociationSystemTests` / `ResolveHierarchicalConditionedActivationTests` —
-  второй канал (CS→CS) и иерархический гейт активации.
+  второй канал (CS→CS) и иерархический гейт активации;
+- `SensoryTransitiveChainTests` — транзитивное обучение и композиция последовательных
+  CS-пар: обход цепей `A→…→C` (сила `Π Cᵢ·δ^(hops−1)`), выбор сильнейшего пути,
+  ограничение `TransitiveMaxDepth`, защита от циклов, гейт `γ_tr = γ·k`
+  (`IsChainActivatable`) и его независимость от порога прямого звена, согласованность
+  индекса исходящих рёбер (`Strengthen`/`Load`/`ApplyDecay`), интеграция с иерархией УР.
 
 ## Границы покрытия
 

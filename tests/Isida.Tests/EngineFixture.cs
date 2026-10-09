@@ -131,6 +131,13 @@ namespace Isida.Tests
             .GetField("_links", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.GetValue(SensoryAssociationSystem.Instance) as System.Collections.IDictionary)
             ?.Clear();
+        // Индекс исходящих рёбер (_outLinks) — новое состояние транзитивного обучения.
+        // Load() при отсутствии файла делает return ДО перестройки индекса, поэтому
+        // без явной очистки рёбра предыдущего теста «текут» в обход цепочек.
+        (typeof(SensoryAssociationSystem)
+            .GetField("_outLinks", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.GetValue(SensoryAssociationSystem.Instance) as System.Collections.IDictionary)
+            ?.Clear();
       }
 
       // 4. Пульс времени: 0 — детерминированная стартовая точка (в т.ч. для
