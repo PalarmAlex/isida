@@ -58,6 +58,12 @@ public static class AppGlobalState
   /// <summary>ID условного рефлекса, активировавшего моторный ответ (для адаптера среды до снимка в UI).</summary>
   private static int _currentConditionedReflexID = 0;
 
+  /// <summary>CS₁ эпизода активации через сенсорный гейт (0 — активация не через гейт).</summary>
+  private static int _currentReflexEpisodeGateCs1 = 0;
+
+  /// <summary>CS₂ эпизода активации через сенсорный гейт (0 — активация не через гейт).</summary>
+  private static int _currentReflexEpisodeGateCs2 = 0;
+
   #endregion
 
   #region Состояние симбионта
@@ -610,6 +616,61 @@ public static class AppGlobalState
       try { _currentConditionedReflexID = value > 0 ? value : 0; }
       finally { _lock.ExitWriteLock(); }
     }
+  }
+
+  /// <summary>
+  /// Фиксирует путь активации текущего эпизода через сенсорный гейт (пара CS₁→CS₂).
+  /// Пара обнуляется при прямой (не через гейт) активации, при б/у-ответе и при снятии
+  /// эпизода методом <see cref="CaptureAndClearCurrentReflexEpisode"/>.
+  /// </summary>
+  /// <param name="gateCs1">ID пускового стимула гейта (CS₁).</param>
+  /// <param name="gateCs2">ID пускового образа у-рефлекса (CS₂).</param>
+  public static void SetCurrentSensoryGate(int gateCs1, int gateCs2)
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      bool valid = gateCs1 > 0 && gateCs2 > 0 && gateCs1 != gateCs2;
+      _currentReflexEpisodeGateCs1 = valid ? gateCs1 : 0;
+      _currentReflexEpisodeGateCs2 = valid ? gateCs2 : 0;
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>Обнуляет путь сенсорного гейта текущего эпизода (прямая активация, б/у-ответ).</summary>
+  public static void ClearCurrentSensoryGate()
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      _currentReflexEpisodeGateCs1 = 0;
+      _currentReflexEpisodeGateCs2 = 0;
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>
+  /// Атомарно снимает и обнуляет эпизод активации у-рефлекса: ID у-рефлекса и (при активации
+  /// через сенсорный гейт) пару CS₁→CS₂. Возврат — массив <c>int[]</c>, чтобы адаптер среды
+  /// читал эпизод простой рефлексией без зависимости от ValueTuple.
+  /// </summary>
+  /// <returns>Массив <c>{ reflexId, gateCs1, gateCs2 }</c>; отсутствующие значения — 0.</returns>
+  public static int[] CaptureAndClearCurrentReflexEpisode()
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      int reflexId = _currentConditionedReflexID > 0 ? _currentConditionedReflexID : 0;
+      int gateCs1 = _currentReflexEpisodeGateCs1 > 0 ? _currentReflexEpisodeGateCs1 : 0;
+      int gateCs2 = _currentReflexEpisodeGateCs2 > 0 ? _currentReflexEpisodeGateCs2 : 0;
+
+      _currentConditionedReflexID = 0;
+      _currentReflexEpisodeGateCs1 = 0;
+      _currentReflexEpisodeGateCs2 = 0;
+
+      return new int[] { reflexId, gateCs1, gateCs2 };
+    }
+    finally { _lock.ExitWriteLock(); }
   }
 
   /// <summary>

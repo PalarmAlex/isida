@@ -116,6 +116,12 @@ namespace ISIDA.Reflexes
     private ConditionedReflexesSystem.ConditionedReflexSettings Settings =>
         _conditionedReflexes.Settings;
 
+    /// <summary>
+    /// Коэффициент адресного штрафа связи по запрету оператора: крепость связи умножается
+    /// на это значение (обратная операция к усилению по Рескорлу–Вагнеру).
+    /// </summary>
+    private const float OperatorPenaltyFactor = 0.3f;
+
     #endregion
 
     #region Внутренние методы — индекс
@@ -243,6 +249,147 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Читает текущую готовность (крепость) направленной связи cs1 → cs2. Если прямого звена нет,
+    /// но гейт открыт транзитивной цепью cs1 → … → cs2, возвращает силу этой цепи.
+    /// </summary>
+    /// <param name="cs1">ID более раннего образа (CS₁).</param>
+    /// <param name="cs2">ID более позднего образа (CS₂).</param>
+    /// <param name="associability">Текущая крепость связи (или сила цепи) C ∈ [0, β]; 0, если ничего нет.</param>
+    /// <returns>True, если найдено прямое звено или транзитивная цепь.</returns>
+    public bool TryGetAssociability(int cs1, int cs2, out float associability)
+    {
+      associability = 0f;
+      if (cs1 <= 0 || cs2 <= 0)
+        return false;
+
+      _lock.EnterReadLock();
+      try
+      {
+        if (_links.TryGetValue((cs1, cs2), out var link))
+        {
+          associability = link.Strength;
+          return true;
+        }
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+
+      // Прямого звена нет: готовность может задаваться транзитивной цепью CS₁→…→CS₂.
+      // TryGetChainStrength берёт свой read-lock, поэтому вызываем вне текущего дока.
+      if (Settings.EnableTransitiveLearning &&
+          TryGetChainStrength(cs1, cs2, out float chainStrength, out _))
+      {
+        associability = chainStrength;
+        return true;
+      }
+      return false;
+    }
+
+    /// <summary>
+    /// Адресно снижает готовность (крепость) пути cs1 → cs2 по запрету оператора — умножение
+    /// крепости каждого звена на <see cref="OperatorPenaltyFactor"/>. Если прямого звена нет,
+    /// наказываются рёбра лучшей транзитивной цепи cs1 → … → cs2. Ослабленные ниже
+    /// <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.MinAssociationStrength"/>
+    /// звенья удаляются. Обратная операция к <see cref="StrengthenLink"/>: у-рефлекс не трогается,
+    /// наказывается именно путь активации через сенсорный гейт.
+    /// </summary>
+    /// <param name="cs1">ID более раннего образа (CS₁).</param>
+    /// <param name="cs2">ID более позднего образа (CS₂).</param>
+    /// <returns>Кортеж (успех, сообщение) для показа оператору.</returns>
+    public (bool Success, string Message) PenalizeLinkByOperator(int cs1, int cs2)
+    {
+      if (cs1 <= 0 || cs2 <= 0 || cs1 == cs2)
+        return (false, $"Некорректная сенсорная связь: {cs1}→{cs2}.");
+
+      var key = (cs1, cs2);
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_links.TryGetValue(key, out var link))
+        {
+          float before = link.Strength;
+          link.Strength *= OperatorPenaltyFactor;
+
+          if (link.Strength < Settings.MinAssociationStrength)
+          {
+            _links.Remove(key);
+            RebuildOutLinksIndex();
+            return (true, $"Готовность сенсорной связи {cs1}→{cs2} понижена оператором " +
+                          $"({before:0.###} → 0, связь удалена).");
+          }
+
+          // Индекс исходящих рёбер синхронизируется, иначе транзитивные цепи видят старую крепость.
+          UpsertOutLink(cs1, cs2, link.Strength);
+
+          return (true, $"Готовность сенсорной связи {cs1}→{cs2} понижена оператором " +
+                        $"({before:0.###} → {link.Strength:0.###}).");
+        }
+
+        // Прямого звена нет: гейт мог быть открыт транзитивной цепью CS₁→…→CS₂.
+        if (Settings.EnableTransitiveLearning && TryGetBestChainPath(cs1, cs2, out var chainPath))
+        {
+          int penalizedEdges = PenalizeChainEdges(chainPath);
+          string chainText = string.Join("→", chainPath);
+          if (penalizedEdges > 0)
+            return (true, $"Готовность сенсорной цепи {chainText} понижена оператором " +
+                          $"({penalizedEdges} зв.).");
+          return (false, $"Не удалось понизить готовность сенсорной цепи {chainText}.");
+        }
+
+        return (false, $"Сенсорная связь {cs1}→{cs2} не найдена.");
+      }
+      catch (Exception ex)
+      {
+        return (false, ex.Message);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
+    /// Наказывает все рёбра пути (умножение крепости на <see cref="OperatorPenaltyFactor"/>),
+    /// удаляя звенья ниже <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.MinAssociationStrength"/>.
+    /// Вызывается из-под write-lock; при удалении перестраивает индекс исходящих рёбер.
+    /// </summary>
+    /// <param name="path">Вершины пути (A,…,C), по рёбрам которого применяется штраф.</param>
+    /// <returns>Число наказанных рёбер.</returns>
+    private int PenalizeChainEdges(List<int> path)
+    {
+      int penalized = 0;
+      bool removedAny = false;
+
+      for (int i = 0; i + 1 < path.Count; i++)
+      {
+        var edgeKey = (path[i], path[i + 1]);
+        if (!_links.TryGetValue(edgeKey, out var edge))
+          continue;
+
+        edge.Strength *= OperatorPenaltyFactor;
+        penalized++;
+
+        if (edge.Strength < Settings.MinAssociationStrength)
+        {
+          _links.Remove(edgeKey);
+          removedAny = true;
+        }
+        else
+        {
+          UpsertOutLink(edgeKey.Item1, edgeKey.Item2, edge.Strength);
+        }
+      }
+
+      if (removedAny)
+        RebuildOutLinksIndex();
+
+      return penalized;
+    }
+
+    /// <summary>
     /// Ищет силу транзитивной цепочки earlier → … → later (длина ≥ 2 рёбер) методом обхода
     /// по индексу исходящих рёбер. Сила пути = Π Cᵢ по рёбрам · δ^(hops−1), где δ —
     /// <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.TransitiveDecayPerHop"/>.
@@ -273,12 +420,14 @@ namespace ISIDA.Reflexes
 
         float bestStrength = 0f;
         int bestHops = 0;
+        var bestPath = new List<int>(); // путь здесь не нужен — только сила/длина
 
         // visited по текущему пути: защита от циклов (A→B→A не даёт усиления).
         var visited = new HashSet<int> { earlierImageId };
+        var currentPath = new List<int> { earlierImageId };
 
         FindBestChain(earlierImageId, laterImageId, 1f, 0, maxDepth, delta, visited,
-            ref bestStrength, ref bestHops);
+            currentPath, ref bestStrength, ref bestHops, ref bestPath);
 
         if (bestHops >= 2)
         {
@@ -297,11 +446,12 @@ namespace ISIDA.Reflexes
     /// <summary>
     /// Рекурсивный DFS по исходящим рёбрам: перебирает простые пути глубиной ≤ maxDepth,
     /// накапливает произведение крепостей и фиксирует лучший путь до целевого узла.
-    /// Вызывается из-под read-lock (данные читаются, не мутируются).
+    /// Вызывается из-под read-lock (данные читаются, не мутируются). Попутно сохраняет
+    /// вершины лучшего пути в <paramref name="bestPath"/> (для адресного штрафа цепи).
     /// </summary>
     private void FindBestChain(int current, int target, float accProduct, int hops,
-        int maxDepth, float delta, HashSet<int> visited,
-        ref float bestStrength, ref int bestHops)
+        int maxDepth, float delta, HashSet<int> visited, List<int> currentPath,
+        ref float bestStrength, ref int bestHops, ref List<int> bestPath)
     {
       if (hops >= maxDepth)
         return;
@@ -325,16 +475,56 @@ namespace ISIDA.Reflexes
           {
             bestStrength = chainStrength;
             bestHops = newHops;
+            bestPath = new List<int>(currentPath) { target };
           }
           // Целевой узел не расширяем дальше — путь до него завершён.
           continue;
         }
 
         visited.Add(e.Later);
+        currentPath.Add(e.Later);
         FindBestChain(e.Later, target, newProduct, newHops, maxDepth, delta, visited,
-            ref bestStrength, ref bestHops);
+            currentPath, ref bestStrength, ref bestHops, ref bestPath);
+        currentPath.RemoveAt(currentPath.Count - 1);
         visited.Remove(e.Later);
       }
+    }
+
+    /// <summary>
+    /// Ищет простейший (максимальный по силе) простой путь earlier → … → later длиной ≥ 2 рёбер
+    /// и возвращает его вершины. Используется для адресного штрафа транзитивной цепи оператором.
+    /// Вызывается из-под уже взятого lock (сам лок не берёт).
+    /// </summary>
+    /// <param name="earlierImageId">ID стартового образа (A).</param>
+    /// <param name="laterImageId">ID целевого образа (C).</param>
+    /// <param name="path">Вершины лучшего пути от A до C включительно (A,…,C).</param>
+    /// <returns>True, если найден путь длиной ≥ 2 рёбер.</returns>
+    private bool TryGetBestChainPath(int earlierImageId, int laterImageId, out List<int> path)
+    {
+      path = null;
+      if (earlierImageId <= 0 || laterImageId <= 0 || earlierImageId == laterImageId)
+        return false;
+
+      int maxDepth = Settings.TransitiveMaxDepth > 0 ? Settings.TransitiveMaxDepth : 3;
+      float delta = Settings.TransitiveDecayPerHop;
+      if (delta <= 0f || delta > 1f)
+        delta = 1f;
+
+      float bestStrength = 0f;
+      int bestHops = 0;
+      var bestPath = new List<int>();
+      var visited = new HashSet<int> { earlierImageId };
+      var currentPath = new List<int> { earlierImageId };
+
+      FindBestChain(earlierImageId, laterImageId, 1f, 0, maxDepth, delta, visited,
+          currentPath, ref bestStrength, ref bestHops, ref bestPath);
+
+      if (bestHops >= 2 && bestPath.Count >= 3)
+      {
+        path = bestPath;
+        return true;
+      }
+      return false;
     }
 
     /// <summary>

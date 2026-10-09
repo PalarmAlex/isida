@@ -204,6 +204,12 @@ namespace ISIDA.Reflexes
 
     private readonly List<int> _geneticReflexesToRun = new List<int>();       // Список безусловных рефлексов для выполнения
     private readonly List<int> _conditionedReflexesToRun = new List<int>();   // Список условных рефлексов для выполнения
+
+    // Пары CS₁→CS₂ сенсорного гейта для отобранных иерархически у-рефлексов (reflexId → (cs1, cs2)).
+    // Нужны к моменту исполнения (через _reflexActionDuration пульсов), чтобы штраф оператора
+    // попал по связи, а не по у-рефлексу целиком.
+    private readonly Dictionary<int, (int Cs1, int Cs2)> _conditionedReflexGateLinks =
+        new Dictionary<int, (int Cs1, int Cs2)>();
     private List<int> _activetStyleIds = new List<int>();                     // Список текущих активных стилей
 
     #endregion
@@ -591,6 +597,13 @@ namespace ISIDA.Reflexes
                 _activeConditionReflexID = conditionedReflexId;
                 _activeGeneticReflexID = conditionedReflex.SourceGeneticReflexId;
                 AppGlobalState.CurrentConditionedReflexID = conditionedReflexId;
+
+                // Путь активации: через сенсорный гейт — сохраняем пару CS₁→CS₂, иначе обнуляем.
+                if (_conditionedReflexGateLinks.TryGetValue(conditionedReflexId, out var gateLink))
+                  AppGlobalState.SetCurrentSensoryGate(gateLink.Cs1, gateLink.Cs2);
+                else
+                  AppGlobalState.ClearCurrentSensoryGate();
+
                 _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
                 _lastReflexActivationPulse = pulseCount;
                 lastActivatedReflexId = conditionedReflexId;
@@ -613,6 +626,7 @@ namespace ISIDA.Reflexes
               _activeGeneticReflexID = reflexId;
               // Б/у ответ — не оставляем ID у-рефлекса от прошлого эпизода.
               AppGlobalState.CurrentConditionedReflexID = 0;
+              AppGlobalState.ClearCurrentSensoryGate();
               _lastReflexActivationPulse = pulseCount;
               lastActivatedReflexId = reflexId;
               lastWasConditioned = false;
@@ -1020,6 +1034,7 @@ namespace ISIDA.Reflexes
     {
       _geneticReflexesToRun.Clear();
       _conditionedReflexesToRun.Clear();
+      _conditionedReflexGateLinks.Clear();
       AppGlobalState.FlgConditionReflexes = false;
       GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
       GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
@@ -1140,13 +1155,36 @@ namespace ISIDA.Reflexes
         return;
 
       foreach (var reflex in resolution.ReflexesToActivate)
+      {
         _conditionedReflexesToRun.Add(reflex.Id);
+
+        // Запоминаем путь активации через сенсорный гейт (бедный стимул CS₁ → богатый образ
+        // рефлекса CS₂) для последующей записи эпизода в AppGlobalState при исполнении.
+        if (IsSensoryGateActivation(reflex))
+          _conditionedReflexGateLinks[reflex.Id] = (_activeCurTriggerStimulusID, reflex.Level3);
+      }
 
       AppGlobalState.FlgConditionReflexes = true;
       GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
 
       Logger.Info($"Иерархическая активация у-рефлексов: режим={resolution.Mode}, " +
                   $"n={resolution.ReflexesToActivate.Count}");
+    }
+
+    /// <summary>
+    /// Активация у-рефлекса через сенсорный гейт: текущий пусковой стимул строго беднее
+    /// пускового образа рефлекса (пара CS₁→CS₂ сенсорной прекондиции). Иерархический сбор
+    /// допускает такие рефлексы только при достаточной крепости связи/цепи.
+    /// </summary>
+    /// <param name="reflex">Отобранный для активации условный рефлекс.</param>
+    /// <returns>True, если рефлекс активируется через сенсорный гейт.</returns>
+    private bool IsSensoryGateActivation(ConditionedReflexesSystem.ConditionedReflex reflex)
+    {
+      if (reflex == null || reflex.Level3 <= 0 || _activeCurTriggerStimulusID <= 0)
+        return false;
+
+      return _conditionedReflexes.IsSensoryPreconditioningPair(
+          _activeCurTriggerStimulusID, reflex.Level3);
     }
 
     /// <summary>
@@ -1714,6 +1752,7 @@ namespace ISIDA.Reflexes
         _lastReflexActivationPulse = 0;
         _geneticReflexesToRun.Clear();
         _conditionedReflexesToRun.Clear();
+        _conditionedReflexGateLinks.Clear();
         AppGlobalState.FlgConditionReflexes = false;
         GetActionsForConditionReflexToRun(_conditionedReflexesToRun);
         GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
