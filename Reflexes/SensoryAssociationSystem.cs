@@ -44,6 +44,18 @@ namespace ISIDA.Reflexes
       public float MaxAchievedStrength { get; set; }
     }
 
+    /// <summary>
+    /// Результат обхода транзитивной цепочки CS→CS… от A до C (не пустая, только длина ≥ 2).
+    /// </summary>
+    public class TransitiveChainResult
+    {
+      /// <summary>Образы-вершины цепи от A до C включительно (например A,B,C)</summary>
+      public List<int> ImageIds { get; set; } = new List<int>();
+
+      /// <summary>Сила цепи = Π Cᵢ по рёбрам · δ^(hops−1)</summary>
+      public float Strength { get; set; }
+    }
+
     #region Инициализация
 
     private static SensoryAssociationSystem _instance;
@@ -94,8 +106,62 @@ namespace ISIDA.Reflexes
     private readonly Dictionary<(int Earlier, int Later), SensoryAssociation> _links =
         new Dictionary<(int Earlier, int Later), SensoryAssociation>();
 
+    /// <summary>
+    /// Индекс исходящих рёбер: образ-источник → список (образ-приёмник, крепость).
+    /// Обновляется при любом изменении графа (StrengthenLink / ApplyDecay / Load / RemoveLink).
+    /// </summary>
+    private readonly Dictionary<int, List<(int Later, float Strength)>> _outLinks =
+        new Dictionary<int, List<(int Later, float Strength)>>();
+
     private ConditionedReflexesSystem.ConditionedReflexSettings Settings =>
         _conditionedReflexes.Settings;
+
+    #endregion
+
+    #region Внутренние методы — индекс
+
+    /// <summary>
+    /// Перестраивает индекс исходящих рёбер из _links.
+    /// Вызывается из Load, ApplyDecay и при удалении рёбер.
+    /// </summary>
+    private void RebuildOutLinksIndex()
+    {
+      _outLinks.Clear();
+      foreach (var kv in _links)
+      {
+        var key = kv.Key;
+        var link = kv.Value;
+        if (!_outLinks.TryGetValue(key.Earlier, out var list))
+        {
+          list = new List<(int Later, float Strength)>();
+          _outLinks[key.Earlier] = list;
+        }
+        list.Add((key.Later, link.Strength));
+      }
+    }
+
+    /// <summary>
+    /// Инкрементально обновляет/добавляет одно исходящее ребро в индекс
+    /// (используется в StrengthenLink, чтобы не перестраивать весь индекс).
+    /// </summary>
+    private void UpsertOutLink(int earlier, int later, float strength)
+    {
+      if (!_outLinks.TryGetValue(earlier, out var list))
+      {
+        list = new List<(int Later, float Strength)>();
+        _outLinks[earlier] = list;
+      }
+
+      for (int i = 0; i < list.Count; i++)
+      {
+        if (list[i].Later == later)
+        {
+          list[i] = (later, strength);
+          return;
+        }
+      }
+      list.Add((later, strength));
+    }
 
     #endregion
 
@@ -136,6 +202,9 @@ namespace ISIDA.Reflexes
           link.MaxAchievedStrength = link.Strength;
 
         link.LastStrengthenPulse = currentPulse;
+
+        // Индекс исходящих рёбер синхронизируется инкрементально (без полной перестройки).
+        UpsertOutLink(earlierImageId, laterImageId, link.Strength);
       }
       finally
       {
@@ -173,6 +242,128 @@ namespace ISIDA.Reflexes
              strength >= Settings.ActivationThreshold;
     }
 
+    /// <summary>
+    /// Ищет силу транзитивной цепочки earlier → … → later (длина ≥ 2 рёбер) методом обхода
+    /// по индексу исходящих рёбер. Сила пути = Π Cᵢ по рёбрам · δ^(hops−1), где δ —
+    /// <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.TransitiveDecayPerHop"/>.
+    /// Выбирается простейший (максимальный по силе) простой путь глубиной не более
+    /// <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.TransitiveMaxDepth"/>.
+    /// visited по текущему пути защищает от циклов (звено не усиливает само себя).
+    /// </summary>
+    /// <param name="earlierImageId">ID стартового образа (A)</param>
+    /// <param name="laterImageId">ID целевого образа (C)</param>
+    /// <param name="strength">Сила лучшей найденной цепи (Π Cᵢ · δ^(hops−1))</param>
+    /// <param name="hops">Число рёбер в лучшей цепи</param>
+    /// <returns>True, если найден хотя бы один путь длиной ≥ 2 рёбер</returns>
+    public bool TryGetChainStrength(int earlierImageId, int laterImageId,
+        out float strength, out int hops)
+    {
+      strength = 0f;
+      hops = 0;
+      if (earlierImageId <= 0 || laterImageId <= 0 || earlierImageId == laterImageId)
+        return false;
+
+      _lock.EnterReadLock();
+      try
+      {
+        int maxDepth = Settings.TransitiveMaxDepth > 0 ? Settings.TransitiveMaxDepth : 3;
+        float delta = Settings.TransitiveDecayPerHop;
+        if (delta <= 0f || delta > 1f)
+          delta = 1f;
+
+        float bestStrength = 0f;
+        int bestHops = 0;
+
+        // visited по текущему пути: защита от циклов (A→B→A не даёт усиления).
+        var visited = new HashSet<int> { earlierImageId };
+
+        FindBestChain(earlierImageId, laterImageId, 1f, 0, maxDepth, delta, visited,
+            ref bestStrength, ref bestHops);
+
+        if (bestHops >= 2)
+        {
+          strength = bestStrength;
+          hops = bestHops;
+          return true;
+        }
+        return false;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивный DFS по исходящим рёбрам: перебирает простые пути глубиной ≤ maxDepth,
+    /// накапливает произведение крепостей и фиксирует лучший путь до целевого узла.
+    /// Вызывается из-под read-lock (данные читаются, не мутируются).
+    /// </summary>
+    private void FindBestChain(int current, int target, float accProduct, int hops,
+        int maxDepth, float delta, HashSet<int> visited,
+        ref float bestStrength, ref int bestHops)
+    {
+      if (hops >= maxDepth)
+        return;
+
+      if (!_outLinks.TryGetValue(current, out var edges))
+        return;
+
+      foreach (var e in edges)
+      {
+        if (visited.Contains(e.Later))
+          continue; // цикл по текущему пути — пропускаем
+
+        float newProduct = accProduct * e.Strength;
+        int newHops = hops + 1;
+
+        if (e.Later == target)
+        {
+          // Сила цепи с штрафом за длину: Π Cᵢ · δ^(hops−1).
+          float chainStrength = newProduct * (float)Math.Pow(delta, newHops - 1);
+          if (chainStrength > bestStrength)
+          {
+            bestStrength = chainStrength;
+            bestHops = newHops;
+          }
+          // Целевой узел не расширяем дальше — путь до него завершён.
+          continue;
+        }
+
+        visited.Add(e.Later);
+        FindBestChain(e.Later, target, newProduct, newHops, maxDepth, delta, visited,
+            ref bestStrength, ref bestHops);
+        visited.Remove(e.Later);
+      }
+    }
+
+    /// <summary>
+    /// Гейт транзитивной активации: допускает ли цепочка earlier → … → later активацию.
+    /// Порог повышен относительно прямого звена: γ_tr = ActivationThreshold · k, где k —
+    /// <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.TransitiveGammaCoefficient"/>
+    /// (k ≥ 1). Прямое звено при этом остаётся на γ (см. <see cref="IsLinkActivatable"/>).
+    /// Если <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.EnableTransitiveLearning"/>
+    /// выключен — всегда false (цепи не участвуют в активации).
+    /// </summary>
+    /// <param name="earlierImageId">ID стартового образа (A)</param>
+    /// <param name="laterImageId">ID целевого образа (C)</param>
+    /// <returns>True, если цепь найдена и её сила ≥ γ_tr</returns>
+    public bool IsChainActivatable(int earlierImageId, int laterImageId)
+    {
+      if (!Settings.EnableTransitiveLearning)
+        return false;
+
+      if (!TryGetChainStrength(earlierImageId, laterImageId, out float strength, out _))
+        return false;
+
+      float k = Settings.TransitiveGammaCoefficient;
+      if (k < 1f)
+        k = 1f;
+
+      float gammaTr = Settings.ActivationThreshold * k;
+      return strength >= gammaTr;
+    }
+
     /// <summary>Применяет затухание ко всем связям и удаляет ослабленные</summary>
     public void ApplyDecay()
     {
@@ -198,6 +389,9 @@ namespace ISIDA.Reflexes
 
         foreach (var key in keysToRemove)
           _links.Remove(key);
+
+        // Индекс перестраивается полностью после удаления слабых звеньев.
+        RebuildOutLinksIndex();
       }
       finally
       {
@@ -287,6 +481,9 @@ namespace ISIDA.Reflexes
           if (link.Strength >= Settings.MinAssociationStrength)
             _links[(earlierId, laterId)] = link;
         }
+
+        // Индекс исходящих рёбер строится один раз после загрузки всего графа.
+        RebuildOutLinksIndex();
       }
       finally
       {
