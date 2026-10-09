@@ -546,6 +546,34 @@ namespace ISIDA.Reflexes
       /// ниже — по η^√C.
       /// </summary>
       public float SensoryMidStrengthThreshold { get; set; } = 0.4f;
+
+      // ---------- Транзитивное обучение и композиция последовательных CS-пар ----------
+
+      /// <summary>
+      /// Включает транзитивное обучение: обход цепочек CS→CS… (A→B и B→C ⇒ A косвенно
+      /// предвещает C). Если false — активация допускается только по прямому звену
+      /// <see cref="SensoryAssociationSystem.IsLinkActivatable"/> (прежнее поведение).
+      /// </summary>
+      public bool EnableTransitiveLearning { get; set; } = true;
+
+      /// <summary>
+      /// Максимальная глубина обхода цепочки CS-звеньев (число рёбер). Ограничивает
+      /// комбинаторный взрыв путей и ложные активации по длинным цепям.
+      /// </summary>
+      public int TransitiveMaxDepth { get; set; } = 3;
+
+      /// <summary>
+      /// Деградация силы пути на каждое звено сверх первого (δ ∈ (0..1]):
+      /// сила цепи = Π Cᵢ · δ^(hops−1). Меньше δ — сильнее штраф за длину.
+      /// </summary>
+      public float TransitiveDecayPerHop { get; set; } = 0.9f;
+
+      /// <summary>
+      /// Коэффициент повышения порога для транзитивной цепи (k ≥ 1):
+      /// γ_tr = ActivationThreshold · k. Прямое звено остаётся на γ. Больше k —
+      /// строже допуск по цепочке (защита от ложных активаций).
+      /// </summary>
+      public float TransitiveGammaCoefficient { get; set; } = 1.5f;
     }
 
     /// <summary>
@@ -1366,8 +1394,11 @@ namespace ISIDA.Reflexes
                 return false;
               if (IsPoorStimulusRichReflex(S, img))
               {
-                return SensoryAssociationSystem.IsInitialized &&
-                       SensoryAssociationSystem.Instance.IsLinkActivatable(S.Id, r.Level3);
+                if (!SensoryAssociationSystem.IsInitialized)
+                  return false;
+                // Прямое звено (гейт γ) либо транзитивная цепь (гейт γ_tr = γ·k).
+                return SensoryAssociationSystem.Instance.IsLinkActivatable(S.Id, r.Level3) ||
+                       SensoryAssociationSystem.Instance.IsChainActivatable(S.Id, r.Level3);
               }
               return false;
             })
@@ -2027,6 +2058,19 @@ namespace ISIDA.Reflexes
             case "SensoryMidStrengthThreshold":
               _settings.SensoryMidStrengthThreshold = ParseF();
               break;
+            case "EnableTransitiveLearning":
+              _settings.EnableTransitiveLearning =
+                  value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
+              break;
+            case "TransitiveMaxDepth":
+              _settings.TransitiveMaxDepth = ParseI();
+              break;
+            case "TransitiveDecayPerHop":
+              _settings.TransitiveDecayPerHop = ParseF();
+              break;
+            case "TransitiveGammaCoefficient":
+              _settings.TransitiveGammaCoefficient = ParseF();
+              break;
           }
         }
       }
@@ -2119,7 +2163,11 @@ namespace ISIDA.Reflexes
             "# SensoryStrengthFloor: нижний предел крепости для кривой затухания CS→CS",
             "# SensoryHighStrengthThreshold: верхняя зона CS→CS (затухание по SensoryHighStrengthDecayRate)",
             "# SensoryHighStrengthDecayRate: эффективный коэффициент затухания устойчивых связей CS→CS",
-            "# SensoryMidStrengthThreshold: средняя зона CS→CS (выше — η^C, ниже — η^√C)"
+            "# SensoryMidStrengthThreshold: средняя зона CS→CS (выше — η^C, ниже — η^√C)",
+            "# EnableTransitiveLearning: транзитивное обучение цепочкам CS→CS… (true/false)",
+            "# TransitiveMaxDepth: максимальная глубина обхода цепочки CS-звеньев (число рёбер)",
+            "# TransitiveDecayPerHop: деградация силы цепи на звено сверх первого δ∈(0..1]",
+            "# TransitiveGammaCoefficient: коэффициент повышения порога цепи k (γ_tr = γ·k)"
           };
 
         // Все значения сериализуются через InvariantCulture (точка как десятичный разделитель) —
@@ -2151,6 +2199,10 @@ namespace ISIDA.Reflexes
         lines.Add($"SensoryHighStrengthThreshold={F(_settings.SensoryHighStrengthThreshold)}");
         lines.Add($"SensoryHighStrengthDecayRate={F(_settings.SensoryHighStrengthDecayRate)}");
         lines.Add($"SensoryMidStrengthThreshold={F(_settings.SensoryMidStrengthThreshold)}");
+        lines.Add($"EnableTransitiveLearning={_settings.EnableTransitiveLearning}");
+        lines.Add($"TransitiveMaxDepth={_settings.TransitiveMaxDepth.ToString(inv)}");
+        lines.Add($"TransitiveDecayPerHop={F(_settings.TransitiveDecayPerHop)}");
+        lines.Add($"TransitiveGammaCoefficient={F(_settings.TransitiveGammaCoefficient)}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),
