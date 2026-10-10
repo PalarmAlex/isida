@@ -12,6 +12,7 @@ namespace ISIDA.Scenarios
         string phraseText,
         int toneId,
         int moodId,
+        IReadOnlyList<int> commandPatternIds,
         int visualColorId = 0);
   }
 }

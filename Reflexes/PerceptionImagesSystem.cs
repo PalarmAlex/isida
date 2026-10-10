@@ -156,7 +156,8 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Число модальностей, задающих «компаунд» (для суммации нескольких CS): действие, речь, ненулевой цвет.
+    /// Число модальностей, задающих «компаунд» (для суммации нескольких CS): действие, речь,
+    /// команда (CommandChannel PhraseTree), ненулевой цвет.
     /// </summary>
     public static int CompoundModalityCount(PerceptionImage img)
     {
@@ -164,6 +165,7 @@ namespace ISIDA.Reflexes
       int n = 0;
       if (img.InfluenceActionsList?.Any() == true) n++;
       if (img.PhraseIdList?.Any() == true) n++;
+      if (img.CommandPatternIdList?.Any() == true) n++;
       if (img.VisualColorId != AgentVisualColor.White) n++;
       return n;
     }
@@ -191,6 +193,7 @@ namespace ISIDA.Reflexes
     /// либо I ⊆ S (богаче стимул, беднее запись рефлекса), либо S ⊆ I (богаче запись, беднее стимул).
     /// Цвет участвует в проверке подмножества как модальность: White (отсутствие цвета)
     /// допускает любое значение у партнёра, а два различных ненулевых цвета конфликтуют.
+    /// Командный канал (CommandPatternIdList) участвует как отдельная модальность подмножества.
     /// </summary>
     public static bool StimulusImagesHierarchyCompatible(PerceptionImage stimulus, PerceptionImage reflexTrigger)
     {
@@ -204,22 +207,25 @@ namespace ISIDA.Reflexes
 
       bool iSubsetS = colorTriggerSubsetStimulus &&
           IsIntListSubset(reflexTrigger.InfluenceActionsList, stimulus.InfluenceActionsList) &&
-          IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList);
+          IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList) &&
+          IsIntListSubset(reflexTrigger.CommandPatternIdList, stimulus.CommandPatternIdList);
       bool sSubsetI = colorStimulusSubsetTrigger &&
           IsIntListSubset(stimulus.InfluenceActionsList, reflexTrigger.InfluenceActionsList) &&
-          IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList);
+          IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList) &&
+          IsIntListSubset(stimulus.CommandPatternIdList, reflexTrigger.CommandPatternIdList);
       return iSubsetS || sSubsetI;
     }
 
     /// <summary>
-    /// Строгое равенство содержимого образов (включая цвет).
+    /// Строгое равенство содержимого образов (включая цвет и командный канал).
     /// </summary>
     public static bool PerceptionImagesEqual(PerceptionImage a, PerceptionImage b)
     {
       if (a == null || b == null) return false;
       return a.VisualColorId == b.VisualColorId &&
              a.InfluenceActionsList.OrderBy(x => x).SequenceEqual(b.InfluenceActionsList.OrderBy(x => x)) &&
-             a.PhraseIdList.OrderBy(x => x).SequenceEqual(b.PhraseIdList.OrderBy(x => x));
+             a.PhraseIdList.OrderBy(x => x).SequenceEqual(b.PhraseIdList.OrderBy(x => x)) &&
+             a.CommandPatternIdList.OrderBy(x => x).SequenceEqual(b.CommandPatternIdList.OrderBy(x => x));
     }
 
     /// <summary>

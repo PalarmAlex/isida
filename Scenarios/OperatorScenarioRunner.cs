@@ -207,11 +207,12 @@ namespace ISIDA.Scenarios
 
           bool hasPhrase = !string.IsNullOrWhiteSpace(line.Phrase);
           bool hasActions = line.ActionIds != null && line.ActionIds.Count > 0;
+          bool hasCommands = line.CommandPatternIds != null && line.CommandPatternIds.Count > 0;
           bool hasEnvProbes = line.EnvironmentProbes != null && line.EnvironmentProbes.Count > 0;
           int colorStep = AgentVisualColor.IsValidCode(line.VisualColorId) ? line.VisualColorId : AgentVisualColor.White;
           bool hasVisualColor = colorStep != AgentVisualColor.White;
 
-          if (hasPhrase || hasActions || hasVisualColor || hasEnvProbes)
+          if (hasPhrase || hasActions || hasCommands || hasVisualColor || hasEnvProbes)
           {
             var pult = _getPult();
             if (pult == null)
@@ -226,6 +227,7 @@ namespace ISIDA.Scenarios
                 line.Phrase ?? "",
                 line.ToneId,
                 line.MoodId,
+                line.CommandPatternIds,
                 colorStep);
             if (err != null)
             {
@@ -234,7 +236,7 @@ namespace ISIDA.Scenarios
               return;
             }
             ScenarioRunnerDiagnostics.Write(
-                $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0} среда={line.EnvironmentProbes?.Count ?? 0}");
+                $"[Apply OK] step={line.StepIndex} global={globalPulseCount} фраза={(line.Phrase ?? "").Length}симв действий={line.ActionIds?.Count ?? 0} команд={line.CommandPatternIds?.Count ?? 0} среда={line.EnvironmentProbes?.Count ?? 0}");
           }
           else
           {

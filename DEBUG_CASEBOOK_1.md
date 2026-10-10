@@ -32,6 +32,25 @@
 - **Эвристики:** → N, N (номера добавленных правил).
 ```
 
+## Случай 10. Сенсорная суммация не срабатывала на стимулы с командным каналом: `CompoundModalityCount` не учитывал `CommandPatternIdList`
+
+- **Дата / сборка:** 2026-10-11, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** в Velum при предъявлении двух CS через **командный канал** (`CommandPatternIdList`) одновременно — условный рефлекс не суммировался; активация шла только по одному CS, второй игнорировался. Оператор сформулировал как «суммация не работает на команды». При предъявлении того же через действия/фразы суммация штатная.
+- **Область:** `Reflexes\PerceptionImagesSystem.cs` — `CompoundModalityCount`, `StimulusImagesHierarchyCompatible`, `PerceptionImagesEqual`, `GetTriggerSpecificityTier`.
+- **Гипотезы и проверки:**
+  1. *Velum не передаёт `CommandPatternIdList`* — **опровергнуто дампом**: `VerbalCommandBrocaSystem` корректно заполняет `CommandPatternIdList` в `PerceptionImage`.
+  2. *Достаточно починить `CompoundModalityCount`* — **опровергнуто кодом**: `StimulusImagesHierarchyCompatible` тоже сравнивает только `InfluenceActionsList` и `PhraseIdList`, поэтому богаче-беднее подмножество не проходит по команде; `PerceptionImagesEqual` игнорирует `CommandPatternIdList` — два разных образа считаются равными; `GetTriggerSpecificityTier` возвращает 1 для чистого командного CS.
+  3. *Достаточно `Any()` вместо `Count()`* — подтверждено как минимально корректное условие (список — `List<int>`, `Any()` достаточно).
+- **Корень:** `PerceptionImage` ввёл командный канал (`CommandPatternIdList`), но три метода иерархии/суммации (`CompoundModalityCount`, `StimulusImagesHierarchyCompatible`, `PerceptionImagesEqual`) и `GetTriggerSpecificityTier` не были обновлены — канал не попадал ни в подсчёт модальностей, ни в сравнение подмножеств.
+- **Доказательство:** `PerceptionImagesSystem.cs` (до правки): `CompoundModalityCount`: `if (img.InfluenceActionsList?.Any() == true) n++; if (img.PhraseIdList?.Any() == true) n++;` — `CommandPatternIdList` отсутствует; `StimulusImagesHierarchyCompatible`: `IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList)` — без `CommandPatternIdList`.
+- **Исправление:** `Reflexes\PerceptionImagesSystem.cs`:
+  - `CompoundModalityCount`: добавлено `if (img.CommandPatternIdList?.Any() == true) n++;`;
+  - `StimulusImagesHierarchyCompatible`: `IsIntListSubset(reflexTrigger.CommandPatternIdList, stimulus.CommandPatternIdList)` и симметрично в `sSubsetI`;
+  - `PerceptionImagesEqual`: `a.CommandPatternIdList.OrderBy(x => x).SequenceEqual(b.CommandPatternIdList.OrderBy(x => x))`;
+  - `GetTriggerSpecificityTier`: XML-`<summary>` дополнен («+ команда/цвет как опора»).
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 552/552. Ручная: предъявить два CS через командный канал в Velum — суммация и иерархия богаче-беднее работают.
+- **Эвристики:** → E11.
+
 ## Случай 1. Условные рефлексы ID1/ID2, созданные «авторитарной записью» (крепость 0,95), через полчаса упали ниже порога активации (0,57 / 0,40) без нажатия «Запретить»
 
 - **Дата / сборка:** 2026-10-01, движок ISIDA.
@@ -226,6 +245,8 @@
 
 - **E7. Состояние «ожидание подкрепления» обязано сниматься по ЛЮБОМУ каналу подкрепления, а не только по прямому US.** Если у записи есть несколько способов быть подкреплённой (прямой US и вторичный — активацией последующего CR), а pending-флаг сбрасывается только по одному из них, то после подкрепления вторым каналом запись на следующем шаге ошибочно классифицируется как неподкреплённая и активно гасится. Диагностический признак: рефлекс создаётся с крепостью ≥ γ и сразу «тает» без явного CS-без-US. Любой `*Awaiting*`/pending-флаг обязан иметь явный подтверждающий сброс для каждого пути подкрепления. См. случай 6.
 
+- **E11. Формула подкрепления обязана учитывать ВСЕ каналы предъявления CS, а не только сенсорные.** Если в образе есть несколько независимых списков модальностей (запах, речь, команда, цвет), а `CompoundModalityCount` считает только сенсорные каналы, то CS, предъявленный через «вторичный» канал (командный, моторный), не попадает в формулу ΣV и не получает подавления. Корректная точка ΣV обязана читать все каналы. Диагностический признак: «сенсорная суммация молчит на вторичных каналах» при зелёной сборке. См. случай 10.
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
@@ -239,3 +260,4 @@
 | 7 | `NullReferenceException` в `GlobalTimer.ProcessAgentPulse` парами при выгрузке (гонка `ClearSystems` и пульса) | Common (GlobalTimer, IsidaEngine) | Исправлен |
 | 8 | Откат цепей CS→CS снёс адресный штраф связи: «Запретить» в Velum бьёт по УР целиком | Reflexes (SensoryAssociationSystem, AppGlobalState, ReflexesActivator) | Восстановлен |
 | 9 | Флажок «очистка при старте» сценария не чистит `SensoryAssociations.dat` (в отличие от перехода на 0 на пульте) | Common (EvolutionStageService, GomeostasSystem) | Исправлен |
+| 10 | Сенсорная суммация не срабатывает на CS через командный канал (`CompoundModalityCount` не учитывает `CommandPatternIdList`) | Reflexes (PerceptionImagesSystem) | Исправлен |
