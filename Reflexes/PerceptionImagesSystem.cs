@@ -194,6 +194,9 @@ namespace ISIDA.Reflexes
     /// Цвет участвует в проверке подмножества как модальность: White (отсутствие цвета)
     /// допускает любое значение у партнёра, а два различных ненулевых цвета конфликтуют.
     /// Командный канал (CommandPatternIdList) участвует как отдельная модальность подмножества.
+    /// Дополнительно: кросс-канальная совместимость для сенсорной прекондиции — если у стимула
+    /// команда, а у триггера фраза (и наоборот), образы считаются совместимыми, поскольку
+    /// разные модальности не конфликтуют (позволяют активацию через сенсорную связь CS₁→CS₂).
     /// </summary>
     public static bool StimulusImagesHierarchyCompatible(PerceptionImage stimulus, PerceptionImage reflexTrigger)
     {
@@ -205,15 +208,32 @@ namespace ISIDA.Reflexes
       bool colorTriggerSubsetStimulus = tColor == AgentVisualColor.White || tColor == sColor;
       bool colorStimulusSubsetTrigger = sColor == AgentVisualColor.White || sColor == tColor;
 
+      // iSubsetS: триггер ⊆ стимул (богаче стимул)
       bool iSubsetS = colorTriggerSubsetStimulus &&
           IsIntListSubset(reflexTrigger.InfluenceActionsList, stimulus.InfluenceActionsList) &&
           IsIntListSubset(reflexTrigger.PhraseIdList, stimulus.PhraseIdList) &&
           IsIntListSubset(reflexTrigger.CommandPatternIdList, stimulus.CommandPatternIdList);
+
+      // sSubsetI: стимул ⊆ триггер (богаче триггер)
       bool sSubsetI = colorStimulusSubsetTrigger &&
           IsIntListSubset(stimulus.InfluenceActionsList, reflexTrigger.InfluenceActionsList) &&
           IsIntListSubset(stimulus.PhraseIdList, reflexTrigger.PhraseIdList) &&
           IsIntListSubset(stimulus.CommandPatternIdList, reflexTrigger.CommandPatternIdList);
-      return iSubsetS || sSubsetI;
+
+      // Кросс-канальная совместимость для сенсорной прекондиции:
+      // разные модальности (команда vs фраза) не конфликтуют — позволяют активацию
+      // через сенсорную связь CS₁→CS₂, даже если строгое подмножество не выполняется.
+      bool crossChannel =
+          (stimulus.CommandPatternIdList?.Any() == true &&
+           reflexTrigger.PhraseIdList?.Any() == true &&
+           (stimulus.PhraseIdList == null || !stimulus.PhraseIdList.Any()) &&
+           (reflexTrigger.CommandPatternIdList == null || !reflexTrigger.CommandPatternIdList.Any())) ||
+          (stimulus.PhraseIdList?.Any() == true &&
+           reflexTrigger.CommandPatternIdList?.Any() == true &&
+           (stimulus.CommandPatternIdList == null || !stimulus.CommandPatternIdList.Any()) &&
+           (reflexTrigger.PhraseIdList == null || !reflexTrigger.PhraseIdList.Any()));
+
+      return iSubsetS || sSubsetI || crossChannel;
     }
 
     /// <summary>

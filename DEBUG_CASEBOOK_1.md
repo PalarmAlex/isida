@@ -49,7 +49,24 @@
   - `PerceptionImagesEqual`: `a.CommandPatternIdList.OrderBy(x => x).SequenceEqual(b.CommandPatternIdList.OrderBy(x => x))`;
   - `GetTriggerSpecificityTier`: XML-`<summary>` дополнен («+ команда/цвет как опора»).
 - **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 552/552. Ручная: предъявить два CS через командный канал в Velum — суммация и иерархия богаче-беднее работают.
-- **Эвристики:** → E11.
+- **Эвристики:** → E11, E12.
+
+## Случай 11. Сенсорная прекондиция не срабатывала на стимул через командный канал: `StimulusImagesHierarchyCompatible` отфильтровывала CS по команде против триггера по фразе
+
+- **Дата / сборка:** 2026-10-11, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** в сценарии сенсорной прекондиции (AIStudio `Scenario_4.dat`) после 12 парных предъявлений SW2 (команда) и «п» (фраза), связь CS₁→CS₂ выше порога γ=0,6. Предъявление «п» → УР активируется. Предъявление SW2 → УР **не** активируется, хотя ассоциация крепкая. В логе отчёта Velum: шаг 26 (SW2) — «Усл. рефлекс: ожид. «1», факт «-»».
+- **Область:** `Reflexes\PerceptionImagesSystem.cs` — `StimulusImagesHierarchyCompatible`; `Reflexes\ConditionedReflexesSystem.cs` — `ResolveHierarchicalConditionedActivation` (строка 1393, фильтр `!StimulusImagesHierarchyCompatible(S, img)`).
+- **Гипотезы и проверки:**
+  1. *Сенсорная связь не создана или ниже порога* — **опровергнуто дампом `SensoryAssociations.dat`**: связь SW2→«п» существует, крепость ≈ 0,65 > γ=0,6.
+  2. *Сенсорная суммация (E11) не учитывает команду* — **опровергнуто**: E11 про `CompoundModalityCount` и формулу подкрепления ΣV; здесь связь уже создана и проверяется активация.
+  3. *Образы несовместимы по иерархии* — **подтверждено**: триггер рефлекса = фраза «п» (пустой `CommandPatternIdList`), стимул = команда SW2 (пустой `PhraseIdList`). `StimulusImagesHierarchyCompatible` проверяет подмножества: `IsIntListSubset([п], [])` = false, `IsIntListSubset([SW2], [])` = false. Оба направления (iSubsetS и sSubsetI) дают false → образ отфильтровывается ДО проверки сенсорной прекондиции (`IsLinkActivatable`).
+- **Корень:**
+  - коммит c753bb5 добавил `CommandPatternIdList` в `StimulusImagesHierarchyCompatible` (для кросс-канальной суммации);
+  - при этом добавлена **строгая** проверка подмножества для командного канала, без учёта того, что разные модальности (команда ↔ фраза) могут образовывать сенсорную связь CS₁→CS₂;
+  - стимул по команде vs триггер по фразе не проходит строгую проверку подмножества → рефлекс отсеивается до гейта сенсорной прекондиции.
+- **Доказательство:** `ConditionedReflexesSystem.cs:1393` — `if (!PerceptionImagesSystem.StimulusImagesHierarchyCompatible(S, img)) return false;` выполняется **до** `IsLinkActivatable` (строка 1400). `PerceptionImagesSystem.StimulusImagesHierarchyCompatible` (до правки): `iSubsetS` требует `IsIntListSubset(reflexTrigger.CommandPatternIdList, stimulus.CommandPatternIdList)` — пустой список триггера ⊆ непустой стимул = true, но `sSubsetI` требует `IsIntListSubset(stimulus.CommandPatternIdList, reflexTrigger.CommandPatternIdList)` — непустой ⊆ пустой = false. Для направления «команда-стимул, фраза-триггер» оба направления дают false.
+- **Исправление:** `Reflexes\PerceptionImagesSystem.cs` — `StimulusImagesHierarchyCompatible`: добавлено условие `crossChannel` — если у стимула команда + пустая фраза, а у триггера фраза + пустая команда (и наоборот) — образы считаются совместимыми для целей сенсорной прекондиции.
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 554/552. Ручная: сценарий сенсорной прекондиции, шаг 26 (SW2) — УР активируется, «Запуск экспорта PDF» срабатывает. Регрессия: `ResolveHierarchicalConditionedActivationTests.CrossChannel_StimulusCommand_TriggerPhrase_ActivatesRichReflex` (успех), `CrossChannel_StimulusPhrase_TriggerCommand_NotActivated_NoLink` (ожидается failure ветки `IsPoorStimulusRichReflex`).
 
 ## Случай 1. Условные рефлексы ID1/ID2, созданные «авторитарной записью» (крепость 0,95), через полчаса упали ниже порога активации (0,57 / 0,40) без нажатия «Запретить»
 
@@ -247,6 +264,8 @@
 
 - **E11. Формула подкрепления обязана учитывать ВСЕ каналы предъявления CS, а не только сенсорные.** Если в образе есть несколько независимых списков модальностей (запах, речь, команда, цвет), а `CompoundModalityCount` считает только сенсорные каналы, то CS, предъявленный через «вторичный» канал (командный, моторный), не попадает в формулу ΣV и не получает подавления. Корректная точка ΣV обязана читать все каналы. Диагностический признак: «сенсорная суммация молчит на вторичных каналах» при зелёной сборке. См. случай 10.
 
+- **E12. При добавлении нового канала в метод сравнения образов нужно различать «тот же канал, строгое подмножество» и «разные каналы, допуск для кросс-канальной связи».** Если в `StimulusImagesHierarchyCompatible` (или аналогичном методе) добавляется проверка подмножества для нового канала (команда, цвет) симметрично существующим (запах, фраза), то стимул по новому каналу vs триггер по старому не проходит строгую проверку подмножества → образ отфильтровывается до гейта сенсорной прекондиции. Правило: при добавлении канала в сравнение — явно проверить, не отсекаются ли кросс-канальные пары (пустой список одного канала + непустой другого). Диагностический признак: «ассоциация крепкая, стимул предъявлен, а рефлекс не активируется» при зелёной сборке. См. случай 11.
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
@@ -261,3 +280,4 @@
 | 8 | Откат цепей CS→CS снёс адресный штраф связи: «Запретить» в Velum бьёт по УР целиком | Reflexes (SensoryAssociationSystem, AppGlobalState, ReflexesActivator) | Восстановлен |
 | 9 | Флажок «очистка при старте» сценария не чистит `SensoryAssociations.dat` (в отличие от перехода на 0 на пульте) | Common (EvolutionStageService, GomeostasSystem) | Исправлен |
 | 10 | Сенсорная суммация не срабатывает на CS через командный канал (`CompoundModalityCount` не учитывает `CommandPatternIdList`) | Reflexes (PerceptionImagesSystem) | Исправлен |
+| 11 | Сенсорная прекондиция не срабатывает на стимул через командный канал (`StimulusImagesHierarchyCompatible` отсекает кросс-канальные пары) | Reflexes (PerceptionImagesSystem, ConditionedReflexesSystem) | Исправлен |

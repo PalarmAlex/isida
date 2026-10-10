@@ -41,12 +41,13 @@ namespace Isida.Tests
     protected static readonly int[] DefaultLevel2 = new int[0];
 
     /// <summary>Создаёт образ восприятия по списку ID (детерминированный seed из фикстуры).</summary>
-    protected int NewImage(int[] actions = null, int[] phrases = null, int color = 0)
+    protected int NewImage(int[] actions = null, int[] phrases = null, int color = 0, int[] commands = null)
     {
       int id = Images.AddPerceptionImage(
           (actions ?? new int[0]).ToList(),
           (phrases ?? new int[0]).ToList(),
-          color);
+          color,
+          commands?.ToList());
       Assert.True(id > 0, "не удалось создать образ восприятия");
       return id;
     }

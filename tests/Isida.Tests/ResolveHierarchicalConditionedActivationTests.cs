@@ -137,5 +137,55 @@ namespace Isida.Tests
       var result = Resolve(unrelated);
       Assert.Empty(result.ReflexesToActivate);
     }
+
+    [Fact]
+    public void CrossChannel_StimulusCommand_TriggerPhrase_ActivatesRichReflex()
+    {
+      // Регрессия случая 11: стимул через командный канал, триггер через речевой.
+      // При строгой проверке подмножества (команды ⊆ [] = false) рефлекс отсекался
+      // до гейта сенсорной прекондиции. Добавлена кросс-канальная совместимость:
+      // команда-стимул + фраза-триггер считаются совместимыми.
+      int cmd = Engine.NextSeed();
+      int phrase = Engine.NextSeed();
+      int action = Engine.NextSeed();
+
+      // Триггер рефлекса: фраза + действие (богатый образ)
+      int rich = NewImage(actions: new[] { action }, phrases: new[] { phrase });
+      int reflexId = AddReflex(rich, authoritative: true, level2: L2);
+
+      // Стимул: только командный канал (пустая фраза)
+      int cmdStimulus = NewImage(commands: new[] { cmd });
+      Assert.False(cmdStimulus == rich); // точно разные образы
+
+      // Сенсорная связь cmd → rich ≥ γ
+      for (int i = 0; i < 10; i++)
+        Sensory.StrengthenLink(cmdStimulus, rich);
+      Assert.True(Sensory.IsLinkActivatable(cmdStimulus, rich));
+
+      var result = Resolve(cmdStimulus);
+      Assert.Contains(result.ReflexesToActivate, r => r.Id == reflexId);
+    }
+
+    [Fact]
+    public void CrossChannel_StimulusPhrase_TriggerCommand_NotActivated_NoLink()
+    {
+      // Стимул с фразой, триггер с командой: IsPoorStimulusRichReflex вернёт false
+      // (phrase ⊄ []), поэтому ветка сенсорной прекондиции не срабатывает.
+      // Это ожидаемо — кросс-канальная совместимость введена только для
+      // StimulusImagesHierarchyCompatible, а IsPoorStimulusRichReflex игнорирует команду.
+      int phrase = Engine.NextSeed();
+      int cmd = Engine.NextSeed();
+      int action = Engine.NextSeed();
+
+      int rich = NewImage(actions: new[] { action }, commands: new[] { cmd });
+      AddReflex(rich, authoritative: true, level2: L2);
+
+      int phraseStimulus = NewImage(phrases: new[] { phrase });
+      for (int i = 0; i < 10; i++)
+        Sensory.StrengthenLink(phraseStimulus, rich);
+
+      var result = Resolve(phraseStimulus);
+      Assert.Empty(result.ReflexesToActivate);
+    }
   }
 }
