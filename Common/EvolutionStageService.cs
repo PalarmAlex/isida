@@ -169,9 +169,12 @@ namespace ISIDA.Common
           else if (targetStage > currentStage && targetStage > currentStage + 1 && force)
             ClearIntermediateStagesData(currentStage + 1, targetStage - 1);
 
-          // Стадия 0 — только безусловные рефлексы; каталог образов действий им не нужен (данные из .dat не используются).
+          // Стадия 0 — только безусловные рефлексы; каталог образов действий и сенсорные связи им не нужны.
           if (targetStage == 0)
+          {
             ClearActionsImagesData();
+            ClearSensoryAssociationsData();
+          }
         }
         AppGlobalState.EvolutionStage = targetStage;
 
@@ -195,7 +198,8 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Полная очистка накопленных данных симбионта перед запуском сценария
-    /// (как при переходе на стадию 0 с max(текущая стадия, 2)): рефлексы, автоматизмы стадии 2 и т.д.
+    /// (как при переходе на стадию 0 с max(текущая стадия, 2)): рефлексы, автоматизмы стадии 2,
+    /// каталог образов действий (action_images.dat) и сенсорные ассоциации (SensoryAssociations.dat) и т.д.
     /// Нужно, чтобы при симбионте на стадии 0–1 всё равно сбрасывались автоматизмы после предыдущего прогона на стадии ≥2.
     /// Номер стадии (<see cref="AppGlobalState.EvolutionStage"/>) не изменяется.
     /// </summary>
@@ -213,6 +217,12 @@ namespace ISIDA.Common
         int clearThrough = Math.Max(stage, 2);
         Logger.Info($"Предзапуск сценария: очистка данных стадий 1..{clearThrough} (текущая стадия симбионта {stage}; как при переходе на стадию 0, без смены номера)");
         ClearSubsequentStagesData(0, clearThrough);
+
+        // Стадия 0 — только безусловные рефлексы; каталог образов действий и сенсорные связи им не нужны.
+        // ClearStageData(1..clearThrough) их не трогает, поэтому чистим отдельно, как в ветке targetStage == 0
+        // метода ChangeEvolutionStage (иначе SensoryAssociations.dat переживает предзапуск сценария).
+        ClearActionsImagesData();
+        ClearSensoryAssociationsData();
 
         // Память опыта и временное состояние стратегий циклов не привязаны к файлам стадии 4 и при clearThrough &lt; 4
         // не очищались бы (ClearThinkingCyclesWhenStageFourDataCleared не зовётся).
@@ -328,6 +338,30 @@ namespace ISIDA.Common
 
         ActionsImagesSystem.Instance.ClearAllActionsImages();
         Logger.Info("Образы действий (action_images.dat) очищены в памяти; запись при закрытии системы");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Очищает все направленные сенсорные ассоциации (SensoryAssociations.dat).
+    /// На стадии 0 не используются.
+    /// </summary>
+    private void ClearSensoryAssociationsData()
+    {
+      try
+      {
+        if (!SensoryAssociationSystem.IsInitialized)
+        {
+          Logger.Info("SensoryAssociationSystem не инициализирована, очистка сенсорных ассоциаций не требуется");
+          return;
+        }
+
+        SensoryAssociationSystem.Instance.ClearAll();
+        Logger.Info("Сенсорные ассоциации (SensoryAssociations.dat) очищены в памяти; запись при закрытии системы");
       }
       catch (Exception ex)
       {

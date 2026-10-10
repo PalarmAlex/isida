@@ -554,6 +554,25 @@ namespace ISIDA.Reflexes
       return strength >= gammaTr;
     }
 
+    /// <summary>
+    /// Полностью очищает все сенсорные связи и сохраняет пустое состояние в файл.
+    /// Используется при переходе на стадию 0 эволюции.
+    /// </summary>
+    public void ClearAll()
+    {
+      _lock.EnterWriteLock();
+      try
+      {
+        _links.Clear();
+        _outLinks.Clear();
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+      Save();
+    }
+
     /// <summary>Применяет затухание ко всем связям и удаляет ослабленные</summary>
     public void ApplyDecay()
     {
