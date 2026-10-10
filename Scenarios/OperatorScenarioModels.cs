@@ -75,6 +75,8 @@ namespace ISIDA.Scenarios
     /// <summary>Воздействия метрик среды: + — давление, − — отпускание.</summary>
     public List<ScenarioEnvironmentProbeEntry> EnvironmentProbes { get; set; } =
         new List<ScenarioEnvironmentProbeEntry>();
+    /// <summary>Идентификаторы паттернов Command-канала (порядок важен для genetic match).</summary>
+    public List<int> CommandPatternIds { get; set; } = new List<int>();
     /// <summary>Текст фразы для подачи симбионту.</summary>
     public string Phrase { get; set; } = "";
 
@@ -190,6 +192,46 @@ namespace ISIDA.Scenarios
     /// <summary>Событие изменения свойств (INotifyPropertyChanged).</summary>
     public event PropertyChangedEventHandler PropertyChanged;
 
+    private string _commandPatternsDisplay = "";
+
+    /// <summary>Названия выбранных паттернов Command-канала через запятую (для отображения в таблице).</summary>
+    public string CommandPatternsDisplay
+    {
+      get => _commandPatternsDisplay;
+      private set
+      {
+        if (_commandPatternsDisplay == value) return;
+        _commandPatternsDisplay = value;
+        NotifyPropertyChanged(nameof(CommandPatternsDisplay));
+      }
+    }
+
+    /// <summary>Обновляет подпись паттернов Command-канала по справочнику id → текст.</summary>
+    /// <param name="patternLookup">Словарь id → текст паттерна; null — отображаются сырые ID.</param>
+    public void RefreshCommandPatternNames(IReadOnlyDictionary<int, string> patternLookup)
+    {
+      if (CommandPatternIds == null || CommandPatternIds.Count == 0)
+      {
+        CommandPatternsDisplay = "";
+        return;
+      }
+      if (patternLookup == null)
+      {
+        CommandPatternsDisplay = string.Join(", ",
+            CommandPatternIds.Select(id => id.ToString(CultureInfo.InvariantCulture)));
+        return;
+      }
+      var parts = new List<string>();
+      foreach (var id in CommandPatternIds)
+      {
+        if (patternLookup.TryGetValue(id, out var text) && !string.IsNullOrEmpty(text))
+          parts.Add(text);
+        else
+          parts.Add(id.ToString(CultureInfo.InvariantCulture));
+      }
+      CommandPatternsDisplay = string.Join(", ", parts);
+    }
+
     /// <summary>Идентификаторы действий в виде строки «1,2,3» для ввода/отображения.</summary>
     public string ActionIdsText
     {
@@ -242,6 +284,7 @@ namespace ISIDA.Scenarios
         ActionIds = ActionIds?.ToList() ?? new List<int>(),
         EnvironmentProbes = EnvironmentProbes?.Select(e => e.Clone()).ToList()
             ?? new List<ScenarioEnvironmentProbeEntry>(),
+        CommandPatternIds = CommandPatternIds?.ToList() ?? new List<int>(),
         Phrase = Phrase ?? "",
         ResetWaitingPeriod = ResetWaitingPeriod
       };

@@ -315,6 +315,15 @@ namespace ISIDA.Scenarios
       set { if (_environmentProbesText == value) return; _environmentProbesText = value ?? ""; OnPropertyChanged(); }
     }
 
+    private string _commandPatternsText = "-";
+
+    /// <summary>Ожидаемые команды Command-канала (названия через запятую); «-» — пусто.</summary>
+    public string CommandPatternsText
+    {
+      get => _commandPatternsText;
+      set { if (_commandPatternsText == value) return; _commandPatternsText = value ?? ""; OnPropertyChanged(); }
+    }
+
     /// <summary>Глубокая копия строки ожиданий.</summary>
     /// <returns>Новый экземпляр с теми же текстовыми полями и номерами шага/пульса.</returns>
     public ScenarioLogExpectationRow Clone()
@@ -338,7 +347,8 @@ namespace ISIDA.Scenarios
         AutomatizmChainText = AutomatizmChainText ?? "",
         MainCycleText = MainCycleText ?? "",
         BackgroundCyclesText = BackgroundCyclesText ?? "",
-        EnvironmentProbesText = EnvironmentProbesText ?? ""
+        EnvironmentProbesText = EnvironmentProbesText ?? "",
+        CommandPatternsText = CommandPatternsText ?? ""
       };
     }
 
