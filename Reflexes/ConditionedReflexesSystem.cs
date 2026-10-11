@@ -522,7 +522,7 @@ namespace ISIDA.Reflexes
       /// <summary>
       /// Период затухания сенсорных связей CS→CS в пульсах (ApplyDecay срабатывает на кратных).
       /// </summary>
-      public int SensoryDecayPeriodPulses { get; set; } = 100;
+      public int SensoryDecayPeriodPulses { get; set; } = 1000;
 
       /// <summary>
       /// Нижний предел эффективной крепости для расчёта кривой затухания CS→CS

@@ -90,7 +90,7 @@ namespace Isida.Tests
       Assert.Equal(0.25f, settings.ActivationReinforcementFraction, 3);
       Assert.Equal(88473600, settings.MaxLifetimePulsesCap);
       Assert.Equal(1000, settings.PassiveDecayFallbackPeriodPulses);
-      Assert.Equal(100, settings.SensoryDecayPeriodPulses);
+      Assert.Equal(1000, settings.SensoryDecayPeriodPulses);
       Assert.Equal(0.1f, settings.SensoryStrengthFloor, 3);
       Assert.Equal(0.8f, settings.SensoryHighStrengthThreshold, 3);
       Assert.Equal(0.998f, settings.SensoryHighStrengthDecayRate, 3);

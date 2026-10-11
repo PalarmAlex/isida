@@ -141,7 +141,7 @@ namespace Isida.Tests
       }
 
       // 4. Пульс времени: 0 — детерминированная стартовая точка (в т.ч. для
-      //    ApplyDecay() сенсорных связей, срабатывающего на кратных 100 пульсов).
+      //    ApplyDecay() сенсорных связей, срабатывающего на кратных 1000 пульсов).
       _pulse = 0;
       AppGlobalState.Lifetime = 0;
       crs.UpdateAgentLifetime();

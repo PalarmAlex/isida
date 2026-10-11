@@ -102,7 +102,7 @@ namespace Isida.Tests
     [Fact]
     public void ApplyDecay_OffDecayPulse_NoChange()
     {
-      // ApplyDecay срабатывает только на пульсах, кратных 100: на пульсе 50 — выход сразу.
+      // ApplyDecay срабатывает только на пульсах, кратных 1000: на пульсе 50 — выход сразу.
       int a = NewPhraseImage();
       int b = NewPhraseImage();
 
@@ -110,7 +110,7 @@ namespace Isida.Tests
         Sensory.StrengthenLink(a, b);
       Sensory.TryGetStrength(a, b, out float before);
 
-      Engine.AdvanceToPulse(50); // не кратно 100
+      Engine.AdvanceToPulse(50); // не кратно 1000
       Sensory.ApplyDecay();
       Sensory.TryGetStrength(a, b, out float after);
 
@@ -120,18 +120,18 @@ namespace Isida.Tests
     [Fact]
     public void ApplyDecay_AtDecayPulse_Decays()
     {
-      // На пульсе, кратном 100, крепость связи падает (пассивное угасание второго канала).
+      // На пульсе, кратном 1000, крепость связи падает (пассивное угасание второго канала).
       int a = NewPhraseImage();
       int b = NewPhraseImage();
       for (int i = 0; i < 10; i++)
         Sensory.StrengthenLink(a, b);
       Sensory.TryGetStrength(a, b, out float before);
 
-      Engine.AdvanceToPulse(100);
+      Engine.AdvanceToPulse(1000);
       Sensory.ApplyDecay();
       Sensory.TryGetStrength(a, b, out float after);
 
-      Assert.True(after < before, $"на пульсе 100 связь должна ослабнуть: {before} → {after}");
+      Assert.True(after < before, $"на пульсе 1000 связь должна ослабнуть: {before} → {after}");
     }
 
     [Fact]

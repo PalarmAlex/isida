@@ -578,7 +578,7 @@ namespace ISIDA.Reflexes
     {
       int currentPulse = GetAgentLifetime();
       // Период затухания — из настроек (ConditionedReflexSettings.dat), а не захардкожен.
-      int period = Settings.SensoryDecayPeriodPulses > 0 ? Settings.SensoryDecayPeriodPulses : 100;
+      int period = Settings.SensoryDecayPeriodPulses > 0 ? Settings.SensoryDecayPeriodPulses : 1000;
       if (period <= 0 || currentPulse % period != 0)
         return;
 

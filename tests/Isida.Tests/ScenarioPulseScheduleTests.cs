@@ -12,7 +12,7 @@ namespace Isida.Tests
     public void ResolveDelay_Sequential_Zero()
     {
       Assert.Equal(0, ScenarioPulseSchedule.ResolveDelayBetweenSteps(
-          ScenarioPulseStepIncrement.Sequential, 100, 200));
+          ScenarioPulseStepIncrement.Sequential, 100, 200, 0));
     }
 
     [Theory]
@@ -20,21 +20,21 @@ namespace Isida.Tests
     [InlineData(ScenarioPulseStepIncrement.ActionHoldPlusOne)]
     public void ResolveDelay_ActionHold_UsesReflexDuration(ScenarioPulseStepIncrement mode)
     {
-      Assert.Equal(30, ScenarioPulseSchedule.ResolveDelayBetweenSteps(mode, 30, 200));
+      Assert.Equal(30, ScenarioPulseSchedule.ResolveDelayBetweenSteps(mode, 30, 200, 0));
     }
 
     [Fact]
     public void ResolveDelay_StateHold_UsesStateDuration()
     {
       Assert.Equal(200, ScenarioPulseSchedule.ResolveDelayBetweenSteps(
-          ScenarioPulseStepIncrement.StateHoldPlusOne, 30, 200));
+          ScenarioPulseStepIncrement.StateHoldPlusOne, 30, 200, 0));
     }
 
     [Fact]
     public void ResolveDelay_NegativeInput_ClampedToZero()
     {
       Assert.Equal(0, ScenarioPulseSchedule.ResolveDelayBetweenSteps(
-          ScenarioPulseStepIncrement.ActionHold, -5, -5));
+          ScenarioPulseStepIncrement.ActionHold, -5, -5, 0));
     }
 
     [Fact]
@@ -50,28 +50,28 @@ namespace Isida.Tests
     public void PulseDelta_Sequential_IsOne()
     {
       Assert.Equal(1, ScenarioPulseSchedule.PulseDeltaBetweenConsecutiveSteps(
-          ScenarioPulseStepIncrement.Sequential, 100, 200));
+          ScenarioPulseStepIncrement.Sequential, 100, 200, 0));
     }
 
     [Fact]
     public void PulseDelta_ActionHold_NoTail()
     {
       Assert.Equal(30, ScenarioPulseSchedule.PulseDeltaBetweenConsecutiveSteps(
-          ScenarioPulseStepIncrement.ActionHold, 30, 200));
+          ScenarioPulseStepIncrement.ActionHold, 30, 200, 0));
     }
 
     [Fact]
     public void PulseDelta_ActionHoldPlusOne_WithTail()
     {
       Assert.Equal(31, ScenarioPulseSchedule.PulseDeltaBetweenConsecutiveSteps(
-          ScenarioPulseStepIncrement.ActionHoldPlusOne, 30, 200));
+          ScenarioPulseStepIncrement.ActionHoldPlusOne, 30, 200, 0));
     }
 
     [Fact]
     public void PulseDelta_NeverBelowOne()
     {
       Assert.Equal(1, ScenarioPulseSchedule.PulseDeltaBetweenConsecutiveSteps(
-          ScenarioPulseStepIncrement.ActionHold, 0, 0));
+          ScenarioPulseStepIncrement.ActionHold, 0, 0, 0));
     }
 
     [Fact]

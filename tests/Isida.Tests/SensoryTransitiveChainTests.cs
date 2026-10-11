@@ -222,7 +222,7 @@ namespace Isida.Tests
       Strengthen(a, b, 10);
       Strengthen(b, c, 10);
 
-      Engine.AdvanceToPulse(100); // кратно SensoryDecayPeriodPulses
+      Engine.AdvanceToPulse(1000); // кратно SensoryDecayPeriodPulses
       Sensory.ApplyDecay();
 
       Assert.True(Sensory.TryGetChainStrength(a, c, out _, out int hops));
@@ -349,6 +349,192 @@ namespace Isida.Tests
       var result = Crs.ResolveHierarchicalConditionedActivation(
           0, new System.Collections.Generic.List<int> { Engine.SeedStyleId }, poor);
       Assert.Empty(result.ReflexesToActivate);
+    }
+
+    [Fact]
+    public void IsChainActivatable_GammaCoefficientBelowOne_ClampedToGamma()
+    {
+      // При TransitiveGammaCoefficient < 1 метод IsChainActivatable клемпит k до 1:
+      // γ_tr = γ·k, k<1 → k=1. Цепь с силой ≥ γ должна стать активируемой,
+      // так как эффективный порог = γ, а не γ·k.
+      // Регресс: «k<1 ломает гейт» — проверка корректности клемпинга.
+      // Усиливаем 10 раз (C≈0.893), δ=1.0: цепь = 0.893·0.893·1 = 0.797 ≥ γ=0.6 → активна.
+      Settings.TransitiveGammaCoefficient = 0.5f;
+      Settings.TransitiveDecayPerHop = 1.0f;
+
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 10);
+      Strengthen(b, c, 10);
+
+      Sensory.TryGetChainStrength(a, c, out float strength, out _);
+      float gamma = Settings.ActivationThreshold; // γ_tr = γ·1 = γ при k клемпится до 1
+      Assert.True(strength >= gamma,
+          $"сила цепи {strength} должна быть ≥ γ={gamma} при k=0.5 (кемп 1)");
+      Assert.True(Sensory.IsChainActivatable(a, c),
+          "цепь должна быть активируема: γ_tr клемпится до γ, сила ≥ γ");
+    }
+
+    [Fact]
+    public void TryGetChainStrength_DecayPerHopOutOfRange_DefaultsToOne()
+    {
+      // δ вне (0, 1] → клемпится к 1 методом FindBestChain.
+      // Сила цепи при δ=0, δ=-1, δ=2 должна совпадать с δ=1.0. Регресс: «битые δ ломают силу».
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 5);
+      Strengthen(b, c, 5);
+
+      Settings.TransitiveDecayPerHop = 1.0f;
+      Sensory.TryGetChainStrength(a, c, out float strengthNormal, out _);
+
+      Settings.TransitiveDecayPerHop = 0f;
+      Sensory.TryGetChainStrength(a, c, out float strengthZero, out _);
+
+      Settings.TransitiveDecayPerHop = -1f;
+      Sensory.TryGetChainStrength(a, c, out float strengthNeg, out _);
+
+      Settings.TransitiveDecayPerHop = 2f;
+      Sensory.TryGetChainStrength(a, c, out float strengthHigh, out _);
+
+      Assert.Equal(strengthNormal, strengthZero, 5);
+      Assert.Equal(strengthNormal, strengthNeg, 5);
+      Assert.Equal(strengthNormal, strengthHigh, 5);
+    }
+
+    [Fact]
+    public void TryGetChainStrength_MaxDepthNonPositive_DefaultsToThree()
+    {
+      // TransitiveMaxDepth ≤ 0 → дефолт = 3. Путь A→B→C→D (3 ребра) должен найтись.
+      // Регресс: «maxDepth=0 блокирует цепь любой длины».
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      int d = NewPhraseImage();
+      Strengthen(a, b, 5);
+      Strengthen(b, c, 5);
+      Strengthen(c, d, 5);
+
+      Settings.TransitiveMaxDepth = 0;
+      Assert.True(Sensory.TryGetChainStrength(a, d, out _, out int hopsZero),
+          "maxDepth=0 → дефолт 3, путь из 3 рёбер должен найтись");
+      Assert.Equal(3, hopsZero);
+
+      Settings.TransitiveMaxDepth = -5;
+      Assert.True(Sensory.TryGetChainStrength(a, d, out _, out int hopsNeg),
+          "maxDepth=-5 → дефолт 3, путь из 3 рёбер должен найтись");
+      Assert.Equal(3, hopsNeg);
+    }
+
+    [Fact]
+    public void TryGetChainStrength_ThreeHop_ProductWithQuadraticDecay()
+    {
+      // A→B→C→D по 5 усилений. При hops=3 показатель степени δ равен hops−1 = 2,
+      // то есть проверяется квадратичный штраф: сила = C_ab · C_bc · C_cd · δ².
+      // Регресс: «hops=3 даёт δ¹ вместо δ²» — неверный показатель степени штрафа за длину.
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      int d = NewPhraseImage();
+      Strengthen(a, b, 5);
+      Strengthen(b, c, 5);
+      Strengthen(c, d, 5);
+
+      Settings.TransitiveDecayPerHop = 0.5f;
+      Sensory.TryGetStrength(a, b, out float cab);
+      Sensory.TryGetStrength(b, c, out float cbc);
+      Sensory.TryGetStrength(c, d, out float ccd);
+
+      Sensory.TryGetChainStrength(a, d, out float strength, out int hops);
+      Assert.Equal(3, hops);
+      // δ² = 0.5² = 0.25.
+      float expected = cab * cbc * ccd * 0.25f;
+      Assert.Equal(expected, strength, 5);
+    }
+
+    [Fact]
+    public void TryGetAssociability_TransitiveDisabled_ReturnsFalse()
+    {
+      // При EnableTransitiveLearning=false TryGetAssociability не смотрит на цепь —
+      // возвращает false, если прямого звена нет. Регресс: «отключённое транзитивное обучение
+      // всё ещё находит цепь через TryGetAssociability».
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 5);
+      Strengthen(b, c, 5);
+
+      Settings.EnableTransitiveLearning = false;
+
+      Assert.False(Sensory.TryGetAssociability(a, c, out float assoc),
+          "при отключённом транзитивном обучении готовность по цепи должна быть false");
+      Assert.Equal(0f, assoc);
+    }
+
+    [Fact]
+    public void PenalizeLinkByOperator_TransitiveChain_DisablesChainActivation()
+    {
+      // Штраф транзитивной цепи (через PenalizeChainEdges) умножает каждое ребро на 0.3.
+      // После штрафа сила цепи падает ниже γ_tr → IsChainActivatable = false.
+      // Регресс: «PenalizeLinkByOperator не влияет на IsChainActivatable».
+      Settings.TransitiveGammaCoefficient = 1.0f;
+      Settings.TransitiveDecayPerHop = 1.0f;
+
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 10);
+      Strengthen(b, c, 10);
+
+      Assert.True(Sensory.IsChainActivatable(a, c), "цепь должна быть активируема до штрафа");
+
+      var result = Sensory.PenalizeLinkByOperator(a, c);
+      Assert.True(result.Success, "PenalizeLinkByOperator должен сработать по транзитивной цепи");
+
+      Assert.False(Sensory.IsChainActivatable(a, c),
+          "после штрафа сила цепи падает ниже γ_tr → неактивируема");
+    }
+
+    [Fact]
+    public void PenalizeLinkByOperator_TransitiveChain_RemovesWeakEdgeKeepsStrong()
+    {
+      // Штраф цепи умножает крепость каждого звена на 0.3 и удаляет звенья ниже C_min.
+      // A→B усилено 1 раз (C=0.2 → после штрафа 0.06 < 0.1, удаляется),
+      // B→C усилено 10 раз (C≈0.893 → 0.268 ≥ 0.1, остаётся).
+      // Регресс: «штраф цепи не удаляет слабое звено» и «штраф рушит сильное звено».
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 1);
+      Strengthen(b, c, 10);
+
+      var result = Sensory.PenalizeLinkByOperator(a, c);
+      Assert.True(result.Success, "штраф по транзитивной цепи должен сработать");
+
+      Assert.False(Sensory.TryGetStrength(a, b, out _), "слабое звено A→B должно быть удалено");
+      Assert.True(Sensory.TryGetStrength(b, c, out _), "сильное звено B→C должно остаться");
+      Assert.False(Sensory.IsChainActivatable(a, c), "после удаления слабого звена цепь разрушена");
+    }
+
+    [Fact]
+    public void PenalizeLinkByOperator_TransitiveDisabled_MissingLink_Fails()
+    {
+      // Прямое звено A→C отсутствует, EnableTransitiveLearning=false →
+      // PenalizeLinkByOperator не ищет цепь, возвращает (false, ...).
+      // Регресс: «PenalizeLinkByOperator ищет цепь даже при отключённом транзитивном обучении».
+      int a = NewPhraseImage();
+      int b = NewPhraseImage();
+      int c = NewPhraseImage();
+      Strengthen(a, b, 5);
+      Strengthen(b, c, 5);
+
+      Settings.EnableTransitiveLearning = false;
+
+      var result = Sensory.PenalizeLinkByOperator(a, c);
+      Assert.False(result.Success,
+          "при отключённом транзитивном обучении и отсутствии прямого звена штраф должен провалиться");
     }
   }
 }
