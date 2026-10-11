@@ -17,7 +17,8 @@ namespace ISIDA.Scenarios
     public static int ResolveDelayBetweenSteps(
         ScenarioPulseStepIncrement mode,
         int reflexActionDisplayDuration,
-        int stateHoldDynamicTime)
+        int stateHoldDynamicTime,
+        int timeWindowPulses)
     {
       switch (mode)
       {
@@ -28,6 +29,8 @@ namespace ISIDA.Scenarios
           return Math.Max(0, reflexActionDisplayDuration);
         case ScenarioPulseStepIncrement.StateHoldPlusOne:
           return Math.Max(0, stateHoldDynamicTime);
+        case ScenarioPulseStepIncrement.TimeWindowPlusOne:
+          return Math.Max(0, timeWindowPulses);
         default:
           return Math.Max(0, reflexActionDisplayDuration);
       }
@@ -41,9 +44,10 @@ namespace ISIDA.Scenarios
     public static int PulseDeltaBetweenConsecutiveSteps(
         ScenarioPulseStepIncrement mode,
         int reflexActionDisplayDuration,
-        int stateHoldDynamicTime)
+        int stateHoldDynamicTime,
+        int timeWindowPulses)
     {
-      int gap = ResolveDelayBetweenSteps(mode, reflexActionDisplayDuration, stateHoldDynamicTime);
+      int gap = ResolveDelayBetweenSteps(mode, reflexActionDisplayDuration, stateHoldDynamicTime, timeWindowPulses);
       return Math.Max(1, gap + TailPulseAfterGap(mode));
     }
 

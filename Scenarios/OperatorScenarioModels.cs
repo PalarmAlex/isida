@@ -19,7 +19,9 @@ namespace ISIDA.Scenarios
     /// <summary>+ время удержания состояний (пульсов) + 1.</summary>
     StateHoldPlusOne = 3,
     /// <summary>Только время удержания действий (пульсов), без дополнительного +1 к следующему шагу.</summary>
-    ActionHold = 4
+    ActionHold = 4,
+    /// <summary>+ временное окно корреляции (пульсов) + 1.</summary>
+    TimeWindowPlusOne = 5
   }
 
   /// <summary>Тип шага сценария: воздействие с пульта или ожидание клика по плашке.</summary>

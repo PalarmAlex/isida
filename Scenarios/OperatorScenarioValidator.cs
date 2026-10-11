@@ -29,8 +29,9 @@ namespace ISIDA.Scenarios
       if (psi != (int)ScenarioPulseStepIncrement.Sequential
           && psi != (int)ScenarioPulseStepIncrement.ActionHoldPlusOne
           && psi != (int)ScenarioPulseStepIncrement.StateHoldPlusOne
-          && psi != (int)ScenarioPulseStepIncrement.ActionHold)
-        return "Укажите корректный режим приращения пульса на шаге (1, 2, 3 или 4).";
+          && psi != (int)ScenarioPulseStepIncrement.ActionHold
+          && psi != (int)ScenarioPulseStepIncrement.TimeWindowPlusOne)
+        return "Укажите корректный режим приращения пульса на шаге (1, 2, 3, 4 или 5).";
 
       int stageForFeatureRules = EffectiveEvolutionStageForValidation(doc);
 
