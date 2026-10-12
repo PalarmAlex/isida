@@ -241,6 +241,28 @@
 - **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 552/552 (новый `EvolutionStageScenarioPreRunClearTests.ScenarioPreRun_ClearsSensoryAssociations_InMemoryAndOnDisk`); при временном отключении вызовов тест падает (проверено). Ручная: запустить сценарий с флажком очистки — `SensoryAssociations.dat` содержит только шапку, связи CS→CS отсутствуют.
 - **Эвристики:** → E10.
 
+## Случай 12. На 2-й стадии режим наблюдения активируется, но автоматизмы не формируются: сессия не фиксирует мотор оператора из-за пустых Target-параметров у G_AD и проверки «focus вышел из Bad» по overall
+
+- **Дата / сборка:** 2026-10-12, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** в Velum на `EvolutionStage == 2` на пульте появляется индикатор «Режим наблюдения», но `automatizm.dat` остаётся пустым — автоматизмы не создаются. В `AgentLogs.jsonl` состояние гомеостаза скачет Bad↔Normal, `ОР = ОР1`, активируются б/у рефлексы (например, ID=4), но колонка «Автоматизм» пуста.
+- **Область:** `Psychic\PsychicSystem.cs` (`ProcessOperatorMotorObservationSession`, `CheckAndRecordOperatorMotor`), `Psychic\OperatorMotorObservationSession.cs` (`RecordOperatorMotor`, `FocusExitedBadZone`), данные среды Velum `AdaptiveActions.dat`.
+- **Гипотезы и проверки:**
+  1. *Сессия не открывается* — **опровергнуто**: индикатор на пульте (и `OpenSession`) требуют `IsActive`; сессия открыта.
+  2. *Мотор не активируется (нет G_AD-активаций)* — **опровергнуто дампом б/у рефлексов**: `GeneticReflexes.dat` (ID=4: EA 64 → мотор 42) активирует G_AD; в логе `б/у рефлекс 4`.
+  3. *`RecordOperatorMotor` отклоняет мотор* — **подтверждено данными**: в `C:\ProgramData\VELUM\Data\Actions\AdaptiveActions.dat` у всех G_AD (38, 40, 42, 43, 45, 46, 47, 48) колонка «Target параметры» пуста; `RecordOperatorMotor` требовал непустой `TargetGomeoParamIdArr` и возвращал false («is not a G_AD»).
+  4. *`CheckAndRecordOperatorMotor` находит мотор* — **опровергнуто кодом**: фильтр `a.TargetGomeoParamIdArr.Contains(session.FocusParameterId)` при пустом Target отсекает все G_AD → `RecordOperatorMotor` вообще не вызывается.
+  5. *Проверка «focus вышел из Bad» идёт по focus-виталу* — **опровергнуто кодом**: `FocusExitedBadZone` читал `AppGlobalState.CurrentOverallState` (общее состояние), а не состояние focus-параметра; проблема другого параметра держит сессию открытой и кредит не выдаётся (план ст. 2 §2.4).
+- **Корень:**
+  - все механизмы 2-й стадии завязаны на `TargetGomeoParamIdArr` у G_AD (usable atmz, фиксация мотора, механизм 3);
+  - в среде Velum G_AD Target-параметров не имеют (связь «мотор ↔ витал» задана через моторные рефлексы: EA → G_AD), поэтому сессия не может связать мотор с focus и ничего не записывает;
+  - дополнительно `CheckAndRecordOperatorMotor` не требовал `ActivationPulse > 0` (при `LastMotorPulse == 0` пропускал все действия), а `FocusExitedBadZone` смотрел на overall, а не на focus-параметр.
+- **Доказательство:** `AdaptiveActions.dat` — `38|Имя документа|...|5|||0` (5-е поле Target пусто); `PsychicSystem.cs` (до правки) `a.TargetGomeoParamIdArr.Contains(session.FocusParameterId)`; `OperatorMotorObservationSession.cs` (до правки) `action.TargetGomeoParamIdArr == null || Count == 0 → return false`.
+- **Исправление:**
+  - `Psychic\OperatorMotorObservationSession.cs`: `RecordOperatorMotor` принимает G_AD с непустым Target **или** реально активированный (`ActivationPulse > 0`); добавлена перегрузка `FocusExitedBadZone(bool isFocusBad)` (кредит по focus-виталу), старая оставлена обёрткой над overall;
+  - `Psychic\PsychicSystem.cs`: `CheckAndRecordOperatorMotor` фильтрует `ActivationPulse > 0` и ослабляет Target-фильтр (пустой Target допускается); `ProcessOperatorMotorObservationSession` вычисляет состояние focus-параметра через `IsFocusParameterBad` (`GomeostasSystem.GetParameter(id).CurrentState`).
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 569/569. Новые регрессионные тесты: `RecordOperatorMotor_GadWithoutTargetButActivated_Records`, `CreateAutomatizmFromMotor_GadWithoutTarget_CreatesUsefulAutomatizm`, `FocusExitedBadZone_ByFocusParameter_IgnoresOverallBadFromOtherParam`. Ручная: повторить сессию на стадии 2 — `automatizm.dat` пополняется; для механизма 3 (random probe) по-прежнему желательно заполнить Target у G_AD (через AIStudio).
+- **Эвристики:** → E13.
+
 ## Эвристики
 
 - **E8. Если обработчик по таймеру читает разделяемое (в т.ч. статическое) состояние вне дока, а выгрузка обнуляет его под локом — снимай состояние в локальный снапшот под тем же локом и жди фактического конца обработчика перед обнулением.** `if (!_isRunning)` под `lock` защищает только вход; тело обработчика, читающее поля вне дока, всё равно видит их обнулёнными. Фиксированный `Thread.Sleep(N)` перед `Clear()`/`Dispose()` не является синхронизацией: если длительность обработчика превышает `N`, гонка воспроизводится. Корректно: (а) снять снимок всех используемых ссылок под тем же `lock`, что и мутатор, и дальше работать по локалям; (б) сигналом (`ManualResetEventSlim`) сообщать «активного обработчика нет» и ждать его **до** входа в лок мутатора (ожидание внутри дока = взаимная блокировка, если обработчик берёт тот же лок). Диагностический признак: стек-трейс с одним фреймом метода-обработчика и `NullReferenceException` на разыменовании поля; ошибки идут парами/пачками в момент закрытия. См. случай 7.
@@ -266,6 +288,8 @@
 
 - **E12. При добавлении нового канала в метод сравнения образов нужно различать «тот же канал, строгое подмножество» и «разные каналы, допуск для кросс-канальной связи».** Если в `StimulusImagesHierarchyCompatible` (или аналогичном методе) добавляется проверка подмножества для нового канала (команда, цвет) симметрично существующим (запах, фраза), то стимул по новому каналу vs триггер по старому не проходит строгую проверку подмножества → образ отфильтровывается до гейта сенсорной прекондиции. Правило: при добавлении канала в сравнение — явно проверить, не отсекаются ли кросс-канальные пары (пустой список одного канала + непустой другого). Диагностический признак: «ассоциация крепкая, стимул предъявлен, а рефлекс не активируется» при зелёной сборке. См. случай 11.
 
+- **E13. Контракт «обязательного» поля проверяй против фактических данных хоста, а не только против тестового харнесса.** Если движок требует у сущности непустой набор (например, `TargetGomeoParamIdArr` у G_AD) и все механизмы стадии завязаны на него, а хост (Velum) это поле не заполняет (связь задана в другом месте — через моторные рефлексы EA → G_AD), фича молча не работает при зелёной сборке и зелёных тестах: тесты создают сущности с полем (`AddAction(..., targetGomeoParamIdArr)`) — хост без. Диагностический признак: «индикатор режима показывается, а результата нет» + пустой файл-артефакт (`automatizm.dat`). Правило: при переносе механизма в хост — проверять фактический дамп данных хоста; обязательные поля либо заполняет хост, либо механизм имеет мягкий fallback (по факту активации, по probe-EA). См. случай 12.
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
@@ -281,3 +305,4 @@
 | 9 | Флажок «очистка при старте» сценария не чистит `SensoryAssociations.dat` (в отличие от перехода на 0 на пульте) | Common (EvolutionStageService, GomeostasSystem) | Исправлен |
 | 10 | Сенсорная суммация не срабатывает на CS через командный канал (`CompoundModalityCount` не учитывает `CommandPatternIdList`) | Reflexes (PerceptionImagesSystem) | Исправлен |
 | 11 | Сенсорная прекондиция не срабатывает на стимул через командный канал (`StimulusImagesHierarchyCompatible` отсекает кросс-канальные пары) | Reflexes (PerceptionImagesSystem, ConditionedReflexesSystem) | Исправлен |
+| 12 | На 2-й стадии режим наблюдения активен, но автоматизмы не создаются (пустой `Target` у G_AD + проверка Bad по overall) | Psychic (PsychicSystem, OperatorMotorObservationSession) | Исправлен |

@@ -1904,8 +1904,9 @@ namespace ISIDA.Psychic
           return;
         }
 
-        // 2. Если сессия активна — проверить, ушёл ли focus из Bad
-        if (session.FocusExitedBadZone())
+        // 2. Если сессия активна — проверить, ушёл ли focus из Bad (по focus-виталу, не по overall)
+        bool isFocusBad = IsFocusParameterBad(session.FocusParameterId);
+        if (session.FocusExitedBadZone(isFocusBad))
         {
           // Focus ушёл из Bad — создаём автоматизм по последнему зафиксированному мотору
           int lastMotorPulse = session.LastMotorPulse;
@@ -1961,12 +1962,16 @@ namespace ISIDA.Psychic
         if (!session.IsActive)
           return;
 
-        // Проверяем активные G_AD от оператора
+        // Мотор оператора — G_AD, реально активированный в сессии (ActivationPulse > 0).
+        // Target-фильтр мягкий: если у действия заданы Target-параметры, оно должно относиться к focus;
+        // если Target не задан (среда Velum), мотор фиксируется по факту активации.
         var allActions = AdaptiveActionsSystem.Instance.GetAllAdaptiveActions();
         var newMotors = allActions.Where(a =>
-            a.TargetGomeoParamIdArr != null &&
-            a.TargetGomeoParamIdArr.Contains(session.FocusParameterId) &&
-            a.ActivationPulse >= session.LastMotorPulse);
+            a.ActivationPulse > 0 &&
+            a.ActivationPulse >= session.LastMotorPulse &&
+            (a.TargetGomeoParamIdArr == null ||
+             a.TargetGomeoParamIdArr.Count == 0 ||
+             a.TargetGomeoParamIdArr.Contains(session.FocusParameterId)));
 
         foreach (var motor in newMotors)
         {
@@ -1984,6 +1989,31 @@ namespace ISIDA.Psychic
       {
         Logger.Error($"CheckAndRecordOperatorMotor: {ex.Message}");
       }
+    }
+
+    /// <summary>
+    /// Состояние focus-параметра сессии наблюдения: true — параметр в зоне Bad.
+    /// Кредит сессии закрывается по focus-виталу, а не по общему состоянию гомеостаза.
+    /// Если параметр недоступен — используется общее состояние (безопасный fallback).
+    /// </summary>
+    /// <param name="focusParamId">ID focus-параметра гомеостаза (DominantParam).</param>
+    private bool IsFocusParameterBad(int focusParamId)
+    {
+      try
+      {
+        if (focusParamId > 0 && _gomeostasSystem != null)
+        {
+          var param = _gomeostasSystem.GetParameter(focusParamId);
+          if (param != null)
+            return param.CurrentState == GomeostasSystem.ParameterState.Bad;
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"IsFocusParameterBad: {ex.Message}");
+      }
+
+      return AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
     }
 
     /// <summary>

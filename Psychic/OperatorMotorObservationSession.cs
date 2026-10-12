@@ -288,7 +288,13 @@ namespace ISIDA.Psychic
         }
 
         var action = _adaptiveActionsSystem.GetAdaptiveAction(actionId);
-        if (action == null || action.TargetGomeoParamIdArr == null || action.TargetGomeoParamIdArr.Count == 0)
+        // G_AD — действие с целевым параметром гомеостаза ЛИБО реально активированный мотор.
+        // В среде Velum у G_AD Target-параметры не заданы (связь с виталом идёт через моторный рефлекс),
+        // поэтому мотор распознаётся по факту активации (ActivationPulse > 0), а не по Target.
+        bool hasTarget = action != null
+            && action.TargetGomeoParamIdArr != null
+            && action.TargetGomeoParamIdArr.Count > 0;
+        if (action == null || (!hasTarget && action.ActivationPulse <= 0))
         {
           Logger.Info($"OperatorMotorObservationSession: actionId={actionId} is not a G_AD");
           return false;
@@ -350,16 +356,27 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Проверить, ушёл ли focus из Bad (Bad -> Well / не-Bad).
+    /// Проверить, ушёл ли focus из Bad (Bad -> Well / не-Bad) по общему состоянию гомеостаза.
     /// </summary>
     public bool FocusExitedBadZone()
+    {
+      bool isCurrentBad = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
+      return FocusExitedBadZone(isCurrentBad);
+    }
+
+    /// <summary>
+    /// Проверить, ушёл ли focus из Bad по состоянию именно focus-параметра.
+    /// Кредит сессии наблюдения должен закрываться по focus-виталу, а не по overall
+    /// (иначе проблема другого параметра держит сессию открытой, см. план ст. 2 §2.4).
+    /// </summary>
+    /// <param name="isFocusBad">Текущее состояние focus-параметра: true — Bad.</param>
+    public bool FocusExitedBadZone(bool isFocusBad)
     {
       _lock.EnterReadLock();
       try
       {
         if (!_isActive || !_wasInBadZone) return false;
-        bool isCurrentBad = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
-        return !isCurrentBad;
+        return !isFocusBad;
       }
       finally
       {

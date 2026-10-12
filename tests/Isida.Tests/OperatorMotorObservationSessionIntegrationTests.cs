@@ -281,6 +281,39 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void RecordOperatorMotor_GadWithoutTargetButActivated_Records()
+    {
+      OpenSessionInBad();
+      SetGlobalPulse(100);
+      int noTarget = CreateActionWithoutTarget();
+
+      // Среда Velum: у G_AD Target-параметры не заданы, связь с виталом идёт через моторный рефлекс.
+      // Мотор распознаётся по факту активации (ActivationPulse > 0), а не по Target.
+      AdaptiveActionsSystem.Instance.GetAdaptiveAction(noTarget).ActivationPulse = 100;
+
+      Assert.True(Session.RecordOperatorMotor(noTarget, null));
+      Assert.Equal(noTarget, Session.LastMotorActionId);
+      Assert.Equal(100, Session.LastMotorPulse);
+    }
+
+    [Fact]
+    public void CreateAutomatizmFromMotor_GadWithoutTarget_CreatesUsefulAutomatizm()
+    {
+      OpenSessionInBad();
+      SetGlobalPulse(100);
+      int noTarget = CreateActionWithoutTarget();
+      AdaptiveActionsSystem.Instance.GetAdaptiveAction(noTarget).ActivationPulse = 100;
+      Session.RecordOperatorMotor(noTarget, null);
+
+      int atmzId = Session.CreateAutomatizmFromMotor(noTarget);
+
+      Assert.True(atmzId > 0, "автоматизм по мотору без Target-параметров не создан");
+      var atmz = Autom.GetAutomatizmById(atmzId);
+      Assert.NotNull(atmz);
+      Assert.Equal(1, atmz.Usefulness);
+    }
+
+    [Fact]
     public void RecordOperatorMotor_ValidGad_RecordsActionAndPulse()
     {
       OpenSessionInBad();
@@ -350,6 +383,18 @@ namespace Isida.Tests
 
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Well;
       Assert.True(Session.FocusExitedBadZone());
+    }
+
+    [Fact]
+    public void FocusExitedBadZone_ByFocusParameter_IgnoresOverallBadFromOtherParam()
+    {
+      OpenSessionInBad();
+
+      // overall всё ещё Bad (проблема другого параметра), но focus-параметр вышел из Bad.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+
+      Assert.True(Session.FocusExitedBadZone(isFocusBad: false));
+      Assert.False(Session.FocusExitedBadZone(isFocusBad: true));
     }
 
     [Fact]
