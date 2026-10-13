@@ -573,7 +573,7 @@ namespace ISIDA.Reflexes
       /// γ_tr = ActivationThreshold · k. Прямое звено остаётся на γ. Больше k —
       /// строже допуск по цепочке (защита от ложных активаций).
       /// </summary>
-      public float TransitiveGammaCoefficient { get; set; } = 1.5f;
+      public float TransitiveGammaCoefficient { get; set; } = 1.0f;
     }
 
     /// <summary>
