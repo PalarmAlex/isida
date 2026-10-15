@@ -12,7 +12,7 @@ using System.Text;
 namespace ISIDA.Reflexes
 {
   /// <summary>
-  /// Результат загрузки условных рефлексов из списка по шаблону
+  /// Результат загрузки условных рефлексов из списка по шаблону.
   /// </summary>
   public sealed class ConditionedReflexLoadResult
   {
