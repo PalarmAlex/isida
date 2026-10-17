@@ -354,6 +354,33 @@ namespace ISIDA.Reflexes
         }
 
         _researchLogger.LogSystemState(pulseCount);
+
+        // Хук реплея: после успешной активации у-рефлекса — пробуем запустить следующий шаг цепочки.
+        if (_reflexFormationService != null && _activeGeneticReflexID != 0)
+        {
+          int nextStimulusId = 0;
+          if (_reflexFormationService.TryGetNextChainStimulus(out nextStimulusId) && nextStimulusId > 0)
+          {
+            // Находим у-рефлекс, чей Level3 == nextStimulusId (следующий у-рефлекс в цепочке).
+            var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
+                .FirstOrDefault(r => r.Level3 == nextStimulusId && r.CanBeActivated());
+            if (nextReflex != null)
+            {
+              var result = _reflexExecutionService.ExecuteConditionedReflex(nextReflex.Id);
+              if (result.Success)
+              {
+                _conditionedReflexes.NotifyConditionedReflexActivated(nextReflex.Id);
+                // Фиксируем мотор для обучения мотор→стимул связей.
+                var motorActions = _reflexExecutionService.GetActionsForGeneticReflex(nextReflex.SourceGeneticReflexId);
+                if (motorActions.Any())
+                  _reflexFormationService.SetLastMotorAction(motorActions.First(), pulseCount);
+                // Записываем активацию для следующего шага цепочки.
+                _reflexFormationService.RecordConditionedReflexActivation(nextReflex.Id, nextStimulusId);
+              }
+            }
+          }
+        }
+
         _activeGlobalCurTriggerStimulusID = 0;
         _activeGeneticReflexID = 0;
       }
@@ -593,6 +620,14 @@ namespace ISIDA.Reflexes
               {
                 _conditionedReflexes.NotifyConditionedReflexActivated(conditionedReflex.Id);
 
+                // Фиксируем мотор рефлекса для обучения мотор→стимул связей.
+                // Разыгрывание звена цепочки (ExecuteChainLink) мотор не пишет — прогон не обучается.
+                var conditionedMotorActions = _reflexExecutionService.GetActionsForGeneticReflex(
+                    conditionedReflex.SourceGeneticReflexId);
+                if (conditionedMotorActions.Any())
+                  _reflexFormationService.SetLastMotorAction(conditionedMotorActions.First(), pulseCount);
+
+
                 // Логируем как активацию условного рефлекса
                 _activeConditionReflexID = conditionedReflexId;
                 _activeGeneticReflexID = conditionedReflex.SourceGeneticReflexId;
@@ -610,6 +645,13 @@ namespace ISIDA.Reflexes
                 lastWasConditioned = true;
 
                 Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+
+                // Запись активации у-рефлекса в контексте цепочки (для реплея виртуальных стимулов).
+                if (_reflexFormationService != null)
+                {
+                  _reflexFormationService.RecordConditionedReflexActivation(
+                      conditionedReflexId, _activeCurTriggerStimulusID);
+                }
               }
             }
           }
@@ -624,6 +666,13 @@ namespace ISIDA.Reflexes
             if (result.Success)
             {
               _activeGeneticReflexID = reflexId;
+
+              // Фиксируем мотор рефлекса для обучения мотор→стимул связей
+              // (прогон звена цепочки мотор не пишет).
+              var geneticMotorActions = _reflexExecutionService.GetActionsForGeneticReflex(reflexId);
+              if (geneticMotorActions.Any())
+                _reflexFormationService.SetLastMotorAction(geneticMotorActions.First(), pulseCount);
+
               // Б/у ответ — не оставляем ID у-рефлекса от прошлого эпизода.
               AppGlobalState.CurrentConditionedReflexID = 0;
               AppGlobalState.ClearCurrentSensoryGate();

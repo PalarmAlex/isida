@@ -187,6 +187,7 @@
     <Compile Include="Reflexes\ConditionedReflexesSystem.cs" />
     <Compile Include="Reflexes\ConditionedReflexFormationService.cs" />
     <Compile Include="Reflexes\SensoryAssociationSystem.cs" />
+    <Compile Include="Reflexes\MotorStimulusAssociationSystem.cs" />
     <Compile Include="Reflexes\GeneticReflexesSystem.cs" />
     <Compile Include="Reflexes\PerceptionImagesSystem.cs" />
     <Compile Include="Reflexes\ReflexChainsSystem.cs" />

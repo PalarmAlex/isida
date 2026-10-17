@@ -547,7 +547,56 @@ namespace ISIDA.Reflexes
       /// </summary>
       public float SensoryMidStrengthThreshold { get; set; } = 0.4f;
 
-      // ---------- Транзитивное обучение и композиция последовательных CS-пар ----------
+      // ---------- Параметры мотор→стимул ассоциаций (MotorStimulusAssociationSystem) ----------
+
+      /// <summary>
+      /// Коэффициент обучения α мотор→стимул связей (0.1-0.3).
+      /// </summary>
+      public float MotorAssociationLearningRate { get; set; } = 0.2f;
+
+      /// <summary>
+      /// Максимальная крепость β мотор→стимул связи.
+      /// </summary>
+      public float MotorAssociationMaxStrength { get; set; } = 1.0f;
+
+      /// <summary>
+      /// Порог активации γ мотор→стимул связи: звено цепочки активируется при C ≥ γ.
+      /// </summary>
+      public float MotorAssociationActivationThreshold { get; set; } = 0.6f;
+
+      /// <summary>
+      /// Коэффициент затухания η мотор→стимул связей (0.95-0.99).
+      /// </summary>
+      public float MotorAssociationDecayRate { get; set; } = 0.98f;
+
+      /// <summary>
+      /// Период затухания мотор→стимул связей в пульсах (ApplyDecay срабатывает на кратных).
+      /// </summary>
+      public int MotorAssociationDecayPeriodPulses { get; set; } = 1000;
+
+      /// <summary>
+      /// Минимальная крепость мотор→стимул связи C_min; ниже — связь удаляется.
+      /// </summary>
+      public float MotorAssociationMinStrength { get; set; } = 0.1f;
+
+       /// <summary>
+       /// Максимальная глубина мотор→стимул цепочки (число звеньев) при построении.
+       /// </summary>
+       public int MotorChainMaxDepth { get; set; } = 3;
+
+       // ---------- Цепочки у-рефлексов (реплей виртуальных стимулов) ----------
+
+       /// <summary>
+       /// Максимальная длина цепочки у-рефлексов (число шагов реплея). 0 = без ограничения.
+       /// </summary>
+       public int ConditionedReflexMaxChainLength { get; set; } = 5;
+
+       /// <summary>
+       /// Таймаут одного шага цепочки в пульсах: если за это время не подан следующий стимул — цепочка завершается. 0 = без таймаута.
+       /// </summary>
+       public int ConditionedReflexChainStepTimeout { get; set; } = 5000;
+
+       // ---------- Транзитивное обучение и композиция последовательных CS-пар ----------
 
       /// <summary>
       /// Включает транзитивное обучение: обход цепочек CS→CS… (A→B и B→C ⇒ A косвенно
@@ -2058,6 +2107,33 @@ namespace ISIDA.Reflexes
             case "SensoryMidStrengthThreshold":
               _settings.SensoryMidStrengthThreshold = ParseF();
               break;
+            case "MotorAssociationLearningRate":
+              _settings.MotorAssociationLearningRate = ParseF();
+              break;
+            case "MotorAssociationMaxStrength":
+              _settings.MotorAssociationMaxStrength = ParseF();
+              break;
+            case "MotorAssociationActivationThreshold":
+              _settings.MotorAssociationActivationThreshold = ParseF();
+              break;
+            case "MotorAssociationDecayRate":
+              _settings.MotorAssociationDecayRate = ParseF();
+              break;
+            case "MotorAssociationDecayPeriodPulses":
+              _settings.MotorAssociationDecayPeriodPulses = ParseI();
+              break;
+            case "MotorAssociationMinStrength":
+              _settings.MotorAssociationMinStrength = ParseF();
+              break;
+            case "MotorChainMaxDepth":
+              _settings.MotorChainMaxDepth = ParseI();
+              break;
+            case "ConditionedReflexMaxChainLength":
+              _settings.ConditionedReflexMaxChainLength = ParseI();
+              break;
+            case "ConditionedReflexChainStepTimeout":
+              _settings.ConditionedReflexChainStepTimeout = ParseI();
+              break;
             case "EnableTransitiveLearning":
               _settings.EnableTransitiveLearning =
                   value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
@@ -2164,6 +2240,15 @@ namespace ISIDA.Reflexes
             "# SensoryHighStrengthThreshold: верхняя зона CS→CS (затухание по SensoryHighStrengthDecayRate)",
             "# SensoryHighStrengthDecayRate: эффективный коэффициент затухания устойчивых связей CS→CS",
             "# SensoryMidStrengthThreshold: средняя зона CS→CS (выше — η^C, ниже — η^√C)",
+            "# MotorAssociationLearningRate: α мотор→стимул связей (0.1-0.3)",
+            "# MotorAssociationMaxStrength: β мотор→стимул связи",
+            "# MotorAssociationActivationThreshold: γ активации звена мотор→стимул (C ≥ γ)",
+            "# MotorAssociationDecayRate: η затухания мотор→стимул связей (0.95-0.99)",
+            "# MotorAssociationDecayPeriodPulses: период затухания мотор→стимул связей (пульсы)",
+            "# MotorAssociationMinStrength: C_min мотор→стимул связи (ниже — удаление)",
+            "# MotorChainMaxDepth: максимальная глубина мотор→стимул цепочки (число звеньев)",
+            "# ConditionedReflexMaxChainLength: макс. длина цепочки у-рефлексов (число шагов реплея)",
+            "# ConditionedReflexChainStepTimeout: таймаут одного шага цепочки (пульсы, 0 = без таймаута)",
             "# EnableTransitiveLearning: транзитивное обучение цепочкам CS→CS… (true/false)",
             "# TransitiveMaxDepth: максимальная глубина обхода цепочки CS-звеньев (число рёбер)",
             "# TransitiveDecayPerHop: деградация силы цепи на звено сверх первого δ∈(0..1]",
@@ -2199,6 +2284,15 @@ namespace ISIDA.Reflexes
         lines.Add($"SensoryHighStrengthThreshold={F(_settings.SensoryHighStrengthThreshold)}");
         lines.Add($"SensoryHighStrengthDecayRate={F(_settings.SensoryHighStrengthDecayRate)}");
         lines.Add($"SensoryMidStrengthThreshold={F(_settings.SensoryMidStrengthThreshold)}");
+        lines.Add($"MotorAssociationLearningRate={F(_settings.MotorAssociationLearningRate)}");
+        lines.Add($"MotorAssociationMaxStrength={F(_settings.MotorAssociationMaxStrength)}");
+        lines.Add($"MotorAssociationActivationThreshold={F(_settings.MotorAssociationActivationThreshold)}");
+        lines.Add($"MotorAssociationDecayRate={F(_settings.MotorAssociationDecayRate)}");
+        lines.Add($"MotorAssociationDecayPeriodPulses={_settings.MotorAssociationDecayPeriodPulses.ToString(inv)}");
+        lines.Add($"MotorAssociationMinStrength={F(_settings.MotorAssociationMinStrength)}");
+        lines.Add($"MotorChainMaxDepth={_settings.MotorChainMaxDepth.ToString(inv)}");
+        lines.Add($"ConditionedReflexMaxChainLength={_settings.ConditionedReflexMaxChainLength.ToString(inv)}");
+        lines.Add($"ConditionedReflexChainStepTimeout={_settings.ConditionedReflexChainStepTimeout.ToString(inv)}");
         lines.Add($"EnableTransitiveLearning={_settings.EnableTransitiveLearning}");
         lines.Add($"TransitiveMaxDepth={_settings.TransitiveMaxDepth.ToString(inv)}");
         lines.Add($"TransitiveDecayPerHop={F(_settings.TransitiveDecayPerHop)}");

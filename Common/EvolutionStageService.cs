@@ -361,6 +361,11 @@ namespace ISIDA.Common
         }
 
         SensoryAssociationSystem.Instance.ClearAll();
+
+        // Очистка состояния цепочки у-рефлексов (реплей виртуальных стимулов).
+        if (ConditionedReflexFormationService.IsInitialized)
+          ConditionedReflexFormationService.Instance.ResetChainState();
+
         Logger.Info("Сенсорные ассоциации (SensoryAssociations.dat) очищены в памяти; запись при закрытии системы");
       }
       catch (Exception ex)
