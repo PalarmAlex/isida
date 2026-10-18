@@ -286,7 +286,27 @@
 - **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 581/581 (включая `MotorStimulusChainReplayTests.FullCycle_TrainThenReplay_WorksTwoSteps`).
 - **Эвристики:** → E14.
 
+## Случай 14. `MotorStimulusAssociations.dat` не создаётся при прогоне сценария и не очищается при переходе на стадию 0
+
+- **Дата / сборка:** 2026-10-18, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error, `dotnet test tests\Isida.Tests` → 581/581).
+- **Симптом:** в Velum (студия, данные в `C:\ProgramData\VELUM`) после прогона сценария `Scenario_7.dat` файл `C:\ProgramData\VELUM\Data\Reflexes\MotorStimulusAssociations.dat` не создаётся вообще. После первого исправления (инициализация) файл появился, но при переключении на 0-ю стадию не очищался, хотя `SensoryAssociations.dat` в той же папке очищается корректно.
+- **Область:** `Common\IsidaEngine.cs` (`InitializeCore`, `Dispose`), `Common\EvolutionStageService.cs` (`ClearSensoryAssociationsData`), `Reflexes\MotorStimulusAssociationSystem.cs`, `Reflexes\ConditionedReflexFormationService.cs` (`_motorStimulusAssociations`).
+- **Гипотезы и проверки:**
+  1. *Файл не пишется, потому что `Save()` вызывается только при `Dispose`/`ClearAll` (не во время прогона)* — **подтверждено кодом как норма**: `Save()` из `Dispose` (`MotorStimulusAssociationSystem.cs:475`) и `ClearAll` (`:335`); это то же поведение, что и `SensoryAssociations.dat` (пишется при закрытии, а не по ходу). Само по себе это не баг.
+  2. *Система вообще не инициализирована в живом движке* — **подтверждено кодом (корень №1)**: `MotorStimulusAssociationSystem.InitializeInstance` вызывался только в `tests\Isida.Tests\EngineFixture.cs`; в `IsidaEngine.InitializeCore` его не было (grep по `IsidaEngine.cs` — ноль вхождений). Значит `IsInitialized == false`, `_motorStimulusAssociations == null` в сервисе формирования, `TryStrengthenMotorStimulusLink` сразу `return` — связи не создаются даже в памяти, `Save()` не вызывается никогда.
+  3. *После инициализации файл не очищается при стадии 0, потому что очистка мотор→стимул связей отсутствует* — **подтверждено кодом (корень №2)**: в `ClearSensoryAssociationsData` был добавлен только `ResetChainState()` (сброс шага цепочки), но не `MotorStimulusAssociationSystem.Instance.ClearAll()`. `SensoryAssociationSystem.ClearAll()` чистит только CS↔CS; мотор→стимул — отдельная система с отдельным файлом.
+- **Корень:**
+  - новая система была встроена только в тестовый харнесс (`EngineFixture`), но не в единую точку сборки живого движка `IsidaEngine` (шаг инициализации, вторичная инициализация `SetMotorStimulusAssociations`, звено выгрузки);
+  - очистка при стадии 0 покрывала только сенсорные CS↔CS и шаг цепочки, но не сами мотор→стимул связи.
+- **Доказательство:** grep `IsidaEngine.cs` до правки: `MotorStimulusAssociation` — 0 вхождений, `SensoryAssociationSystem.InitializeInstance` — есть (`:737`); `EvolutionStageService.ClearSensoryAssociationsData` до правки содержал `SensoryAssociationSystem.Instance.ClearAll()` + `ResetChainState()`, но не `MotorStimulusAssociationSystem.Instance.ClearAll()`.
+- **Исправление:**
+  - `Common\IsidaEngine.cs`: шаг 12 — `MotorStimulusAssociationSystem.InitializeInstance(GeneticReflexes, ConditionedReflexes)` сразу после сенсорной системы (те же зависимости); шаг 15 — `context.ConditionedReflexFormation.SetMotorStimulusAssociations(MotorStimulusAssociationSystem.Instance)`; `Dispose` — `SafeDispose(MotorStimulusAssociationSystem.Instance, ...)` рядом с сенсорной системой (зависимостно-безопасный порядок, до `GeneticReflexes`);
+  - `Common\EvolutionStageService.cs`: в `ClearSensoryAssociationsData` добавлен `if (MotorStimulusAssociationSystem.IsInitialized) MotorStimulusAssociationSystem.Instance.ClearAll();` перед `ResetChainState()` (метод вызывается и при стадии 0 `:176`, и при предзапуске сценария `:225`).
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 581/581; `Build-Velum.ps1 Debug` → EXIT=0. Ручная: перезапустить студию, прогнать сценарий, закрыть — `MotorStimulusAssociations.dat` создаётся; переключить на стадию 0 — файл очищается до шапки.
+- **Эвристики:** → E15.
+
 ## Эвристики
+
 
 
 - **E8. Если обработчик по таймеру читает разделяемое (в т.ч. статическое) состояние вне дока, а выгрузка обнуляет его под локом — снимай состояние в локальный снапшот под тем же локом и жди фактического конца обработчика перед обнулением.** `if (!_isRunning)` под `lock` защищает только вход; тело обработчика, читающее поля вне дока, всё равно видит их обнулёнными. Фиксированный `Thread.Sleep(N)` перед `Clear()`/`Dispose()` не является синхронизацией: если длительность обработчика превышает `N`, гонка воспроизводится. Корректно: (а) снять снимок всех используемых ссылок под тем же `lock`, что и мутатор, и дальше работать по локалям; (б) сигналом (`ManualResetEventSlim`) сообщать «активного обработчика нет» и ждать его **до** входа в лок мутатора (ожидание внутри дока = взаимная блокировка, если обработчик берёт тот же лок). Диагностический признак: стек-трейс с одним фреймом метода-обработчика и `NullReferenceException` на разыменовании поля; ошибки идут парами/пачками в момент закрытия. См. случай 7.
@@ -316,6 +336,12 @@
 
 - **E14. При реплее виртуальных стимулов память об отреплейнутых стимулах обязательна — иначе цикл.** Если цепочка у-рефлексов строится через мотор→стимул ассоциации (`MotorStimulusAssociationSystem`) и реплей идёт по `GetActivatableStimuli(motorId)`, то при отсутствии `HashSet` отреплейнутых стимулов один и тот же стимул будет возвращаться бесконечно — мотор→стимул связь не мутирует и даёт один и тот же результат. Диагностический признак: реплей «застревает» на одном стимуле, цепочка не завершается, `step` не обнуляется. Правило: `TryGetNextChainStimulus` обязан хранить память о отреплейнутых стимулах (`HashSet<int>`) и фильтровать их при выборе следующего; при исчерпании всех новых стимулов — завершать цепочку (`step = 0`). См. случай 13.
 
+- **E15. Новая система, добавленная только в тестовую фикстуру, не работает в живом движке — это гарантированный баг «тихого отсутствия».**
+ Если класс (сервис, ассамблия, система) зарегистрирован в `EngineFixture` и покрыт тестами, но не добавлен в `IsidaEngine.InitializeCore` (шаг инициализации + зависимостно-безопасный порядок + вторичная инициализация через `Set*`) и `IsidaContext.Dispose` (звено выгрузки), то в реальном сценарии `IsInitialized == false`, все ссылки `null`, методы выходят через ранний `return` — сборка и тесты зелёные, но поведение пустое. Диагностический признак: «в тесте работает, в студии нет» или «файл-артефакт не создаётся» при зелёной сборке. Правило: каждый новый `InitializeInstance`/`IDisposable`-класс обязан иметь три якоря в `IsidaEngine`: шаг инициализации, звено `Dispose`, при необходимости — вторичная инициализация. См. случай 14.
+
+- **E16. При добавлении очистки данных при стадии 0 проверяй, что чистишь ВСЕ системы, а не только «первую встреченную».** Если новая система (мотор→стимул) имеет свой файл и свой метод очистки (`ClearAll`), а `ClearSensoryAssociationsData` (или аналогичный метод очистки стадии 0) содержит только вызов для `SensoryAssociationSystem`, то данные новой системы переживут переключение стадии — как если бы их не было. Диагностический признак: «одна система чистится при стадии 0, другая — нет» при зелёной сборке. Правило: `ClearSensoryAssociationsData` (и любые другие методы очистки стадии 0) обязан охватывать все подсистемы, владеющие файлами данных, не привязанными к номерам стадий. См. случай 14.
+
+
 
 ## Указатель случаев
 
@@ -334,4 +360,6 @@
 | 11 | Сенсорная прекондиция не срабатывает на стимул через командный канал (`StimulusImagesHierarchyCompatible` отсекает кросс-канальные пары) | Reflexes (PerceptionImagesSystem, ConditionedReflexesSystem) | Исправлен |
 | 12 | На 2-й стадии режим наблюдения активен, но автоматизмы не создаются (пустой `Target` у G_AD + проверка Bad по overall) | Psychic (PsychicSystem, OperatorMotorObservationSession) | Исправлен |
 | 13 | Реплей цепочки у-рефлексов зацикливался: один и тот же стимул возвращался бесконечно (отсутствие защиты от цикла) | Reflexes (ConditionedReflexFormationService, MotorStimulusAssociationSystem) | Исправлен |
+| 14 | `MotorStimulusAssociations.dat` не создавался и не очищался при стадии 0: новая система не встроена в живой движок (только в тестовую фикстуру) | Common (IsidaEngine, EvolutionStageService) | Исправлен |
+
 

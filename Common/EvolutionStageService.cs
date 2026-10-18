@@ -362,7 +362,9 @@ namespace ISIDA.Common
 
         SensoryAssociationSystem.Instance.ClearAll();
 
-        // Очистка состояния цепочки у-рефлексов (реплей виртуальных стимулов).
+        // Очистка мотор→стимул связей (MotorStimulusAssociations.dat) и состояния цепочки у-рефлексов.
+        if (MotorStimulusAssociationSystem.IsInitialized)
+          MotorStimulusAssociationSystem.Instance.ClearAll();
         if (ConditionedReflexFormationService.IsInitialized)
           ConditionedReflexFormationService.Instance.ResetChainState();
 
