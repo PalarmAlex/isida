@@ -341,6 +341,10 @@
 
 - **E16. При добавлении очистки данных при стадии 0 проверяй, что чистишь ВСЕ системы, а не только «первую встреченную».** Если новая система (мотор→стимул) имеет свой файл и свой метод очистки (`ClearAll`), а `ClearSensoryAssociationsData` (или аналогичный метод очистки стадии 0) содержит только вызов для `SensoryAssociationSystem`, то данные новой системы переживут переключение стадии — как если бы их не было. Диагностический признак: «одна система чистится при стадии 0, другая — нет» при зелёной сборке. Правило: `ClearSensoryAssociationsData` (и любые другие методы очистки стадии 0) обязан охватывать все подсистемы, владеющие файлами данных, не привязанными к номерам стадий. См. случай 14.
 
+- **E17. Если структура данных строится иерархически через обход, а поиск использует «первое совпадение», то добавление нового узла может создать «неправильную» вложенность, которую поиск не найдёт.** Если `CreateNewReflexToTreeFromNodes` создаёт дочерние узлы от `detectedNode`, найденного `ConditionsDetection` (первое совпадение по первому условию), то дочерний узел может попасть в subtree с другим StyleID. Поиск `GetReflexTreeNode` не может найти такой узел, потому что перебирает только `node.Children` текущего узла. Диагностический признак: «узел в дереве есть (видно в дампе), но поиск его не находит». Правило: после иерархического поиска добавить фолбэк — полный поиск по всем узлам через `FindReflexTreeNodeFromCondition`, если иерархический не нашёл полный набор условий. См. случай 15.
+
+- **E18. При отладке «почему рефлекс не срабатывает» — сначала проверь, что `detectedNode` содержит нужный `GeneticReflexID`, а не только, что `detectedLevel` совпадает.** Если `ConditionsDetection` возвращает `DetectedLevel=1` (стиль найден, триггер нет), то `CollectGeneticReflexesWithTriggers` использует `detectedNode.GeneticReflexID`, который может быть 0 (промежуточный узел без рефлекса). Рефлекс не добавляется в `_geneticReflexesToRun`. Диагностический признак: «DetectedLevel=1, DetectedReflexNodeId=N, но GeneticReflexID=0». Правило: проверить содержимое `detectedNode` (GeneticReflexID) через дамп дерева (`ReflexTree.dat`). См. случай 15.
+
 
 
 ## Указатель случаев
@@ -361,5 +365,22 @@
 | 12 | На 2-й стадии режим наблюдения активен, но автоматизмы не создаются (пустой `Target` у G_AD + проверка Bad по overall) | Psychic (PsychicSystem, OperatorMotorObservationSession) | Исправлен |
 | 13 | Реплей цепочки у-рефлексов зацикливался: один и тот же стимул возвращался бесконечно (отсутствие защиты от цикла) | Reflexes (ConditionedReflexFormationService, MotorStimulusAssociationSystem) | Исправлен |
 | 14 | `MotorStimulusAssociations.dat` не создавался и не очищался при стадии 0: новая система не встроена в живой движок (только в тестовую фикстуру) | Common (IsidaEngine, EvolutionStageService) | Исправлен |
+| 15 | Безусловный рефлекс 11 не срабатывает в сценарии: ConditionsDetection не находит узел из-за неправильной иерархии вложенности | Reflexes (ReflexTreeSystem) | Исправлен |
+
+## Случай 15. Безусловный рефлекс 11 не срабатывает в сценарии: ConditionsDetection не находит узел из-за неправильной иерархии вложенности
+
+- **Дата / сборка:** 2026-10-18, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** при прогоне сценария `Scenario_9.dat` (Velum) на шаге 2 (пульс 2, глобальный пульс 174–175) безусловный рефлекс №11 не срабатывает. В отчёте: «Б/у рефлекс: ожид. «11», факт «-»». При этом рефлексы 3 и 5 на других шагах срабатывают штатно.
+- **Область:** `Reflexes\ReflexTreeSystem.cs` — `ConditionsDetection`, `GetReflexTreeNode`, `FindReflexTreeNodeFromCondition`.
+- **Гипотезы и проверки:**
+  1. *Триггер (образ пускового стимула) не совпадает из-за цвета фона* — **опровергнуто кодом**: в `InfluenceActionSystem.ApplyMultipleInfluenceActions` для б/у рефлексов (`ActiveCurReflexTriggerStimulusID`) цвет **всегда** `AgentVisualColor.White` (строка 481), поэтому цвет сценария не влияет на поиск б/у рефлекса.
+  2. *Узел дерева 40 не находится иерархическим поиском* — **подтверждено**: `ConditionsDetection([-1, 4, 55])` находит корень с BaseID=-1 (узел 1), среди детей ищет StyleID=4 → находит **узел 35** (StyleID=4, ActionID=37), среди детей узла 35 ищет ActionID=55 → **не находит**. Возвращает DetectedLevel=1, DetectedReflexNodeId=35 (GeneticReflexID=0).
+  3. *Узел 40 вложен в неправильного родителя* — **подтверждено дампом `ReflexTree.dat`**: узел 40 имеет ParentID=4 (StyleID=1), а не ParentID=35 (StyleID=4). При создании узла `CreateNewReflexToTreeFromNodes` вызывается с `detectedNode=узел 4` (найденный ConditionsDetection), и создаёт дочерний узел с StyleID=4 в поддереве узла StyleID=1.
+  4. *Рефлекс 3 работает потому, что его узел 6 находится в ReflexTree.Children (ParentID=1)* — **подтверждено**: ConditionsDetection([-1, 2, 56]) находит узел 6 (StyleID=2, ActionID=56) среди детей корня. detectedNode=узел 6 (GeneticReflexID=3) → CollectGeneticReflexesWithTriggers находит рефлекс.
+- **Корень:** `CreateNewReflexToTreeFromNodes` создаёт узлы как дочерние `detectedNode`, найденного `ConditionsDetection`. Если `ConditionsDetection` находит промежуточный узел с другим StyleID (например, узел 4 с StyleID=1 вместо узла 35 с StyleID=4), дочерний узел создаётся в неправильном поддереве. Иерархический поиск `GetReflexTreeNode` не может найти узел, вложенный в subtree с другим StyleID.
+- **Доказательство:** `ReflexTree.dat`: `40|4|-1|4|55|11|0|0` (ParentID=4, StyleID=4) — StyleID дочернего узла ≠ StyleID родителя. `ReflexTreeSystem.cs:526`: `if (conditions[0] != levelID) continue;` — строгое равенство, без фолбэка.
+- **Исправление:** `Reflexes\ReflexTreeSystem.cs`, `ConditionsDetection`: добавлен фолбэк после иерархического поиска — если `_detectedLevel < 2` и `conditionArr[2] > 0`, используется `FindReflexTreeNodeFromCondition` (поиск по всем узлам через `ReflexTreeFromID`) для поиска полного совпадения [BaseID, StyleID, ActionID], игнорируя иерархию.
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 583/583. Ручная: прогнать `Scenario_9.dat` в Velum — рефлекс 11 срабатывает на шаге 2.
+- **Эвристики:** → E17, E18.
 
 
