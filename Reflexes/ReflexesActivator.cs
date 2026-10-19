@@ -494,9 +494,11 @@ namespace ISIDA.Reflexes
         }
 
         CollectReflexesForExecution();
-        // Безусловные рефлексы — только на триггеры действий с пульта или изменение состояния/стилей.
-        // На одну лишь фразу с пульта (без смены гомеостаза/стилей) безусловные не запускаем.
-        _geneticReflexesToRun.Clear();
+        // Безусловные рефлексы — только на триггеры действий с пульта, изменение состояния/стилей
+        // или команды командного канала (commandPatternIds). На одну лишь фразу с пульта
+        // (без actionIds, команд и смены состояния/стилей) безусловные не запускаем —
+        // в этом случае DetectedReflexNodeId == 0, CollectGeneticReflexesWithTriggers не найдёт
+        // узел, и _geneticReflexesToRun останется пустым.
         GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
 
         bool psychicBlocked = _psychicSystem.SensorActivation(
