@@ -263,7 +263,51 @@
 - **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 569/569. Новые регрессионные тесты: `RecordOperatorMotor_GadWithoutTargetButActivated_Records`, `CreateAutomatizmFromMotor_GadWithoutTarget_CreatesUsefulAutomatizm`, `FocusExitedBadZone_ByFocusParameter_IgnoresOverallBadFromOtherParam`. Ручная: повторить сессию на стадии 2 — `automatizm.dat` пополняется; для механизма 3 (random probe) по-прежнему желательно заполнить Target у G_AD (через AIStudio).
 - **Эвристики:** → E13.
 
+## Случай 13. Цепочки у-рефлексов (реплей виртуальных стимулов): бесконечный цикл при повторном реплее одного стимула
+
+- **Дата / сборка:** 2026-10-17, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error, `dotnet test tests\Isida.Tests` → 581/581).
+- **Симптом:** при обучении цепочки у-рефлексов через мотор→стимул ассоциации (`MotorStimulusAssociationSystem`) и последующем реплее виртуальных стимулов реплей зацикливался: если мотор М2 ассоциирован со стимулом С6, то при попытке реплея С6 `TryGetNextChainStimulus` возвращал тот же С6 снова и снова — цепочка не завершалась. Пользователь наблюдал «бесконечный повтор одного стимула» вместо последовательного прогона цепочки С4→С5→С6.
+- **Область:** `Reflexes\ConditionedReflexFormationService.cs` — `TryGetNextChainStimulus`, `MotorStimulusAssociationSystem.GetActivatableStimuli`.
+- **Гипотезы и проверки:**
+  1. *`GetActivatableStimuli` возвращает неправильный список* — **опровергнуто кодом**: метод корректно возвращает все стимулы с C ≥ γ для данного мотора (проверено тестами `MotorStimulusAssociationTests`).
+  2. *Цепочка должна проверять уникальность стимула* — **подтверждено**: `TryGetNextChainStimulus` выбирал первый `activatable[0]`, но не проверял, не был ли этот стимул уже отреплейнут в текущей цепочке. Если мотор М2 ассоциирован только со С6, то при шаге 3 цепочки `GetActivatableStimuli(М2)` → [С6] → С6 возвращался снова и снова.
+  3. *Достаточно добавить флаг «стимул отреплейнут»* — **подтверждено**: решение — `HashSet<int> _chainReplayedStimuli`, который пополняется при каждом реплее и фильтрует выбор.
+- **Корень:**
+  - `TryGetNextChainStimulus` не помнил, какие стимулы уже были отреплейнуты в текущей цепочке;
+  - `GetActivatableStimuli` возвращал те же стимулы при каждом вызове (нет внутренней мутации);
+  - при отсутствии защиты от цикла реплей «застревал» на одном стимуле, если мотор→стимул ассоциация давала только один стимул.
+- **Доказательство:** `ConditionedReflexFormationService.cs` (до правки): `TryGetNextChainStimulus` → `activatable[0]` без проверки уникальности; тест `FullCycle_TrainThenReplay_WorksTwoSteps` падал на шаге 3 (`step3` возвращал true вместо false).
+- **Исправление:** `Reflexes\ConditionedReflexFormationService.cs`:
+  - добавлено поле `HashSet<int> _chainReplayedStimuli` — память об отреплейнутых стимулах текущей цепочки;
+  - `RecordConditionedReflexActivation`: при step==0 очищает HashSet и добавляет триггер (защита от повтора первого стимула);
+  - `TryGetNextChainStimulus`: ищет первый `activatable` стимул, НЕ в HashSet; добавляет выбранный в HashSet; если все стимулы в HashSet → завершение цепочки (`step = 0`);
+  - `ResetChainState`: очищает HashSet;
+  - тест `FullCycle_TrainThenReplay_WorksTwoSteps` обновлён: шаг 3 ожидает false (завершение).
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 581/581 (включая `MotorStimulusChainReplayTests.FullCycle_TrainThenReplay_WorksTwoSteps`).
+- **Эвристики:** → E14.
+
+## Случай 14. `MotorStimulusAssociations.dat` не создаётся при прогоне сценария и не очищается при переходе на стадию 0
+
+- **Дата / сборка:** 2026-10-18, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error, `dotnet test tests\Isida.Tests` → 581/581).
+- **Симптом:** в Velum (студия, данные в `C:\ProgramData\VELUM`) после прогона сценария `Scenario_7.dat` файл `C:\ProgramData\VELUM\Data\Reflexes\MotorStimulusAssociations.dat` не создаётся вообще. После первого исправления (инициализация) файл появился, но при переключении на 0-ю стадию не очищался, хотя `SensoryAssociations.dat` в той же папке очищается корректно.
+- **Область:** `Common\IsidaEngine.cs` (`InitializeCore`, `Dispose`), `Common\EvolutionStageService.cs` (`ClearSensoryAssociationsData`), `Reflexes\MotorStimulusAssociationSystem.cs`, `Reflexes\ConditionedReflexFormationService.cs` (`_motorStimulusAssociations`).
+- **Гипотезы и проверки:**
+  1. *Файл не пишется, потому что `Save()` вызывается только при `Dispose`/`ClearAll` (не во время прогона)* — **подтверждено кодом как норма**: `Save()` из `Dispose` (`MotorStimulusAssociationSystem.cs:475`) и `ClearAll` (`:335`); это то же поведение, что и `SensoryAssociations.dat` (пишется при закрытии, а не по ходу). Само по себе это не баг.
+  2. *Система вообще не инициализирована в живом движке* — **подтверждено кодом (корень №1)**: `MotorStimulusAssociationSystem.InitializeInstance` вызывался только в `tests\Isida.Tests\EngineFixture.cs`; в `IsidaEngine.InitializeCore` его не было (grep по `IsidaEngine.cs` — ноль вхождений). Значит `IsInitialized == false`, `_motorStimulusAssociations == null` в сервисе формирования, `TryStrengthenMotorStimulusLink` сразу `return` — связи не создаются даже в памяти, `Save()` не вызывается никогда.
+  3. *После инициализации файл не очищается при стадии 0, потому что очистка мотор→стимул связей отсутствует* — **подтверждено кодом (корень №2)**: в `ClearSensoryAssociationsData` был добавлен только `ResetChainState()` (сброс шага цепочки), но не `MotorStimulusAssociationSystem.Instance.ClearAll()`. `SensoryAssociationSystem.ClearAll()` чистит только CS↔CS; мотор→стимул — отдельная система с отдельным файлом.
+- **Корень:**
+  - новая система была встроена только в тестовый харнесс (`EngineFixture`), но не в единую точку сборки живого движка `IsidaEngine` (шаг инициализации, вторичная инициализация `SetMotorStimulusAssociations`, звено выгрузки);
+  - очистка при стадии 0 покрывала только сенсорные CS↔CS и шаг цепочки, но не сами мотор→стимул связи.
+- **Доказательство:** grep `IsidaEngine.cs` до правки: `MotorStimulusAssociation` — 0 вхождений, `SensoryAssociationSystem.InitializeInstance` — есть (`:737`); `EvolutionStageService.ClearSensoryAssociationsData` до правки содержал `SensoryAssociationSystem.Instance.ClearAll()` + `ResetChainState()`, но не `MotorStimulusAssociationSystem.Instance.ClearAll()`.
+- **Исправление:**
+  - `Common\IsidaEngine.cs`: шаг 12 — `MotorStimulusAssociationSystem.InitializeInstance(GeneticReflexes, ConditionedReflexes)` сразу после сенсорной системы (те же зависимости); шаг 15 — `context.ConditionedReflexFormation.SetMotorStimulusAssociations(MotorStimulusAssociationSystem.Instance)`; `Dispose` — `SafeDispose(MotorStimulusAssociationSystem.Instance, ...)` рядом с сенсорной системой (зависимостно-безопасный порядок, до `GeneticReflexes`);
+  - `Common\EvolutionStageService.cs`: в `ClearSensoryAssociationsData` добавлен `if (MotorStimulusAssociationSystem.IsInitialized) MotorStimulusAssociationSystem.Instance.ClearAll();` перед `ResetChainState()` (метод вызывается и при стадии 0 `:176`, и при предзапуске сценария `:225`).
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 581/581; `Build-Velum.ps1 Debug` → EXIT=0. Ручная: перезапустить студию, прогнать сценарий, закрыть — `MotorStimulusAssociations.dat` создаётся; переключить на стадию 0 — файл очищается до шапки.
+- **Эвристики:** → E15.
+
 ## Эвристики
+
+
 
 - **E8. Если обработчик по таймеру читает разделяемое (в т.ч. статическое) состояние вне дока, а выгрузка обнуляет его под локом — снимай состояние в локальный снапшот под тем же локом и жди фактического конца обработчика перед обнулением.** `if (!_isRunning)` под `lock` защищает только вход; тело обработчика, читающее поля вне дока, всё равно видит их обнулёнными. Фиксированный `Thread.Sleep(N)` перед `Clear()`/`Dispose()` не является синхронизацией: если длительность обработчика превышает `N`, гонка воспроизводится. Корректно: (а) снять снимок всех используемых ссылок под тем же `lock`, что и мутатор, и дальше работать по локалям; (б) сигналом (`ManualResetEventSlim`) сообщать «активного обработчика нет» и ждать его **до** входа в лок мутатора (ожидание внутри дока = взаимная блокировка, если обработчик берёт тот же лок). Диагностический признак: стек-трейс с одним фреймом метода-обработчика и `NullReferenceException` на разыменовании поля; ошибки идут парами/пачками в момент закрытия. См. случай 7.
 
@@ -290,6 +334,19 @@
 
 - **E13. Контракт «обязательного» поля проверяй против фактических данных хоста, а не только против тестового харнесса.** Если движок требует у сущности непустой набор (например, `TargetGomeoParamIdArr` у G_AD) и все механизмы стадии завязаны на него, а хост (Velum) это поле не заполняет (связь задана в другом месте — через моторные рефлексы EA → G_AD), фича молча не работает при зелёной сборке и зелёных тестах: тесты создают сущности с полем (`AddAction(..., targetGomeoParamIdArr)`) — хост без. Диагностический признак: «индикатор режима показывается, а результата нет» + пустой файл-артефакт (`automatizm.dat`). Правило: при переносе механизма в хост — проверять фактический дамп данных хоста; обязательные поля либо заполняет хост, либо механизм имеет мягкий fallback (по факту активации, по probe-EA). См. случай 12.
 
+- **E14. При реплее виртуальных стимулов память об отреплейнутых стимулах обязательна — иначе цикл.** Если цепочка у-рефлексов строится через мотор→стимул ассоциации (`MotorStimulusAssociationSystem`) и реплей идёт по `GetActivatableStimuli(motorId)`, то при отсутствии `HashSet` отреплейнутых стимулов один и тот же стимул будет возвращаться бесконечно — мотор→стимул связь не мутирует и даёт один и тот же результат. Диагностический признак: реплей «застревает» на одном стимуле, цепочка не завершается, `step` не обнуляется. Правило: `TryGetNextChainStimulus` обязан хранить память о отреплейнутых стимулах (`HashSet<int>`) и фильтровать их при выборе следующего; при исчерпании всех новых стимулов — завершать цепочку (`step = 0`). См. случай 13.
+
+- **E15. Новая система, добавленная только в тестовую фикстуру, не работает в живом движке — это гарантированный баг «тихого отсутствия».**
+ Если класс (сервис, ассамблия, система) зарегистрирован в `EngineFixture` и покрыт тестами, но не добавлен в `IsidaEngine.InitializeCore` (шаг инициализации + зависимостно-безопасный порядок + вторичная инициализация через `Set*`) и `IsidaContext.Dispose` (звено выгрузки), то в реальном сценарии `IsInitialized == false`, все ссылки `null`, методы выходят через ранний `return` — сборка и тесты зелёные, но поведение пустое. Диагностический признак: «в тесте работает, в студии нет» или «файл-артефакт не создаётся» при зелёной сборке. Правило: каждый новый `InitializeInstance`/`IDisposable`-класс обязан иметь три якоря в `IsidaEngine`: шаг инициализации, звено `Dispose`, при необходимости — вторичная инициализация. См. случай 14.
+
+- **E16. При добавлении очистки данных при стадии 0 проверяй, что чистишь ВСЕ системы, а не только «первую встреченную».** Если новая система (мотор→стимул) имеет свой файл и свой метод очистки (`ClearAll`), а `ClearSensoryAssociationsData` (или аналогичный метод очистки стадии 0) содержит только вызов для `SensoryAssociationSystem`, то данные новой системы переживут переключение стадии — как если бы их не было. Диагностический признак: «одна система чистится при стадии 0, другая — нет» при зелёной сборке. Правило: `ClearSensoryAssociationsData` (и любые другие методы очистки стадии 0) обязан охватывать все подсистемы, владеющие файлами данных, не привязанными к номерам стадий. См. случай 14.
+
+- **E17. Если структура данных строится иерархически через обход, а поиск использует «первое совпадение», то добавление нового узла может создать «неправильную» вложенность, которую поиск не найдёт.** Если `CreateNewReflexToTreeFromNodes` создаёт дочерние узлы от `detectedNode`, найденного `ConditionsDetection` (первое совпадение по первому условию), то дочерний узел может попасть в subtree с другим StyleID. Поиск `GetReflexTreeNode` не может найти такой узел, потому что перебирает только `node.Children` текущего узла. Диагностический признак: «узел в дереве есть (видно в дампе), но поиск его не находит». Правило: после иерархического поиска добавить фолбэк — полный поиск по всем узлам через `FindReflexTreeNodeFromCondition`, если иерархический не нашёл полный набор условий. См. случай 15.
+
+- **E18. При отладке «почему рефлекс не срабатывает» — сначала проверь, что `detectedNode` содержит нужный `GeneticReflexID`, а не только, что `detectedLevel` совпадает.** Если `ConditionsDetection` возвращает `DetectedLevel=1` (стиль найден, триггер нет), то `CollectGeneticReflexesWithTriggers` использует `detectedNode.GeneticReflexID`, который может быть 0 (промежуточный узел без рефлекса). Рефлекс не добавляется в `_geneticReflexesToRun`. Диагностический признак: «DetectedLevel=1, DetectedReflexNodeId=N, но GeneticReflexID=0». Правило: проверить содержимое `detectedNode` (GeneticReflexID) через дамп дерева (`ReflexTree.dat`). См. случай 15.
+
+
+
 ## Указатель случаев
 
 | № | Симптом | Область | Статус |
@@ -306,3 +363,24 @@
 | 10 | Сенсорная суммация не срабатывает на CS через командный канал (`CompoundModalityCount` не учитывает `CommandPatternIdList`) | Reflexes (PerceptionImagesSystem) | Исправлен |
 | 11 | Сенсорная прекондиция не срабатывает на стимул через командный канал (`StimulusImagesHierarchyCompatible` отсекает кросс-канальные пары) | Reflexes (PerceptionImagesSystem, ConditionedReflexesSystem) | Исправлен |
 | 12 | На 2-й стадии режим наблюдения активен, но автоматизмы не создаются (пустой `Target` у G_AD + проверка Bad по overall) | Psychic (PsychicSystem, OperatorMotorObservationSession) | Исправлен |
+| 13 | Реплей цепочки у-рефлексов зацикливался: один и тот же стимул возвращался бесконечно (отсутствие защиты от цикла) | Reflexes (ConditionedReflexFormationService, MotorStimulusAssociationSystem) | Исправлен |
+| 14 | `MotorStimulusAssociations.dat` не создавался и не очищался при стадии 0: новая система не встроена в живой движок (только в тестовую фикстуру) | Common (IsidaEngine, EvolutionStageService) | Исправлен |
+| 15 | Безусловный рефлекс 11 не срабатывает в сценарии: ConditionsDetection не находит узел из-за неправильной иерархии вложенности | Reflexes (ReflexTreeSystem) | Исправлен |
+
+## Случай 15. Безусловный рефлекс 11 не срабатывает в сценарии: ConditionsDetection не находит узел из-за неправильной иерархии вложенности
+
+- **Дата / сборка:** 2026-10-18, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** при прогоне сценария `Scenario_9.dat` (Velum) на шаге 2 (пульс 2, глобальный пульс 174–175) безусловный рефлекс №11 не срабатывает. В отчёте: «Б/у рефлекс: ожид. «11», факт «-»». При этом рефлексы 3 и 5 на других шагах срабатывают штатно.
+- **Область:** `Reflexes\ReflexTreeSystem.cs` — `ConditionsDetection`, `GetReflexTreeNode`, `FindReflexTreeNodeFromCondition`.
+- **Гипотезы и проверки:**
+  1. *Триггер (образ пускового стимула) не совпадает из-за цвета фона* — **опровергнуто кодом**: в `InfluenceActionSystem.ApplyMultipleInfluenceActions` для б/у рефлексов (`ActiveCurReflexTriggerStimulusID`) цвет **всегда** `AgentVisualColor.White` (строка 481), поэтому цвет сценария не влияет на поиск б/у рефлекса.
+  2. *Узел дерева 40 не находится иерархическим поиском* — **подтверждено**: `ConditionsDetection([-1, 4, 55])` находит корень с BaseID=-1 (узел 1), среди детей ищет StyleID=4 → находит **узел 35** (StyleID=4, ActionID=37), среди детей узла 35 ищет ActionID=55 → **не находит**. Возвращает DetectedLevel=1, DetectedReflexNodeId=35 (GeneticReflexID=0).
+  3. *Узел 40 вложен в неправильного родителя* — **подтверждено дампом `ReflexTree.dat`**: узел 40 имеет ParentID=4 (StyleID=1), а не ParentID=35 (StyleID=4). При создании узла `CreateNewReflexToTreeFromNodes` вызывается с `detectedNode=узел 4` (найденный ConditionsDetection), и создаёт дочерний узел с StyleID=4 в поддереве узла StyleID=1.
+  4. *Рефлекс 3 работает потому, что его узел 6 находится в ReflexTree.Children (ParentID=1)* — **подтверждено**: ConditionsDetection([-1, 2, 56]) находит узел 6 (StyleID=2, ActionID=56) среди детей корня. detectedNode=узел 6 (GeneticReflexID=3) → CollectGeneticReflexesWithTriggers находит рефлекс.
+- **Корень:** `CreateNewReflexToTreeFromNodes` создаёт узлы как дочерние `detectedNode`, найденного `ConditionsDetection`. Если `ConditionsDetection` находит промежуточный узел с другим StyleID (например, узел 4 с StyleID=1 вместо узла 35 с StyleID=4), дочерний узел создаётся в неправильном поддереве. Иерархический поиск `GetReflexTreeNode` не может найти узел, вложенный в subtree с другим StyleID.
+- **Доказательство:** `ReflexTree.dat`: `40|4|-1|4|55|11|0|0` (ParentID=4, StyleID=4) — StyleID дочернего узла ≠ StyleID родителя. `ReflexTreeSystem.cs:526`: `if (conditions[0] != levelID) continue;` — строгое равенство, без фолбэка.
+- **Исправление:** `Reflexes\ReflexTreeSystem.cs`, `ConditionsDetection`: добавлен фолбэк после иерархического поиска — если `_detectedLevel < 2` и `conditionArr[2] > 0`, используется `FindReflexTreeNodeFromCondition` (поиск по всем узлам через `ReflexTreeFromID`) для поиска полного совпадения [BaseID, StyleID, ActionID], игнорируя иерархию.
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0 warning / 0 error; `dotnet test tests\Isida.Tests` → 583/583. Ручная: прогнать `Scenario_9.dat` в Velum — рефлекс 11 срабатывает на шаге 2.
+- **Эвристики:** → E17, E18.
+
+

@@ -495,6 +495,21 @@ namespace ISIDA.Reflexes
         }
       }
 
+      // Фолбэк: если иерархический поиск не нашёл уровень 2 (состояние+стиль+триггер),
+      // ищем полный набор условий по всем узлам дерева. Это нужно для случаев, когда
+      // узел был создан на неправильном уровне вложенности (например, дочерний узел
+      // StyleID=4 оказался вложен в узел StyleID=1 вместо узла StyleID=4).
+      // Находим узел точно по трём параметрам, игнорируя иерархию.
+      if (_detectedLevel < 2 && conditionArr.Length >= 3 && conditionArr[2] > 0)
+      {
+        var (foundId, foundNode) = FindReflexTreeNodeFromCondition(conditionArr[0], conditionArr[1], conditionArr[2]);
+        if (foundId > 0 && foundNode != null)
+        {
+          _detectedLastNodeID = foundId;
+          _detectedLevel = 2;
+        }
+      }
+
       if (_detectedLastNodeID == 0)
         _detectedLevel = -1;
 

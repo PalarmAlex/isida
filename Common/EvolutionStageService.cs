@@ -361,6 +361,13 @@ namespace ISIDA.Common
         }
 
         SensoryAssociationSystem.Instance.ClearAll();
+
+        // Очистка мотор→стимул связей (MotorStimulusAssociations.dat) и состояния цепочки у-рефлексов.
+        if (MotorStimulusAssociationSystem.IsInitialized)
+          MotorStimulusAssociationSystem.Instance.ClearAll();
+        if (ConditionedReflexFormationService.IsInitialized)
+          ConditionedReflexFormationService.Instance.ResetChainState();
+
         Logger.Info("Сенсорные ассоциации (SensoryAssociations.dat) очищены в памяти; запись при закрытии системы");
       }
       catch (Exception ex)

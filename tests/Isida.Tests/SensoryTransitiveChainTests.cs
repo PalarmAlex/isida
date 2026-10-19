@@ -258,12 +258,12 @@ namespace Isida.Tests
     [Fact]
     public void IsChainActivatable_BelowGammaTr_False()
     {
-      // По умолчанию γ_tr = γ·k = 0.6·1.5 = 0.9; сила цепи 2 звена (≈0.8² · 0.9) ниже порога.
+      // По умолчанию γ_tr = γ·k = 0.6·1.0 = 0.6; слабая цепь (4 усиления) ниже порога.
       int a = NewPhraseImage();
       int b = NewPhraseImage();
       int c = NewPhraseImage();
-      Strengthen(a, b, 10);
-      Strengthen(b, c, 10);
+      Strengthen(a, b, 4);
+      Strengthen(b, c, 4);
 
       Sensory.TryGetChainStrength(a, c, out float strength, out _);
       float gammaTr = Settings.ActivationThreshold * Settings.TransitiveGammaCoefficient;
@@ -333,6 +333,7 @@ namespace Isida.Tests
     public void HierarchicalActivation_ChainBelowGammaTr_NotActivated()
     {
       // Цепь poor→mid→rich существует, но её сила ниже γ_tr по умолчанию — иерархия не срабатывает.
+      // При k=1 (дефолт) γ_tr = 0.6; 4 усиления дают силу цепи ≈ 0.31 < 0.6.
       int phrase = Engine.NextSeed();
       int action = Engine.NextSeed();
       int poor = NewImage(phrases: new[] { phrase });
@@ -340,8 +341,8 @@ namespace Isida.Tests
       int rich = NewImage(actions: new[] { action }, phrases: new[] { phrase });
       AddReflex(rich, authoritative: true, level2: new System.Collections.Generic.List<int> { Engine.SeedStyleId });
 
-      Strengthen(poor, mid, 10);
-      Strengthen(mid, rich, 10);
+      Strengthen(poor, mid, 4);
+      Strengthen(mid, rich, 4);
 
       Assert.True(Sensory.TryGetChainStrength(poor, rich, out _, out _));
       Assert.False(Sensory.IsChainActivatable(poor, rich));
