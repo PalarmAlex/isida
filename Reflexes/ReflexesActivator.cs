@@ -1130,10 +1130,15 @@ namespace ISIDA.Reflexes
         return;
       }
 
+      // Рефлекс «по умолчанию» (-1) добавляем только когда условных к выполнению нет:
+      // ExecuteReflexes при _geneticReflexesToRun[0] == -1 выполняет его и выходит,
+      // не доходя до условных. Командный канал (без actionIds) даёт
+      // _activeCurReflexTriggerStimulusID > 0, поэтому иначе любой у-рефлекс,
+      // пусковым образом которого служит команда, никогда не активировался.
       if (_activeCurReflexTriggerStimulusID > 0)
       {
         CollectGeneticReflexesWithTriggers(detectedNode);
-        if (!_geneticReflexesToRun.Any())
+        if (!_geneticReflexesToRun.Any() && !_conditionedReflexesToRun.Any())
         {
           _geneticReflexesToRun.Add(-1); // рефлекс по умолчанию         
           GetActionsForGeneticReflexToRun(_geneticReflexesToRun);
