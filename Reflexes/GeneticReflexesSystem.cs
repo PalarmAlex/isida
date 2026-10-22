@@ -246,6 +246,40 @@ namespace ISIDA.Reflexes
     private int _cascadeCleanupSuppressCount = 0;
 
     /// <summary>
+    /// Замороженный снимок условий запуска каждого рефлекса (ключ — <c>ComputeGeneticReflexTriggerKey</c>),
+    /// актуальный на момент последней синхронизации с деревом (Add/Load/Update).
+    /// Хранится отдельно от <see cref="GeneticReflex"/>, потому что <see cref="GetGeneticReflex"/>
+    /// возвращает ссылку на экземпляр из <see cref="_geneticReflexes"/>: вызывающий код (UI) может
+    /// изменять его поля напрямую, и тогда «старые» условия внутри объекта теряются.
+    /// Сравнение входящих условий с этим снимком даёт корректный <c>conditionsChanged</c> независимо
+    /// от того, был ли объект мутирован снаружи.
+    /// </summary>
+    private readonly Dictionary<int, string> _geneticReflexTriggerKeys = new Dictionary<int, string>();
+
+    /// <summary>
+    /// Ключ условий запуска рефлекса: Level1 + Level2 + InfluenceActionIds + CommandPatternIds.
+    /// Совпадает по смыслу с <see cref="AreReflexesSemanticallyEqual"/>; сам список моторных действий
+    /// (<c>AdaptiveActions</c>) и привязка цепочки в ключ не входят — они не участвуют в поиске узла дерева.
+    /// </summary>
+    private static string ComputeGeneticReflexTriggerKey(GeneticReflex reflex)
+    {
+      if (reflex == null) return string.Empty;
+
+      var level2 = (reflex.Level2 ?? new List<int>()).OrderBy(x => x);
+      var influence = (reflex.InfluenceActionIds ?? new List<int>()).OrderBy(x => x);
+      var command = reflex.CommandPatternIds ?? new List<int>(); // порядок важен
+
+      return $"{reflex.Level1}|{string.Join(",", level2)}|{string.Join(",", influence)}|{string.Join(",", command)}";
+    }
+
+    /// <summary>Записывает/обновляет замороженный снимок условий рефлекса (без блокировки — вызывается под lock или в конструкторе).</summary>
+    private void SyncGeneticReflexTriggerKey(GeneticReflex reflex)
+    {
+      if (reflex == null) return;
+      _geneticReflexTriggerKeys[reflex.Id] = ComputeGeneticReflexTriggerKey(reflex);
+    }
+
+    /// <summary>
     /// Подавлена ли полная каскадная очистка (например, при промежуточном удалении в UpdateGeneticReflex).
     /// </summary>
     internal bool IsGeneticReflexesCascadeCleanupSuppressed => _cascadeCleanupSuppressCount > 0;
@@ -432,6 +466,7 @@ namespace ISIDA.Reflexes
         };
 
         _geneticReflexes.Add(newId, geneticReflex);
+        SyncGeneticReflexTriggerKey(geneticReflex);
       }
       finally
       {
@@ -512,8 +547,25 @@ namespace ISIDA.Reflexes
         throw new ArgumentException(validationResult.ErrorMessage);
       }
 
-      // Проверяем, изменились ли условия триггера рефлекса
-      bool conditionsChanged = !AreReflexesSemanticallyEqual(oldReflexCopy, reflex);
+      // Проверяем, изменились ли условия триггера рефлекса.
+      // Сравниваем снимок условий (изменяется ТОЛЬКО самой системой) с новыми значениями.
+      // Это решает баг при мутации объекта по ссылке: GetGeneticReflex возвращает
+      // ссылку на экземпляр из словаря — если UI меняет его поля напрямую, копия oldReflexCopy
+      // содержит уже изменённые значения и совпадает с reflex, conditionsChanged == false,
+      // и дерево не пересоздаётся. Снимок хранит «исторические» условия, поэтому сравнение
+      // всегда корректно независимо от того, был ли объект мутирован снаружи.
+      bool conditionsChanged = false;
+      _lock.EnterReadLock();
+      try
+      {
+        string snapshot = _geneticReflexTriggerKeys.TryGetValue(oldReflexId, out var key) ? key : null;
+        string newKey = ComputeGeneticReflexTriggerKey(reflex);
+        conditionsChanged = snapshot != newKey;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
 
       // Проверка на дубликаты среди других рефлексов (если условия изменились)
       if (conditionsChanged)
@@ -556,6 +608,7 @@ namespace ISIDA.Reflexes
         try
         {
           _geneticReflexes[reflex.Id] = reflex;
+          SyncGeneticReflexTriggerKey(reflex);
           return warnings.ToArray();
         }
         finally
@@ -605,6 +658,9 @@ namespace ISIDA.Reflexes
           {
             var newReflex = _geneticReflexes[newReflexId];
 
+            // Удаляем снимок по старому ключу (newReflexId) — он будет перезаписан ниже
+            _geneticReflexTriggerKeys.Remove(newReflexId);
+
             _geneticReflexes.Remove(newReflexId);
             newReflex.Id = oldReflexId;
             newReflex.ReflexChainID = reflex.ReflexChainID; // Сохраняем chain ID
@@ -612,6 +668,9 @@ namespace ISIDA.Reflexes
 
             if (oldReflexId > _lastGeneticReflexId)
               _lastGeneticReflexId = oldReflexId;
+
+            // Обновляем снимок на старый ID (AddGeneticReflex уже записал его для newReflexId)
+            SyncGeneticReflexTriggerKey(newReflex);
 
             idSwapped = true;
             chainIdForEvent = newReflex.ReflexChainID;
@@ -672,6 +731,7 @@ namespace ISIDA.Reflexes
       try
       {
         removed = _geneticReflexes.Remove(reflexId);
+        _geneticReflexTriggerKeys.Remove(reflexId);
         _activeGeneticReflexes.RemoveAll(a => a.Id == reflexId);
       }
       finally
@@ -706,6 +766,7 @@ namespace ISIDA.Reflexes
           if (!removed)
             break;
           _activeGeneticReflexes.RemoveAll(a => a.Id == reflexId);
+          _geneticReflexTriggerKeys.Remove(reflexId);
         }
       }
       finally
@@ -952,6 +1013,7 @@ namespace ISIDA.Reflexes
         if (IsValidGeneticReflexesFile(path))
         {
           _geneticReflexes.Clear();
+          _geneticReflexTriggerKeys.Clear();
           _activeGeneticReflexes.Clear();
           _lastGeneticReflexId = 0;
 
@@ -997,6 +1059,7 @@ namespace ISIDA.Reflexes
             };
 
             _geneticReflexes[reflex.Id] = reflex;
+            SyncGeneticReflexTriggerKey(reflex);
             if (reflex.Id > _lastGeneticReflexId)
               _lastGeneticReflexId = reflex.Id;
           }
@@ -1017,6 +1080,7 @@ namespace ISIDA.Reflexes
           File.WriteAllLines(path, lines);
 
           _geneticReflexes.Clear();
+          _geneticReflexTriggerKeys.Clear();
           _activeGeneticReflexes.Clear();
           _lastGeneticReflexId = 0;
         }
