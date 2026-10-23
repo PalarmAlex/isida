@@ -594,7 +594,7 @@ namespace ISIDA.Reflexes
        /// <summary>
        /// Таймаут одного шага цепочки в пульсах: если за это время не подан следующий стимул — цепочка завершается. 0 = без таймаута.
        /// </summary>
-       public int ConditionedReflexChainStepTimeout { get; set; } = 5000;
+       public int ConditionedReflexChainStepTimeout { get; set; } = 5;
 
        // ---------- Транзитивное обучение и композиция последовательных CS-пар ----------
 

@@ -31,6 +31,7 @@ namespace ISIDA.Reflexes
     private readonly ConditionedReflexFormationService _reflexFormationService;
     private readonly PerceptionImagesSystem _perceptionImageSystem;
     private PsychicSystem _psychicSystem;
+    private MotorStimulusAssociationSystem _motorStimulusAssociations;
 
     #region Инициализация
 
@@ -100,6 +101,7 @@ namespace ISIDA.Reflexes
       _adaptiveActions = adaptiveActions ?? throw new ArgumentNullException(nameof(adaptiveActions));
       _reflexFormationService = reflexFormationService ?? throw new ArgumentNullException(nameof(reflexFormationService));
       _perceptionImageSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+      _motorStimulusAssociations = null;
 
       _reflexActionDuration = _adaptiveActions.ReflexActionDisplayDuration;
 
@@ -142,6 +144,16 @@ namespace ISIDA.Reflexes
     public void SetPsychicSystemm(PsychicSystem psychicSystem)
     {
       _psychicSystem = psychicSystem ?? throw new ArgumentNullException(nameof(psychicSystem));
+    }
+
+    /// <summary>
+    /// Устанавливает ссылку на систему мотор→стимул ассоциаций (вторичная инициализация из движка).
+    /// Нужна для построения виртуальных транзитивных цепочек у-рефлексов поверх мотор→стимул связей.
+    /// </summary>
+    /// <param name="system">Система мотор→стимул ассоциаций.</param>
+    public void SetMotorStimulusAssociations(MotorStimulusAssociationSystem system)
+    {
+      _motorStimulusAssociations = system;
     }
 
     #endregion
@@ -354,32 +366,6 @@ namespace ISIDA.Reflexes
         }
 
         _researchLogger.LogSystemState(pulseCount);
-
-        // Хук реплея: после успешной активации у-рефлекса — пробуем запустить следующий шаг цепочки.
-        if (_reflexFormationService != null && _activeGeneticReflexID != 0)
-        {
-          int nextStimulusId = 0;
-          if (_reflexFormationService.TryGetNextChainStimulus(out nextStimulusId) && nextStimulusId > 0)
-          {
-            // Находим у-рефлекс, чей Level3 == nextStimulusId (следующий у-рефлекс в цепочке).
-            var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
-                .FirstOrDefault(r => r.Level3 == nextStimulusId && r.CanBeActivated());
-            if (nextReflex != null)
-            {
-              var result = _reflexExecutionService.ExecuteConditionedReflex(nextReflex.Id);
-              if (result.Success)
-              {
-                _conditionedReflexes.NotifyConditionedReflexActivated(nextReflex.Id);
-                // Фиксируем мотор для обучения мотор→стимул связей.
-                var motorActions = _reflexExecutionService.GetActionsForGeneticReflex(nextReflex.SourceGeneticReflexId);
-                if (motorActions.Any())
-                  _reflexFormationService.SetLastMotorAction(motorActions.First(), pulseCount);
-                // Записываем активацию для следующего шага цепочки.
-                _reflexFormationService.RecordConditionedReflexActivation(nextReflex.Id, nextStimulusId);
-              }
-            }
-          }
-        }
 
         _activeGlobalCurTriggerStimulusID = 0;
         _activeGeneticReflexID = 0;
@@ -642,19 +628,18 @@ namespace ISIDA.Reflexes
                   AppGlobalState.ClearCurrentSensoryGate();
 
                 _activeGlobalCurTriggerStimulusID = _activeCurTriggerStimulusID;
-                _lastReflexActivationPulse = pulseCount;
-                lastActivatedReflexId = conditionedReflexId;
-                lastWasConditioned = true;
+              _lastReflexActivationPulse = pulseCount;
+              lastActivatedReflexId = conditionedReflexId;
+              lastWasConditioned = true;
 
-                Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+              Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
 
-                // Запись активации у-рефлекса в контексте цепочки (для реплея виртуальных стимулов).
-                if (_reflexFormationService != null)
-                {
-                  _reflexFormationService.RecordConditionedReflexActivation(
-                      conditionedReflexId, _activeCurTriggerStimulusID);
-                }
+              // Строим виртуальную транзитивную цепочку после успешного выполнения УР
+              if (_motorStimulusAssociations != null && _conditionedReflexes.Settings.ConditionedReflexMaxChainLength > 0)
+              {
+                BuildTransitiveChain(conditionedReflexId, pulseCount);
               }
+            }
             }
           }
         }
@@ -865,6 +850,10 @@ namespace ISIDA.Reflexes
     private int _pendingChainBaseID = 0;
     private int _pendingChainStyleID = 0;
 
+    // ---------- Виртуальная транзитивная цепочка у-рефлексов ----------
+    // Состояние цепочки хранится в _activeReflexChain (IsTransitive=true, TransitiveReflexIds).
+    // Цепочка крутится штатным контуром ProcessActiveChain / ExecuteChainLink.
+
     /// <summary>
     /// Проверяет и активирует цепочки после выполнения рефлексов
     /// </summary>
@@ -903,6 +892,197 @@ namespace ISIDA.Reflexes
         _pendingChainBaseID = _activeCurBaseID;
         _pendingChainStyleID = _activeCurBaseStyleID;
         Logger.Info($"Цепочка рефлексов {chainId} запланирована к активации через {_reflexActionDuration} пульсов (на пульсе {pulseCount + _reflexActionDuration})");
+      }
+    }
+
+    /// <summary>
+    /// Строит виртуальную транзитивную цепочку у-рефлексов на основе мотор→стимул связей.
+    /// Если после текущего мотора есть связь с стимулом, и для этого стимула есть активный УР —
+    /// создаём _activeReflexChain с флагом IsTransitive=true.
+    /// </summary>
+    private void BuildTransitiveChain(int currentReflexId, int pulseCount)
+    {
+      if (_motorStimulusAssociations == null || _isChainActive) return;
+      if (_activeReflexChain != null) return; // Уже активна другая цепочка
+
+      var currentReflex = _conditionedReflexes.GetAllConditionedReflexes()
+          .FirstOrDefault(r => r.Id == currentReflexId);
+      if (currentReflex == null) return;
+
+      // Получаем мотор текущего УР
+      var motorActions = _reflexExecutionService.GetActionsForGeneticReflex(currentReflex.SourceGeneticReflexId);
+      if (motorActions == null || !motorActions.Any()) return;
+
+      int currentMotorId = motorActions.First();
+      var activatableStimuli = _motorStimulusAssociations.GetActivatableStimuli(currentMotorId);
+      if (activatableStimuli == null || activatableStimuli.Count == 0) return;
+
+      // Строим цепочку
+      var chainReflexIds = new List<int>();
+      var visitedReflexIds = new HashSet<int> { currentReflexId };
+
+      foreach (var stimulusId in activatableStimuli)
+      {
+        // Ищем УР с Level3 == stimulusId
+        var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Level3 == stimulusId && r.CanBeActivated() && !visitedReflexIds.Contains(r.Id));
+        
+        if (nextReflex != null)
+        {
+          chainReflexIds.Add(nextReflex.Id);
+          visitedReflexIds.Add(nextReflex.Id);
+          
+          // Проверяем макс. длину цепочки
+          int maxLen = _conditionedReflexes.Settings.ConditionedReflexMaxChainLength;
+          if (maxLen > 0 && chainReflexIds.Count >= maxLen) break;
+          
+          // Рекурсивно продолжаем поиск
+          BuildTransitiveChainRecursive(nextReflex.Id, maxLen, visitedReflexIds, chainReflexIds);
+          break; // Берём первый подходящий стимул
+        }
+      }
+
+      if (chainReflexIds.Count > 0)
+      {
+        _chainBaseID = _activeCurBaseID;
+        _chainStyleID = _activeCurBaseStyleID;
+        _chainAlreadyActivatedInThisContext = true;
+
+        _activeReflexChain = new ActiveReflexChain
+        {
+          ChainId = -currentReflexId, // Отрицательный ID = виртуальная цепочка
+          CurrentLinkId = 1, // Начинаем с первого шага (индекс 0 в chainReflexIds)
+          StartPulse = pulseCount,
+          LastStepPulse = pulseCount,
+          IsWaitingForResult = false,
+          IsTransitive = true,
+          TransitiveReflexIds = chainReflexIds
+        };
+
+        _activeChainId = -currentReflexId;
+        AppGlobalState.IsReflexChainActive = true;
+        
+        Logger.Info($"Построена виртуальная транзитивная цепочка: {chainReflexIds.Count} шагов после УР {currentReflexId}");
+      }
+    }
+
+    /// <summary>
+    /// Рекурсивное продолжение построения транзитивной цепочки.
+    /// </summary>
+    private void BuildTransitiveChainRecursive(int reflexId, int maxChainLength, HashSet<int> visitedReflexIds, List<int> chainReflexIds)
+    {
+      if (chainReflexIds.Count >= maxChainLength) return;
+
+      var reflex = _conditionedReflexes.GetAllConditionedReflexes()
+          .FirstOrDefault(r => r.Id == reflexId);
+      if (reflex == null) return;
+
+      var motorActions = _reflexExecutionService.GetActionsForGeneticReflex(reflex.SourceGeneticReflexId);
+      if (motorActions == null || !motorActions.Any()) return;
+
+      int motorId = motorActions.First();
+      var activatableStimuli = _motorStimulusAssociations.GetActivatableStimuli(motorId);
+      if (activatableStimuli == null || activatableStimuli.Count == 0) return;
+
+      foreach (var stimulusId in activatableStimuli)
+      {
+        var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
+            .FirstOrDefault(r => r.Level3 == stimulusId && r.CanBeActivated() && !visitedReflexIds.Contains(r.Id));
+        
+        if (nextReflex != null)
+        {
+          chainReflexIds.Add(nextReflex.Id);
+          visitedReflexIds.Add(nextReflex.Id);
+          BuildTransitiveChainRecursive(nextReflex.Id, maxChainLength, visitedReflexIds, chainReflexIds);
+          break;
+        }
+      }
+    }
+
+    /// <summary>
+    /// Выполняет одно звено виртуальной транзитивной цепочки: активирует следующий у-рефлекс
+    /// из <see cref="ActiveReflexChain.TransitiveReflexIds"/> и переходит в ожидание оценки
+    /// (как штатное звено цепочки). Мотор при прогоне не фиксируется — прогон не обучается.
+    /// </summary>
+    private void ExecuteTransitiveChainLink(int pulseCount)
+    {
+      int chainId = 0;
+      int stepIndex = 0;
+      int reflexId = 0;
+      int motorActionId = 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_activeReflexChain == null || !_activeReflexChain.IsTransitive)
+          return;
+
+        chainId = _activeReflexChain.ChainId;
+        // CurrentLinkId — номер шага (1-база) в цепочке.
+        stepIndex = _activeReflexChain.CurrentLinkId - 1;
+
+        if (stepIndex < 0 || stepIndex >= _activeReflexChain.TransitiveReflexIds.Count)
+        {
+          StopCurrentReflexChainCore(pulseCount);
+          return;
+        }
+
+        reflexId = _activeReflexChain.TransitiveReflexIds[stepIndex];
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
+      // Быстрая валидация актуальности звена перед запуском: у-рефлекс ещё существует и активируем.
+      var reflex = _conditionedReflexes.GetAllConditionedReflexes()
+          .FirstOrDefault(r => r.Id == reflexId);
+      if (reflex == null || !reflex.CanBeActivated())
+      {
+        Logger.Info($"Транзитивная цепочка: у-рефлекс {reflexId} недоступен — цепочка остановлена");
+        _lock.EnterWriteLock();
+        try { StopCurrentReflexChainCore(pulseCount); }
+        finally { _lock.ExitWriteLock(); }
+        return;
+      }
+
+      // Выполняем у-рефлекс (мотор исходного безусловного).
+      var result = _reflexExecutionService.ExecuteConditionedReflex(reflexId);
+
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_activeReflexChain == null || _activeReflexChain.ChainId != chainId)
+          return;
+
+        if (!result.Success)
+        {
+          Logger.Warning($"Ошибка выполнения у-рефлекса {reflexId} в транзитивной цепочке {chainId}");
+          StopCurrentReflexChainCore(pulseCount);
+          return;
+        }
+
+        _conditionedReflexes.NotifyConditionedReflexActivated(reflexId);
+
+        _activeConditionReflexID = reflexId;
+        _activeGeneticReflexID = reflex.SourceGeneticReflexId;
+        AppGlobalState.CurrentConditionedReflexID = reflexId;
+
+        string chainInfo = $"{chainId}:{reflexId}";
+        SetChainInfoForCurrentPulse(pulseCount, "Reflex", chainInfo);
+
+        _activeReflexChain.IsWaitingForResult = true;
+        _activeReflexChain.LastStepPulse = pulseCount;
+        _activeReflexChain.LastEvaluation = null;
+
+        Logger.Info($"Транзитивная цепочка: активирован у-рефлекс {reflexId} (шаг {_activeReflexChain.CurrentLinkId}/" +
+                    $"{_activeReflexChain.TransitiveReflexIds.Count}), ожидание оценки {_reflexActionDuration} пульсов");
+
+        _researchLogger?.LogChainLinkExecution(chainId, _activeReflexChain.CurrentLinkId, motorActionId, pulseCount);
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 
@@ -1443,6 +1623,14 @@ namespace ISIDA.Reflexes
       public bool IsWaitingForResult { get; set; }
       public bool OperatorEvaluated => LastEvaluation.HasValue;
       public bool? LastEvaluation { get; set; }
+      /// <summary>
+      /// True если это виртуальная транзитивная цепочка (мотор→стимул связи, а не ReflexChains.dat).
+      /// </summary>
+      public bool IsTransitive { get; set; }
+      /// <summary>
+      /// Список ID у-рефлексов в виртуальной цепочке. Заполняется при построении.
+      /// </summary>
+      public List<int> TransitiveReflexIds { get; set; } = new List<int>();
     }
 
     #endregion
@@ -1455,10 +1643,19 @@ namespace ISIDA.Reflexes
     private int pulseChainCompleted = 0;
 
     /// <summary>
-    /// Выполняет звено цепочки рефлексов
+    /// Выполняет звено цепочки рефлексов.
+    /// Для транзитивной цепочки звено — это активация следующего у-рефлекса из
+    /// <see cref="ActiveReflexChain.TransitiveReflexIds"/>, а не моторное действие из файла цепочек.
     /// </summary>
     private void ExecuteChainLink(int pulseCount)
     {
+      // --- Транзитивная (виртуальная) цепочка: следующий шаг = активация у-рефлекса ---
+      if (_activeReflexChain != null && _activeReflexChain.IsTransitive)
+      {
+        ExecuteTransitiveChainLink(pulseCount);
+        return;
+      }
+
       int chainId = 0;
       int linkId = 0;
       int actionId = 0;
@@ -1586,27 +1783,52 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Проверка возможности продолжения цепочки
+    /// Проверка возможности продолжения цепочки.
     /// </summary>
-    private bool CanContinueChain()
+    /// <param name="reason">Причина отказа, если метод вернул <c>false</c> — для журнала.</param>
+    /// <returns>True, если цепочка может выполняться в текущем пульсе.</returns>
+    private bool CanContinueChain(out string reason)
     {
+      reason = null;
+
       if (_activeReflexChain == null)
+      {
+        reason = "цепочка отсутствует";
         return false;
+      }
 
       if (_chainBaseID != _activeCurBaseID || _chainStyleID != _activeCurBaseStyleID)
+      {
+        reason = $"сменились условия (base: {_chainBaseID}->{_activeCurBaseID}, " +
+                 $"style: {_chainStyleID}->{_activeCurBaseStyleID})";
         return false;
+      }
 
-      if (_activeCurTriggerStimulusID != 0 || _activeCurReflexTriggerStimulusID != 0)
+      // Для транзитивной цепочки ненулевые триггеры — нормальное состояние в пульсе
+      // активации фразы (обнулятся только в ResetStates в конце пульса). Не блокировать.
+      // Для транзитивной цепочки ненулевые триггеры — нормальное состояние в пульсе
+      // активации фразы (обнулятся только в ResetStates в конце пульса). Не блокировать.
+      if (!_activeReflexChain.IsTransitive &&
+          (_activeCurTriggerStimulusID != 0 || _activeCurReflexTriggerStimulusID != 0))
+      {
+        reason = $"появился новый пусковой стимул " +
+                 $"(trigger: {_activeCurTriggerStimulusID}, reflexTrigger: {_activeCurReflexTriggerStimulusID})";
         return false;
+      }
 
       if (_gomeostas.HasCriticalChanges)
+      {
+        reason = "критические изменения гомеостаза";
         return false;
+      }
 
       return true;
     }
 
     /// <summary>
-    /// Проверка и выполнение активной цепочки в текущем пульсе
+    /// Проверка и выполнение активной цепочки в текущем пульсе.
+    /// Для транзитивной (виртуальной) цепочки звенья берутся из <see cref="ActiveReflexChain.TransitiveReflexIds"/>
+    /// (CurrentLinkId — номер шага, 1-база), а не из <see cref="ReflexChainsSystem"/>.
     /// </summary>
     private void ProcessActiveChain(int pulseCount)
     {
@@ -1618,15 +1840,30 @@ namespace ISIDA.Reflexes
         if (_activeReflexChain == null)
           return;
 
-        if (AppGlobalState.IsNewConditions || !CanContinueChain())
+        string canContinueReason = null;
+        string stopReason = AppGlobalState.IsNewConditions ? "новые условия (IsNewConditions)" : null;
+        if (stopReason != null || !CanContinueChain(out canContinueReason))
         {
           StopCurrentReflexChainCore(pulseCount);
-          Logger.Info($"Цепочка рефлексов завершена из-за смены условий");
+          Logger.Info($"Цепочка рефлексов завершена: {stopReason ?? canContinueReason}");
           _chainAlreadyActivatedInThisContext = false;
           return;
         }
 
         var chain = _activeReflexChain;
+
+        // Резервный таймаут шага от зависания: для транзитивной цепочки основной синхронизатор —
+        // завершение мотора (_reflexActionDuration), таймаут лишь подстраховка.
+        if (chain.IsTransitive)
+        {
+          int timeout = _conditionedReflexes.Settings.ConditionedReflexChainStepTimeout;
+          if (timeout > 0 && pulseCount - chain.LastStepPulse > timeout)
+          {
+            StopCurrentReflexChainCore(pulseCount);
+            Logger.Info($"Транзитивная цепочка у-рефлексов протухла по таймауту шага ({timeout} пульсов)");
+            return;
+          }
+        }
 
         if (chain.IsWaitingForResult)
         {
@@ -1645,16 +1882,29 @@ namespace ISIDA.Reflexes
               Logger.Info($"Время ожидания оценки истекло, оценка не получена, используется успех=true по умолчанию");
             }
 
-            var reflexChain = _reflexChainsSystem.GetChain(chain.ChainId);
-            var currentLink = reflexChain?.Links.FirstOrDefault(l => l.ID == chain.CurrentLinkId);
+            int nextLinkId;
 
-            if (currentLink == null)
+            if (chain.IsTransitive)
             {
-              StopCurrentReflexChainCore(pulseCount);
-              return;
-            }
+              // Линейная цепочка: следующий шаг — при успехе, конец — при неудаче.
+              nextLinkId = finalEvaluation ? chain.CurrentLinkId + 1 : 0;
 
-            int nextLinkId = finalEvaluation ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+              if (nextLinkId > chain.TransitiveReflexIds.Count)
+                nextLinkId = 0;
+            }
+            else
+            {
+              var reflexChain = _reflexChainsSystem.GetChain(chain.ChainId);
+              var currentLink = reflexChain?.Links.FirstOrDefault(l => l.ID == chain.CurrentLinkId);
+
+              if (currentLink == null)
+              {
+                StopCurrentReflexChainCore(pulseCount);
+                return;
+              }
+
+              nextLinkId = finalEvaluation ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
+            }
 
             if (nextLinkId == 0)
             {

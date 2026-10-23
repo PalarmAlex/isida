@@ -978,6 +978,8 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
+        context.ReflexesActivator.SetMotorStimulusAssociations(
+            MotorStimulusAssociationSystem.Instance);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal > 0
             ? config.WaitingPeriodForActionsVal
             : 30;

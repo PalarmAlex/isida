@@ -92,6 +92,29 @@ namespace Isida.Tests
       ConditionedReflexFormationService.Instance.SetMotorStimulusAssociations(
           MotorStimulusAssociationSystem.Instance);
 
+      // Сервис выполнения рефлексов инициализируется ДО активатора: активатор получает
+      // ReflexExecutionService.Instance в конструктор (см. IsidaEngine, шаг 14).
+      ReflexExecutionService.InitializeInstance(
+          AdaptiveActionsSystem.Instance,
+          InfluenceActionSystem.Instance,
+          GeneticReflexesSystem.Instance,
+          ConditionedReflexesSystem.Instance);
+
+      // Вторичная инициализация: активатор получает мотор→стимул связи для транзитивных цепочек.
+      ReflexesActivator.InitializeInstance(
+          GomeostasSystem.Instance,
+          GeneticReflexesSystem.Instance,
+          ConditionedReflexesSystem.Instance,
+          InfluenceActionSystem.Instance,
+          ReflexTreeSystem.Instance,
+          ReflexChainsSystem.Instance,
+          ReflexExecutionService.Instance,
+          AdaptiveActionsSystem.Instance,
+          ConditionedReflexFormationService.Instance,
+          PerceptionImagesSystem.Instance);
+      ReflexesActivator.Instance.SetMotorStimulusAssociations(
+          MotorStimulusAssociationSystem.Instance);
+
       ResetToCleanState();
     }
 
