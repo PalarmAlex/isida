@@ -390,7 +390,9 @@ namespace ISIDA.Reflexes
       {
         InfluenceActionsList = influenceActionList?.OrderBy(x => x).ToList() ?? new List<int>(),
         PhraseIdList = phraseIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
-        CommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>(),
+        // Порядок командного канала нормализуем сортировкой — иначе [3,1] и [1,3] дают
+        // разные образы и дедупликация ниже не срабатывает (дубликат с новым ID).
+        CommandPatternIdList = commandPatternIdList?.OrderBy(x => x).ToList() ?? new List<int>(),
         VisualColorId = visualColorId
       };
 
@@ -437,7 +439,8 @@ namespace ISIDA.Reflexes
                  newImage.InfluenceActionsList.OrderBy(x => x)) &&
              existing.PhraseIdList.OrderBy(x => x).SequenceEqual(
                  newImage.PhraseIdList.OrderBy(x => x)) &&
-             existing.CommandPatternIdList.SequenceEqual(newImage.CommandPatternIdList);
+             existing.CommandPatternIdList.OrderBy(x => x).SequenceEqual(
+                 newImage.CommandPatternIdList.OrderBy(x => x));
     }
 
     /// <summary>
@@ -594,7 +597,7 @@ namespace ISIDA.Reflexes
             }
             else if (parts.Length >= 5)
             {
-              commandPatternIdList = AddUtils.ParseIntList(parts[3]);
+              commandPatternIdList = AddUtils.ParseIntList(parts[3]).OrderBy(x => x).ToList();
               if (int.TryParse(parts[4].Trim(), out int parsedColor))
                 colorId = AgentVisualColor.IsValidCode(parsedColor) ? parsedColor : AgentVisualColor.White;
             }

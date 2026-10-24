@@ -1508,6 +1508,53 @@ namespace ISIDA.Reflexes
         Logger.Info("ReconcileGeneticReflexTreeImageIds: дерево рефлексов синхронизировано с образами восприятия");
     }
 
+    /// <summary>
+    /// Полностью перестраивает образы восприятия (PerceptionImages.dat) из актуальной таблицы
+    /// безусловных рефлексов.
+    /// <para>
+    /// Вызывается при переходе на стадию 0 (и при предзапуске сценария с флагом очистки): на
+    /// нулевой стадии остаются только б/у рефлексы, поэтому образы восприятия, накопленные
+    /// условными рефлексами и рантаймом (фразы, цвета, действия), удаляются, а образы б/у
+    /// рефлексов пересоздаются заново и дерево перепривязывается на актуальные ID.
+    /// </para>
+    /// <para>
+    /// Образы СТИЛЕЙ (<c>BehaviorStyleImages.dat</c>) намеренно НЕ очищаются: колонка «Стили»
+    /// в логе — это ID образа стилей (<see cref="Gomeostas.GomeostasSystem.ActiveBehaviorStyleImageId"/>),
+    /// выдаваемый глобальным счётчиком. Session-learned образы стилей гомеостаза не принадлежат
+    /// б/у рефлексу и rebuild их не восстанавливает, а сброс счётчика сдвигает нумерацию — из-за
+    /// чего ожидания сценария по стилю перестают совпадать (см. DEBUG_CASEBOOK_1, Случай 19).
+    /// Для б/у рефлексов <see cref="ReconcileGeneticReflexTreeImageIds"/> подтягивает существующие
+    /// ID образов стилей через дедупликацию, новых не создавая.
+    /// </para>
+    /// <para>
+    /// Идемпотентен: повторный вызов даёт тот же набор образов восприятия. Основан на
+    /// <see cref="ReconcileGeneticReflexTreeImageIds"/> — том же механизме, что поднимает образы
+    /// из таблиц б/у рефлексов при загрузке движка.
+    /// </para>
+    /// </summary>
+    public void RebuildPerceptionImagesFromGeneticReflexes()
+    {
+      try
+      {
+        // Чистим только образы восприятия; образы стилей сохраняем (см. <see cref="ClearAllBehaviorStyleImages"/> ниже).
+        _perceptionImagesSystem.ClearAllPerceptionImages();
+
+        // Пересоздаёт образы восприятия из таблицы б/у рефлексов и перепривязывает StyleID/ActionID
+        // узлов дерева на актуальные ID (внутри сохраняет ReflexTree.dat при изменениях).
+        ReconcileGeneticReflexTreeImageIds();
+
+        var (saved, error) = _perceptionImagesSystem.SaveAllImages();
+        if (!saved)
+          Logger.Warning($"Не удалось сохранить образы восприятия после перестройки: {error}");
+        else
+          Logger.Info("Образы восприятия перестроены из таблицы безусловных рефлексов");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"Ошибка перестройки образов восприятия из б/у рефлексов: {ex.Message}");
+      }
+    }
+
     private int ResolveStyleImageId(List<int> level2)
     {
       if (level2 == null || !level2.Any())

@@ -1039,7 +1039,8 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
             context.SituationImageSystem,
             Psychic.Understanding.ThemeImageSystem.Instance,
             context.UnderstandingTreeSystem,
-            context.PsychicSystem);
+            context.PsychicSystem,
+            context.ReflexTree);
         context.EvolutionStageService = EvolutionStageService.Instance;
         context.Gomeostas.SetEvolutionStageService(context.EvolutionStageService);
 

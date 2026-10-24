@@ -45,7 +45,8 @@ namespace Isida.Tests
         EvolutionStageService.InitializeInstance(
             AutomatizmSystem.Instance,
             Crs,
-            AutomatizmTreeSystem.Instance);
+            AutomatizmTreeSystem.Instance,
+            reflexTreeSystem: ReflexTreeSystem.Instance);
     }
 
     /// <summary>Освобождает статический экземпляр сервиса стадий после теста.</summary>
@@ -71,6 +72,94 @@ namespace Isida.Tests
       Assert.False(Sensory.TryGetStrength(a, b, out _),
           "после предзапуска сценария связь должна быть очищена в памяти");
       Assert.Empty(ReadSensoryLinkLines());
+    }
+
+    /// <summary>
+    /// Перестройка образов восприятия при предзапуске сценария (как при переходе на стадию 0):
+    /// мусорный образ (не принадлежащий ни одному б/у рефлексу) удаляется из памяти и файла,
+    /// а образ стиля эталонного б/у рефлекса сохраняется.
+    /// </summary>
+    [Fact]
+    public void ScenarioPreRun_RebuildsPerceptionImages_KeepsGenetic_DropsGarbage()
+    {
+      // Мусорный образ: фраза, не связанная ни с одним б/у рефлексом.
+      int garbage = NewPhraseImage();
+      Assert.Contains(Images.GetAllPerceptionImagesList(), x => x.Id == garbage);
+
+      EvolutionStageService.Instance.ClearStageDataOnlyForScenarioPreRun(AppGlobalState.EvolutionStage);
+
+      // 1. Мусорный образ исчез из памяти.
+      Assert.DoesNotContain(Images.GetAllPerceptionImagesList(), x => x.Id == garbage);
+
+      // 2. Мусорного образа нет в файле PerceptionImages.dat (строки вида "ID|...").
+      string garbagePrefix = garbage + "|";
+      Assert.DoesNotContain(ReadPerceptionImageLines(),
+          line => line.StartsWith(garbagePrefix, StringComparison.Ordinal));
+
+      // 3. Образ стиля эталонного б/у рефлекса (Level2) пересоздан и присутствует.
+      var seedReflex = GeneticReflexesSystem.Instance.GetGeneticReflex(Engine.SeedGeneticReflexId);
+      Assert.NotNull(seedReflex);
+      Assert.Contains(Images.GetAllBehaviorStyleImagesList(),
+          s => s.BehaviorStylesList.OrderBy(x => x)
+              .SequenceEqual((seedReflex.Level2 ?? new System.Collections.Generic.List<int>()).OrderBy(x => x)));
+    }
+
+    /// <summary>
+    /// Повторная перестройка идемпотентна: набор ID образов не «дрейфует» между прогонами.
+    /// </summary>
+    [Fact]
+    public void ScenarioPreRun_PerceptionImageRebuild_IsIdempotent()
+    {
+      EvolutionStageService.Instance.ClearStageDataOnlyForScenarioPreRun(AppGlobalState.EvolutionStage);
+      var firstIds = Images.GetAllPerceptionImagesList().Select(x => x.Id).OrderBy(x => x).ToList();
+      var firstStyles = Images.GetAllBehaviorStyleImagesList().Select(x => x.Id).OrderBy(x => x).ToList();
+
+      EvolutionStageService.Instance.ClearStageDataOnlyForScenarioPreRun(AppGlobalState.EvolutionStage);
+      var secondIds = Images.GetAllPerceptionImagesList().Select(x => x.Id).OrderBy(x => x).ToList();
+      var secondStyles = Images.GetAllBehaviorStyleImagesList().Select(x => x.Id).OrderBy(x => x).ToList();
+
+      Assert.Equal(firstIds, secondIds);
+      Assert.Equal(firstStyles, secondStyles);
+    }
+
+    /// <summary>
+    /// Регрессия (Случай 19): предзапуск сценария НЕ должен трогать образы стилей
+    /// (<c>BehaviorStyleImages.dat</c>). Колонка «Стили» в логе — это ID образа стилей из
+    /// глобального счётчика; сброс счётчика и удаление session-learned образов стилей гомеостаза
+    /// ломали сверку ожиданий по стилю в группе (первый сценарий: «ожид. 21, факт 23»,
+    /// «ожид. 23/25/27, факт -»). При этом образы восприятия чистятся по-прежнему.
+    /// </summary>
+    [Fact]
+    public void ScenarioPreRun_KeepsBehaviorStyleImages_DropsGarbagePerceptionImages()
+    {
+      // Session-learned образ стиля: не принадлежит ни одному б/у рефлексу (произвольный набор).
+      int learnedStyle = Images.AddBehaviorStyleImage(new System.Collections.Generic.List<int> { 901, 902 });
+      Assert.True(learnedStyle > 0);
+      // Мусорный образ восприятия: фраза, не связанная ни с одним б/у рефлексом.
+      int garbage = NewPhraseImage();
+
+      EvolutionStageService.Instance.ClearStageDataOnlyForScenarioPreRun(AppGlobalState.EvolutionStage);
+
+      // 1. Session-learned образ стиля сохранён в памяти и на диске.
+      Assert.Contains(Images.GetAllBehaviorStyleImagesList(),
+          s => s.BehaviorStylesList.OrderBy(x => x).SequenceEqual(new[] { 901, 902 }));
+      // 2. Его ID не изменился (счётчик образов стилей не сбрасывался).
+      Assert.Contains(Images.GetAllBehaviorStyleImagesList(), s => s.Id == learnedStyle);
+      // 3. Мусорный образ восприятия удалён.
+      Assert.DoesNotContain(Images.GetAllPerceptionImagesList(), x => x.Id == garbage);
+    }
+
+    /// <summary>Строки данных (без шапки/пустых) из PerceptionImages.dat.</summary>
+    private static string[] ReadPerceptionImageLines()
+    {
+      string reflexesPath = GeneticReflexesSystem.Instance.GetGeneticReflexesFilePath();
+      string file = Path.Combine(Path.GetDirectoryName(reflexesPath), "PerceptionImages.dat");
+      if (!File.Exists(file))
+        return new string[0];
+
+      return File.ReadAllLines(file)
+          .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
+          .ToArray();
     }
 
     /// <summary>

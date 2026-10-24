@@ -23,6 +23,7 @@ namespace ISIDA.Common
     private readonly AutomatizmSystem _automatizmSystem;
     private readonly ConditionedReflexesSystem _conditionedReflexesSystem;
     private readonly AutomatizmTreeSystem _automatizmTreeSystem;
+    private readonly ReflexTreeSystem _reflexTreeSystem;
 
     private readonly EpisodicMemorySystem _episodicMemory;
     private readonly ProblemTreeSystem _problemTree;
@@ -54,6 +55,7 @@ namespace ISIDA.Common
     /// Инициализирует глобальный экземпляр системы (основные зависимости обязательны, системы Understanding — опционально, передаются из движка для избежания перекрёстных ссылок через Instance).
     /// Справочник типов ситуаций в сервис не передаётся: при смене стадии он не очищается.
     /// Необязательный <c>psychicSystem</c>: сброс циклов мышления при очистке данных стадии 4 (может быть null в тестах).
+    /// Необязательный <c>reflexTreeSystem</c>: перестройка образов восприятия из б/у рефлексов при переходе на стадию 0 (может быть null в тестах).
     /// </summary>
     public static void InitializeInstance(
         AutomatizmSystem automatizmSystem,
@@ -65,7 +67,8 @@ namespace ISIDA.Common
         SituationImageSystem situationImageSystem = null,
         ThemeImageSystem themeImageSystem = null,
         UnderstandingTreeSystem understandingTreeSystem = null,
-        PsychicSystem psychicSystem = null)
+        PsychicSystem psychicSystem = null,
+        ReflexTreeSystem reflexTreeSystem = null)
     {
       if (_instance != null)
         throw new InvalidOperationException("EvolutionStageService уже инициализирован.");
@@ -80,7 +83,8 @@ namespace ISIDA.Common
         situationImageSystem,
         themeImageSystem,
         understandingTreeSystem,
-        psychicSystem);
+        psychicSystem,
+        reflexTreeSystem);
     }
 
     private EvolutionStageService(
@@ -93,7 +97,8 @@ namespace ISIDA.Common
         SituationImageSystem situationImageSystem,
         ThemeImageSystem themeImageSystem,
         UnderstandingTreeSystem understandingTreeSystem,
-        PsychicSystem psychicSystem)
+        PsychicSystem psychicSystem,
+        ReflexTreeSystem reflexTreeSystem)
     {
       _automatizmSystem = automatizmSystem ?? throw new ArgumentNullException(nameof(automatizmSystem));
       _conditionedReflexesSystem = conditionedReflexesSystem ?? throw new ArgumentNullException(nameof(conditionedReflexesSystem));
@@ -105,6 +110,7 @@ namespace ISIDA.Common
       _themeImageSystem = themeImageSystem;
       _understandingTreeSystem = understandingTreeSystem;
       _psychicSystem = psychicSystem;
+      _reflexTreeSystem = reflexTreeSystem;
     }
 
     #endregion
@@ -174,6 +180,7 @@ namespace ISIDA.Common
           {
             ClearActionsImagesData();
             ClearSensoryAssociationsData();
+            ClearPerceptionImagesData();
           }
         }
         AppGlobalState.EvolutionStage = targetStage;
@@ -223,6 +230,7 @@ namespace ISIDA.Common
         // метода ChangeEvolutionStage (иначе SensoryAssociations.dat переживает предзапуск сценария).
         ClearActionsImagesData();
         ClearSensoryAssociationsData();
+        ClearPerceptionImagesData();
 
         // Память опыта и временное состояние стратегий циклов не привязаны к файлам стадии 4 и при clearThrough &lt; 4
         // не очищались бы (ClearThinkingCyclesWhenStageFourDataCleared не зовётся).
@@ -369,6 +377,34 @@ namespace ISIDA.Common
           ConditionedReflexFormationService.Instance.ResetChainState();
 
         Logger.Info("Сенсорные ассоциации (SensoryAssociations.dat) очищены в памяти; запись при закрытии системы");
+      }
+      catch (Exception ex)
+      {
+        Logger.Error(ex.Message);
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Перестраивает образы восприятия (PerceptionImages.dat) из таблицы безусловных рефлексов.
+    /// На стадии 0 остаются только б/у рефлексы, поэтому образы восприятия, накопленные условными
+    /// рефлексами и рантаймом, удаляются, а образы б/у рефлексов пересоздаются и дерево рефлексов
+    /// перепривязывается на актуальные ID (делает <see cref="ReflexTreeSystem"/>). Образы стилей
+    /// (BehaviorStyleImages.dat) не затрагиваются — на них завязана колонка «Стили» в логе и
+    /// ожидания сценариев.
+    /// </summary>
+    private void ClearPerceptionImagesData()
+    {
+      try
+      {
+        if (_reflexTreeSystem == null)
+        {
+          Logger.Info("Ссылка на ReflexTreeSystem не передана, перестройка образов восприятия не выполнена");
+          return;
+        }
+
+        _reflexTreeSystem.RebuildPerceptionImagesFromGeneticReflexes();
+        Logger.Info("Образы восприятия (PerceptionImages.dat) перестроены из таблицы б/у рефлексов");
       }
       catch (Exception ex)
       {
