@@ -544,8 +544,17 @@ namespace Isida.Tests
       int lastStepPulse = GetChainField<int>(GetField(ReflexesActivator.Instance, "_activeReflexChain"), "LastStepPulse");
       Assert.Equal(Engine.CurrentPulse, lastStepPulse);
 
-      // Оценка приходит в том же пульсе, что и запуск звена
+      // Оценка приходит в том же пульсе, что и запуск звена.
+      // Это же моделирует синхронный рецепт адаптера (RunCommand/вызов метода): он
+      // вызывает SetChainStepResult ещё внутри ExecuteConditionedReflex, и оценка
+      // не должна теряться при выставлении состояния ожидания.
+      var waitingChain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.Null(GetChainField<bool?>(waitingChain, "LastEvaluation"));
+
       ReflexesActivator.Instance.SetChainStepResult(true);
+
+      Assert.True(GetChainField<bool?>(waitingChain, "LastEvaluation") == true,
+          "оценка синхронного рецепта потеряна при запуске звена");
 
       // Тот же пульс: перехода быть не должно
       InvokePrivate("ProcessActiveChain", Engine.CurrentPulse);

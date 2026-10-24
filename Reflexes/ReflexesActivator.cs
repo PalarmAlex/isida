@@ -1054,6 +1054,27 @@ namespace ISIDA.Reflexes
         return;
       }
 
+      // Ожидание оценки выставляется ДО вызова мотора: синхронный рецепт адаптера
+      // (RunCommand, вызов метода и т.п.) успевает вызвать SetChainStepResult прямо внутри
+      // ExecuteConditionedReflex. Если выставить флаг после, оценка уйдёт в резервное поле
+      // активатора и потеряется — цепочка затем протухнет по таймауту ожидания.
+      // LastStepPulse = текущий пульс гарантирует, что следующее звено стартует не раньше
+      // следующего пульса (два звена в одном пульсе не выполняются).
+      _lock.EnterWriteLock();
+      try
+      {
+        if (_activeReflexChain == null || _activeReflexChain.ChainId != chainId)
+          return;
+
+        _activeReflexChain.IsWaitingForResult = true;
+        _activeReflexChain.LastStepPulse = pulseCount;
+        _activeReflexChain.LastEvaluation = null;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+
       // Выполняем у-рефлекс (мотор исходного безусловного).
       var result = _reflexExecutionService.ExecuteConditionedReflex(reflexId);
 
@@ -1079,12 +1100,11 @@ namespace ISIDA.Reflexes
         string chainInfo = $"{chainId}:{reflexId}";
         SetChainInfoForCurrentPulse(pulseCount, "Reflex", chainInfo);
 
-        _activeReflexChain.IsWaitingForResult = true;
-        _activeReflexChain.LastStepPulse = pulseCount;
-        _activeReflexChain.LastEvaluation = null;
+        // LastEvaluation намеренно не сбрасывается: синхронный рецепт мог уже записать оценку.
 
+        int evalTimeout = _conditionedReflexes.Settings.TransitiveChainStepEvaluationTimeout;
         Logger.Info($"Транзитивная цепочка: активирован у-рефлекс {reflexId} (шаг {_activeReflexChain.CurrentLinkId}/" +
-                    $"{_activeReflexChain.TransitiveReflexIds.Count}), ожидание оценки {_reflexActionDuration} пульсов");
+                    $"{_activeReflexChain.TransitiveReflexIds.Count}), ожидание оценки до {evalTimeout} пульсов");
 
         _researchLogger?.LogChainLinkExecution(chainId, _activeReflexChain.CurrentLinkId, motorActionId, pulseCount);
       }
