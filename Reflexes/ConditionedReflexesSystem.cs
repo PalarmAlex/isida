@@ -623,6 +623,15 @@ namespace ISIDA.Reflexes
       /// строже допуск по цепочке (защита от ложных активаций).
       /// </summary>
       public float TransitiveGammaCoefficient { get; set; } = 1.0f;
+
+      /// <summary>
+      /// Максимальное время ожидания оценки результата выполнения моторного действия
+      /// в транзитивной цепочке (в пульсах). Если хост (Velum) не вызвал
+      /// <c>ReflexesActivator.SetChainStepResult</c> за это время — цепочка
+      /// переходит к следующему звену с оценкой true по умолчанию.
+      /// 0 = без таймаута (ждать бесконечно). Дефолт = 5 пульсов.
+      /// </summary>
+      public int TransitiveChainStepEvaluationTimeout { get; set; } = 5;
     }
 
     /// <summary>
@@ -2147,6 +2156,9 @@ namespace ISIDA.Reflexes
             case "TransitiveGammaCoefficient":
               _settings.TransitiveGammaCoefficient = ParseF();
               break;
+            case "TransitiveChainStepEvaluationTimeout":
+              _settings.TransitiveChainStepEvaluationTimeout = ParseI();
+              break;
           }
         }
       }
@@ -2252,7 +2264,8 @@ namespace ISIDA.Reflexes
             "# EnableTransitiveLearning: транзитивное обучение цепочкам CS→CS… (true/false)",
             "# TransitiveMaxDepth: максимальная глубина обхода цепочки CS-звеньев (число рёбер)",
             "# TransitiveDecayPerHop: деградация силы цепи на звено сверх первого δ∈(0..1]",
-            "# TransitiveGammaCoefficient: коэффициент повышения порога цепи k (γ_tr = γ·k)"
+            "# TransitiveGammaCoefficient: коэффициент повышения порога цепи k (γ_tr = γ·k)",
+            "# TransitiveChainStepEvaluationTimeout: макс. время ожидания оценки мотор-действия в транзитивной цепи (пульсы, 0 = без таймаута)"
           };
 
         // Все значения сериализуются через InvariantCulture (точка как десятичный разделитель) —
@@ -2297,6 +2310,7 @@ namespace ISIDA.Reflexes
         lines.Add($"TransitiveMaxDepth={_settings.TransitiveMaxDepth.ToString(inv)}");
         lines.Add($"TransitiveDecayPerHop={F(_settings.TransitiveDecayPerHop)}");
         lines.Add($"TransitiveGammaCoefficient={F(_settings.TransitiveGammaCoefficient)}");
+        lines.Add($"TransitiveChainStepEvaluationTimeout={_settings.TransitiveChainStepEvaluationTimeout.ToString(inv)}");
 
         var result = FileValidator.SafeSaveFile(
             GetConditionedReflexSettingsFilePath(),

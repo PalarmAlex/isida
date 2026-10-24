@@ -1864,9 +1864,10 @@ namespace ISIDA.Reflexes
 
         var chain = _activeReflexChain;
 
-        // Резервный таймаут шага от зависания: для транзитивной цепочки основной синхронизатор —
-        // завершение мотора (_reflexActionDuration), таймаут лишь подстраховка.
-        if (chain.IsTransitive)
+        // Резервный таймаут шага от зависания. Для транзитивной цепочки, ожидающей оценку
+        // хоста, он неприменим: иначе он гасил бы цепь раньше TransitiveChainStepEvaluationTimeout
+        // (оба по дефолту 5), делая настройку ожидания оценки бессмысленной.
+        if (chain.IsTransitive && !(chain.IsWaitingForResult && !chain.LastEvaluation.HasValue))
         {
           int timeout = _conditionedReflexes.Settings.ConditionedReflexChainStepTimeout;
           if (timeout > 0 && pulseCount - chain.LastStepPulse > timeout)
@@ -1879,7 +1880,56 @@ namespace ISIDA.Reflexes
 
         if (chain.IsWaitingForResult)
         {
-          if (pulseCount >= chain.LastStepPulse + _reflexActionDuration)
+          // === Транзитивная цепочка: ждём оценку от хоста (Velum) ===
+          if (chain.IsTransitive)
+          {
+            bool hasEvaluation = chain.LastEvaluation.HasValue;
+
+            // Если оценка не пришла за TransitiveChainStepEvaluationTimeout — завершаем цепочку.
+            if (!hasEvaluation)
+            {
+              int evalTimeout = _conditionedReflexes.Settings.TransitiveChainStepEvaluationTimeout;
+              if (evalTimeout > 0 && pulseCount - chain.LastStepPulse > evalTimeout)
+              {
+                StopCurrentReflexChainCore(pulseCount);
+                Logger.Info($"Транзитивная цепочка: время ожидания оценки звена {chain.CurrentLinkId} истекло ({evalTimeout} пульсов), цепочка завершена");
+                return;
+              }
+            }
+
+            // Если оценка пришла и не в том же пульсе, что запуск звена — переходим немедленно.
+            if (hasEvaluation && chain.LastStepPulse != pulseCount)
+            {
+              bool finalEvaluation = chain.LastEvaluation.Value;
+              Logger.Info($"Оценка звена {chain.CurrentLinkId} транзитивной цепочки получена из хоста, переходим к следующему звену");
+
+              int nextLinkId = finalEvaluation ? chain.CurrentLinkId + 1 : 0;
+              if (nextLinkId > chain.TransitiveReflexIds.Count)
+                nextLinkId = 0;
+
+              if (nextLinkId == 0)
+              {
+                StopCurrentReflexChainCore(pulseCount);
+                Logger.Info($"Транзитивная цепочка у-рефлексов {chain.ChainId} успешно завершена. " +
+                           $"Выполнено звеньев: {chain.CompletedActions.Count}");
+                _researchLogger?.LogChainCompletion(chain.ChainId, pulseCount,
+                                                    chain.CompletedActions.Count, finalEvaluation);
+              }
+              else
+              {
+                _researchLogger?.LogChainBranchDecision(chain.ChainId, chain.CurrentLinkId,
+                                                        finalEvaluation, nextLinkId, "Success", pulseCount);
+                chain.CurrentLinkId = nextLinkId;
+                chain.LastStepPulse = pulseCount;
+                chain.IsWaitingForResult = false;
+                chain.LastEvaluation = null;
+                shouldExecuteLink = true;
+              }
+            }
+            // Иначе ждём оценку — никуда не переходим.
+          }
+          // === Непротранзитивная цепочка: стандартная логика по _reflexActionDuration ===
+          else if (pulseCount >= chain.LastStepPulse + _reflexActionDuration)
           {
             bool finalEvaluation;
 
@@ -1896,27 +1946,16 @@ namespace ISIDA.Reflexes
 
             int nextLinkId;
 
-            if (chain.IsTransitive)
+            var reflexChain = _reflexChainsSystem.GetChain(chain.ChainId);
+            var currentLink = reflexChain?.Links.FirstOrDefault(l => l.ID == chain.CurrentLinkId);
+
+            if (currentLink == null)
             {
-              // Линейная цепочка: следующий шаг — при успехе, конец — при неудаче.
-              nextLinkId = finalEvaluation ? chain.CurrentLinkId + 1 : 0;
-
-              if (nextLinkId > chain.TransitiveReflexIds.Count)
-                nextLinkId = 0;
+              StopCurrentReflexChainCore(pulseCount);
+              return;
             }
-            else
-            {
-              var reflexChain = _reflexChainsSystem.GetChain(chain.ChainId);
-              var currentLink = reflexChain?.Links.FirstOrDefault(l => l.ID == chain.CurrentLinkId);
 
-              if (currentLink == null)
-              {
-                StopCurrentReflexChainCore(pulseCount);
-                return;
-              }
-
-              nextLinkId = finalEvaluation ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
-            }
+            nextLinkId = finalEvaluation ? currentLink.SuccessNextLink : currentLink.FailureNextLink;
 
             if (nextLinkId == 0)
             {

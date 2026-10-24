@@ -202,6 +202,40 @@ namespace Isida.Tests
         AdaptiveActionsSystem.Instance.ReflexActionDisplayDuration;
 
     /// <summary>
+    /// Создаёт активную транзитивную цепочку напрямую, минуя <c>BuildTransitiveChain</c>:
+    /// тот строит звенья только по реальным мотор→стимул связям, а для проверки
+    /// синхронизации по <c>SetChainStepResult</c> нужна цепочка из двух и более звеньев.
+    /// </summary>
+    private void SeedActiveTransitiveChain(int seedReflexId, params int[] linkReflexIds)
+    {
+      var activator = ReflexesActivator.Instance;
+
+      var chainType = typeof(ReflexesActivator)
+          .GetNestedType("ActiveReflexChain", BindingFlags.NonPublic);
+      Assert.NotNull(chainType);
+
+      object chain = Activator.CreateInstance(chainType, nonPublic: true);
+      Assert.NotNull(chain);
+
+      chainType.GetProperty("ChainId", ChainMembers).SetValue(chain, -seedReflexId);
+      chainType.GetProperty("CurrentLinkId", ChainMembers).SetValue(chain, 1);
+      chainType.GetProperty("StartPulse", ChainMembers).SetValue(chain, Engine.CurrentPulse);
+      chainType.GetProperty("LastStepPulse", ChainMembers).SetValue(chain, Engine.CurrentPulse);
+      chainType.GetProperty("IsWaitingForResult", ChainMembers).SetValue(chain, false);
+      chainType.GetProperty("IsTransitive", ChainMembers).SetValue(chain, true);
+      chainType.GetProperty("TransitiveReflexIds", ChainMembers)
+          .SetValue(chain, linkReflexIds.ToList());
+
+      SetField(activator, "_activeReflexChain", chain);
+      SetField(activator, "_activeChainId", -seedReflexId);
+      // Условия «заморожены» теми же значениями, что и в активаторе: иначе CanContinueChain
+      // погасит цепочку по смене base/style.
+      SetField(activator, "_chainBaseID", (int)GetField(activator, "_activeCurBaseID"));
+      SetField(activator, "_chainStyleID", (int)GetField(activator, "_activeCurBaseStyleID"));
+      AppGlobalState.IsReflexChainActive = true;
+    }
+
+    /// <summary>
     /// Основной сценарий: фраза запускает УР1, строится транзитивная цепочка,
     /// штатный контур проигрывает её и активирует УР2.
     /// </summary>
@@ -266,10 +300,14 @@ namespace Isida.Tests
       Assert.True(AppGlobalState.CurrentConditionedReflexID == reflex2Id,
           $"УР2 не активирован в процессе прогона цепочки (CurrentConditionedReflexID={AppGlobalState.CurrentConditionedReflexID})");
 
-      // === Завершение: оценка не приходила → успех по умолчанию, звеньев больше нет ===
-      // Цепочка должна погаснуть сама в пределах нескольких пульсов.
-      Assert.True(RunPulsesUntilChainStops(5),
-          "цепочка не завершилась после активации УР2");
+      // === Завершение: хост подтверждает выполненное звено (эмуляция SetChainStepResult из Velum) ===
+      // Транзитивная цепочка больше не идёт «по таймеру» — она ждёт оценку от хоста.
+      // Оценка, пришедшая в том же пульсе, что запуск звена, не обрабатывается (см.
+      // TransitiveChain_SamePulseEvaluation_SkipsImmediateAdvance), поэтому погасание
+      // происходит на следующем пульсе — в пределах 1–2 итераций.
+      ReflexesActivator.Instance.SetChainStepResult(true);
+      Assert.True(RunPulsesUntilChainStops(2),
+          "цепочка не завершилась после подтверждения звена хостом");
 
       Assert.False(ReflexesActivator.Instance.IsChainActive);
     }
@@ -375,6 +413,158 @@ namespace Isida.Tests
 
       Assert.Equal(reflex1Id, (int)GetField(ReflexesActivator.Instance, "_activeConditionReflexID"));
       Assert.False(ReflexesActivator.Instance.IsChainActive);
+    }
+
+    /// <summary>
+    /// Оценка из хоста (Velum) через SetChainStepResult: цепочка переходит к следующему звену
+    /// немедленно, не дожидаясь _reflexActionDuration пульсов.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_SetChainStepResult_AdvancesImmediately()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      int triggerA = NewPhraseImage();
+      int triggerB = NewPhraseImage();
+      int triggerC = NewPhraseImage();
+
+      int reflex1Id = AddReflex(triggerA, level2: new[] { Engine.SeedStyleId });
+      int reflex2Id = AddReflex(triggerB, level2: new[] { Engine.SeedStyleId });
+      int reflex3Id = AddReflex(triggerC, level2: new[] { Engine.SeedStyleId });
+
+      // Цепочка из двух звеньев: УР2 → УР3. Первое звено (УР1) уже отработало.
+      EmulatePhraseTrigger(triggerA, styleImageId);
+      SeedActiveTransitiveChain(reflex1Id, reflex2Id, reflex3Id);
+
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.True(GetChainField<bool>(chain, "IsTransitive"), "не транзитивная цепочка");
+      Assert.True(GetChainField<List<int>>(chain, "TransitiveReflexIds").Count == 2,
+          "ожидается 2 звена в цепочке");
+
+      EndPulse(Engine.CurrentPulse);
+
+      // === Прогон первого звена: нужно дождаться _reflexActionDuration пульсов ===
+      AdvanceAndProcess(ReflexActionDuration);
+
+      Assert.True(ReflexesActivator.Instance.IsChainWaitingForResult(),
+          "цепочка должна ждать результат после запуска звена");
+
+      // === Эмуляция ответа хоста: SetChainStepResult(true) ===
+      // Оценка приходит в том же пульсе, что и запуск звена, поэтому переход
+      // произойдёт только на следующем пульсе.
+      ReflexesActivator.Instance.SetChainStepResult(true);
+
+      // === Следующий пульс: немедленный переход ко второму звену ===
+      Engine.AdvancePulses(1);
+      InvokePrivate("ProcessActiveChain", Engine.CurrentPulse);
+
+      chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.True(GetChainField<int>(chain, "CurrentLinkId") == 2,
+          "ожидается переход ко второму звену (CurrentLinkId=2)");
+
+      // === Подтверждаем второе звено — цепочка завершается ===
+      ReflexesActivator.Instance.SetChainStepResult(true);
+      Engine.AdvancePulses(1);
+      InvokePrivate("ProcessActiveChain", Engine.CurrentPulse);
+
+      Assert.False(ReflexesActivator.Instance.IsChainActive,
+          "цепочка должна завершиться после подтверждения последнего звена");
+    }
+
+    /// <summary>
+    /// Оценка не пришла за TransitiveChainStepEvaluationTimeout — цепочка завершается.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_EvaluationTimeout_ChainStops()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      int triggerA = NewPhraseImage();
+      int triggerB = NewPhraseImage();
+      int triggerC = NewPhraseImage();
+
+      int reflex1Id = AddReflex(triggerA, level2: new[] { Engine.SeedStyleId });
+      int reflex2Id = AddReflex(triggerB, level2: new[] { Engine.SeedStyleId });
+      int reflex3Id = AddReflex(triggerC, level2: new[] { Engine.SeedStyleId });
+
+      EmulatePhraseTrigger(triggerA, styleImageId);
+      SeedActiveTransitiveChain(reflex1Id, reflex2Id, reflex3Id);
+      EndPulse(Engine.CurrentPulse);
+
+      // Прогон первого звена — теперь цепочка ждёт оценку
+      AdvanceAndProcess(ReflexActionDuration);
+      Assert.True(ReflexesActivator.Instance.IsChainWaitingForResult());
+
+      int originalTimeout = Settings.TransitiveChainStepEvaluationTimeout;
+      Settings.TransitiveChainStepEvaluationTimeout = 2;
+
+      try
+      {
+        // Оценка не приходит — цепочка обязана погаснуть по таймауту.
+        Assert.True(RunPulsesUntilChainStops(10),
+            "цепочка должна завершиться по таймауту ожидания оценки");
+        Assert.False(ReflexesActivator.Instance.IsChainActive);
+      }
+      finally
+      {
+        Settings.TransitiveChainStepEvaluationTimeout = originalTimeout;
+      }
+    }
+
+    /// <summary>
+    /// Оценка пришла в том же пульсе, что и запуск звена — немедленный переход блокируется.
+    /// Цепочка переходит к следующему звену только на следующий пульс.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_SamePulseEvaluation_SkipsImmediateAdvance()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      int triggerA = NewPhraseImage();
+      int triggerB = NewPhraseImage();
+      int triggerC = NewPhraseImage();
+
+      int reflex1Id = AddReflex(triggerA, level2: new[] { Engine.SeedStyleId });
+      int reflex2Id = AddReflex(triggerB, level2: new[] { Engine.SeedStyleId });
+      int reflex3Id = AddReflex(triggerC, level2: new[] { Engine.SeedStyleId });
+
+      EmulatePhraseTrigger(triggerA, styleImageId);
+      SeedActiveTransitiveChain(reflex1Id, reflex2Id, reflex3Id);
+      EndPulse(Engine.CurrentPulse);
+
+      // === Прогон первого звена ===
+      AdvanceAndProcess(ReflexActionDuration);
+
+      Assert.True(ReflexesActivator.Instance.IsChainWaitingForResult());
+      int lastStepPulse = GetChainField<int>(GetField(ReflexesActivator.Instance, "_activeReflexChain"), "LastStepPulse");
+      Assert.Equal(Engine.CurrentPulse, lastStepPulse);
+
+      // Оценка приходит в том же пульсе, что и запуск звена
+      ReflexesActivator.Instance.SetChainStepResult(true);
+
+      // Тот же пульс: перехода быть не должно
+      InvokePrivate("ProcessActiveChain", Engine.CurrentPulse);
+
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.True(GetChainField<int>(chain, "CurrentLinkId") == 1,
+          "в том же пульсе цепочка не должна переходить к следующему звену");
+      Assert.True(GetChainField<bool>(chain, "IsWaitingForResult"),
+          "цепочка должна остаться в ожидании");
+
+      // === Следующий пульс: переход произойдёт ===
+      Engine.AdvancePulses(1);
+      InvokePrivate("ProcessActiveChain", Engine.CurrentPulse);
+
+      chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.True(GetChainField<int>(chain, "CurrentLinkId") == 2,
+          "на следующий пульс цепочка должна перейти к следующему звену");
     }
   }
 }
