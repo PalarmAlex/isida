@@ -275,17 +275,25 @@ namespace ISIDA.Reflexes
       _isSleeping = isSleeping;
       _currentPulse = pulseCount;
 
-      if (AppGlobalState.IsNewConditions || (pulseChainCompleted != 0 && pulseCount > pulseChainCompleted + _reflexActionDuration))
+      bool timeoutExpired = pulseChainCompleted != 0 && pulseCount > pulseChainCompleted + _reflexActionDuration;
+
+      _lock.EnterWriteLock();
+      try
       {
-        _lock.EnterWriteLock();
-        try
+        // Смена внешних условий (IsNewConditions) НЕ должна рвать транзитивную виртуальную
+        // цепочку реплея: она идёт по внутренним виртуальным стимулам, а не по внешним условиям.
+        // Иначе цепочка, построенная в конце пульса, гасится на входе следующего (регресс Случая 17,
+        // ветка IsNewConditions → DeactivateChainCore — та же E20, что и в CanContinueChain).
+        // Таймаут зависания (timeoutExpired) гасит любую цепочку, включая транзитивную.
+        bool newConditionsExpired = AppGlobalState.IsNewConditions && _activeReflexChain?.IsTransitive != true;
+        if (newConditionsExpired || timeoutExpired)
         {
           DeactivateChainCore(pulseCount);
         }
-        finally
-        {
-          _lock.ExitWriteLock();
-        }
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
 
       ProcessActiveChain(pulseCount);
@@ -1841,7 +1849,11 @@ namespace ISIDA.Reflexes
           return;
 
         string canContinueReason = null;
-        string stopReason = AppGlobalState.IsNewConditions ? "новые условия (IsNewConditions)" : null;
+        // IsNewConditions гасит транзитивную цепь в начале ProcessReflexPulse —
+        // здесь достаточно проверить base/style и CanContinueChain (уже учитывает IsTransitive).
+        string stopReason = _activeReflexChain.IsTransitive
+          ? null
+          : (AppGlobalState.IsNewConditions ? "новые условия (IsNewConditions)" : null);
         if (stopReason != null || !CanContinueChain(out canContinueReason))
         {
           StopCurrentReflexChainCore(pulseCount);

@@ -52,6 +52,13 @@ namespace Isida.Tests
             ConditionedReflexesSystem.Instance);
       }
 
+      if (!MotorStimulusAssociationSystem.IsInitialized)
+      {
+        MotorStimulusAssociationSystem.InitializeInstance(
+            GeneticReflexesSystem.Instance,
+            ConditionedReflexesSystem.Instance);
+      }
+
       if (!ReflexesActivator.IsInitialized)
       {
         ReflexesActivator.InitializeInstance(
@@ -65,9 +72,12 @@ namespace Isida.Tests
             AdaptiveActionsSystem.Instance,
             ConditionedReflexFormationService.Instance,
             PerceptionImagesSystem.Instance);
-        ReflexesActivator.Instance.SetMotorStimulusAssociations(
-            MotorStimulusAssociationSystem.Instance);
       }
+
+      // Всегда обновляем ссылку: предыдущий тест мог обнулить MotorStimulusAssociationSystem
+      // через Dispose, а ссылка в активаторе осталась «мёртвой».
+      ReflexesActivator.Instance.SetMotorStimulusAssociations(
+          MotorStimulusAssociationSystem.Instance);
     }
 
     private static void SetField(object target, string name, object value)
@@ -117,9 +127,15 @@ namespace Isida.Tests
       SetField(activator, "_activeCurReflexTriggerStimulusID", 0);
       SetField(activator, "_activatedPulsCount", Engine.CurrentPulse);
       SetField(activator, "_weitPulceCount", Engine.CurrentPulse);
-      // Страховка от «протёкшего» состояния предыдущего теста:
+
+      // Полная очистка «протёкшего» состояния предыдущего теста.
       AppGlobalState.IsReflexChainActive = false;
       AppGlobalState.IsNewConditions = false;
+      SetField(activator, "_activeReflexChain", null);
+      SetField(activator, "_chainAlreadyActivatedInThisContext", false);
+      SetField(activator, "_isChainActive", false);
+      SetField(activator, "_chainBaseID", 0);
+      SetField(activator, "_chainStyleID", 0);
 
       ReflexTreeSystem.Instance.ConditionsDetection(new[] { 0, styleImageId, triggerImageId });
 
