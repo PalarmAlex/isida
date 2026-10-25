@@ -33,6 +33,17 @@ namespace ISIDA.Scenarios
     WaitClick = 1
   }
 
+  /// <summary>Оценка выполнения звена цепочки рефлексов, которую сценарий подставляет вместо ручного переключателя на пульте.</summary>
+  public enum ScenarioChainStepResult
+  {
+    /// <summary>Нет оценки — сигнал в движок не отправляется, цепочка прервётся по таймауту TransitiveChainStepEvaluationTimeout.</summary>
+    None = 0,
+    /// <summary>Успех — SetChainStepResult(true): переход к следующему звену транзитивной цепочки.</summary>
+    Success = 1,
+    /// <summary>Неудача — SetChainStepResult(false): цепочка завершается на текущем звене.</summary>
+    Failure = 2
+  }
+
   /// <summary>Строка сценария: порядковый шаг и расчётный номер пульса внутри прогона.</summary>
   public sealed class ScenarioLineRow : INotifyPropertyChanged
   {
@@ -259,6 +270,27 @@ namespace ISIDA.Scenarios
     /// <summary>Сбросить таймер ожидания оценки оператора (если доступно по стадии).</summary>
     public bool ResetWaitingPeriod { get; set; }
 
+    /// <summary>Оценка звена цепочки рефлексов, подставляемая на этом шаге (Нет — сигнал не отправляется, ждём таймаут движка).</summary>
+    public ScenarioChainStepResult ChainStepResult { get; set; }
+
+    /// <summary>Числовой код оценки звена для привязки ComboBox в редакторе (см. <see cref="ChainStepResult"/>).</summary>
+    public int ChainStepResultCode
+    {
+      get => (int)ChainStepResult;
+      set
+      {
+        var v = value == (int)ScenarioChainStepResult.Success
+            ? ScenarioChainStepResult.Success
+            : value == (int)ScenarioChainStepResult.Failure
+                ? ScenarioChainStepResult.Failure
+                : ScenarioChainStepResult.None;
+        if (ChainStepResult == v)
+          return;
+        ChainStepResult = v;
+        NotifyPropertyChanged();
+      }
+    }
+
     /// <summary>P — пульт, W — только клик по плашке ожидания.</summary>
     public string KindCode
     {
@@ -288,7 +320,8 @@ namespace ISIDA.Scenarios
             ?? new List<ScenarioEnvironmentProbeEntry>(),
         CommandPatternIds = CommandPatternIds?.ToList() ?? new List<int>(),
         Phrase = Phrase ?? "",
-        ResetWaitingPeriod = ResetWaitingPeriod
+        ResetWaitingPeriod = ResetWaitingPeriod,
+        ChainStepResult = ChainStepResult
       };
     }
   }

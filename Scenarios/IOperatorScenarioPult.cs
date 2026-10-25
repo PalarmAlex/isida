@@ -14,5 +14,8 @@ namespace ISIDA.Scenarios
         int moodId,
         IReadOnlyList<int> commandPatternIds,
         int visualColorId = 0);
+
+    /// <summary>Оценка звена цепочки по шагу сценария (см. <see cref="ScenarioChainStepResult"/>); реализация — на пульте UI.</summary>
+    void ApplyScenarioChainStepResult(ScenarioChainStepResult result);
   }
 }

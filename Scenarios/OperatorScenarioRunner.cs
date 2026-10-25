@@ -248,6 +248,19 @@ namespace ISIDA.Scenarios
           }
         }
 
+        if (line.ChainStepResult != ScenarioChainStepResult.None)
+        {
+          var pultEval = _getPult();
+          if (pultEval == null)
+          {
+            Fail("Пульт симбионта недоступен (оценка звена сценария).");
+            return;
+          }
+          pultEval.ApplyScenarioChainStepResult(line.ChainStepResult);
+          ScenarioRunnerDiagnostics.Write(
+              $"[ChainStepResult] step={line.StepIndex} global={globalPulseCount} result={line.ChainStepResult}");
+        }
+
         int delta = line.PulseWithinScenario;
         _lastExecutedStepPulse = delta;
         if (delta >= _maxPulse)
