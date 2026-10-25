@@ -956,21 +956,31 @@ namespace ISIDA.Reflexes
         _chainStyleID = _activeCurBaseStyleID;
         _chainAlreadyActivatedInThisContext = true;
 
+        // Цепочка создаётся в состоянии ожидания: стартовый мотор УР уже запущен, но его
+        // завершение ещё не подтверждено хостом. CurrentLinkId = 0 — «звенья ещё не
+        // запускались, ждём сигнал завершения стартового мотора». Первое подтверждение
+        // (SetChainStepResult) штатный ProcessActiveChain превратит в переход 0 → 1 и
+        // запуск первого звена; без подтверждения цепочка погаснет по
+        // TransitiveChainStepEvaluationTimeout — как и любое другое звено. Иначе мотор
+        // стартового УР мог ещё выполняться, а первое звено уже пошло бы на следующем пульсе.
         _activeReflexChain = new ActiveReflexChain
         {
           ChainId = -currentReflexId, // Отрицательный ID = виртуальная цепочка
-          CurrentLinkId = 1, // Начинаем с первого шага (индекс 0 в chainReflexIds)
+          CurrentLinkId = 0, // 0 = ждём подтверждения завершения стартового мотора УР
           StartPulse = pulseCount,
           LastStepPulse = pulseCount,
-          IsWaitingForResult = false,
+          IsWaitingForResult = true,
+          LastEvaluation = null,
           IsTransitive = true,
           TransitiveReflexIds = chainReflexIds
         };
 
         _activeChainId = -currentReflexId;
         AppGlobalState.IsReflexChainActive = true;
-        
-        Logger.Info($"Построена виртуальная транзитивная цепочка: {chainReflexIds.Count} шагов после УР {currentReflexId}");
+
+        int startEvalTimeout = _conditionedReflexes.Settings.TransitiveChainStepEvaluationTimeout;
+        Logger.Info($"Построена виртуальная транзитивная цепочка: {chainReflexIds.Count} шагов после УР {currentReflexId}, " +
+                    $"ожидание подтверждения завершения стартового мотора до {startEvalTimeout} пульсов");
       }
     }
 

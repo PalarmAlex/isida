@@ -284,24 +284,41 @@ namespace Isida.Tests
       Assert.True(GetChainField<bool>(chain, "IsTransitive"));
       Assert.Equal(new[] { reflex2Id }, GetChainField<List<int>>(chain, "TransitiveReflexIds"));
 
+      // Стартовый мотор УР1 ещё не подтверждён хостом: цепочка рождается в ожидании,
+      // CurrentLinkId = 0 («звенья ещё не запускались»). Иначе первое звено пошло бы на
+      // следующем пульсе, пока мотор стартового УР не завершён (баг прогона Scenario_8).
+      Assert.True(GetChainField<bool>(chain, "IsWaitingForResult"),
+          "сразу после построения цепочка обязана ждать подтверждения стартового мотора");
+      Assert.Equal(0, GetChainField<int>(chain, "CurrentLinkId"));
+      Assert.True(ReflexesActivator.Instance.IsChainWaitingForResult(),
+          "IsChainWaitingForResult должен быть истинен до подтверждения стартового мотора");
+
       // Конец пульса: ResetStates обнуляет пусковой стимул, цепочка обязана выжить.
       // Именно на этом месте в рантайме она и гасла (Случай 1).
       EndPulse(Engine.CurrentPulse);
       Assert.True(ReflexesActivator.Instance.IsChainActive,
           "цепочка погашена в конце пульса активации");
 
-      // === Прогон: ждём завершения мотора и разворачиваем звено ===
-      // Для одного звена: пульс 1 — ExecuteChainLink ставит IsWaitingForResult,
-      // пульс 2 — ProcessActiveChain оценивает и останавливает цепочку.
-      AdvanceAndProcess(ReflexActionDuration);
+      // === Хост подтверждает завершение стартового мотора (эмуляция SetChainStepResult из Velum) ===
+      // Только после этого подтверждения штатный контур развернёт первое звено.
+      ReflexesActivator.Instance.SetChainStepResult(true);
 
-      // УР2 должен активироваться в ExecuteChainLink, а ResetStates обнуляет
+      // === Следующий пульс: переход 0 → 1 и запуск первого звена (активация УР2) ===
+      AdvanceAndProcess(1);
+
+      // УР2 должен активироваться в ExecuteTransitiveChainLink, а ResetStates обнуляет
       // _activeConditionReflexID — проверяем через AppGlobalState.CurrentConditionedReflexID
       Assert.True(AppGlobalState.CurrentConditionedReflexID == reflex2Id,
           $"УР2 не активирован в процессе прогона цепочки (CurrentConditionedReflexID={AppGlobalState.CurrentConditionedReflexID})");
 
-      // === Завершение: хост подтверждает выполненное звено (эмуляция SetChainStepResult из Velum) ===
-      // Транзитивная цепочка больше не идёт «по таймеру» — она ждёт оценку от хоста.
+      chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.Equal(1, GetChainField<int>(chain, "CurrentLinkId"));
+      Assert.True(GetChainField<bool>(chain, "IsWaitingForResult"),
+          "после запуска первого звена цепочка снова ждёт оценку хоста");
+
+      // === Завершение: хост подтверждает выполненное первое звено ===
+      // Транзитивная цепочка не идёт «по таймеру» — она ждёт оценку от хоста.
       // Оценка, пришедшая в том же пульсе, что запуск звена, не обрабатывается (см.
       // TransitiveChain_SamePulseEvaluation_SkipsImmediateAdvance), поэтому погасание
       // происходит на следующем пульсе — в пределах 1–2 итераций.
@@ -310,6 +327,61 @@ namespace Isida.Tests
           "цепочка не завершилась после подтверждения звена хостом");
 
       Assert.False(ReflexesActivator.Instance.IsChainActive);
+    }
+
+    /// <summary>
+    /// Регресс бага прогона Scenario_8 (25.10): первое звено цепочки стартовало на следующем
+    /// пульсе после построения, не дождавшись подтверждения завершения мотора стартового УР.
+    /// Мотор стартового у-рефлекса ещё выполнялся, а звено уже шло на выполнение.
+    /// Теперь цепочка рождается в ожидании подтверждения (как и любое звено): без сигнала
+    /// хоста первое звено не запускается даже по истечении <c>_reflexActionDuration</c> пульсов.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_StartMotorNotConfirmed_FirstLinkDoesNotStart()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      int triggerA = NewPhraseImage();
+      int triggerB = NewPhraseImage();
+
+      int reflex1Id = AddReflex(triggerA, level2: new[] { Engine.SeedStyleId });
+      int reflex2Id = AddReflex(triggerB, level2: new[] { Engine.SeedStyleId });
+
+      int motor1 = ReflexExecutionService.Instance
+          .GetActionsForGeneticReflex(Find(reflex1Id).SourceGeneticReflexId).First();
+
+      float gamma = Settings.MotorAssociationActivationThreshold;
+      do
+      {
+        MotorStimulusAssociationSystem.Instance.StrengthenLink(motor1, triggerB);
+      }
+      while (!MotorStimulusAssociationSystem.Instance.TryGetStrength(motor1, triggerB, out float c) || c < gamma);
+
+      EmulatePhraseTrigger(triggerA, styleImageId);
+      InvokePrivate("ExecuteReflexes", Engine.CurrentPulse);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "цепочка не построена в пульсе активации");
+
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.True(GetChainField<bool>(chain, "IsWaitingForResult"),
+          "цепочка обязана родиться в ожидании подтверждения стартового мотора");
+
+      EndPulse(Engine.CurrentPulse);
+
+      // Прогоняем столько пульсов, сколько раньше хватило бы для старта звена по таймеру.
+      // Без подтверждения стартового мотора хостом первое звено запущено быть не должно.
+      AdvanceAndProcess(ReflexActionDuration);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "цепочка не должна гаснуть раньше TransitiveChainStepEvaluationTimeout");
+      Assert.True(ReflexesActivator.Instance.IsChainWaitingForResult(),
+          "цепочка обязана оставаться в ожидании подтверждения стартового мотора");
+      Assert.NotEqual(reflex2Id, AppGlobalState.CurrentConditionedReflexID);
+
+      chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.Equal(0, GetChainField<int>(chain, "CurrentLinkId"));
     }
 
     /// <summary>
