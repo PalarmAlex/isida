@@ -1064,6 +1064,24 @@ namespace ISIDA.Reflexes
         return;
       }
 
+      // Сверка контекста звена с АКТУАЛЬНЫМ гомеостазом перед запуском мотора.
+      // Звено транзитивной цепи — это у-рефлекс, выученный в конкретном контексте
+      // (Level1 = базовое состояние, Level2 = стили реагирования). Мотор берётся из
+      // исходного б/у рефлекса и через ExecuteConditionedReflex исполняется «как мотор»,
+      // без привязки к условиям. Если гомеостаз сменился (например, метрика отпустила и
+      // «Плохо» сменилось на «Хорошо») — запускать мотор этого звена нельзя: это другой
+      // контекст, для которого связь не выучивалась. Level3 не сверяем: в транзитивной
+      // цепи он виртуальный (мотор→стимул связь), а не внешний пусковой стимул.
+      string contextReason;
+      if (!IsChainLinkContextMet(reflex, out contextReason))
+      {
+        Logger.Info($"Транзитивная цепочка: контекст звена (у-рефлекс {reflexId}) не совпал с текущим — {contextReason}; цепочка остановлена");
+        _lock.EnterWriteLock();
+        try { StopCurrentReflexChainCore(pulseCount); }
+        finally { _lock.ExitWriteLock(); }
+        return;
+      }
+
       // Ожидание оценки выставляется ДО вызова мотора: синхронный рецепт адаптера
       // (RunCommand, вызов метода и т.п.) успевает вызвать SetChainStepResult прямо внутри
       // ExecuteConditionedReflex. Если выставить флаг после, оценка уйдёт в резервное поле
@@ -1566,6 +1584,46 @@ namespace ISIDA.Reflexes
       // Проверка Level3 - пусковой стимул
       if (reflex.Level3 != _activeCurTriggerStimulusID)
         return false;
+
+      return true;
+    }
+
+    /// <summary>
+    /// Сверка контекста звена транзитивной цепочки с АКТУАЛЬНЫМ состоянием гомеостаза.
+    /// Проверяет Level1 (базовое состояние) и Level2 (стили реагирования). Level3
+    /// намеренно не проверяется: в транзитивной цепи это виртуальный стимул мотор→стимул
+    /// связи, а не внешний пусковой образ текущего пульса (см. регресс Случая 17).
+    /// В отличие от <see cref="IsReflexConditionsMet(ConditionedReflexesSystem.ConditionedReflex)"/>
+    /// не читает замороженные <c>_activeCurBaseID</c>/<c>_activetStyleIds</c> (они обновляются
+    /// только при новой активации вне цепи), а берёт живые значения из <see cref="GomeostasSystem"/>
+    /// и <see cref="AppGlobalState.ActiveStyles"/> — иначе проигнорировалась бы смена контекста
+    /// во время прогона цепи (Случай 21).
+    /// </summary>
+    private bool IsChainLinkContextMet(ConditionedReflexesSystem.ConditionedReflex reflex, out string reason)
+    {
+      reason = null;
+
+      int currentBaseId = (int)_gomeostas.GetHomeostasisState().OverallState;
+      if (reflex.Level1 != currentBaseId)
+      {
+        reason = $"база звена {reflex.Level1} != текущая {currentBaseId}";
+        return false;
+      }
+
+      var currentStyleIds = AppGlobalState.ActiveStyles.Select(s => s.Id).ToList();
+      if (currentStyleIds.Count == 0)
+      {
+        reason = "нет активных стилей реагирования";
+        return false;
+      }
+
+      // Точное совпадение Level2 с текущими активными стилями (как в IsReflexConditionsMet).
+      if (!reflex.Level2.All(styleId => currentStyleIds.Contains(styleId)) ||
+          !currentStyleIds.All(styleId => reflex.Level2.Contains(styleId)))
+      {
+        reason = $"стили звена [{string.Join(",", reflex.Level2)}] != текущие [{string.Join(",", currentStyleIds)}]";
+        return false;
+      }
 
       return true;
     }
