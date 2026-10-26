@@ -480,6 +480,88 @@ namespace Isida.Tests
     }
 
     /// <summary>
+    /// Регресс Случая 22: транзитивная цепь, где звено выучено в ДРУГОМ контексте (стиле),
+    /// чем стартовый рефлекс. До фикса `CanContinueChain` (проверка `_chainBaseID/_chainStyleID`
+    /// без учёта `IsTransitive`) цепь мерла на любой смене контекста, не допуская второго звена.
+    /// Теперь `CanContinueChain` пропускает базовую проверку base/style для транзитивных цепей —
+    /// контроль контекста передан на уровень звена (<see cref="IsChainLinkContextMet"/>), и звено
+    /// запускается, если его контекст совпадает с текущим гомеостазом.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_LinksInDifferentContexts_SecondLinkExecutes()
+    {
+      // === Шаг 1: создаём стиль B и выучиваем reflex2 в нём ===
+      ActivateSeedStyle();
+      int styleImageIdA = SeedStyleImage();
+
+      // Добавляем стиль B и активируем его
+      var (styleBId, _) = GomeostasSystem.Instance.AddBehaviorStyle("Стиль B", "");
+      var styleB = GomeostasSystem.Instance.GetAllBehaviorStyles()[styleBId];
+      AppGlobalState.UpdateActiveStyles(new[] { styleB });
+
+      // Стиль B должен стать активным образом стилей
+      int styleImageIdB = Images.AddBehaviorStyleImage(new List<int> { styleBId });
+
+      // Пусковые образы
+      int triggerA = NewPhraseImage();
+      int triggerB = NewPhraseImage();
+
+      // reflex1 выучен в стиле A, reflex2 — в стиле B
+      int reflex1Id = AddReflex(triggerA, level2: new[] { Engine.SeedStyleId });
+      int reflex2Id = AddReflex(triggerB, level2: new[] { styleBId });
+
+      // Мотор reflex1 связывается со стимулом triggerB
+      int motor1 = ReflexExecutionService.Instance
+          .GetActionsForGeneticReflex(Find(reflex1Id).SourceGeneticReflexId).First();
+
+      float gamma = Settings.MotorAssociationActivationThreshold;
+      do
+      {
+        MotorStimulusAssociationSystem.Instance.StrengthenLink(motor1, triggerB);
+      }
+      while (!MotorStimulusAssociationSystem.Instance.TryGetStrength(motor1, triggerB, out float c) || c < gamma);
+
+      // === Шаг 2: переключаемся на стиль A для активации reflex1 ===
+      ActivateSeedStyle();
+
+      // Эмуляция фразы A → reflex1 → построение цепи
+      EmulatePhraseTrigger(triggerA, styleImageIdA);
+      InvokePrivate("ExecuteReflexes", Engine.CurrentPulse);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "транзитивная цепочка не построена после активации УР1");
+
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.NotNull(chain);
+      Assert.True(GetChainField<bool>(chain, "IsTransitive"));
+      Assert.Equal(new[] { reflex2Id }, GetChainField<List<int>>(chain, "TransitiveReflexIds"));
+
+      EndPulse(Engine.CurrentPulse);
+
+      // === Шаг 3: переключаем контекст на стиль B ===
+      AppGlobalState.UpdateActiveStyles(new[] { styleB });
+
+      // Эмуляция UpdateCurrentStates реального пульса: активатор пересчитывает замороженный
+      // образ активных стилей (в рантайме — из GomeostasSystem.ActiveBehaviorStyleImageId).
+      // Именно это расхождение _chainStyleID (стиль A) != _activeCurBaseStyleID (стиль B)
+      // на пульсе 139 прогона Scenario_8 и гасило цепь до запуска второго звена.
+      SetField(ReflexesActivator.Instance, "_activeCurBaseStyleID", styleImageIdB);
+
+      // Подтверждение стартового мотора → цепь должна перейти к звену 1
+      ReflexesActivator.Instance.SetChainStepResult(true);
+
+      // Прогон пульса: ExecuteTransitiveChainLink сверяет контекст reflex2 (Level2=[BId])
+      // с текущим гомеостазом (стиль B) — должно совпасть, звено запускается
+      AdvanceAndProcess(1);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "цепь не должна быть остановлена при совпадении контекста звена с текущим");
+      Assert.True(AppGlobalState.CurrentConditionedReflexID == reflex2Id,
+          $"звено 2 (УР2) должно активироваться при совпадении контекста " +
+          $"(CurrentConditionedReflexID={AppGlobalState.CurrentConditionedReflexID})");
+    }
+
+    /// <summary>
     /// Регресс Случая 17: <c>ProcessActiveChain</c> в том же пульсе, что и <c>ExecuteReflexes</c>,
     /// гасил только что построенную цепочку — <c>CanContinueChain</c> требовал нулевого пускового
     /// стимула, а обнуляет его только <c>ResetStates</c> в конце пульса.

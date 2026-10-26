@@ -1893,15 +1893,17 @@ namespace ISIDA.Reflexes
         return false;
       }
 
-      if (_chainBaseID != _activeCurBaseID || _chainStyleID != _activeCurBaseStyleID)
+      // Для транзитивной цепочки контекст (база/стиль) проверяется на уровне каждого звена
+      // через IsChainLinkContextMet — звено может жить в своём контексте, отличном от
+      // стартового. Для не-транзитивной цепочки условия не должны меняться с момента сборки.
+      if (!_activeReflexChain.IsTransitive &&
+          (_chainBaseID != _activeCurBaseID || _chainStyleID != _activeCurBaseStyleID))
       {
         reason = $"сменились условия (base: {_chainBaseID}->{_activeCurBaseID}, " +
                  $"style: {_chainStyleID}->{_activeCurBaseStyleID})";
         return false;
       }
 
-      // Для транзитивной цепочки ненулевые триггеры — нормальное состояние в пульсе
-      // активации фразы (обнулятся только в ResetStates в конце пульса). Не блокировать.
       // Для транзитивной цепочки ненулевые триггеры — нормальное состояние в пульсе
       // активации фразы (обнулятся только в ResetStates в конце пульса). Не блокировать.
       if (!_activeReflexChain.IsTransitive &&
