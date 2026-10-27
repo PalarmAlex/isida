@@ -129,6 +129,14 @@ namespace ISIDA.Reflexes
     // Мотор уже «поглощён» первым нейтральным CS после него — защита от перехвата несколькими CS.
     private bool _motorStimulusLinkConsumed = false;
 
+    // «Удержанный» мотор-реакция: мотор, зафиксированный SetLastMotorAction в том же пульсе,
+    // что и предъявление CS, на котором есть прокачанный УР (реальный порядок ActiveFromPhrase:
+    // ExecuteReflexes → RecordStimulus). Пока кандидат на подкрепление (_lastMotorActionId)
+    // не потреблён, новый мотор уходит сюда и НЕ затирает кандидата (регресс Случая 23:
+    // затирание кандидата рвало транзитивную цепь ровно на «известном» стимуле).
+    private int _heldMotorActionId = 0;
+    private int _heldMotorPulse = 0;
+
     // Состояние цепочки у-рефлексов (реплей виртуальных стимулов).
     // Живёт между пульсами (сервис не сбрасывается в ResetStates), в отличие от полей ReflexesActivator.
     private int _chainTriggerImageId = 0;       // первый CS (триггер цепочки)
@@ -318,6 +326,10 @@ namespace ISIDA.Reflexes
     /// Фиксирует выполненный мотор как «последний» для обучения мотор→стимул связей.
     /// Вызывается из ReflexesActivator при штатном выполнении рефлекса (ExecuteReflexes),
     /// НЕ при разыгрывании звена цепочки — прогон цепочки не должен обучаться.
+    /// Если мотор приходит в том же пульсе, что и последнее предъявление CS, а кандидат
+    /// на подкрепление ещё не потреблён — мотор НЕ затирает кандидата, а уходит в
+    /// «удерживаемый» (heldMotor). Это позволяет первому звену усилиться до того,
+    /// как второй мотор станет кандидатом для следующего CS (регресс Случая 23).
     /// </summary>
     /// <param name="motorActionId">ID моторного действия.</param>
     /// <param name="pulse">Пульс выполнения мотора.</param>
@@ -326,6 +338,19 @@ namespace ISIDA.Reflexes
       _lock.EnterWriteLock();
       try
       {
+        // Если есть живой непотреблённый кандидат и мотор-реакция пришла в пределах окна τ
+        // от него — не затираем кандидата, а удерживаем мотор для следующего CS. Иначе —
+        // штатная замена кандидата (первый мотор или кандидат уже подкреплён/остыл).
+        if (_lastMotorActionId > 0 &&
+            !_motorStimulusLinkConsumed &&
+            pulse <= _lastMotorPulse + _conditionedReflexes.Settings.TimeWindowPulses)
+        {
+          _heldMotorActionId = motorActionId;
+          _heldMotorPulse = pulse;
+          return;
+        }
+
+        // Иначе — штатная замена кандидата.
         _lastMotorActionId = motorActionId;
         _lastMotorPulse = pulse;
         _motorStimulusLinkConsumed = false;
@@ -363,6 +388,17 @@ namespace ISIDA.Reflexes
 
       _motorStimulusAssociations.StrengthenLink(_lastMotorActionId, currentImageId);
       _motorStimulusLinkConsumed = true;
+
+      // После подкрепления кандидата продвигаем удержанный мотор-реакцию в кандидаты,
+      // чтобы следующий CS (CS₃) мог усилить связь M₂→CS₃ (регресс Случая 23).
+      if (_heldMotorActionId > 0)
+      {
+        _lastMotorActionId = _heldMotorActionId;
+        _lastMotorPulse = _heldMotorPulse;
+        _motorStimulusLinkConsumed = false;
+        _heldMotorActionId = 0;
+        _heldMotorPulse = 0;
+      }
     }
 
     /// <summary>
@@ -909,6 +945,8 @@ namespace ISIDA.Reflexes
         _lastMotorActionId = 0;
         _lastMotorPulse = 0;
         _motorStimulusLinkConsumed = false;
+        _heldMotorActionId = 0;
+        _heldMotorPulse = 0;
 
         // Сброс состояния цепочки у-рефлексов.
         _chainTriggerImageId = 0;
