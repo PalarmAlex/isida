@@ -483,6 +483,30 @@ namespace ISIDA.Reflexes
       public float CompetitionSuppressionCoefficient { get; set; } = 1.0f;
 
       /// <summary>
+      /// Требовать совместного предъявления CS для конкурентного слоя (классический Kamин
+      /// blocking): подавление применяется только если в текущем испытании (окно τ до US)
+      /// было два и более разных CS — компаунд. При true раздельные испытания учатся
+      /// независимо (spacing effect), и к одному подкреплению можно прицепить несколько
+      /// разных стимулов. При false — междуиспытательное подавление по всему реестру
+      /// (прежнее поведение, лечившее «мусорные» УР ценой блокировки раздельных trials).
+      /// </summary>
+      public bool CompetitiveLearningRequiresCompound { get; set; } = true;
+
+      /// <summary>
+      /// Сила латентного торможения (Lubov–Moore, 1959) — анти-мусорный слой, не зависящий
+      /// от компаунда: CS, многократно предъявленный без US, обусловливается медленнее.
+      /// Множитель скорости обучения 1/(1+S·N), где N — число неподкреплённых предъявлений.
+      /// 0 — латентное торможение выключено.
+      /// </summary>
+      public float LatentInhibitionStrength { get; set; } = 0.5f;
+
+      /// <summary>
+      /// Нижняя граница множителя латентного торможения (0..1): даже «известная константа
+      /// среды» сохраняет минимальную обучаемость, чтобы торможение было обратимо.
+      /// </summary>
+      public float LatentInhibitionMinFactor { get; set; } = 0.15f;
+
+      /// <summary>
       /// Прибавка к C_min при вычислении стартовой крепости нового УР:
       /// C₀ = (C_min + InitialStrengthBonus) / K(order).
       /// </summary>
@@ -2083,6 +2107,17 @@ namespace ISIDA.Reflexes
             case "CompetitionSuppressionCoefficient":
               _settings.CompetitionSuppressionCoefficient = ParseF();
               break;
+            case "CompetitiveLearningRequiresCompound":
+              _settings.CompetitiveLearningRequiresCompound =
+                  !value.Equals("false", StringComparison.OrdinalIgnoreCase) &&
+                  value != "0";
+              break;
+            case "LatentInhibitionStrength":
+              _settings.LatentInhibitionStrength = ParseF();
+              break;
+            case "LatentInhibitionMinFactor":
+              _settings.LatentInhibitionMinFactor = ParseF();
+              break;
             case "InitialStrengthBonus":
               _settings.InitialStrengthBonus = ParseF();
               break;
@@ -2241,6 +2276,9 @@ namespace ISIDA.Reflexes
             "# TieBreakPreferSmallerReflexId: при равной крепости — меньший ID у-рефлекса (true/false)",
             "# EnableCompetitiveLearning: конкурентный слой обучения (ΣV / Kamin blocking) — true/false",
             "# CompetitionSuppressionCoefficient: доля подавления подкрепления конкурирующими CS (0..1)",
+            "# CompetitiveLearningRequiresCompound: Kamin только при совместном предъявлении CS (true/false)",
+            "# LatentInhibitionStrength: сила латентного торможения за CS без US (0 — выключено)",
+            "# LatentInhibitionMinFactor: нижняя граница множителя латентного торможения (0..1)",
             "# InitialStrengthBonus: прибавка к C_min в стартовой крепости C0=(C_min+bonus)/K",
             "# AuthoritativeStrength: крепость авторитарной записи (до понижения по порядку)",
             "# EstablishedStrengthThreshold: порог MaxAchievedStrength для IsEstablished",
@@ -2286,6 +2324,9 @@ namespace ISIDA.Reflexes
         lines.Add($"TieBreakPreferSmallerReflexId={_settings.TieBreakPreferSmallerReflexId}");
         lines.Add($"EnableCompetitiveLearning={_settings.EnableCompetitiveLearning}");
         lines.Add($"CompetitionSuppressionCoefficient={F(_settings.CompetitionSuppressionCoefficient)}");
+        lines.Add($"CompetitiveLearningRequiresCompound={_settings.CompetitiveLearningRequiresCompound}");
+        lines.Add($"LatentInhibitionStrength={F(_settings.LatentInhibitionStrength)}");
+        lines.Add($"LatentInhibitionMinFactor={F(_settings.LatentInhibitionMinFactor)}");
         lines.Add($"InitialStrengthBonus={F(_settings.InitialStrengthBonus)}");
         lines.Add($"AuthoritativeStrength={F(_settings.AuthoritativeStrength)}");
         lines.Add($"EstablishedStrengthThreshold={F(_settings.EstablishedStrengthThreshold)}");

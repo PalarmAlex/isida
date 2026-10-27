@@ -5,17 +5,25 @@ using Xunit;
 namespace Isida.Tests
 {
   /// <summary>
-  /// Конкурентный слой обучения (Kamin blocking, ΣV в ошибке Рескорла–Вагнера):
-  /// подкрепление λ при CS→US распределяется с учётом того, что тот же US уже
-  /// предсказывается более крепким CS в тех же условиях. Это лечение «мусорных»
-  /// у-рефлексов: шумовой CS, предъявляемый ПОСЛЕ окрепшего целевого, почти не учится.
-  /// При <c>Settings.EnableCompetitiveLearning = false</c> поведение возвращается к
-  /// независимому обучению (каждый CS растёт полным α·(β−C)) — регрессионный контроль.
+  /// Конкурентный слой обучения и анти-мусорные механизмы.
+  /// <para>
+  /// Kamин blocking (ΣV в ошибке Рескорла–Вагнера) по классике действует ТОЛЬКО при
+  /// совместном предъявлении CS (компаунд): блокуется новый CS, когда в том же испытании
+  /// рядом стоит уже окрепший предсказатель US. Раздельные испытания обязаны учиться
+  /// независимо (spacing effect) — иначе к одному подкреплению нельзя прицепить несколько
+  /// разных стимулов. Это фиксирует <see cref="SeparateTrials_EachCsLearnsIndependently_NoBlocking"/>.
+  /// </para>
+  /// <para>
+  /// «Мусор» (стимулы, не несущие информации) отсекается не чужой крепостью, а латентным
+  /// торможением (Lubov–Moore, 1959): CS, многократно предъявленный без US, обучается
+  /// медленнее. см. <see cref="LatentInhibition_UnreinforcedCsLearnsSlowerThanControl"/>.
+  /// </para>
   /// </summary>
   public class CompetitiveLearningTests : EngineIntegrationTestBase
   {
     public CompetitiveLearningTests(EngineFixture engine) : base(engine) { }
 
+    /// <summary>Раздельное испытание: один CS, затем US в окне τ.</summary>
     private void FeedPair(int cs, int us, int pulse, bool authoritative = false)
     {
       Formation.RecordStimulus(pulse, cs, 0, 0);
@@ -23,16 +31,111 @@ namespace Isida.Tests
       Formation.CheckTemporalCorrelations(pulse + 1, authoritativeMode: authoritative);
     }
 
+    /// <summary>
+    /// Компаунд-испытание: два CS предъявлены СОВМЕСТНО (в одном окне τ) перед US.
+    /// Подкрепление получает последний из них — именно он и должен блокироваться
+    /// окрепшим со-предъявленным конкурентом. Первый CS помечен <c>crFired</c>: в живом
+    /// потоке это окрепший активируемый стимул (его УР срабатывает), поэтому он не
+    /// закрывается как «CS без US» и не угасает посреди испытания.
+    /// </summary>
+    private void FeedCompound(int csFirst, int csReinforced, int us, int pulse)
+    {
+      Formation.RecordStimulus(pulse, csFirst, 0, 0, crFired: true);
+      Formation.RecordStimulus(pulse + 1, csReinforced, 0, 0);
+      Formation.RecordStimulus(pulse + 2, 0, 0, 0, us);
+      Formation.CheckTemporalCorrelations(pulse + 2);
+    }
+
     private float StrengthOf(int level3) =>
         Crs.GetAllConditionedReflexes().First(r => r.Level3 == level3).AssociationStrength;
 
     [Fact]
-    public void Enabled_TargetBlocksNoise_NoiseStaysBelowThreshold()
+    public void Compound_TargetBlocksNoise_NoiseStaysBelowThreshold()
     {
-      // Целевой CS захватывает предсказание US, после чего шумовой CS к тому же US
-      // почти не обучается (ΣV ≈ C_target). Итог: шумовой рефлекс заметно слабее
-      // целевого и не достигает порога активации γ.
+      // Классический Kamин: целевой CS окреп, затем шумовой предъявляется СОVMЕСТНО с ним
+      // перед тем же US — новый CS блокируется (ΣV ≈ C_target).
       ActivateSeedStyle();
+      int target = NewPhraseImage();
+      int noise = NewPhraseImage();
+      int us = Engine.SeedGeneticReflexId;
+
+      for (int i = 0; i < 6; i++)
+        FeedPair(target, us, 1 + i * 10);
+      float cTarget = StrengthOf(target);
+
+      for (int i = 0; i < 6; i++)
+        FeedCompound(target, noise, us, 200 + i * 10);
+      float cNoise = StrengthOf(noise);
+
+      Assert.True(cNoise < cTarget,
+          $"шумовой CS при компаунд-блокировке обязан отставать: target={cTarget}, noise={cNoise}");
+      Assert.True(cNoise < Settings.ActivationThreshold,
+          $"шумовой CS при блокировке не должен стать активируемым: C={cNoise} ≥ γ={Settings.ActivationThreshold}");
+    }
+
+    [Fact]
+    public void SeparateTrials_EachCsLearnsIndependently_NoBlocking()
+    {
+      // РЕГРЕСС НА БАГ: Kamин blocking не имеет права действовать между испытаниями.
+      // Раздельные CS→US (никогда не предъявляются вместе) обязаны идти полным темпом RW,
+      // иначе «один прицепленный стимул подавляет попытку прицепить другой».
+      ActivateSeedStyle();
+      int target = NewPhraseImage();
+      int second = NewPhraseImage();
+      int us = Engine.SeedGeneticReflexId;
+
+      for (int i = 0; i < 6; i++)
+        FeedPair(target, us, 1 + i * 10);
+      float cTarget = StrengthOf(target);
+
+      for (int i = 0; i < 6; i++)
+        FeedPair(second, us, 200 + i * 10);
+      float cSecond = StrengthOf(second);
+
+      float c0 = Settings.MinAssociationStrength + Settings.InitialStrengthBonus;
+      float expected = ExpectedRwStrength(c0, steps: 5, order: 1);
+
+      Assert.True(System.Math.Abs(expected - cSecond) < 5e-4f,
+          $"раздельное испытание обязано идти чистым RW: C={cSecond}, ожидалось {expected}");
+      Assert.True(System.Math.Abs(cTarget - cSecond) < 5e-4f,
+          $"второй стимул обязан догнать первый: target={cTarget}, second={cSecond}");
+      Assert.True(cSecond >= Settings.ActivationThreshold,
+          $"оба стимула должны стать активируемыми: C={cSecond} < γ={Settings.ActivationThreshold}");
+    }
+
+    [Fact]
+    public void MultipleStimuli_OnSameReinforcer_AllBecomeActivatable()
+    {
+      // Прямая проверка жалобы пользователя: к ОДНОМУ подкреплению прицепляем три разных
+      // стимула раздельными испытаниями — все обязаны окрепнуть до активации.
+      ActivateSeedStyle();
+      int us = Engine.SeedGeneticReflexId;
+      int csA = NewPhraseImage();
+      int csB = NewPhraseImage();
+      int csC = NewPhraseImage();
+
+      for (int i = 0; i < 6; i++)
+      {
+        FeedPair(csA, us, 1 + i * 10);
+        FeedPair(csB, us, 100 + i * 10);
+        FeedPair(csC, us, 300 + i * 10);
+      }
+
+      var all = Crs.GetAllConditionedReflexes().Where(r => r.SourceGeneticReflexId == us).ToList();
+      Assert.Equal(3, all.Count);
+      foreach (var r in all)
+        Assert.True(r.CanBeActivated(),
+            $"стимул Level3={r.Level3} обязан стать активируемым: C={r.AssociationStrength}");
+    }
+
+    [Fact]
+    public void LegacyBetweenTrialsMode_WhenCompoundRequirementDisabled()
+    {
+      // Обратимость настройки: CompetitiveLearningRequiresCompound=false возвращает
+      // прежний междуиспытательный режим (лечение «мусора» ценой блокировки раздельных
+      // trials) — регрессионный контроль на то, что старый режим не потерян безвозвратно.
+      ActivateSeedStyle();
+      Settings.CompetitiveLearningRequiresCompound = false;
       int target = NewPhraseImage();
       int noise = NewPhraseImage();
       int us = Engine.SeedGeneticReflexId;
@@ -46,16 +149,16 @@ namespace Isida.Tests
       float cNoise = StrengthOf(noise);
 
       Assert.True(cNoise < cTarget,
-          $"шумовой CS при блокировке обязан отставать: target={cTarget}, noise={cNoise}");
+          $"в междуиспытательном режиме шумовой CS обязан блокироваться: target={cTarget}, noise={cNoise}");
       Assert.True(cNoise < Settings.ActivationThreshold,
-          $"шумовой CS при блокировке не должен стать активируемым: C={cNoise} ≥ γ={Settings.ActivationThreshold}");
+          $"в междуиспытательном режиме шумовой CS не должен активируаться: C={cNoise}");
     }
 
     [Fact]
     public void Disabled_EachCsLearnsIndependently_NoBlocking()
     {
-      // Отключённый слой — прежняя модель без ΣV: шумовой CS идёт по тому же RW-ряду,
-      // что и целевой, и догоняет его. Регрессионный контроль на обратимость настройки.
+      // Отключённый конкурентный слой — прежняя модель без ΣV: шумовой CS идёт по тому же
+      // RW-ряду, что и целевой, и догоняет его. Регрессионный контроль на обратимость.
       ActivateSeedStyle();
       Settings.EnableCompetitiveLearning = false;
       int target = NewPhraseImage();
@@ -70,20 +173,26 @@ namespace Isida.Tests
         FeedPair(noise, us, 200 + i * 10);
       float cNoise = StrengthOf(noise);
 
-      float c0 = Settings.MinAssociationStrength + 0.1f;
+      // target после 6 подкреплений ≈ 0.74; независимый noise догоняет его за 6 trials.
+      float c0 = Settings.MinAssociationStrength + Settings.InitialStrengthBonus;
       float expected = ExpectedRwStrength(c0, steps: 5, order: 1);
 
       Assert.True(System.Math.Abs(expected - cNoise) < 5e-4f,
-          $"без блокировки шумовой CS должен идти по RW: C={cNoise}, ожидалось {expected}");
+          $"раздельные испытания обязаны идти чистым RW: C={cNoise}, ожидалось {expected}");
       Assert.True(System.Math.Abs(cTarget - cNoise) < 5e-4f,
-          $"без блокировки шумовой CS догоняет целевой: target={cTarget}, noise={cNoise}");
+          $"раздельный noise обязан догнать target (блокировки нет): target={cTarget}, noise={cNoise}");
+
+      // Оба стимула становятся активируемыми — именно этого не давал старый
+      // междуиспытательный blocking («прицепить второй CS к тому же подкреплению нельзя»).
+      Assert.True(cTarget >= Settings.ActivationThreshold && cNoise >= Settings.ActivationThreshold,
+          $"оба УР обязаны перешагнуть γ при раздельном обучении: target={cTarget}, noise={cNoise}");
     }
 
     [Fact]
     public void AuthoritativeMode_NotSuppressed()
     {
-      // Явное подтверждение оператором (authoritativeMode) от блокировки защищено:
-      // даже при окрепшем целевом шумовой CS, записанный авторитарно, стартует с 0.95.
+      // Явное подтверждение оператором (authoritativeMode) от подавления защищено: даже при
+      // окрепшем со-предъявленном конкуренте шумовой CS, записанный авторитарно, стартует с 0.95.
       ActivateSeedStyle();
       int target = NewPhraseImage();
       int noise = NewPhraseImage();
@@ -91,7 +200,11 @@ namespace Isida.Tests
 
       for (int i = 0; i < 6; i++)
         FeedPair(target, us, 1 + i * 10, authoritative: true);
-      FeedPair(noise, us, 200, authoritative: true);
+
+      Formation.RecordStimulus(200, target, 0, 0);
+      Formation.RecordStimulus(201, noise, 0, 0);
+      Formation.RecordStimulus(202, 0, 0, 0, us);
+      Formation.CheckTemporalCorrelations(202, authoritativeMode: true);
 
       var noiseReflex = Crs.GetAllConditionedReflexes().First(r => r.Level3 == noise);
       Assert.True(noiseReflex.CanBeActivated(),
@@ -125,9 +238,9 @@ namespace Isida.Tests
     [Fact]
     public void PartialSuppression_NoiseGrowsSlowerButNotBlocked()
     {
-      // coefficient = 0.5: частичное подавление. Шумовой CS не блокируется полностью
-      // (растёт выше C_min), но идёт заметно медленнее целевого (α_eff = α·(1−suppression)).
-      // Это средний режим между Enabled (suppression→1, блокировка) и Disabled (0, независимость).
+      // coefficient = 0.5: частичное подавление в компаунде. Шумовой CS не блокируется
+      // полностью (растёт выше C_min), но идёт заметно медленнее целевого
+      // (α_eff = α·(1−suppression)). Средний режим между полной блокировкой и независимостью.
       ActivateSeedStyle();
       Settings.CompetitionSuppressionCoefficient = 0.5f;
       int target = NewPhraseImage();
@@ -139,13 +252,82 @@ namespace Isida.Tests
       float cTarget = StrengthOf(target);
 
       for (int i = 0; i < 6; i++)
-        FeedPair(noise, us, 200 + i * 10);
+        FeedCompound(target, noise, us, 200 + i * 10);
       float cNoise = StrengthOf(noise);
 
       Assert.True(cNoise > Settings.MinAssociationStrength,
           $"при частичном подавлении шумовый CS обязан всё же учиться: C={cNoise} ≤ C_min");
       Assert.True(cNoise < cTarget,
           $"но слабее целевого (частичное подавление): target={cTarget}, noise={cNoise}");
+    }
+
+    [Fact]
+    public void LatentInhibition_UnreinforcedCsLearnsSlowerThanControl()
+    {
+      // Анти-мусорный фильтр, не зависящий от компаунда: CS, многократно предъявленный
+      // БЕЗ US («известная константа среды»), обусловливается медленнее контрольного.
+      // Это и есть природное лечение мусора после отказа от междуиспытательного blocking.
+      ActivateSeedStyle();
+      int us = Engine.SeedGeneticReflexId;
+      int noisy = NewPhraseImage();
+      int control = NewPhraseImage();
+
+      // Накопление латентного торможения: 8 предъявлений noisy без подкрепления.
+      int pulse = 1;
+      for (int i = 0; i < 8; i++)
+      {
+        Formation.RecordStimulus(pulse, noisy, 0, 0);
+        Formation.ProcessPendingExtinction(pulse + Settings.TimeWindowPulses + 1);
+        pulse += Settings.TimeWindowPulses + 2;
+      }
+
+      // Обучение шумового и контрольного CS раздельными испытаниями (без блокировки).
+      for (int i = 0; i < 4; i++)
+      {
+        FeedPair(noisy, us, 200 + i * 10);
+        FeedPair(control, us, 500 + i * 10);
+      }
+
+      float cNoisy = StrengthOf(noisy);
+      float cControl = StrengthOf(control);
+
+      Assert.True(cNoisy < cControl,
+          $"латентно заторможенный CS обязан отставать: noisy={cNoisy}, control={cControl}");
+      Assert.True(cNoisy < Settings.ActivationThreshold,
+          $"латентное торможение должно не дать шумовому CS стать активируемым: C={cNoisy}");
+      Assert.True(cControl >= Settings.ActivationThreshold ||
+                  cControl > cNoisy + 0.1f,
+          $"контрольный CS обязан идти заметно быстрее: control={cControl}, noisy={cNoisy}");
+    }
+
+    [Fact]
+    public void LatentInhibition_DisabledByZeroStrength()
+    {
+      // Обратимость: LatentInhibitionStrength = 0 выключает торможение — заторможенный CS
+      // идёт тем же полным RW-рядом, что и контрольный.
+      ActivateSeedStyle();
+      Settings.LatentInhibitionStrength = 0f;
+      int us = Engine.SeedGeneticReflexId;
+      int noisy = NewPhraseImage();
+      int control = NewPhraseImage();
+
+      int pulse = 1;
+      for (int i = 0; i < 8; i++)
+      {
+        Formation.RecordStimulus(pulse, noisy, 0, 0);
+        Formation.ProcessPendingExtinction(pulse + Settings.TimeWindowPulses + 1);
+        pulse += Settings.TimeWindowPulses + 2;
+      }
+
+      for (int i = 0; i < 4; i++)
+      {
+        FeedPair(noisy, us, 200 + i * 10);
+        FeedPair(control, us, 500 + i * 10);
+      }
+
+      Assert.True(System.Math.Abs(StrengthOf(noisy) - StrengthOf(control)) < 5e-4f,
+          $"при S=0 латентное торможение не должно работать: " +
+          $"noisy={StrengthOf(noisy)}, control={StrengthOf(control)}");
     }
 
     [Fact]
@@ -172,6 +354,34 @@ namespace Isida.Tests
       Assert.False(Settings.EnableCompetitiveLearning,
           "EnableCompetitiveLearning=false обязан восстановиться из файла");
       Assert.Equal(0.5f, Settings.CompetitionSuppressionCoefficient, 5);
+    }
+
+    [Fact]
+    public void CompoundGateAndLatentInhibitionSettings_RoundTripThroughFile()
+    {
+      // Компаунд-гейт и параметры латентного торможения — новые рычаги модели; если они
+      // не переживут Save → Load, после рестарта движка Kamин снова станет
+      // междуиспытательным, а «мусор» перестанет тормозиться.
+      Settings.CompetitiveLearningRequiresCompound = false;
+      Settings.LatentInhibitionStrength = 0.35f;
+      Settings.LatentInhibitionMinFactor = 0.2f;
+
+      var saveResult = Crs.SaveConditionedReflexSettings();
+      Assert.True(saveResult.Success, saveResult.ErrorMessage);
+
+      Settings.CompetitiveLearningRequiresCompound = true;
+      Settings.LatentInhibitionStrength = 0f;
+      Settings.LatentInhibitionMinFactor = 1f;
+
+      typeof(ConditionedReflexesSystem)
+          .GetMethod("LoadConditionedReflexSettings",
+              System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+          ?.Invoke(Crs, null);
+
+      Assert.False(Settings.CompetitiveLearningRequiresCompound,
+          "CompetitiveLearningRequiresCompound=false обязан восстановиться из файла");
+      Assert.Equal(0.35f, Settings.LatentInhibitionStrength, 5);
+      Assert.Equal(0.2f, Settings.LatentInhibitionMinFactor, 5);
     }
 
     [Fact]
@@ -229,8 +439,8 @@ namespace Isida.Tests
     [Fact]
     public void NoisePairs_DoNotWeakenExistingTargetReflex()
     {
-      // Пока идут шумовые пары (и они блокируются), целевой рефлекс не угасает:
-      // он подкреплялся US и не является «CS без подкрепления».
+      // Пока идут пары с другим стимулом, целевой рефлекс не угасает: он подкреплялся US
+      // и не является «CS без подкрепления».
       ActivateSeedStyle();
       int target = NewPhraseImage();
       int noise = NewPhraseImage();
@@ -247,7 +457,7 @@ namespace Isida.Tests
       var alive = Find(targetId);
       Assert.NotNull(alive);
       Assert.True(alive.AssociationStrength >= before,
-          $"целевой рефлекс не должен слабнуть от шумовых пар: {before} → {alive.AssociationStrength}");
+          $"целевой рефлекс не должен слабнуть от чужих пар: {before} → {alive.AssociationStrength}");
     }
   }
 }

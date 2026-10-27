@@ -155,6 +155,24 @@ namespace ISIDA.Reflexes
     private int _pendingCsMoodId;
 
     /// <summary>
+    /// CS, предъявленные в текущем испытании (в окне τ от последнего стимула).
+    /// Нужны, чтобы отличить классический Kamин blocking (компаунд: два CS предъявлены
+    /// СОВМЕСТНО перед одним US) от раздельных испытаний. Без этой истории конкурентный
+    /// слой неизбежно считается по всему реестру и блокирует раздельное обучение,
+    /// делая невозможным «несколько разных стимулов на одну реакцию».
+    /// </summary>
+    private readonly List<StimulusRecord> _trialConditionedStimuli = new List<StimulusRecord>();
+
+    /// <summary>
+    /// Число неподкреплённых предъявлений CS (ключ: образ/тон/настроение) — накопитель
+    /// латентного торможения (Lubov–Moore, 1959): стимул, многократно встреченный без US,
+    /// «известная константа среды», обусловливается медленнее. Это природный анти-мусорный
+    /// фильтр: он карает НЕинформативный CS, а не «второй CS на тот же US».
+    /// </summary>
+    private readonly Dictionary<(int Image, int Tone, int Mood), int> _csUnreinforcedPresentations =
+        new Dictionary<(int Image, int Tone, int Mood), int>();
+
+    /// <summary>
     /// Добавление стимула в историю
     /// </summary>
     /// <param name="pulse">Время стимула (пульс)</param>
@@ -204,6 +222,7 @@ namespace ISIDA.Reflexes
         if (geneticReflexId > 0)
         {
           _lastUnconditionedStimulus = record;
+          TrimTrialCsHistory(pulse);
           if (_pendingCsAwaitingUs &&
               _pendingCsPulse < pulse &&
               pulse - _pendingCsPulse <= _conditionedReflexes.Settings.TimeWindowPulses)
@@ -226,6 +245,8 @@ namespace ISIDA.Reflexes
           // Всегда обновляем last CS — от него зависят вторичное обусловливание
           // и сенсорная прекондиция.
           _lastConditionedStimulus = record;
+          _trialConditionedStimuli.Add(record);
+          TrimTrialCsHistory(pulse);
 
           // Новый CS помечаем pending ТОЛЬКО если он не подтверждён сработавшим CR.
           if (!crFired)
@@ -244,7 +265,110 @@ namespace ISIDA.Reflexes
       }
 
       if (doExtinguish)
+      {
+        // Неподкреплённое предъявление — копим латентное торможение (см. E6-примечание).
+        RegisterUnreinforcedPresentation(extinguishImageId, extinguishToneId, extinguishMoodId);
         _conditionedReflexes.ApplyActiveExtinctionForStimulus(extinguishImageId, extinguishToneId, extinguishMoodId);
+      }
+    }
+
+    /// <summary>
+    /// Убирает из истории текущего испытания CS, вышедшие за окно τ от <paramref name="currentPulse"/>.
+    /// </summary>
+    /// <param name="currentPulse">Пульс, относительно которого обрезается окно.</param>
+    private void TrimTrialCsHistory(int currentPulse)
+    {
+      int timeWindow = _conditionedReflexes.Settings.TimeWindowPulses;
+      _trialConditionedStimuli.RemoveAll(r => r.Pulse < currentPulse - timeWindow);
+    }
+
+    /// <summary>
+    /// Множество образов CS, предъявленных в окне τ ДО <paramref name="reinforcementPulse"/> —
+    /// «совместно предъявленные» стимулы одного испытания. Размер &lt; 2 означает, что
+    /// подкрепляемый CS был в испытании один (раздельное обучение), и Kamин blocking
+    /// неприменим.
+    /// </summary>
+    /// <param name="reinforcementPulse">Пульс подкрепления (US или подкрепляющего CS).</param>
+    /// <returns>Множество Level3 CS текущего испытания.</returns>
+    private HashSet<int> GetCoPresentedCsImageIds(int reinforcementPulse)
+    {
+      int timeWindow = _conditionedReflexes.Settings.TimeWindowPulses;
+      var ids = new HashSet<int>();
+      foreach (var r in _trialConditionedStimuli)
+      {
+        if (r.Pulse > reinforcementPulse) continue;
+        if (reinforcementPulse - r.Pulse > timeWindow) continue;
+        ids.Add(r.StimulusImageId);
+      }
+      return ids;
+    }
+
+    /// <summary>
+    /// Фиксирует факт неподкреплённого предъявления CS (накопитель латентного торможения).
+    /// </summary>
+    /// <param name="imageId">Образ-стимул.</param>
+    /// <param name="toneId">Тон.</param>
+    /// <param name="moodId">Настроение.</param>
+    private void RegisterUnreinforcedPresentation(int imageId, int toneId, int moodId)
+    {
+      if (imageId <= 0)
+        return;
+
+      var key = (imageId, toneId, moodId);
+      int count;
+      _csUnreinforcedPresentations.TryGetValue(key, out count);
+      _csUnreinforcedPresentations[key] = count + 1;
+    }
+
+    /// <summary>
+    /// CS получил подкрепление — латентное торможение плавно снимается (накопитель
+    /// уменьшается вдвое, а не обнуляется мгновенно). Мгновенный сброс превращал бы LI
+    /// в одно-пробный штраф: достаточно одного случайного «CS без US», чтобы стимул
+    /// навсегда стал «известной константой среды». Половинчатый распад сохраняет и
+    /// тормозящий эффект для хронически шумовых CS, и обратимость для полезного стимула.
+    /// </summary>
+    /// <param name="imageId">Образ-стимул.</param>
+    /// <param name="toneId">Тон.</param>
+    /// <param name="moodId">Настроение.</param>
+    private void DecayLatentInhibition(int imageId, int toneId, int moodId)
+    {
+      if (imageId <= 0)
+        return;
+
+      var key = (imageId, toneId, moodId);
+      int count;
+      if (!_csUnreinforcedPresentations.TryGetValue(key, out count))
+        return;
+
+      count /= 2;
+      if (count <= 0)
+        _csUnreinforcedPresentations.Remove(key);
+      else
+        _csUnreinforcedPresentations[key] = count;
+    }
+
+    /// <summary>
+    /// Множитель скорости обучения из латентного торможения: f = max(min, 1/(1+S·N)),
+    /// где N — число неподкреплённых предъявлений CS. 1 — торможения нет.
+    /// </summary>
+    /// <param name="conditionedStimulus">Запись подкрепляемого CS.</param>
+    /// <returns>Множитель ∈ [LatentInhibitionMinFactor..1].</returns>
+    private float ComputeLatentInhibitionFactor(StimulusRecord conditionedStimulus)
+    {
+      var settings = _conditionedReflexes.Settings;
+      float strength = Math.Min(1f, Math.Max(0f, settings.LatentInhibitionStrength));
+      if (strength <= 0f)
+        return 1f;
+
+      int count;
+      if (!_csUnreinforcedPresentations.TryGetValue(
+              (conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId),
+              out count) || count <= 0)
+        return 1f;
+
+      float factor = 1f / (1f + strength * count);
+      float floor = Math.Min(1f, Math.Max(0f, settings.LatentInhibitionMinFactor));
+      return Math.Max(floor, factor);
     }
 
     /// <summary>
@@ -279,7 +403,10 @@ namespace ISIDA.Reflexes
       }
 
       if (shouldExtinguish)
+      {
+        RegisterUnreinforcedPresentation(imageId, toneId, moodId);
         _conditionedReflexes.ApplyActiveExtinctionForStimulus(imageId, toneId, moodId);
+      }
     }
 
     /// <summary>
@@ -481,11 +608,12 @@ namespace ISIDA.Reflexes
       try
       {
         // Конкурентный слой (ΣV / Kamin blocking): если тот же US уже предсказывается
-        // другими CS в тех же условиях, подкрепление шумового CS подавляется.
+        // другим CS, СОВМЕСТНО предъявленным в этом же испытании, подкрепление подавляется.
         // Авторитарная запись оператора от подавления защищена — это явное подтверждение.
         float suppression = authoritativeMode
             ? 0f
-            : ComputeCompetitionSuppression(conditionedStimulus, unconditionedStimulus.GeneticReflexId, 0);
+            : ComputeCompetitionSuppression(
+                conditionedStimulus, unconditionedStimulus.GeneticReflexId, 0, unconditionedStimulus.Pulse);
         if (suppression >= 1f)
         {
           Logger.Info(
@@ -493,6 +621,11 @@ namespace ISIDA.Reflexes
               $"от UR {unconditionedStimulus.GeneticReflexId}");
           return;
         }
+
+        // Латентное торможение (Lubov–Moore): «известный» CS, долго висевший без US,
+        // обусловливается медленнее. Работает и при раздельных испытаниях, поэтому и есть
+        // основной анти-мусорный фильтр после отключения междуиспытательного blocking.
+        float latentFactor = authoritativeMode ? 1f : ComputeLatentInhibitionFactor(conditionedStimulus);
 
         var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
             .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
@@ -505,17 +638,20 @@ namespace ISIDA.Reflexes
               existingReflex.ToneId == conditionedStimulus.ToneId &&
               existingReflex.MoodId == conditionedStimulus.MoodId)
           {
-            if (suppression > 0f)
+            if (suppression > 0f || latentFactor < 1f)
             {
               _conditionedReflexes.StrengthenAssociationWithRate(
-                  existingReflex.Id, GetCompetitiveLearningRate(suppression, existingReflex.Order));
-              Logger.Info($"Усилен (подавлён конкурентом) условный рефлекс ID={existingReflex.Id}");
+                  existingReflex.Id,
+                  GetEffectiveLearningRate(suppression, latentFactor, existingReflex.Order));
+              Logger.Info($"Усилен (скорректирован конкурентом/латентным торможением) условный рефлекс ID={existingReflex.Id}");
             }
             else
             {
               _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
               Logger.Info($"Усилен условный рефлекс ID={existingReflex.Id}");
             }
+            DecayLatentInhibition(
+                conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
             return;
           }
         }
@@ -548,9 +684,11 @@ namespace ISIDA.Reflexes
         if (newReflexId > 0)
         {
           Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
-          if (suppression > 0f)
+          if (suppression > 0f || latentFactor < 1f)
             _conditionedReflexes.StrengthenAssociationWithRate(
-                newReflexId, GetCompetitiveLearningRate(suppression, order: 1));
+                newReflexId, GetEffectiveLearningRate(suppression, latentFactor, order: 1));
+          DecayLatentInhibition(
+              conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
         }
       }
       catch (Exception ex)
@@ -560,12 +698,19 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Скорость обучения с учётом конкурентного подавления: α_eff = (α / K(order)) · (1 − suppression).
+    /// Скорость обучения с учётом конкурентного подавления и латентного торможения:
+    /// α_eff = (α / K(order)) · (1 − suppression) · latentFactor.
     /// </summary>
-    private float GetCompetitiveLearningRate(float suppression, int order)
+    /// <param name="suppression">Доля подавления конкурирующим CS (0..1).</param>
+    /// <param name="latentFactor">Множитель латентного торможения (0..1).</param>
+    /// <param name="order">Порядок УР (для понижающего коэффициента K).</param>
+    /// <returns>Эффективная скорость обучения ∈ [0..1].</returns>
+    private float GetEffectiveLearningRate(float suppression, float latentFactor, int order)
     {
       float reduction = _conditionedReflexes.GetReductionCoefficientForOrder(order);
-      float rate = (_conditionedReflexes.Settings.LearningRate / reduction) * (1f - suppression);
+      float rate = (_conditionedReflexes.Settings.LearningRate / reduction)
+          * (1f - suppression)
+          * Math.Min(1f, Math.Max(0f, latentFactor));
       return Math.Min(1f, Math.Max(0f, rate));
     }
 
@@ -577,12 +722,23 @@ namespace ISIDA.Reflexes
     /// Для первичного обусловливания конкурентами считаются CR₁ того же UR
     /// (<paramref name="sourceConditionedReflexId"/> = 0); для вторичного — CR того же
     /// родительского CR (<paramref name="sourceConditionedReflexId"/> &gt; 0).
+    /// Kamин blocking по классике действует только при **совместном** предъявлении CS
+    /// (компаунд): если <see cref="ConditionedReflexesSystem.ConditionedReflexSettings.CompetitiveLearningRequiresCompound"/>
+    /// истинно, подавление считается лишь по конкурентам, реально предъявленным в окне τ
+    /// до <paramref name="reinforcementPulse"/>; раздельные испытания учатся независимо
+    /// (spacing effect). При ложном — прежний междуиспытательный режим по всему реестру.
     /// Возвращает 0, если конкурентный слой отключён или конкурентов нет.
     /// </summary>
+    /// <param name="conditionedStimulus">Подкрепляемый CS.</param>
+    /// <param name="sourceGeneticReflexId">Источник подкрепления — безусловный рефлекс (0 для вторичных).</param>
+    /// <param name="sourceConditionedReflexId">Родительский УР для вторичного обусловливания (0 для первичных).</param>
+    /// <param name="reinforcementPulse">Пульс подкрепления (US или подкрепляющего CS).</param>
+    /// <returns>Доля подавления ∈ [0..1].</returns>
     private float ComputeCompetitionSuppression(
         StimulusRecord conditionedStimulus,
         int sourceGeneticReflexId,
-        int sourceConditionedReflexId)
+        int sourceConditionedReflexId,
+        int reinforcementPulse)
     {
       var settings = _conditionedReflexes.Settings;
       if (!settings.EnableCompetitiveLearning)
@@ -590,6 +746,16 @@ namespace ISIDA.Reflexes
 
       if (sourceGeneticReflexId <= 0 && sourceConditionedReflexId <= 0)
         return 0f;
+
+      // Компаунд-гейт: Kamин blocking — про совместное предъявление. Если в текущем
+      // испытании был только один CS, конкурировать не с чем → подавления нет.
+      HashSet<int> coPresented = null;
+      if (settings.CompetitiveLearningRequiresCompound)
+      {
+        coPresented = GetCoPresentedCsImageIds(reinforcementPulse);
+        if (coPresented.Count < 2)
+          return 0f;
+      }
 
       float beta = settings.MaxAssociationStrength > 1e-6f ? settings.MaxAssociationStrength : 1f;
       var styleIds = GetCurrentStyleIds();
@@ -606,6 +772,8 @@ namespace ISIDA.Reflexes
         if (!r.Level2.OrderBy(x => x).SequenceEqual(styleIds.OrderBy(x => x))) continue;
         // Сам подкрепляемый CS конкурентом не является.
         if (r.Level3 == conditionedStimulus.StimulusImageId) continue;
+        // В компаунд-режиме конкурентом считается только CS, предъявленный в этом же испытании.
+        if (coPresented != null && !coPresented.Contains(r.Level3)) continue;
         if (!r.CanBeActivated()) continue;
 
         sumV += r.AssociationStrength;
@@ -689,7 +857,8 @@ namespace ISIDA.Reflexes
       bool reinforced = ProcessSecondaryConditionedAssociation(
           _lastConditionedStimulus,
           parentReflex,
-          authoritativeMode);
+          authoritativeMode,
+          currentPulse);
 
       // CSₐ получил вторичное подкрепление (активацией CR на CSᵦ) — снимаем у него
       // ожидание US без активного угасания. Иначе при записи следующего стимула CSₐ
@@ -707,19 +876,23 @@ namespace ISIDA.Reflexes
     private bool ProcessSecondaryConditionedAssociation(
         StimulusRecord conditionedStimulus,
         ConditionedReflexesSystem.ConditionedReflex parentConditionedReflex,
-        bool authoritativeMode)
+        bool authoritativeMode,
+        int reinforcementPulse)
     {
       try
       {
-        // Конкурентный слой (ΣV / Kamin blocking) для вторичного обусловливания:
-        // если тот же источник подкрепления уже предсказывается другими активируемыми CR
-        // в тех же условиях, подкрепление шумового CS₂ подавляется.
+        // Конкурентный слой (ΣV / Kamин blocking) для вторичного обусловливания:
+        // если тот же источник подкрепления уже предсказывается другим активируемым CR,
+        // СОВМЕСТНО предъявленным в этом испытании, подкрепление шумового CS₂ подавляется.
         float suppression = authoritativeMode
             ? 0f
             : ComputeCompetitionSuppression(
                 conditionedStimulus,
                 sourceGeneticReflexId: 0,
-                sourceConditionedReflexId: parentConditionedReflex.Id);
+                sourceConditionedReflexId: parentConditionedReflex.Id,
+                reinforcementPulse: reinforcementPulse);
+
+        float latentFactor = authoritativeMode ? 1f : ComputeLatentInhibitionFactor(conditionedStimulus);
 
         var existingReflexes = _conditionedReflexes.GetAllConditionedReflexes()
             .Where(r => r.Level3 == conditionedStimulus.StimulusImageId)
@@ -732,15 +905,18 @@ namespace ISIDA.Reflexes
               existingReflex.ToneId == conditionedStimulus.ToneId &&
               existingReflex.MoodId == conditionedStimulus.MoodId)
           {
-            if (suppression > 0f)
+            if (suppression > 0f || latentFactor < 1f)
             {
               _conditionedReflexes.StrengthenAssociationWithRate(
-                  existingReflex.Id, GetCompetitiveLearningRate(suppression, existingReflex.Order));
+                  existingReflex.Id,
+                  GetEffectiveLearningRate(suppression, latentFactor, existingReflex.Order));
             }
             else
             {
               _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
             }
+            DecayLatentInhibition(
+                conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
             Logger.Info($"Усилен вторичный условный рефлекс ID={existingReflex.Id} " +
                        $"(порядок {existingReflex.Order}) от условного {parentConditionedReflex.Id}");
             return true;
@@ -773,9 +949,11 @@ namespace ISIDA.Reflexes
           Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
                      $"от условного {parentConditionedReflex.Id} " +
                      $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
-          if (suppression > 0f)
+          if (suppression > 0f || latentFactor < 1f)
             _conditionedReflexes.StrengthenAssociationWithRate(
-                newReflexId, GetCompetitiveLearningRate(suppression, newOrder));
+                newReflexId, GetEffectiveLearningRate(suppression, latentFactor, newOrder));
+          DecayLatentInhibition(
+              conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
         }
 
         return true;
@@ -952,6 +1130,12 @@ namespace ISIDA.Reflexes
         _chainTriggerImageId = 0;
         _chainStep = 0;
         _chainActivationPulse = 0;
+
+        // Сброс истории CS текущего испытания и накопителя латентного торможения:
+        // оба живут только в памяти сервиса (не персистятся) и при сбросе движка/теста
+        // обязаны обнуляться, иначе следующий прогон стартует с чужим «знакомством со средой».
+        _trialConditionedStimuli.Clear();
+        _csUnreinforcedPresentations.Clear();
       }
       finally
       {
