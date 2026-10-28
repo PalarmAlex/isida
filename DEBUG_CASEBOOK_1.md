@@ -655,3 +655,21 @@
   3. В `BuildTransitiveChain` и `BuildTransitiveChainRecursive` в цикле по `activatableStimuli` добавлен `if (!IsChainLinkVisualColorCompatible(stimulusId)) continue;` перед поиском следующего УР. Вся цепь строится в одном контексте предъявления, поэтому цветовой контекст неизменен на всей рекурсии.
 - **Проверка:** `dotnet build isida.csproj -c Debug` → 0/0; `dotnet test tests\Isida.Tests` → **635/635** (было 632 + 3 новых в `TransitiveReplayIntegrationTests`: `TransitiveChain_MotorFork_CurrentBlack_PicksBlackLink` — вилка DXF(чёрн)/PDF(оранж), сцена=деталь → выбран DXF-УР; `TransitiveChain_MotorFork_CurrentColor_PicksColorLink` — та же вилка, сцена=сборка(оранж) → выбран PDF-УР; `TransitiveChain_MotorFork_WhiteLinkAlwaysAllowed` — белое звено не отбрасывается, обратная совместимость). **Регресс валидирован:** оба теста с вилкой падают без цветового фильтра (берётся не то звено) и проходят с ним; контроль на белом звене зелёный на обеих ветках (фильтр его не трогает).
 - **Эвристики:** → E30.
+
+## Случай 27. Транзитивная цепочка УР в Velum не логирует звенья: в колонках CSV пусто, кроме запуска УР
+
+- **Дата / сборка:** 2026-10-28, движок ISIDA (Debug, `dotnet build isida.csproj -c Debug` → 0 warning / 0 error).
+- **Симптом:** после сценарного обучения в адаптере Velum транзитивная цепочка УР запускается и отрабатывает, но в логах `C:\ProgramData\VELUM\Logs` виден только запуск у-рефлекса (пульс активации). Звенья цепочки не логируются — колонки «Цепочка РФ» пусты на всех пульсах прогона. При этом в AIStudio (пульт с пошаговым проходом) цепочка логируется корректно.
+- **Область:** `Reflexes\ReflexesActivator.cs` (`BuildTransitiveChain`, `ExecuteTransitiveChainLink`); `Common\GlobalTimer.cs` (`ProcessAgentPulse`); `Common\ResearchLogger.cs` (`LogChainLinkExecution`, `SetChainInfoForCurrentPulse`, `LogSystemState`).
+- **Гипотезы и проверки:**
+  1. *«Velum не вызывает LogSystemState на каждом пульсе» — подтверждено кодом (корень):* AIStudio в `OnPulseCompleted` (MainViewModel.cs:2458) вызывает `_researchLogger?.LogSystemState(pulseCount)`, что наполняет колонку «Цепочка РФ» из `_chainInfoByPulse`. Velum `VelumEnginePulseBridge.OnPulseCompleted` вызывает только `LogOverallStateTransitionIfChanged` и `RecipeDispatcher.ProcessPulse` — `LogSystemState` отсутствует.
+  2. *«Виртуальная цепочка не регистрируется в логгере» — подтверждено кодом:* `BuildTransitiveChain` не зовёт `_researchLogger?.RegisterActiveChain(...)`, в отличие от `ExecuteChainFromReflex` (L761) и `ActivatePendingChain` (L841). Все `LogChainLinkExecution`/`LogChainCompletion` guarded by `_activeChains.TryGetValue(chainId)` — для `ChainId = -reflexId` промахиваются.
+  3. *«motorActionId = 0 в LogChainLinkExecution» — подтверждено кодом:* в `ExecuteTransitiveChainLink` локальная `int motorActionId = 0` нигде не заполняется — в колонку идёт `chainId:0`.
+- **Корень:** три взаимосвязанные ошибки: (а) логирование цепочек полностью зависело от хоста, вызывающего `LogSystemState`; (б) виртуальная цепочка не заводила сессию в логгере; (в) мотор звена не извлекался из исходного б/у рефлекса.
+- **Доказательство:** `VelumEnginePulseBridge.cs:61-70` — `OnPulseCompleted` без `LogSystemState`; `ReflexesActivator.cs:~950` — `BuildTransitiveChain` без `RegisterActiveChain`; `ExecuteTransitiveChainLink:1081` — `motorActionId = 0` без присваивания.
+- **Исправление:**
+  1. `GlobalTimer.cs` — в `ProcessAgentPulse` перед `FlushBufferedAgentRowToMemoryNow()` добавлен `researchLogger?.LogSystemState(GlobalPulsCount)` — движок теперь сам снимает слепок на каждом пульсе, хост-зависимый `LogSystemState` становится опциональным (AIStudio `OnPulseCompleted` идемпотентен: `IsDuplicateState` отфильтрует дубли, буфер перезапишется).
+  2. `ReflexesActivator.cs` — `BuildTransitiveChain` теперь вызывает `_researchLogger?.RegisterActiveChain(-currentReflexId, $"TransitiveChain_{currentReflexId}", "Reflex")` после создания `_activeReflexChain`.
+  3. `ReflexesActivator.cs` — `ExecuteTransitiveChainLink` теперь извлекает `motorActionId` из `GetActionsForGeneticReflex(reflex.SourceGeneticReflexId)` перед запуском мотора.
+- **Проверка:** `dotnet build isida.csproj -c Debug` → 0/0; `dotnet test tests\Isida.Tests` → **635/635** (все существующие + 3 новых в `TransitiveChainLoggingTests`).
+- **Эвристики:** → E15, E24.

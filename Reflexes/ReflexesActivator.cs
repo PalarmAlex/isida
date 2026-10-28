@@ -985,6 +985,12 @@ namespace ISIDA.Reflexes
         _activeChainId = -currentReflexId;
         AppGlobalState.IsReflexChainActive = true;
 
+        // Виртуальная цепочка обязана завести сессию в логгере: все LogChainLink…/LogChainCompletion
+        // защищёны _activeChains.TryGetValue(chainId) — без регистрации звенья молча терялись,
+        // а в колонку «Цепочка РФ» не попадало ни одного шага (Случай 27).
+        _researchLogger?.RegisterActiveChain(
+            -currentReflexId, $"TransitiveChain_{currentReflexId}", "Reflex");
+
         int startEvalTimeout = _conditionedReflexes.Settings.TransitiveChainStepEvaluationTimeout;
         Logger.Info($"Построена виртуальная транзитивная цепочка: {chainReflexIds.Count} шагов после УР {currentReflexId}, " +
                     $"ожидание подтверждения завершения стартового мотора до {startEvalTimeout} пульсов");
@@ -1108,6 +1114,14 @@ namespace ISIDA.Reflexes
         finally { _lock.ExitWriteLock(); }
         return;
       }
+
+      // Мотор звена = мотор исходного б/у рефлекса (то, что реально исполнит ExecuteConditionedReflex).
+      // Нужен для колонки «Цепочка РФ»: без него LogChainLinkExecution писал бы chainId:0 (Случай 27).
+      // Чтение списка действий — вне _lock активатора (как в ExecuteReflexes), иначе под write-lock
+      // лишняя вложенная блокировка рефлекс-сервиса.
+      var linkMotorActions = _reflexExecutionService.GetActionsForGeneticReflex(reflex.SourceGeneticReflexId);
+      if (linkMotorActions != null && linkMotorActions.Any())
+        motorActionId = linkMotorActions.First();
 
       // Сверка контекста звена с АКТУАЛЬНЫМ гомеостазом перед запуском мотора.
       // Звено транзитивной цепи — это у-рефлекс, выученный в конкретном контексте
