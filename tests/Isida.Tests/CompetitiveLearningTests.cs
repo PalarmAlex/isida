@@ -459,5 +459,91 @@ namespace Isida.Tests
       Assert.True(alive.AssociationStrength >= before,
           $"целевой рефлекс не должен слабнуть от чужих пар: {before} → {alive.AssociationStrength}");
     }
+
+    /// <summary>
+    /// Сценарный профиль «CS-пачка + редкий US» (профиль Scenario_8). Три CS идут подряд
+    /// (пачка), затем в окне τ приходит US — подкрепляется последний CS пачки (last-CS-wins).
+    /// Предыдущие CS пачки закрываются НОВЫМ CS, а не пролётом окна: они — сенсорные
+    /// партнёры (латентная пара CS→CS′), информативны, и латентное торможение на них копиться
+    /// НЕ должно. РЕГРЕСС НА БАГ: раньше каждый закрытый пачкой CS копил LI, множитель падал
+    /// к полу, и даже регулярно подкрепляемый CS залипал на C≈0.27–0.30 (ниже γ) и никогда не
+    /// становился активируемым — условный рефлекс сам себя хоронил.
+    /// </summary>
+    [Fact]
+    public void ScenarioProfile_BurstCs_RareUs_ReinforcedCsReachesActivation()
+    {
+      ActivateSeedStyle();
+      int us = Engine.SeedGeneticReflexId;
+
+      // Пачки по три CS; подкрепляется всегда третий (последний перед US).
+      int cs1 = NewPhraseImage();
+      int cs2 = NewPhraseImage();
+      int cs3 = NewPhraseImage();
+
+      for (int i = 0; i < 8; i++)
+      {
+        int p = 1 + i * 10;
+        Formation.RecordStimulus(p, cs1, 0, 0);       // закроется cs2 (сенсорная пара)
+        Formation.RecordStimulus(p + 1, cs2, 0, 0);   // закроется cs3 (сенсорная пара)
+        Formation.RecordStimulus(p + 2, cs3, 0, 0);
+        Formation.RecordStimulus(p + 3, 0, 0, 0, us); // US в окне τ от cs3
+        Formation.CheckTemporalCorrelations(p + 3);
+      }
+
+      var reinforced = Crs.GetAllConditionedReflexes().First(r => r.Level3 == cs3);
+      Assert.True(reinforced.AssociationStrength >= Settings.ActivationThreshold,
+          $"подкрепляемый CS обязан пробить γ за 8 циклов пачки+US: " +
+          $"C={reinforced.AssociationStrength}, γ={Settings.ActivationThreshold}");
+      Assert.True(reinforced.CanBeActivated(),
+          $"подкрепляемый CS обязан стать активируемым: C={reinforced.AssociationStrength}");
+
+      // «Шумовые» CS пачки не подкреплялись — у них не должно появиться УР (last-CS-wins),
+      // но и латентное торможение на них не копилось (они закрывались партнёром, не пролётом).
+      Assert.DoesNotContain(Crs.GetAllConditionedReflexes(), r => r.Level3 == cs1);
+      Assert.DoesNotContain(Crs.GetAllConditionedReflexes(), r => r.Level3 == cs2);
+    }
+
+    /// <summary>
+    /// Фильтр (b) п.1: CS, предъявленный ПЕРЕД другим CS (партнёром) и потому закрытый
+    /// новым CS, а не пролётом окна τ, латентное торможение НЕ копит — он информативен
+    /// (предсказывает партнёра). После серии таких «пар» он обучается полным темпом RW,
+    /// как контрольный CS, никогда не видевший партнёра.
+    /// </summary>
+    [Fact]
+    public void PairedCs_ClosedByAnotherCs_DoesNotAccumulateLatentInhibition()
+    {
+      ActivateSeedStyle();
+      int us = Engine.SeedGeneticReflexId;
+      int paired = NewPhraseImage();   // каждый раз закрывается партнёром partner
+      int partner = NewPhraseImage();  // подкрепляется US (last-CS-wins)
+      int control = NewPhraseImage();  // никогда не предъявляется с партнёром
+
+      // Серия пар paired→partner→US: подкрепляется partner, paired лишь закрывается
+      // новым CS. Старый код записывал бы paired как «CS без US» и копил LI.
+      for (int i = 0; i < 8; i++)
+      {
+        int p = 1 + i * 10;
+        Formation.RecordStimulus(p, paired, 0, 0);
+        Formation.RecordStimulus(p + 1, partner, 0, 0);
+        Formation.RecordStimulus(p + 2, 0, 0, 0, us);
+        Formation.CheckTemporalCorrelations(p + 2);
+      }
+
+      // Теперь обучаем paired и control раздельными чистыми парами (без блокировки).
+      for (int i = 0; i < 6; i++)
+      {
+        FeedPair(paired, us, 200 + i * 10);
+        FeedPair(control, us, 500 + i * 10);
+      }
+
+      float cPaired = StrengthOf(paired);
+      float cControl = StrengthOf(control);
+
+      Assert.True(System.Math.Abs(cPaired - cControl) < 5e-4f,
+          $"CS, закрытый партнёром, не должен копить LI и обязан идти полным RW: " +
+          $"paired={cPaired}, control={cControl}");
+      Assert.True(cPaired >= Settings.ActivationThreshold,
+          $"CS без накопленного LI обязан пробить γ: C={cPaired}");
+    }
   }
 }

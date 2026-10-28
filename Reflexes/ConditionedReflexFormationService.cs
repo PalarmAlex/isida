@@ -115,6 +115,12 @@ namespace ISIDA.Reflexes
     // Последний безусловный стимул
     private StimulusRecord _lastUnconditionedStimulus = null;
 
+    // Пульс ПРЕДЫДУЩего безусловного стимула (до текущего). Граничит испытания: CS,
+    // предъявленные до него, относятся к прошному триалу и не могут быть «со-предъявлены»
+    // с текущим подкреплением (между ними уже встал US). Нужно для строгого компаунд-гейта
+    // Kamin blocking (см. GetCoPresentedCsImageIds).
+    private int _prevUnconditionedPulse = 0;
+
     // Последний условный стимул
     private StimulusRecord _lastConditionedStimulus = null;
 
@@ -221,6 +227,8 @@ namespace ISIDA.Reflexes
 
         if (geneticReflexId > 0)
         {
+          // Сдвигаем границу испытаний: прежний US становится «предыдущим».
+          _prevUnconditionedPulse = _lastUnconditionedStimulus != null ? _lastUnconditionedStimulus.Pulse : 0;
           _lastUnconditionedStimulus = record;
           TrimTrialCsHistory(pulse);
           if (_pendingCsAwaitingUs &&
@@ -266,8 +274,15 @@ namespace ISIDA.Reflexes
 
       if (doExtinguish)
       {
-        // Неподкреплённое предъявление — копим латентное торможение (см. E6-примечание).
-        RegisterUnreinforcedPresentation(extinguishImageId, extinguishToneId, extinguishMoodId);
+        // Pending CS закрыт НОВЫМ CS раньше истечения окна τ. Это НЕ фиксируем как
+        // «неподкреплённое предъявление» (латентное торможение здесь не копится):
+        //  • US ещё может прийти в этом же окне τ и подкрепить закрытый CS;
+        //  • новый CS для закрытого — сенсорный партнёр (латентная пара CS→CS′),
+        //    т.е. закрытый CS предсказывает другой значимый стимул и потому ИНФОРМАТИВЕН,
+        //    а не «известная константа среды» (Lubov–Moore).
+        // Латентное торможение накапливается только по факту полного пролёта окна τ без US
+        // (ProcessPendingExtinction) и только для ещё не обусловленного CS.
+        // Активное угасание при этом применяется как и раньше.
         _conditionedReflexes.ApplyActiveExtinctionForStimulus(extinguishImageId, extinguishToneId, extinguishMoodId);
       }
     }
@@ -298,6 +313,12 @@ namespace ISIDA.Reflexes
       {
         if (r.Pulse > reinforcementPulse) continue;
         if (reinforcementPulse - r.Pulse > timeWindow) continue;
+        // Граница испытания: CS, предъявленные до ПРЕДЫДУЩЕГО US, относятся к прошному
+        // триалу (между ними уже встал US). Настоящий Kamин блокирует только при
+        // совместном предъявлении БЕЗ промежуточного подкрепления (A+AX), поэтому такие
+        // CS не считаются со-предъявленными — иначе паттерн CS→US→CS→US впритык ложно
+        // сошёл бы за компаунд и затормозил свежий, отдельно обучающийся стимул.
+        if (_prevUnconditionedPulse > 0 && r.Pulse <= _prevUnconditionedPulse) continue;
         ids.Add(r.StimulusImageId);
       }
       return ids;
@@ -305,6 +326,14 @@ namespace ISIDA.Reflexes
 
     /// <summary>
     /// Фиксирует факт неподкреплённого предъявления CS (накопитель латентного торможения).
+    /// <para>
+    /// Латентное торможение (Lubov–Moore, 1959) по смыслу наказывает только НЕинформативный
+    /// CS — «известную константу среды», которая ничего не предсказывает. Если на образ уже
+    /// есть условный рефлекс, стимул перестал быть константой: он предсказывает US/другой CS.
+    /// Для такого CS угасание идёт своим механизмом (<c>ApplyActiveExtinctionForStimulus</c>),
+    /// а латентное торможение не накапливается — иначе обусловленный стимул, застрявший чуть
+    /// ниже порога γ, сам бы себя хоронил (самоподдерживающаяся ловушка «всегда слабый CS»).
+    /// </para>
     /// </summary>
     /// <param name="imageId">Образ-стимул.</param>
     /// <param name="toneId">Тон.</param>
@@ -314,10 +343,34 @@ namespace ISIDA.Reflexes
       if (imageId <= 0)
         return;
 
+      // Фильтр (a): обусловленный CS (есть хотя бы один УР на этот образ) — не «константа
+      // среды», латентное торможение на него не копим.
+      if (HasConditionedReflexForImage(imageId))
+        return;
+
       var key = (imageId, toneId, moodId);
       int count;
       _csUnreinforcedPresentations.TryGetValue(key, out count);
       _csUnreinforcedPresentations[key] = count + 1;
+    }
+
+    /// <summary>
+    /// Есть ли на образ-стимул хотя бы один условный рефлекс (любого порядка/тона/настроения).
+    /// Такой стимул информативен (что-то предсказывает) и не подлежит латентному торможению.
+    /// </summary>
+    /// <param name="imageId">Образ-стимул (Level3).</param>
+    /// <returns>True, если УР на образ существует.</returns>
+    private bool HasConditionedReflexForImage(int imageId)
+    {
+      if (imageId <= 0)
+        return false;
+
+      foreach (var r in _conditionedReflexes.GetAllConditionedReflexes())
+      {
+        if (r.Level3 == imageId)
+          return true;
+      }
+      return false;
     }
 
     /// <summary>
@@ -1112,6 +1165,7 @@ namespace ISIDA.Reflexes
       try
       {
         _lastUnconditionedStimulus = null;
+        _prevUnconditionedPulse = 0;
         _lastConditionedStimulus = null;
         _pendingCsAwaitingUs = false;
         _pendingCsPulse = 0;
