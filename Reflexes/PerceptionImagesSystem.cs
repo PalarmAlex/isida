@@ -295,6 +295,27 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Возвращает образ восприятия по его ID (или <c>null</c>, если образа нет).
+    /// </summary>
+    /// <param name="imageId">ID образа восприятия.</param>
+    /// <returns>Образ восприятия либо <c>null</c>.</returns>
+    public PerceptionImage GetPerceptionImageById(int imageId)
+    {
+      if (imageId <= 0)
+        return null;
+
+      _lock.EnterReadLock();
+      try
+      {
+        return _perceptionImages.TryGetValue(imageId, out var image) ? image : null;
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
     /// Возвращает список всех образов стилей реагирования
     /// </summary>
     /// <returns>Копия списка образов стилей реагирования</returns>

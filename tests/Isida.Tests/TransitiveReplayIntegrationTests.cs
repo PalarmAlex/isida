@@ -824,5 +824,127 @@ namespace Isida.Tests
       Assert.True(GetChainField<int>(chain, "CurrentLinkId") == 2,
           "на следующий пульс цепочка должна перейти к следующему звену");
     }
+
+    /// <summary>
+    /// Усиливает мотор→стимул связь до порога γ (вспомогательный для тестов «вилки»).
+    /// </summary>
+    private static void StrengthenToGamma(int motorId, int stimulusImageId)
+    {
+      float gamma = ConditionedReflexesSystem.Instance.Settings.MotorAssociationActivationThreshold;
+      do
+      {
+        MotorStimulusAssociationSystem.Instance.StrengthenLink(motorId, stimulusImageId);
+      }
+      while (!MotorStimulusAssociationSystem.Instance.TryGetStrength(
+          motorId, stimulusImageId, out float c) || c < gamma);
+    }
+
+    /// <summary>
+    /// Регресс Случая 26: «вилка» мотор→стимул разрешается по зрительному каналу текущего
+    /// образа восприятия. Один мотор («Обновить») предсказывает ДВА образа, оба above γ:
+    /// DXF-чертёж детали (цвет «чёрный») и PDF-чертёж сборки (цвет «оранжевый»). При
+    /// предъявлении образа детали цепочка обязана выбрать DXF-звено, а не PDF, даже если PDF
+    /// стоит в списке первым. До фикса <c>BuildTransitiveChain</c> брал первый активируемый
+    /// стимул без учёта цвета — срабатывало неверное экспортное звено.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_MotorFork_CurrentBlack_PicksBlackLink()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      // Стартовый образ (фраза «дд») — в сцене детали: цвет «чёрный».
+      int triggerStart = NewImage(phrases: new[] { Engine.NextSeed() }, color: AgentVisualColor.Black);
+      // Два образа-звена от одного мотора, оба above γ, но в разных цветовых сценах.
+      int triggerDxf = NewImage(phrases: new[] { Engine.NextSeed() }, color: AgentVisualColor.Black);
+      int triggerPdf = NewImage(phrases: new[] { Engine.NextSeed() }, color: 3);
+
+      int reflexStartId = AddReflex(triggerStart, level2: new[] { Engine.SeedStyleId });
+      int reflexDxfId = AddReflex(triggerDxf, level2: new[] { Engine.SeedStyleId });
+      int reflexPdfId = AddReflex(triggerPdf, level2: new[] { Engine.SeedStyleId });
+
+      int motor = ReflexExecutionService.Instance
+          .GetActionsForGeneticReflex(Find(reflexStartId).SourceGeneticReflexId).First();
+
+      // «Вилка»: один мотор предсказывает оба образа.
+      StrengthenToGamma(motor, triggerDxf);
+      StrengthenToGamma(motor, triggerPdf);
+      Assert.Equal(2, MotorStimulusAssociationSystem.Instance.GetActivatableStimuli(motor).Count);
+
+      // Сцена = деталь (чёрный): цепочка обязана выбрать DXF-звено.
+      EmulatePhraseTrigger(triggerStart, styleImageId);
+      InvokePrivate("ExecuteReflexes", Engine.CurrentPulse);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "цепочка не построена при наличии вилки мотор→стимул");
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.Equal(new[] { reflexDxfId }, GetChainField<List<int>>(chain, "TransitiveReflexIds"));
+    }
+
+    /// <summary>
+    /// Вторая сторона вилки (Случай 26): та же пара связей мотора, но сцена — сборка
+    /// (цвет «спектр»). Цепочка обязана выбрать PDF-звено, а не DXF. Контроль к предыдущему
+    /// тесту: фильтр действительно различает сцены, а не всегда берёт один и тот же стимул.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_MotorFork_CurrentColor_PicksColorLink()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      // Сцена сборки: стартовый образ и PDF-звено одного цвета, DXF — другого.
+      int sceneColor = 3;
+      int triggerStart = NewImage(phrases: new[] { Engine.NextSeed() }, color: sceneColor);
+      int triggerDxf = NewImage(phrases: new[] { Engine.NextSeed() }, color: AgentVisualColor.Black);
+      int triggerPdf = NewImage(phrases: new[] { Engine.NextSeed() }, color: sceneColor);
+
+      int reflexStartId = AddReflex(triggerStart, level2: new[] { Engine.SeedStyleId });
+      int reflexDxfId = AddReflex(triggerDxf, level2: new[] { Engine.SeedStyleId });
+      int reflexPdfId = AddReflex(triggerPdf, level2: new[] { Engine.SeedStyleId });
+
+      int motor = ReflexExecutionService.Instance
+          .GetActionsForGeneticReflex(Find(reflexStartId).SourceGeneticReflexId).First();
+
+      StrengthenToGamma(motor, triggerDxf);
+      StrengthenToGamma(motor, triggerPdf);
+
+      EmulatePhraseTrigger(triggerStart, styleImageId);
+      InvokePrivate("ExecuteReflexes", Engine.CurrentPulse);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive);
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.Equal(new[] { reflexPdfId }, GetChainField<List<int>>(chain, "TransitiveReflexIds"));
+    }
+
+    /// <summary>
+    /// Обратная совместимость (Случай 26): если у звена цвет белый (отсутствие зрительной
+    /// опоры), он не конфликтует ни с одной сценой — звено допускается. Это сохраняет
+    /// работу старых цепочек, где цвет не задавался.
+    /// </summary>
+    [Fact]
+    public void TransitiveChain_MotorFork_WhiteLinkAlwaysAllowed()
+    {
+      ActivateSeedStyle();
+      int styleImageId = SeedStyleImage();
+
+      // Сцена — цвет «спектр», но единственное звено имеет белый цвет (старый формат).
+      int triggerStart = NewImage(phrases: new[] { Engine.NextSeed() }, color: 3);
+      int triggerLink = NewImage(phrases: new[] { Engine.NextSeed() }, color: AgentVisualColor.White);
+
+      int reflexStartId = AddReflex(triggerStart, level2: new[] { Engine.SeedStyleId });
+      int reflexLinkId = AddReflex(triggerLink, level2: new[] { Engine.SeedStyleId });
+
+      int motor = ReflexExecutionService.Instance
+          .GetActionsForGeneticReflex(Find(reflexStartId).SourceGeneticReflexId).First();
+      StrengthenToGamma(motor, triggerLink);
+
+      EmulatePhraseTrigger(triggerStart, styleImageId);
+      InvokePrivate("ExecuteReflexes", Engine.CurrentPulse);
+
+      Assert.True(ReflexesActivator.Instance.IsChainActive,
+          "белое звено не должно отбрасываться цветовым фильтром");
+      var chain = GetField(ReflexesActivator.Instance, "_activeReflexChain");
+      Assert.Equal(new[] { reflexLinkId }, GetChainField<List<int>>(chain, "TransitiveReflexIds"));
+    }
   }
 }

@@ -931,19 +931,26 @@ namespace ISIDA.Reflexes
 
       foreach (var stimulusId in activatableStimuli)
       {
+        // «Вилка» мотор→стимул: один мотор может предсказывать несколько образов
+        // (напр. «Обновить» → DXF-чертёж детали И PDF-чертёж сборка). Разрешаем её по
+        // зрительному каналу текущего образа восприятия — звено обязано относиться к той
+        // же сцене, что и запускающий стимул (Случай 26).
+        if (!IsChainLinkVisualColorCompatible(stimulusId))
+          continue;
+
         // Ищем УР с Level3 == stimulusId
         var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
             .FirstOrDefault(r => r.Level3 == stimulusId && r.CanBeActivated() && !visitedReflexIds.Contains(r.Id));
-        
+
         if (nextReflex != null)
         {
           chainReflexIds.Add(nextReflex.Id);
           visitedReflexIds.Add(nextReflex.Id);
-          
+
           // Проверяем макс. длину цепочки
           int maxLen = _conditionedReflexes.Settings.ConditionedReflexMaxChainLength;
           if (maxLen > 0 && chainReflexIds.Count >= maxLen) break;
-          
+
           // Рекурсивно продолжаем поиск
           BuildTransitiveChainRecursive(nextReflex.Id, maxLen, visitedReflexIds, chainReflexIds);
           break; // Берём первый подходящий стимул
@@ -1004,6 +1011,12 @@ namespace ISIDA.Reflexes
 
       foreach (var stimulusId in activatableStimuli)
       {
+        // Тот же цветовой фильтр «вилки», что и в BuildTransitiveChain: вся цепь
+        // разворачивается в одной сцене (текущий образ восприятия неизменен на всём
+        // построении), поэтому каждое звено обязано принадлежать той же сцене (Случай 26).
+        if (!IsChainLinkVisualColorCompatible(stimulusId))
+          continue;
+
         var nextReflex = _conditionedReflexes.GetAllConditionedReflexes()
             .FirstOrDefault(r => r.Level3 == stimulusId && r.CanBeActivated() && !visitedReflexIds.Contains(r.Id));
         
@@ -1015,6 +1028,38 @@ namespace ISIDA.Reflexes
           break;
         }
       }
+    }
+
+    /// <summary>
+    /// Разрешение «вилки» мотор→стимул по зрительному каналу (Случай 26). Один мотор может
+    /// предсказывать несколько образов-стимулов, достигших γ (напр. «Обновить» → DXF-чертёж
+    /// детали И PDF-чертёж сборки). Транзитивная цепь разворачивается в одной сцене, задаваемой
+    /// текущим образом восприятия <see cref="_activeCurTriggerStimulusID"/>, поэтому звено
+    /// обязано относиться к той же сцене. Сравнивается ТОЛЬКО зрительный канал (цвета открытого
+    /// объекта и образа-триггера звена): белый (отсутствие цвета) ни с чем не конфликтует,
+    /// два различных ненулевых цвета конфликтуют. Если текущего образа восприятия нет или один
+    /// из образов не найден — фильтр не применяется (обратная совместимость).
+    /// </summary>
+    /// <param name="stimulusImageId">ID образа-стимула — кандидата в следующее звено.</param>
+    /// <returns>False, если цвет звена конфликтует с текущей сценой (звено отбрасывается).</returns>
+    private bool IsChainLinkVisualColorCompatible(int stimulusImageId)
+    {
+      if (_perceptionImageSystem == null || _activeCurTriggerStimulusID <= 0)
+        return true;
+
+      var currentImage = _perceptionImageSystem.GetPerceptionImageById(_activeCurTriggerStimulusID);
+      var linkImage = _perceptionImageSystem.GetPerceptionImageById(stimulusImageId);
+      if (currentImage == null || linkImage == null)
+        return true;
+
+      int currentColor = currentImage.VisualColorId;
+      int linkColor = linkImage.VisualColorId;
+
+      // Белый = отсутствие цвета (не задаёт зрительную опору) — не конфликтует ни с чем.
+      if (currentColor == AgentVisualColor.White || linkColor == AgentVisualColor.White)
+        return true;
+
+      return currentColor == linkColor;
     }
 
     /// <summary>
