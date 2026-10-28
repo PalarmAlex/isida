@@ -991,6 +991,12 @@ namespace ISIDA.Reflexes
         _researchLogger?.RegisterActiveChain(
             -currentReflexId, $"TransitiveChain_{currentReflexId}", "Reflex");
 
+        // Стартовое звено (звено 0) — мотор стартового УР, уже запущенный в ExecuteReflexes до
+        // построения цепи. ExecuteTransitiveChainLink логирует только звенья 1..N, поэтому без
+        // этого вызова первый шаг цепи («Обновить») не попадал в «Цепочка РФ» и в логе было видно
+        // лишь N−1 из N запусков (Случай 27). linkId=0 согласован с CurrentLinkId=0 ниже.
+        _researchLogger?.LogChainLinkExecution(-currentReflexId, 0, currentMotorId, pulseCount);
+
         int startEvalTimeout = _conditionedReflexes.Settings.TransitiveChainStepEvaluationTimeout;
         Logger.Info($"Построена виртуальная транзитивная цепочка: {chainReflexIds.Count} шагов после УР {currentReflexId}, " +
                     $"ожидание подтверждения завершения стартового мотора до {startEvalTimeout} пульсов");

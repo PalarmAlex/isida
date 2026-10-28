@@ -155,10 +155,11 @@ namespace Isida.Tests
 
     /// <summary>
     /// Строит реальную транзитивную цепочку из двух УР (общий мотор эталонного б/у):
-    /// возвращает ID стартового УР, ID УР-звена и мотор звена (мотор исходного б/у звена).
+    /// возвращает ID стартового УР, ID УР-звена, мотор звена, образ стиля, мотор стартового УР
+    /// и пульс построения цепи (для проверки стартового звена в логе).
     /// </summary>
-    private (int StartReflexId, int LinkReflexId, int LinkMotorId, int StyleImageId)
-        BuildTwoLinkChain()
+    private (int StartReflexId, int LinkReflexId, int LinkMotorId, int StyleImageId,
+        int StartMotorId, int BuildPulse, int AdvancePulse) BuildTwoLinkChain()
     {
       ActivateSeedStyle();
       int styleImageId = SeedStyleImage();
@@ -188,21 +189,17 @@ namespace Isida.Tests
       int linkMotor = ReflexExecutionService.Instance
           .GetActionsForGeneticReflex(Find(reflex2Id).SourceGeneticReflexId).First();
 
-      return (reflex1Id, reflex2Id, linkMotor, styleImageId);
-    }
+      int buildPulse = Engine.CurrentPulse;
 
-    /// <summary>
-    /// Разворачивает первое звено: хост подтверждает стартовый мотор, затем один пульс
-    /// штатного контура вызывает <c>ExecuteTransitiveChainLink</c>. Возвращает пульс звена.
-    /// </summary>
-    private int AdvanceFirstLink()
-    {
+      // Разворачиваем первое звено: хост подтверждает стартовый мотор, затем один пульс
+      // штатного контура вызывает ExecuteTransitiveChainLink.
       EndPulse(Engine.CurrentPulse);
       ReflexesActivator.Instance.SetChainStepResult(true);
       Engine.AdvancePulses(1);
-      int pulse = Engine.CurrentPulse;
-      InvokePrivate("ProcessActiveChain", pulse);
-      return pulse;
+      int advancePulse = Engine.CurrentPulse;
+      InvokePrivate("ProcessActiveChain", advancePulse);
+
+      return (reflex1Id, reflex2Id, linkMotor, styleImageId, motor1, buildPulse, advancePulse);
     }
 
     private static ResearchLogger CreateLogger(ReflexesActivator activator, string tempDir)
@@ -233,7 +230,7 @@ namespace Isida.Tests
       ReflexesActivator.Instance.SetResearchLogger(logger);
       try
       {
-        var (startReflexId, _, _, _) = BuildTwoLinkChain();
+        var (startReflexId, _, _, _, _, _, _) = BuildTwoLinkChain();
 
         var activeChains = (IDictionary)GetField(logger, "_activeChains");
         Assert.NotNull(activeChains);
@@ -262,19 +259,30 @@ namespace Isida.Tests
       ReflexesActivator.Instance.SetResearchLogger(logger);
       try
       {
-        var (startReflexId, linkReflexId, linkMotorId, _) = BuildTwoLinkChain();
-        int pulse = AdvanceFirstLink();
+        var (startReflexId, linkReflexId, linkMotorId, _, startMotorId, buildPulse, advancePulse) = BuildTwoLinkChain();
 
         var chainInfoByPulse = (IDictionary)GetField(logger, "_chainInfoByPulse");
         Assert.NotNull(chainInfoByPulse);
-        Assert.True(chainInfoByPulse.Contains(pulse),
-            $"Пульс звена {pulse} не попал в _chainInfoByPulse (сессия не зарегистрирована).");
 
-        object boxed = chainInfoByPulse[pulse]; // (string ReflexChain, string AutomatizmChain)
-        string reflexChain = boxed.GetType().GetField("Item1").GetValue(boxed) as string;
+        // Стартовое звено (0) логируется в BuildTransitiveChain на пульсе построения
+        Assert.True(chainInfoByPulse.Contains(buildPulse),
+            $"Пульс построения {buildPulse} не попал в _chainInfoByPulse (нет стартового звена).");
 
-        Assert.Equal($"{-startReflexId}:{linkMotorId}", reflexChain);
-        Assert.DoesNotContain(":0", reflexChain);
+        object boxedStart = chainInfoByPulse[buildPulse];
+        string reflexChainStart = boxedStart.GetType().GetField("Item1").GetValue(boxedStart) as string;
+        Assert.NotNull(reflexChainStart);
+        Assert.Contains($"{-startReflexId}:{startMotorId}", reflexChainStart);
+        Assert.DoesNotContain(":0", reflexChainStart);
+
+        // Звено №1 логируется в ExecuteTransitiveChainLink на пульсе разворота
+        Assert.True(chainInfoByPulse.Contains(advancePulse),
+            $"Пульс звена {advancePulse} не попал в _chainInfoByPulse.");
+
+        object boxedLink = chainInfoByPulse[advancePulse];
+        string reflexChainLink = boxedLink.GetType().GetField("Item1").GetValue(boxedLink) as string;
+        Assert.NotNull(reflexChainLink);
+        Assert.Contains($"{-startReflexId}:{linkMotorId}", reflexChainLink);
+        Assert.DoesNotContain(":0", reflexChainLink);
         // Различимость: мотор звена ≠ ID у-рефлекса звена (иначе «:motor» неотличим от «:reflexId»).
         Assert.NotEqual(linkReflexId, linkMotorId);
       }
@@ -298,8 +306,7 @@ namespace Isida.Tests
       string tempDir = Path.Combine(Path.GetTempPath(), "isida_chainlog_" + Guid.NewGuid().ToString("N"));
       Directory.CreateDirectory(tempDir);
 
-      var (startReflexId, _, linkMotorId, _) = BuildTwoLinkChain();
-      int pulse = AdvanceFirstLink();
+      var (startReflexId, _, linkMotorId, _, _, _, advancePulse) = BuildTwoLinkChain();
 
       // Хост «Velum»: без LogSystemState колонка не появляется вообще.
       var noStateWriter = new RecordingLogWriter();
@@ -311,7 +318,7 @@ namespace Isida.Tests
         // Цепочка построена без логгера, поэтому регистрируем сессию вручную — как это
         // делает BuildTransitiveChain в рантайме (RegisterActiveChain), иначе LogChainLink… молча выйдет.
         loggerA.RegisterActiveChain(-startReflexId, $"TransitiveChain_{startReflexId}", "Reflex");
-        loggerA.LogChainLinkExecution(-startReflexId, 1, linkMotorId, pulse);
+        loggerA.LogChainLinkExecution(-startReflexId, 1, linkMotorId, advancePulse);
         loggerA.FlushBufferedAgentRowToMemoryNow();
         Assert.Empty(noStateWriter.Rows);
       }
@@ -330,8 +337,8 @@ namespace Isida.Tests
       try
       {
         loggerB.RegisterActiveChain(-startReflexId, $"TransitiveChain_{startReflexId}", "Reflex");
-        loggerB.LogChainLinkExecution(-startReflexId, 1, linkMotorId, pulse);
-        loggerB.LogSystemState(pulse);
+        loggerB.LogChainLinkExecution(-startReflexId, 1, linkMotorId, advancePulse);
+        loggerB.LogSystemState(advancePulse);
         loggerB.FlushBufferedAgentRowToMemoryNow();
 
         Assert.NotEmpty(stateWriter.Rows);
