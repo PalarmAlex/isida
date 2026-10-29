@@ -187,6 +187,12 @@ namespace Isida.Tests
       // иначе стили, активированные предыдущим тестом, попадают в Level2 новых УР.
       AppGlobalState.UpdateActiveStyles(System.Linq.Enumerable.Empty<GomeostasSystem.BehaviorStyle>());
 
+      // Активный автоматизм — в ноль. AppGlobalState.CurrentActiveAutomatizmId статический и
+      // переживает тесты; ResearchLogger при нём > 0 глушит колонки «Б/у рефлекс»/«Усл. рефлекс»
+      // (гейт reflexSuppressedByAutomatizm), поэтому остаток от предыдущего автоматизм-теста
+      // обнулял рефлексы в чужих тестах (зелёные изолированно, падали в полном прогоне).
+      AppGlobalState.ResetAutomatizmInfo();
+
       // 6. Генетические рефлексы — эталонные из комплекта данных, не удаляем:
       //    без них не работает дерево рефлексов и активация у-рефлексов.
     }

@@ -16,9 +16,12 @@ namespace Isida.Tests
   /// Регресс Случая 27: транзитивная цепочка УР в адаптере Velum не попадала в колонку
   /// «Цепочка РФ», потому что (а) виртуальная цепочка не регистрировала сессию в
   /// <see cref="ResearchLogger"/> и все <c>LogChainLink…</c> молча выходили по
-  /// <c>_activeChains.TryGetValue</c>; (б) <c>motorActionId</c> звена оставался 0;
-  /// (в) колонку формирует только <see cref="ResearchLogger.LogSystemState"/>, которую Velum
-  /// не вызывал на пульсах звеньев.
+  /// <c>_activeChains.TryGetValue</c>; (б) колонку формирует только
+  /// <see cref="ResearchLogger.LogSystemState"/>, которую Velum не вызывал на пульсах звеньев.
+  ///
+  /// Формат колонки (Случай 29): «chainId:ID-у-рефлекса-звена» (напр. «-1:2») — по эталону
+  /// сценария. Стартовое звено-мотор в колонку не пишется; вчерашняя правка, подставлявшая
+  /// вместо ID у-рефлекса ID мотора («-1:49»), откачена.
   ///
   /// Поток повторяет рантаймовый (как в <see cref="TransitiveReplayIntegrationTests"/>):
   /// фраза → УР1 → построена цепочка → хост подтвердил стартовый мотор → ProcessActiveChain
@@ -247,11 +250,12 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// Правка 3 (ExecuteTransitiveChainLink → motorActionId): после разворота звена копилка
-    /// <c>_chainInfoByPulse</c> обязана содержать реальный мотор звена, а не <c>:0</c>.
+    /// Формат колонки «Цепочка РФ» = «chainId:ID-у-рефлекса-звена» (по эталону сценария, напр. «-1:2»).
+    /// Стартовое звено (мотор стартового УР) в колонку не пишется; звено на пульсе разворота
+    /// логируется ID у-рефлекса, а не мотора (регресс: было «-1:49» вместо «-1:2»).
     /// </summary>
     [Fact]
-    public void TransitiveChain_LinkExecution_LogsRealMotorNotZero()
+    public void TransitiveChain_LinkExecution_LogsReflexIdNotMotor()
     {
       string tempDir = Path.Combine(Path.GetTempPath(), "isida_chainlog_" + Guid.NewGuid().ToString("N"));
       Directory.CreateDirectory(tempDir);
@@ -259,32 +263,28 @@ namespace Isida.Tests
       ReflexesActivator.Instance.SetResearchLogger(logger);
       try
       {
-        var (startReflexId, linkReflexId, linkMotorId, _, startMotorId, buildPulse, advancePulse) = BuildTwoLinkChain();
+        var (startReflexId, linkReflexId, linkMotorId, _, _, buildPulse, advancePulse) = BuildTwoLinkChain();
 
         var chainInfoByPulse = (IDictionary)GetField(logger, "_chainInfoByPulse");
         Assert.NotNull(chainInfoByPulse);
 
-        // Стартовое звено (0) логируется в BuildTransitiveChain на пульсе построения
-        Assert.True(chainInfoByPulse.Contains(buildPulse),
-            $"Пульс построения {buildPulse} не попал в _chainInfoByPulse (нет стартового звена).");
+        // Стартовое звено (мотор стартового УР) в колонку НЕ пишется: по эталону цепь видна
+        // только на пульсах разворота звеньев-у-рефлексов, а не на пульсе активации стартового УР.
+        Assert.False(chainInfoByPulse.Contains(buildPulse),
+            $"Пульс построения {buildPulse} попал в _chainInfoByPulse — стартовое звено-мотор пишется в колонку (регресс формата).");
 
-        object boxedStart = chainInfoByPulse[buildPulse];
-        string reflexChainStart = boxedStart.GetType().GetField("Item1").GetValue(boxedStart) as string;
-        Assert.NotNull(reflexChainStart);
-        Assert.Contains($"{-startReflexId}:{startMotorId}", reflexChainStart);
-        Assert.DoesNotContain(":0", reflexChainStart);
-
-        // Звено №1 логируется в ExecuteTransitiveChainLink на пульсе разворота
+        // Звено №1 логируется в ExecuteTransitiveChainLink на пульсе разворота.
         Assert.True(chainInfoByPulse.Contains(advancePulse),
             $"Пульс звена {advancePulse} не попал в _chainInfoByPulse.");
 
         object boxedLink = chainInfoByPulse[advancePulse];
         string reflexChainLink = boxedLink.GetType().GetField("Item1").GetValue(boxedLink) as string;
         Assert.NotNull(reflexChainLink);
-        Assert.Contains($"{-startReflexId}:{linkMotorId}", reflexChainLink);
+        // Колонка = «-стартовыйУР:УР-звена» (совпадает с ожиданием Scenario_8 «-1:2»).
+        Assert.Equal($"{-startReflexId}:{linkReflexId}", reflexChainLink);
         Assert.DoesNotContain(":0", reflexChainLink);
-        // Различимость: мотор звена ≠ ID у-рефлекса звена (иначе «:motor» неотличим от «:reflexId»).
-        Assert.NotEqual(linkReflexId, linkMotorId);
+        // Мотор звена в колонке быть не должно (иначе «-1:49» вместо «-1:2»).
+        Assert.DoesNotContain($"{-startReflexId}:{linkMotorId}", reflexChainLink);
       }
       finally
       {
@@ -306,7 +306,7 @@ namespace Isida.Tests
       string tempDir = Path.Combine(Path.GetTempPath(), "isida_chainlog_" + Guid.NewGuid().ToString("N"));
       Directory.CreateDirectory(tempDir);
 
-      var (startReflexId, _, linkMotorId, _, _, _, advancePulse) = BuildTwoLinkChain();
+      var (startReflexId, _, linkReflexId, _, _, _, advancePulse) = BuildTwoLinkChain();
 
       // Хост «Velum»: без LogSystemState колонка не появляется вообще.
       var noStateWriter = new RecordingLogWriter();
@@ -318,7 +318,7 @@ namespace Isida.Tests
         // Цепочка построена без логгера, поэтому регистрируем сессию вручную — как это
         // делает BuildTransitiveChain в рантайме (RegisterActiveChain), иначе LogChainLink… молча выйдет.
         loggerA.RegisterActiveChain(-startReflexId, $"TransitiveChain_{startReflexId}", "Reflex");
-        loggerA.LogChainLinkExecution(-startReflexId, 1, linkMotorId, advancePulse);
+        loggerA.LogChainLinkExecution(-startReflexId, 1, linkReflexId, advancePulse);
         loggerA.FlushBufferedAgentRowToMemoryNow();
         Assert.Empty(noStateWriter.Rows);
       }
@@ -337,13 +337,13 @@ namespace Isida.Tests
       try
       {
         loggerB.RegisterActiveChain(-startReflexId, $"TransitiveChain_{startReflexId}", "Reflex");
-        loggerB.LogChainLinkExecution(-startReflexId, 1, linkMotorId, advancePulse);
+        loggerB.LogChainLinkExecution(-startReflexId, 1, linkReflexId, advancePulse);
         loggerB.LogSystemState(advancePulse);
         loggerB.FlushBufferedAgentRowToMemoryNow();
 
         Assert.NotEmpty(stateWriter.Rows);
         var row = stateWriter.Rows.Last();
-        Assert.Equal($"{-startReflexId}:{linkMotorId}", row.ReflexChainInfo);
+        Assert.Equal($"{-startReflexId}:{linkReflexId}", row.ReflexChainInfo);
       }
       finally
       {

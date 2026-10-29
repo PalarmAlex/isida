@@ -752,7 +752,18 @@ namespace ISIDA.Common
             _bufferedRawPulse = -1;
           }
 
-          if (hasStateChanges || hasChainInfoForPulse)
+          // На одном пульсе LogSystemState вызывается несколько раз: ReflexesActivator
+          // (ActiveFromConditionChange/ActiveFromAction/ActiveFromPhrase) и движок в конце пульса
+          // (GlobalTimer.ProcessAgentPulse), плюс хост в OnPulseCompleted. Активатор сразу после
+          // своего снимка обнуляет _activeGeneticReflexID/_activeConditionReflexID (это и есть
+          // механизм дельта-колонок), поэтому повторный снимок видит «изменение» вида 18→null,
+          // считает его штатной дельтой и Перезаписывал буфер пустой строкой того же пульса —
+          // в CSV/UI/отчёт сценария уходила строка без «Б/у рефлекс», «Усл. рефлекс», «Триггер»
+          // (Случай 28). Первый снимок пульса каноничен: повторный только дополняет колонки
+          // цепочек, которые подставляет WriteBufferedLogEntry из _chainInfoByPulse.
+          bool samePulseAlreadyBuffered = _bufferedRawPulse >= 0 && _bufferedRawPulse == currentPulse;
+
+          if ((hasStateChanges || hasChainInfoForPulse) && !samePulseAlreadyBuffered)
           {
             var logEntry = CreateLogEntry(currentState, correctPulse);
 
