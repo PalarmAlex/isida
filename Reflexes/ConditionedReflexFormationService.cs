@@ -124,34 +124,6 @@ namespace ISIDA.Reflexes
     // Последний условный стимул
     private StimulusRecord _lastConditionedStimulus = null;
 
-    // Система мотор→стимул ассоциаций (вторичная инициализация из IsidaEngine)
-    private MotorStimulusAssociationSystem _motorStimulusAssociations;
-
-    // Последний выполненный мотор — для обучения мотор→стимул связей.
-    // Живёт между пульсами (сервис не сбрасывается в ResetStates), в отличие от полей ReflexesActivator.
-    private int _lastMotorActionId = 0;
-    private int _lastMotorPulse = 0;
-
-    // Мотор уже «поглощён» первым нейтральным CS после него — защита от перехвата несколькими CS.
-    private bool _motorStimulusLinkConsumed = false;
-
-    // «Удержанный» мотор-реакция: мотор, зафиксированный SetLastMotorAction в том же пульсе,
-    // что и предъявление CS, на котором есть прокачанный УР (реальный порядок ActiveFromPhrase:
-    // ExecuteReflexes → RecordStimulus). Пока кандидат на подкрепление (_lastMotorActionId)
-    // не потреблён, новый мотор уходит сюда и НЕ затирает кандидата (регресс Случая 23:
-    // затирание кандидата рвало транзитивную цепь ровно на «известном» стимуле).
-    private int _heldMotorActionId = 0;
-    private int _heldMotorPulse = 0;
-
-    // Состояние цепочки у-рефлексов (реплей виртуальных стимулов).
-    // Живёт между пульсами (сервис не сбрасывается в ResetStates), в отличие от полей ReflexesActivator.
-    private int _chainTriggerImageId = 0;       // первый CS (триггер цепочки)
-    private int _chainStep = 0;                 // индекс шага (1 = первый у-рефлекс сработал)
-    private int _chainActivationPulse = 0;      // пульс активации первого у-рефлекса цепочки
-    // Уже отреплейнутые стимулы текущей цепочки — защита от цикла (мотор2→С6 не даёт повторить С6).
-    private readonly HashSet<int> _chainReplayedStimuli = new HashSet<int>();
-
-
     /// <summary>Ожидается ли US после последнего CS (для активного угасания).</summary>
     private bool _pendingCsAwaitingUs;
 
@@ -211,7 +183,6 @@ namespace ISIDA.Reflexes
         if (geneticReflexId == 0)
         {
           TryStrengthenNeutralSequentialLink(pulse, stimulusImageId);
-          TryStrengthenMotorStimulusLink(pulse, stimulusImageId);
         }
 
         var record = new StimulusRecord
@@ -492,96 +463,6 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Устанавливает ссылку на систему мотор→стимул ассоциаций (вторичная инициализация).
-    /// Вызывается из IsidaEngine после инициализации MotorStimulusAssociationSystem.
-    /// </summary>
-    /// <param name="system">Система мотор→стимул ассоциаций.</param>
-    /// <exception cref="ArgumentNullException">Передана null-ссылка.</exception>
-    internal void SetMotorStimulusAssociations(MotorStimulusAssociationSystem system)
-    {
-      _motorStimulusAssociations = system ?? throw new ArgumentNullException(nameof(system));
-    }
-
-    /// <summary>
-    /// Фиксирует выполненный мотор как «последний» для обучения мотор→стимул связей.
-    /// Вызывается из ReflexesActivator при штатном выполнении рефлекса (ExecuteReflexes),
-    /// НЕ при разыгрывании звена цепочки — прогон цепочки не должен обучаться.
-    /// Если мотор приходит в том же пульсе, что и последнее предъявление CS, а кандидат
-    /// на подкрепление ещё не потреблён — мотор НЕ затирает кандидата, а уходит в
-    /// «удерживаемый» (heldMotor). Это позволяет первому звену усилиться до того,
-    /// как второй мотор станет кандидатом для следующего CS (регресс Случая 23).
-    /// </summary>
-    /// <param name="motorActionId">ID моторного действия.</param>
-    /// <param name="pulse">Пульс выполнения мотора.</param>
-    internal void SetLastMotorAction(int motorActionId, int pulse)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        // Если есть живой непотреблённый кандидат и мотор-реакция пришла в пределах окна τ
-        // от него — не затираем кандидата, а удерживаем мотор для следующего CS. Иначе —
-        // штатная замена кандидата (первый мотор или кандидат уже подкреплён/остыл).
-        if (_lastMotorActionId > 0 &&
-            !_motorStimulusLinkConsumed &&
-            pulse <= _lastMotorPulse + _conditionedReflexes.Settings.TimeWindowPulses)
-        {
-          _heldMotorActionId = motorActionId;
-          _heldMotorPulse = pulse;
-          return;
-        }
-
-        // Иначе — штатная замена кандидата.
-        _lastMotorActionId = motorActionId;
-        _lastMotorPulse = pulse;
-        _motorStimulusLinkConsumed = false;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Укрепляет мотор→стимул связь: если последний выполненный мотор сработал в окне τ
-    /// до текущего нейтрального CS, усиливает связь MotorId → StimulusImageId.
-    /// Усиливает связь только для ПЕРВОГО нейтрального CS после мотора.
-    /// Вызывается из RecordStimulus() при geneticReflexId == 0.
-    /// </summary>
-    /// <param name="currentPulse">Пульс текущего стимула.</param>
-    /// <param name="currentImageId">Образ текущего стимула.</param>
-    private void TryStrengthenMotorStimulusLink(int currentPulse, int currentImageId)
-    {
-      if (_lastMotorActionId <= 0 || _motorStimulusAssociations == null)
-        return;
-
-      // Мотор уже связан с первым CS после него — второй и последующие CS
-      // в том же окне не должны «перехватывать» мотор.
-      if (_motorStimulusLinkConsumed)
-        return;
-
-      int timeWindow = _conditionedReflexes.Settings.TimeWindowPulses;
-      // currentPulse <= _lastMotorPulse — намеренная защита от ложной связи «мотор → собственный
-      // триггер»: в ActiveFromPhrase ExecuteReflexes (SetLastMotorAction) и RecordStimulus идут
-      // в одном пульсе, поэтому CS того же пульса связывать нельзя.
-      if (currentPulse <= _lastMotorPulse || currentPulse - _lastMotorPulse > timeWindow)
-        return;
-
-      _motorStimulusAssociations.StrengthenLink(_lastMotorActionId, currentImageId);
-      _motorStimulusLinkConsumed = true;
-
-      // После подкрепления кандидата продвигаем удержанный мотор-реакцию в кандидаты,
-      // чтобы следующий CS (CS₃) мог усилить связь M₂→CS₃ (регресс Случая 23).
-      if (_heldMotorActionId > 0)
-      {
-        _lastMotorActionId = _heldMotorActionId;
-        _lastMotorPulse = _heldMotorPulse;
-        _motorStimulusLinkConsumed = false;
-        _heldMotorActionId = 0;
-        _heldMotorPulse = 0;
-      }
-    }
-
-    /// <summary>
     /// Получает последние стимулы в пределах временного окна
     /// </summary>
     public List<StimulusRecord> GetRecentStimuli(int currentPulse, int timeWindowPulses)
@@ -645,8 +526,6 @@ namespace ISIDA.Reflexes
       _conditionedReflexes.ApplyDecay();
       if (SensoryAssociationSystem.IsInitialized)
         SensoryAssociationSystem.Instance.ApplyDecay();
-      if (_motorStimulusAssociations != null)
-        _motorStimulusAssociations.ApplyDecay();
     }
 
     /// <summary>
@@ -1037,123 +916,6 @@ namespace ISIDA.Reflexes
 
     #endregion
 
-    #region Цепочки у-рефлексов (реплей виртуальных стимулов)
-
-    /// <summary>
-    /// Записывает активацию у-рефлекса в контексте цепочки.
-    /// Вызывается из <c>ReflexesActivator.ExecuteReflexes</c> после успешной активации у-рефлекса.
-    /// Первый вызов для данного триггера устанавливает <c>_chainTriggerImageId</c> и <c>_chainStep = 1</c>.
-    /// </summary>
-    /// <param name="conditionedReflexId">ID у-рефлекса, который только что сработал.</param>
-    /// <param name="triggerStimulusId">ID стимула, который его активировал (первый CS цепочки).</param>
-    internal void RecordConditionedReflexActivation(int conditionedReflexId, int triggerStimulusId)
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        // Первый шаг цепочки: сбрасываем HashSet отреплейнутых стимулов и фиксируем триггер.
-        // Все последующие шаги (step > 1) не перезаписывают триггер — он сохраняется от первого вызова.
-        if (_chainStep == 0)
-        {
-          _chainReplayedStimuli.Clear();
-          _chainReplayedStimuli.Add(triggerStimulusId);
-        }
-        _chainTriggerImageId = triggerStimulusId;
-        _chainStep = 1;
-        _chainActivationPulse = AppGlobalState.Lifetime;
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    /// <summary>
-    /// Проверяет, есть ли цепочка, и возвращает стимул для реплея (второй CS цепочки).
-    /// true — есть следующий шаг, false — цепочка завершена или не начата.
-    /// </summary>
-    /// <param name="nextStimulusId">ID стимула для реплея (второй CS).</param>
-    /// <returns>True, если цепочка продолжается.</returns>
-    internal bool TryGetNextChainStimulus(out int nextStimulusId)
-    {
-      nextStimulusId = 0;
-      if (_chainTriggerImageId <= 0 || _chainStep <= 0)
-        return false;
-
-      // Таймаут шага: если прошло слишком много пульсов — цепочка мертва.
-      int timeout = _conditionedReflexes.Settings.ConditionedReflexChainStepTimeout;
-      if (timeout > 0 && AppGlobalState.Lifetime - _chainActivationPulse > timeout)
-      {
-        _chainStep = 0;
-        return false;
-      }
-
-      // Ищем активируемые стимулы для последнего выполненного мотора.
-      if (_motorStimulusAssociations == null || _lastMotorActionId <= 0)
-      {
-        _chainStep = 0;
-        return false;
-      }
-
-      var activatable = _motorStimulusAssociations.GetActivatableStimuli(_lastMotorActionId);
-      if (activatable == null || activatable.Count == 0)
-      {
-        _chainStep = 0;
-        return false;
-      }
-
-      // Берём первый активируемый стимул, ещё не отреплейнутый в этой цепочке (защита от цикла).
-      int chosen = 0;
-      foreach (var s in activatable)
-      {
-        if (!_chainReplayedStimuli.Contains(s))
-        {
-          chosen = s;
-          break;
-        }
-      }
-      if (chosen == 0)
-      {
-        // Все активируемые стимулы уже использованы — цепочка завершена.
-        _chainStep = 0;
-        return false;
-      }
-
-      nextStimulusId = chosen;
-      _chainReplayedStimuli.Add(chosen);
-      _chainStep++;
-
-      // Проверяем, не достигли ли макс. длины цепочки.
-      int maxLen = _conditionedReflexes.Settings.ConditionedReflexMaxChainLength;
-      if (maxLen > 0 && _chainStep >= maxLen)
-      {
-        _chainStep = 0;
-      }
-
-      return true;
-    }
-
-    /// <summary>
-    /// Сбрасывает состояние цепочки (вызывается при необходимости извне, например при смене условий).
-    /// </summary>
-    internal void ResetChainState()
-    {
-      _lock.EnterWriteLock();
-      try
-      {
-        _chainTriggerImageId = 0;
-        _chainStep = 0;
-        _chainActivationPulse = 0;
-        _chainReplayedStimuli.Clear();
-      }
-      finally
-      {
-        _lock.ExitWriteLock();
-      }
-    }
-
-    #endregion
-
     #region Управление жизненным циклом рефлексов
 
     /// <summary>
@@ -1172,18 +934,6 @@ namespace ISIDA.Reflexes
         _pendingCsStimulusImageId = 0;
         _pendingCsToneId = 0;
         _pendingCsMoodId = 0;
-
-        // Сброс состояния мотора (страховка при выгрузке/сбросе тестов).
-        _lastMotorActionId = 0;
-        _lastMotorPulse = 0;
-        _motorStimulusLinkConsumed = false;
-        _heldMotorActionId = 0;
-        _heldMotorPulse = 0;
-
-        // Сброс состояния цепочки у-рефлексов.
-        _chainTriggerImageId = 0;
-        _chainStep = 0;
-        _chainActivationPulse = 0;
 
         // Сброс истории CS текущего испытания и накопителя латентного торможения:
         // оба живут только в памяти сервиса (не персистятся) и при сбросе движка/теста

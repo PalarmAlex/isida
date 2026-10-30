@@ -79,8 +79,6 @@ namespace Isida.Tests
       GeneticReflexesSystem.InitializeWithChains(ReflexChainsSystem.Instance);
       SensoryAssociationSystem.InitializeInstance(
           GeneticReflexesSystem.Instance, ConditionedReflexesSystem.Instance);
-      MotorStimulusAssociationSystem.InitializeInstance(
-          GeneticReflexesSystem.Instance, ConditionedReflexesSystem.Instance);
       ReflexTreeSystem.InitializeInstance(
           GeneticReflexesSystem.Instance,
           ConditionedReflexesSystem.Instance,
@@ -88,9 +86,6 @@ namespace Isida.Tests
           ReflexChainsSystem.Instance);
       ConditionedReflexFormationService.InitializeInstance(
           GomeostasSystem.Instance, GeneticReflexesSystem.Instance, ConditionedReflexesSystem.Instance);
-      // Вторичная инициализация как в IsidaEngine: FormationService получает систему мотор→стимул связей.
-      ConditionedReflexFormationService.Instance.SetMotorStimulusAssociations(
-          MotorStimulusAssociationSystem.Instance);
 
       // Сервис выполнения рефлексов инициализируется ДО активатора: активатор получает
       // ReflexExecutionService.Instance в конструктор (см. IsidaEngine, шаг 14).
@@ -100,7 +95,6 @@ namespace Isida.Tests
           GeneticReflexesSystem.Instance,
           ConditionedReflexesSystem.Instance);
 
-      // Вторичная инициализация: активатор получает мотор→стимул связи для транзитивных цепочек.
       ReflexesActivator.InitializeInstance(
           GomeostasSystem.Instance,
           GeneticReflexesSystem.Instance,
@@ -112,8 +106,6 @@ namespace Isida.Tests
           AdaptiveActionsSystem.Instance,
           ConditionedReflexFormationService.Instance,
           PerceptionImagesSystem.Instance);
-      ReflexesActivator.Instance.SetMotorStimulusAssociations(
-          MotorStimulusAssociationSystem.Instance);
 
       ResetToCleanState();
     }
@@ -167,10 +159,6 @@ namespace Isida.Tests
             ?.GetValue(SensoryAssociationSystem.Instance) as System.Collections.IDictionary)
             ?.Clear();
       }
-
-      // 3b. Мотор→стимул связи — к чистому состоянию.
-      if (MotorStimulusAssociationSystem.IsInitialized)
-        MotorStimulusAssociationSystem.Instance.ClearAll();
 
       // 4. Пульс времени: 0 — детерминированная стартовая точка (в т.ч. для
       //    ApplyDecay() сенсорных связей, срабатывающего на кратных 1000 пульсов).
@@ -311,7 +299,6 @@ namespace Isida.Tests
     {
       // Порядок как в IsidaEngine.Shutdown: сначала сервисы поверх CRS, затем сам CRS.
       try { if (ConditionedReflexFormationService.IsInitialized) ConditionedReflexFormationService.Instance.Dispose(); } catch { }
-      try { if (MotorStimulusAssociationSystem.IsInitialized) MotorStimulusAssociationSystem.Instance.Dispose(); } catch { }
       try { if (ReflexTreeSystem.IsInitialized) ReflexTreeSystem.Instance.Dispose(); } catch { }
       try { if (SensoryAssociationSystem.IsInitialized) SensoryAssociationSystem.Instance.Dispose(); } catch { }
       try { if (ConditionedReflexesSystem.IsInitialized) ConditionedReflexesSystem.Instance.Dispose(); } catch { }

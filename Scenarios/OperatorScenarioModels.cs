@@ -36,9 +36,9 @@ namespace ISIDA.Scenarios
   /// <summary>Оценка выполнения звена цепочки рефлексов, которую сценарий подставляет вместо ручного переключателя на пульте.</summary>
   public enum ScenarioChainStepResult
   {
-    /// <summary>Нет оценки — сигнал в движок не отправляется, цепочка прервётся по таймауту TransitiveChainStepEvaluationTimeout.</summary>
+    /// <summary>Нет оценки — сигнал в движок не отправляется, цепочка прервётся по таймауту ожидания оценки (ReflexActionDisplayDuration).</summary>
     None = 0,
-    /// <summary>Успех — SetChainStepResult(true): переход к следующему звену транзитивной цепочки.</summary>
+    /// <summary>Успех — SetChainStepResult(true): переход к следующему звену цепочки.</summary>
     Success = 1,
     /// <summary>Неудача — SetChainStepResult(false): цепочка завершается на текущем звене.</summary>
     Failure = 2

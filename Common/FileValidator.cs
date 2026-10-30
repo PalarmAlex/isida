@@ -32,12 +32,6 @@ namespace ISIDA.Common
       public const string SensoryAssociationsFields =
           "# Format: EarlierImageId|LaterImageId|Strength|LastStrengthen|BirthTime|MaxAchievedStrength";
 
-      // Мотор→стимул ассоциации (MotorStimulusAssociationSystem)
-      public const string MotorStimulusAssociationsFormat =
-          "# MotorStimulusAssociations: связи «моторное действие → образ-стимул»";
-      public const string MotorStimulusAssociationsFields =
-          "# Format: MotorId|StimulusImageId|Strength|LastStrengthen|BirthTime|MaxAchievedStrength";
-
       // Образы восприятия (пусковые стимулы для условных рефлексов)
       public const string PerceptionImagesFormat = "# ID|InfluenceActionsList|PhraseIdList|CommandPatternIdList|VisualColorId";
       public const string PerceptionImagesLists = "# Формат списков: id1,id2,id3";

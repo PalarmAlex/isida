@@ -489,8 +489,6 @@ namespace ISIDA.Common
       SafeDispose(ConditionedReflexes, "ConditionedReflexes");
       if (SensoryAssociationSystem.IsInitialized)
         SafeDispose(SensoryAssociationSystem.Instance, "SensoryAssociationSystem");
-      if (MotorStimulusAssociationSystem.IsInitialized)
-        SafeDispose(MotorStimulusAssociationSystem.Instance, "MotorStimulusAssociationSystem");
       SafeDispose(GeneticReflexes, "GeneticReflexes");
       SafeDispose(PerceptionImages, "PerceptionImages");
       SafeDispose(SensorySystem, "SensorySystem");
@@ -740,11 +738,6 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
             context.GeneticReflexes,
             context.ConditionedReflexes);
 
-        // Мотор→стимул ассоциации — зеркало сенсорных CS↔CS (те же зависимости: путь к данным + настройки).
-        MotorStimulusAssociationSystem.InitializeInstance(
-            context.GeneticReflexes,
-            context.ConditionedReflexes);
-
         // Шаг 13: Дерево рефлексов
         initializationStep = 13;
         ReflexTreeSystem.InitializeInstance(
@@ -770,10 +763,6 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
             context.GeneticReflexes,
             context.ConditionedReflexes);
         context.ConditionedReflexFormation = ConditionedReflexFormationService.Instance;
-
-        // Вторичная инициализация: сервис формирования получает мотор→стимул связи для обучения цепочек.
-        context.ConditionedReflexFormation.SetMotorStimulusAssociations(
-            MotorStimulusAssociationSystem.Instance);
 
         // Шаг 16: Активатор рефлексов
         initializationStep = 16;
@@ -978,8 +967,6 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         context.ReflexesActivator.SetResearchLogger(context.ResearchLogger);
         context.AutomatismExecution.SetResearchLogger(context.ResearchLogger);
         context.ReflexesActivator.SetPsychicSystemm(context.PsychicSystem);
-        context.ReflexesActivator.SetMotorStimulusAssociations(
-            MotorStimulusAssociationSystem.Instance);
         AppGlobalState.WaitingPeriodForActionsVal = config.WaitingPeriodForActionsVal > 0
             ? config.WaitingPeriodForActionsVal
             : 30;
