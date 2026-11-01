@@ -1571,10 +1571,10 @@ namespace ISIDA.Psychic
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
 
           // Период ожидания оценки оператора: только после фактической активации автоматизма (сброс таймера при каждом успешном запуске)
-          if (AppGlobalState.EvolutionStage >= 2)
-          {
-            AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
-          }
+          //if (AppGlobalState.EvolutionStage >= 2)
+          //{
+          //  AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
+          //}
           _currentAutomatizmId = automatizm.ID;
         }
         else
