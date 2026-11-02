@@ -473,12 +473,14 @@ namespace ISIDA.Actions
             phraseIdList ?? new List<int>(),
             commandPatternIdList ?? new List<int>(),
             visualColorId);
-        // для б/у рефлексов: EA + Command (порядок Command важен); фразу и цвет не включаем
+        // для б/у рефлексов: EA + Command (порядок Command важен); фразу не включаем,
+        // цвет берём из visualColorId — иначе при активном документе (цвет != белый) создавался
+        // отдельный «нейтральный» белый образ-дубль (код 0) поверх цветного CS-образа.
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(
             operatorStimulusIds,
             new List<int>(),
             commandPatternIdList ?? new List<int>(),
-            AgentVisualColor.White);
+            visualColorId);
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
         // Зрительный канал (цвет сцены) — модальность контекста CS (подмешан в
