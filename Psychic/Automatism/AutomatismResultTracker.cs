@@ -503,8 +503,9 @@ namespace ISIDA.Psychic
 
     /// <summary>
     /// Сообщить от хоста о завершении моторного выполнения автоматизма.
-    /// Переснимает «до»-снимок состояния (после мотора, до окна ожидания) и перезапускает
-    /// таймер <see cref="AppGlobalState.WaitingForOperatorEvaluation"/> с текущего пульса.
+    /// Если к моменту завершения мотора состояние гомеостаза уже изменилось относительно снимка «до автоматизма»
+    /// — немедленно оценить результат по дельте и закрыть окно ожидания.
+    /// Если состояние ещё не отреагировало — перезапустить таймер ожидания, пока метрика не откликнется.
     /// Вызывается хостом адаптера после фактического завершения рецепта/диалога SW.
     /// </summary>
     /// <param name="automatizmId">ID автоматизма, мотор которого завершён.</param>
@@ -515,22 +516,42 @@ namespace ISIDA.Psychic
 
       try
       {
-        // Снимок «ДО» для оценки — после завершения мотора, до начала окна ожидания.
-        // Это корректная точка отсчёта: дельта состояния будет отражать эффект мотора,
-        // а не шум во время длительного диалога.
-        AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
+        var lastResult = GetLastResult(automatizmId);
+        var stateBefore = lastResult?.PreviousState ?? AppGlobalState.CurrentOverallState;
+        var stateAfter = AppGlobalState.CurrentOverallState;
+
+        // Если состояние уже изменилось с момента запуска автоматизма — оценить немедленно и закрыть окно.
+        // Переиспользуем FinishTracking: он сам выставит CurrentState, вызовет AnalyzeResult,
+        // запишет в эпизодическую память и обновит статистику.
+        if (stateBefore != stateAfter)
+        {
+          if (lastResult != null)
+          {
+            lastResult.CurrentState = stateAfter;
+            lastResult.EndPulse = GlobalTimer.GlobalPulsCount;
+            FinishTracking(lastResult);
+          }
+
+          AppGlobalState.ResetWaitingForOperatorEvaluation();
+          Logger.Info(
+              $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
+              $"state={stateBefore}→{stateAfter} (оценка по метрике)");
+          return;
+        }
+
+        // Состояние ещё не изменилось — перезапустить снимок и таймер ожидания.
+        AppGlobalState.StateBeforeOperatorImpact = stateAfter;
 
         if (AppGlobalState.EvolutionStage >= 2)
           CaptureOperatorEvaluationParameterSnapshot();
         else
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
 
-        // Перезапустить таймер ожидания с текущего пульса — мотор завершён, начинаем отсчёт.
         AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
 
         Logger.Info(
             $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
-            $"state={AppGlobalState.CurrentOverallState}");
+            $"state={stateAfter} (ожидание реакции метрики)");
       }
       catch (Exception ex)
       {
