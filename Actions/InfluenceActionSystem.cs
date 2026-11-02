@@ -473,14 +473,19 @@ namespace ISIDA.Actions
             phraseIdList ?? new List<int>(),
             commandPatternIdList ?? new List<int>(),
             visualColorId);
-        // для б/у рефлексов: EA + Command (порядок Command важен); фразу не включаем,
-        // цвет берём из visualColorId — иначе при активном документе (цвет != белый) создавался
-        // отдельный «нейтральный» белый образ-дубль (код 0) поверх цветного CS-образа.
+        // для б/у рефлексов: EA + Command (порядок Command важен); фразу не включаем.
+        // Цвет — ВСЕГДА белый (AgentVisualColor.White): б/у-рефлексы заводятся руками в справочнике
+        // без цвета, и в ReflexTree.dat на уровне триггера (ActionID) стоит ID белого образа.
+        // Дерево рефлексов матчится по ID образа (ReflexTreeSystem.GetReflexTreeNode → child.ActionID),
+        // поэтому триггер обязан схлопнуться в существующий белый образ. Если передать visualColorId,
+        // при активном документе (цвет 1/2/3) создастся отдельный цветной образ, на который в дереве
+        // ссылки нет → DetectedLevel<2 → б/у-рефлекс не найден → срабатывает рефлекс по умолчанию (-1)
+        // → G_AD=1 (случай 32). Цветной образ остаётся только за CS-путём (ActiveCurTriggerStimulusID).
         ActiveCurReflexTriggerStimulusID = CreatePerceptionImage(
             operatorStimulusIds,
             new List<int>(),
             commandPatternIdList ?? new List<int>(),
-            visualColorId);
+            AgentVisualColor.White);
         AppGlobalState.LastTriggerStimulusID = ActiveCurTriggerStimulusID;
 
         // Зрительный канал (цвет сцены) — модальность контекста CS (подмешан в
