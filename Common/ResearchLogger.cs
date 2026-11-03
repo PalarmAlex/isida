@@ -140,6 +140,12 @@ namespace ISIDA.Common
       public int? CurrentAutomatizmID { get; set; }
       /// <summary>Полезность автоматизма на момент снимка (из справочника), если активен автоматизм.</summary>
       public int? CurrentAutomatizmUsefulness { get; set; }
+      /// <summary>
+      /// ID узла дерева автоматизмов, по которому сматчился активный автоматизм (колонка «ТриггерАВ»).
+      /// Заполняется только при активном автоматизме: это его честный аналог Level3 у усл. рефлекса
+      /// (у автоматизмов PerceptionImage-предъявление триггером не является).
+      /// </summary>
+      public int? CurrentAutomatizmTreeNodeId { get; set; }
       public int? HasCriticalChanges { get; set; }
       public int? OrientationReflexType { get; set; }
       public int? OrientationReflexPulse { get; set; }
@@ -878,6 +884,13 @@ namespace ISIDA.Common
                 : ""),
         // Автоматизм — при смене ID или при смене полезности того же ID (иначе в строке была бы «Полезность» без номера).
         ["Автоматизм"] = logAutomatizmId ? state.CurrentAutomatizmID.ToString() : "",
+        // ТриггерАВ — ID узла дерева автоматизмов, по которому сматчился активный автоматизм.
+        // Пишется только при активном АВ и только при смене узла (дельта, как у «Триггер»).
+        // Это аналог «Триггер» для рефлексов (у них там PerceptionImage = Level3 у усл. рефлекса);
+        // у автоматизмов PerceptionImage-предъявление триггером не является, поэтому отдельная колонка.
+        ["ТриггерАВ"] = (state.CurrentAutomatizmTreeNodeId.HasValue
+                && state.CurrentAutomatizmTreeNodeId != _lastState.CurrentAutomatizmTreeNodeId)
+            ? state.CurrentAutomatizmTreeNodeId.ToString() : "",
         ["Цепочка РФ"] = reflexChainInfo,
         ["Цепочка АВ"] = automatizmChainInfo,
         ["УМ"] = umString,
@@ -1507,6 +1520,10 @@ namespace ISIDA.Common
         CurrentConditionReflexID = finalConditionedReflexId,
         CurrentAutomatizmID = atmInfo.Id != 0 ? (int?)atmInfo.Id : null,
         CurrentAutomatizmUsefulness = TrySnapshotAutomatizmUsefulness(atmInfo.Id),
+        // Триггер автоматизма — узел дерева, по которому он сматчился (не PerceptionImage-предъявление).
+        // AutomatizmNodeId актуален на пульсе активации (PsychicSystem выставляет его вместе с АВ).
+        CurrentAutomatizmTreeNodeId = atmInfo.Id != 0 && AppGlobalState.AutomatizmNodeId != 0
+            ? (int?)AppGlobalState.AutomatizmNodeId : null,
         HasCriticalChanges = GetHasCriticalChanges(),
         OrientationReflexType = orInfo.Type != 0 ? (int?)orInfo.Type : null,
         OrientationReflexPulse = orInfo.Pulse != 0 ? (int?)orInfo.Pulse : null
@@ -1624,6 +1641,7 @@ namespace ISIDA.Common
                              current.CurrentGeneticReflexID, current.CurrentConditionReflexID) ||
 
              _lastState.CurrentAutomatizmID != current.CurrentAutomatizmID ||
+             _lastState.CurrentAutomatizmTreeNodeId != current.CurrentAutomatizmTreeNodeId ||
              _lastState.OrientationReflexType != current.OrientationReflexType ||
              _lastState.OrientationReflexPulse != current.OrientationReflexPulse ||
              _lastState.ThinkingLevel != current.ThinkingLevel ||
