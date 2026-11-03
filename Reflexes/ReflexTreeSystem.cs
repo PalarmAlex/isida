@@ -1578,6 +1578,7 @@ namespace ISIDA.Reflexes
       return _perceptionImagesSystem.AddPerceptionImage(
           operatorInfluenceIds,
           new List<int>(),
+          visualColorId: reflex.VisualColorId,
           commandPatternIdList: commandIds ?? new List<int>());
     }
 
