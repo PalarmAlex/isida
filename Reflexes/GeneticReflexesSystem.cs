@@ -59,9 +59,12 @@ namespace ISIDA.Reflexes
       /// <summary>ID цепочки рефлексов</summary>
       public int ReflexChainID { get; }
 
+      /// <summary>Код зрительного канала (<see cref="AgentVisualColor"/>): тип активного документа, в котором рефлекс применим; 0 — без документа</summary>
+      public int VisualColorId { get; }
+
       /// <summary>Создает аргументы события</summary>
       public GeneticReflexCreatedEventArgs(int reflexId, int level1, List<int> level2,
-          List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0)
+          List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0, int visualColorId = 0)
       {
         ReflexId = reflexId;
         Level1 = level1;
@@ -69,6 +72,7 @@ namespace ISIDA.Reflexes
         InfluenceActionIds = influenceActionIds;
         CommandPatternIds = commandPatternIds;
         ReflexChainID = reflexChainID;
+        VisualColorId = visualColorId;
       }
     }
 
@@ -226,6 +230,14 @@ namespace ISIDA.Reflexes
       public List<int> CommandPatternIds { get; set; } = new List<int>();
 
       /// <summary>
+      /// Код зрительного канала (<see cref="AgentVisualColor"/>): тип активного документа,
+      /// в котором рефлекс применим (деталь/сборка/чертёж → 1/2/3). 0 (белый) — без активного
+      /// документа. Цвет входит в триггер образа: б/у-рефлекс «заточен» под конкретный тип
+      /// документа и матчится строго по ID цветного образа-триггера.
+      /// </summary>
+      public int VisualColorId { get; set; }
+
+      /// <summary>
       /// Моторные действия рефлекса
       /// </summary>
       public List<int> AdaptiveActions { get; set; } = new List<int>();
@@ -257,9 +269,11 @@ namespace ISIDA.Reflexes
     private readonly Dictionary<int, string> _geneticReflexTriggerKeys = new Dictionary<int, string>();
 
     /// <summary>
-    /// Ключ условий запуска рефлекса: Level1 + Level2 + InfluenceActionIds + CommandPatternIds.
+    /// Ключ условий запуска рефлекса: Level1 + Level2 + InfluenceActionIds + CommandPatternIds + VisualColorId.
     /// Совпадает по смыслу с <see cref="AreReflexesSemanticallyEqual"/>; сам список моторных действий
     /// (<c>AdaptiveActions</c>) и привязка цепочки в ключ не входят — они не участвуют в поиске узла дерева.
+    /// Цвет входит: б/у-рефлекс «заточен» под тип документа, поэтому два рефлекса с одинаковыми
+    /// EA/Command, но разным цветом — разные триггеры (разные узлы дерева), а не дубликаты.
     /// </summary>
     private static string ComputeGeneticReflexTriggerKey(GeneticReflex reflex)
     {
@@ -269,7 +283,7 @@ namespace ISIDA.Reflexes
       var influence = (reflex.InfluenceActionIds ?? new List<int>()).OrderBy(x => x);
       var command = reflex.CommandPatternIds ?? new List<int>(); // порядок важен
 
-      return $"{reflex.Level1}|{string.Join(",", level2)}|{string.Join(",", influence)}|{string.Join(",", command)}";
+      return $"{reflex.Level1}|{string.Join(",", level2)}|{string.Join(",", influence)}|{string.Join(",", command)}|{reflex.VisualColorId}";
     }
 
     /// <summary>Записывает/обновляет замороженный снимок условий рефлекса (без блокировки — вызывается под lock или в конструкторе).</summary>
@@ -398,6 +412,7 @@ namespace ISIDA.Reflexes
     /// <param name="influenceActionIds">Воздействия с пульта оператора (Level3 EA)</param>
     /// <param name="commandPatternIds">Паттерны Command-канала среды (Level3 Command); порядок важен</param>
     /// <param name="adaptiveActions">Моторные действия рефлекса</param>
+    /// <param name="visualColorId">Код зрительного канала (<see cref="AgentVisualColor"/>): тип активного документа, в котором рефлекс применим; 0 — без документа</param>
     /// <returns>ID созданного рефлекса и массив предупреждений (если были скорректированы значения)</returns>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях в влияниях или затратах (вне диапазона -10..+10)</exception>    
@@ -406,7 +421,8 @@ namespace ISIDA.Reflexes
         List<int> level2,
         List<int> influenceActionIds,
         List<int> commandPatternIds,
-        List<int> adaptiveActions)
+        List<int> adaptiveActions,
+        int visualColorId = 0)
     {
       if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с безусловными рефлексами разрешена только в стадии 0");
@@ -414,7 +430,7 @@ namespace ISIDA.Reflexes
       var warnings = new List<string>();
 
       var validationResult = ValidateGeneticReflexParameters(
-          level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
+          level1, level2, influenceActionIds, commandPatternIds, adaptiveActions, visualColorId);
       if (!validationResult.IsValid)
       {
         warnings.Add(validationResult.ErrorMessage);
@@ -428,7 +444,8 @@ namespace ISIDA.Reflexes
         Level2 = level2?.OrderBy(x => x).ToList() ?? new List<int>(),
         InfluenceActionIds = influenceActionIds?.OrderBy(x => x).ToList() ?? new List<int>(),
         CommandPatternIds = commandPatternIds?.ToList() ?? new List<int>(),
-        AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
+        AdaptiveActions = adaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>(),
+        VisualColorId = visualColorId
       };
 
       _lock.EnterReadLock();
@@ -462,7 +479,8 @@ namespace ISIDA.Reflexes
           Level2 = level2 ?? new List<int>(),
           InfluenceActionIds = influenceActionIds ?? new List<int>(),
           CommandPatternIds = commandPatternIds ?? new List<int>(),
-          AdaptiveActions = adaptiveActions ?? new List<int>()
+          AdaptiveActions = adaptiveActions ?? new List<int>(),
+          VisualColorId = visualColorId
         };
 
         _geneticReflexes.Add(newId, geneticReflex);
@@ -475,7 +493,7 @@ namespace ISIDA.Reflexes
 
       try
       {
-        OnGeneticReflexCreated(newId, level1, level2, influenceActionIds, commandPatternIds);
+        OnGeneticReflexCreated(newId, level1, level2, influenceActionIds, commandPatternIds, 0, visualColorId);
       }
       catch (Exception ex)
       {
@@ -487,10 +505,10 @@ namespace ISIDA.Reflexes
 
     /// <summary>Вызывает событие создания рефлекса</summary>
     private void OnGeneticReflexCreated(int reflexId, int level1, List<int> level2,
-        List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0)
+        List<int> influenceActionIds, List<int> commandPatternIds, int reflexChainID = 0, int visualColorId = 0)
     {
       var args = new GeneticReflexCreatedEventArgs(
-          reflexId, level1, level2, influenceActionIds, commandPatternIds, reflexChainID);
+          reflexId, level1, level2, influenceActionIds, commandPatternIds, reflexChainID, visualColorId);
       GeneticReflexCreated?.Invoke(args);
     }
 
@@ -524,7 +542,8 @@ namespace ISIDA.Reflexes
           InfluenceActionIds = new List<int>(originalReflex.InfluenceActionIds),
           CommandPatternIds = new List<int>(originalReflex.CommandPatternIds),
           AdaptiveActions = new List<int>(originalReflex.AdaptiveActions),
-          ReflexChainID = originalReflex.ReflexChainID
+          ReflexChainID = originalReflex.ReflexChainID,
+          VisualColorId = originalReflex.VisualColorId
         };
       }
       finally
@@ -539,7 +558,8 @@ namespace ISIDA.Reflexes
           reflex.Level2,
           reflex.InfluenceActionIds,
           reflex.CommandPatternIds,
-          reflex.AdaptiveActions);
+          reflex.AdaptiveActions,
+          reflex.VisualColorId);
 
       if (!validationResult.IsValid)
       {
@@ -577,7 +597,8 @@ namespace ISIDA.Reflexes
           Level2 = reflex.Level2?.OrderBy(x => x).ToList() ?? new List<int>(),
           InfluenceActionIds = reflex.InfluenceActionIds?.OrderBy(x => x).ToList() ?? new List<int>(),
           CommandPatternIds = reflex.CommandPatternIds?.ToList() ?? new List<int>(),
-          AdaptiveActions = reflex.AdaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>()
+          AdaptiveActions = reflex.AdaptiveActions?.OrderBy(x => x).ToList() ?? new List<int>(),
+          VisualColorId = reflex.VisualColorId
         };
 
         _lock.EnterReadLock();
@@ -627,6 +648,7 @@ namespace ISIDA.Reflexes
         List<int> influenceActionIds = reflex.InfluenceActionIds?.ToList() ?? new List<int>();
         List<int> commandPatternIds = reflex.CommandPatternIds?.ToList() ?? new List<int>();
         List<int> adaptiveActions = reflex.AdaptiveActions?.ToList() ?? new List<int>();
+        int visualColorId = reflex.VisualColorId;
 
         // Удаляем старый рефлекс (это вызовет событие удаления и очистит ссылки в дереве)
         bool removed = RemoveGeneticReflex(oldReflexId);
@@ -638,7 +660,7 @@ namespace ISIDA.Reflexes
 
         // Создаем новый рефлекс с теми же параметрами
         var (newReflexId, createWarnings) = AddGeneticReflex(
-            level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
+            level1, level2, influenceActionIds, commandPatternIds, adaptiveActions, visualColorId);
 
         warnings.AddRange(createWarnings);
 
@@ -686,7 +708,7 @@ namespace ISIDA.Reflexes
         {
           OnGeneticReflexDeleted(newReflexId);
           OnGeneticReflexCreated(
-              oldReflexId, level1, level2, influenceActionIds, commandPatternIds, chainIdForEvent);
+              oldReflexId, level1, level2, influenceActionIds, commandPatternIds, chainIdForEvent, visualColorId);
         }
 
         return warnings.ToArray();
@@ -1038,8 +1060,13 @@ namespace ISIDA.Reflexes
             var commandPatternIds = parts.Length > 4 ? AddUtils.ParseIntList(parts[4]) : new List<int>();
             var adaptiveActions = parts.Length > 5 ? AddUtils.ParseIntList(parts[5]) : new List<int>();
 
+            // 8-е поле — код зрительного канала; у старых файлов его нет, fallback 0 (без документа)
+            int visualColorId = 0;
+            if (parts.Length > 7 && !int.TryParse(parts[7].Trim(), out visualColorId))
+              visualColorId = 0;
+
             var validationResult = ValidateGeneticReflexParameters(
-                level1, level2, influenceActionIds, commandPatternIds, adaptiveActions);
+                level1, level2, influenceActionIds, commandPatternIds, adaptiveActions, visualColorId);
             if (!validationResult.IsValid)
               continue;
 
@@ -1055,7 +1082,8 @@ namespace ISIDA.Reflexes
               InfluenceActionIds = influenceActionIds,
               CommandPatternIds = commandPatternIds,
               AdaptiveActions = adaptiveActions,
-              ReflexChainID = reflexChainID
+              ReflexChainID = reflexChainID,
+              VisualColorId = visualColorId
             };
 
             _geneticReflexes[reflex.Id] = reflex;
@@ -1075,7 +1103,8 @@ namespace ISIDA.Reflexes
                 FileHeaders.GeneticReflexesInfluenceActionIds,
                 FileHeaders.GeneticReflexesCommandPatternIds,
                 FileHeaders.GeneticReflexesActions,
-                FileHeaders.GeneticReflexesChain
+                FileHeaders.GeneticReflexesChain,
+                FileHeaders.GeneticReflexesVisualColor
             };
           File.WriteAllLines(path, lines);
 
@@ -1115,7 +1144,8 @@ namespace ISIDA.Reflexes
                 reflex.Level2,
                 reflex.InfluenceActionIds,
                 reflex.CommandPatternIds,
-                reflex.AdaptiveActions);
+                reflex.AdaptiveActions,
+                reflex.VisualColorId);
 
             if (!validationResult.IsValid)
             {
@@ -1155,7 +1185,8 @@ namespace ISIDA.Reflexes
         FileHeaders.GeneticReflexesInfluenceActionIds,
         FileHeaders.GeneticReflexesCommandPatternIds,
         FileHeaders.GeneticReflexesActions,
-        FileHeaders.GeneticReflexesChain
+        FileHeaders.GeneticReflexesChain,
+        FileHeaders.GeneticReflexesVisualColor
     };
 
         foreach (var reflex in _geneticReflexes.Values.OrderBy(r => r.Id))
@@ -1165,7 +1196,8 @@ namespace ISIDA.Reflexes
                    $"{string.Join(",", reflex.InfluenceActionIds)}|" +
                    $"{string.Join(",", reflex.CommandPatternIds)}|" +
                    $"{string.Join(",", reflex.AdaptiveActions)}|" +
-                   $"{reflex.ReflexChainID}");
+                   $"{reflex.ReflexChainID}|" +
+                   $"{reflex.VisualColorId}");
         }
 
         var minLinesCount = 7;
@@ -1254,6 +1286,7 @@ namespace ISIDA.Reflexes
       if (!a.Level2.OrderBy(x => x).SequenceEqual(b.Level2.OrderBy(x => x))) return false;
       if (!a.InfluenceActionIds.OrderBy(x => x).SequenceEqual(b.InfluenceActionIds.OrderBy(x => x))) return false;
       if (!(a.CommandPatternIds ?? new List<int>()).SequenceEqual(b.CommandPatternIds ?? new List<int>())) return false;
+      if (a.VisualColorId != b.VisualColorId) return false;
       return true;
     }
 
@@ -1265,8 +1298,17 @@ namespace ISIDA.Reflexes
         List<int> level2,
         List<int> influenceActionIds,
         List<int> commandPatternIds,
-        List<int> adaptiveActions)
+        List<int> adaptiveActions,
+        int visualColorId = 0)
     {
+      // Проверка кода зрительного канала — тип активного документа (0 = белый/без документа)
+      if (!AgentVisualColor.IsValidCode(visualColorId))
+      {
+        return (false,
+            $"Недопустимый код зрительного канала VisualColorId={visualColorId} " +
+            $"(допустимо {AgentVisualColor.MinCode}..{AgentVisualColor.MaxCode})");
+      }
+
       // Проверка Level1 - базовые состояния гомеостаза
       var validBaseStates = new[] { -1, 0, 1 }; // Bad, Normal, Well
       if (!validBaseStates.Contains(level1))
@@ -1394,7 +1436,8 @@ namespace ISIDA.Reflexes
           reflex.Level2,
           reflex.InfluenceActionIds,
           reflex.CommandPatternIds,
-          reflex.AdaptiveActions);
+          reflex.AdaptiveActions,
+          reflex.VisualColorId);
 
       errorMessage = validationResult.ErrorMessage;
       return validationResult.IsValid;
@@ -1413,7 +1456,8 @@ namespace ISIDA.Reflexes
           reflex.Level2,
           reflex.InfluenceActionIds,
           reflex.CommandPatternIds,
-          reflex.AdaptiveActions);
+          reflex.AdaptiveActions,
+          reflex.VisualColorId);
     }
 
     #endregion

@@ -14,18 +14,19 @@ namespace Isida.Tests
   /// Проверка зрительного канала образов, создаваемых
   /// <see cref="InfluenceActionSystem.ApplyMultipleInfluenceActions"/>.
   ///
-  /// На каждый стимул создаются ДВА образа восприятия:
+  /// На каждый стимул создаются образы восприятия:
   /// - CS-образ (<see cref="InfluenceActionSystem.ActiveCurTriggerStimulusID"/>) — с текущим
   ///   <c>visualColorId</c>: цвет различает «деталь / сборка / чертёж» в условном рефлексе;
-  /// - б/у-триггер (<see cref="InfluenceActionSystem.ActiveCurReflexTriggerStimulusID"/>) — ВСЕГДА
-  ///   белый (код 0): б/у-рефлексы заводятся руками в справочнике без цвета, и в ReflexTree.dat
-  ///   на уровне триггера стоит ID именно белого образа. Дерево рефлексов матчится по ID образа,
-  ///   поэтому триггер обязан схлопываться в существующий белый образ (иначе б/у-рефлекс не
-  ///   находится и срабатывает рефлекс по умолчанию → G_AD=1).
+  /// - б/у-триггер (<see cref="InfluenceActionSystem.ActiveCurReflexTriggerStimulusID"/>) — с тем же
+  ///   <c>visualColorId</c>. Б/у-рефлекс теперь несёт собственный код зрительного канала
+  ///   (GeneticReflex.VisualColorId), и при привязке узла дерева триггерный образ заводится тем же
+  ///   цветом, поэтому в ReflexTree.dat на уровне триггера стоит ID цветного образа нужного типа
+  ///   документа и матчинг по ID образа сходится. При одинаковом наборе EA+Command+цвет CS-образ и
+  ///   б/у-триггер схлопываются в ОДИН образ (дедупликация), дубля нет.
   ///
-  /// Случай 30 (ошибочный диагноз) пытался убрать «белый дубль», передав в б/у-триггер цветной
-  /// <c>visualColorId</c> — это ломало поиск б/у-рефлексов при активном документе (случай 32).
-  /// Исправление: б/у-триггер снова всегда белый; цветной образ остаётся только за CS-путём.
+  /// Исторически (случай 32) б/у-триггер был жёстко белым, потому что б/у-рефлексы не имели своего
+  /// цвета и узел дерева ссылался на белый образ. После добавления GeneticReflex.VisualColorId это
+  /// ограничение снято: цвет б/у-триггера = цвет рефлекса.
   /// </summary>
   [Collection("EngineIntegration")]
   public sealed class ApplyMultipleInfluenceActionsVisualColorTests
@@ -38,11 +39,12 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// При не-белом <c>visualColorId</c> CS-образ получает цвет, а б/у-триггер остаётся белым.
-    /// Оба образа содержат один и тот же command-паттерн, но различаются зрительным каналом.
+    /// При не-белом <c>visualColorId</c> CS-образ и б/у-триггер получают ОДИН И ТОТ ЖЕ цвет.
+    /// Поскольку набор EA+Command+цвет совпадает, оба схлопываются в один образ восприятия
+    /// (дедупликация <c>CreatePerceptionImage</c>), дубля нет.
     /// </summary>
     [Fact]
-    public void ApplyMultipleInfluenceActions_WithCommandPattern_CsColoredReflexTriggerWhite()
+    public void ApplyMultipleInfluenceActions_WithCommandPattern_CsAndReflexTriggerBothColored()
     {
       int actionId = PrepareOperatorAction();
       int commandPatternId = _engine.NextSeed();
@@ -59,12 +61,16 @@ namespace Isida.Tests
       Assert.NotNull(csImage);
       Assert.NotNull(reflexImage);
 
-      // CS-образ наследует цвет сцены (модальность контекста условного рефлекса).
+      // Оба образа наследуют цвет сцены: б/у-триггер больше не жёстко белый.
       Assert.Equal(visualColor, csImage.VisualColorId);
-      // Б/у-триггер всегда белый — канонический образ для узлов ReflexTree.dat (код 0).
-      Assert.Equal(AgentVisualColor.White, reflexImage.VisualColorId);
+      Assert.Equal(visualColor, reflexImage.VisualColorId);
 
-      // Оба образа содержат один и тот же command-паттерн.
+      // Одинаковый набор EA+Command+цвет → один и тот же образ (дедупликация).
+      Assert.Equal(
+          InfluenceActionSystem.Instance.ActiveCurTriggerStimulusID,
+          InfluenceActionSystem.Instance.ActiveCurReflexTriggerStimulusID);
+
+      // Образ содержит command-паттерн.
       Assert.Contains(commandPatternId, csImage.CommandPatternIdList);
       Assert.Contains(commandPatternId, reflexImage.CommandPatternIdList);
     }

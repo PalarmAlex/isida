@@ -189,6 +189,7 @@ namespace ISIDA.Reflexes
                     ? InfluenceActionSystem.Instance.FilterOperatorStimulusActionIds(e.InfluenceActionIds)
                     : (e.InfluenceActionIds ?? new List<int>()),
                 new List<int>(),
+                visualColorId: e.VisualColorId,
                 commandPatternIdList: e.CommandPatternIds ?? new List<int>());
           }
         }

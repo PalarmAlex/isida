@@ -41,13 +41,15 @@ namespace ISIDA.Common
           "# VisualColorId: 0 белый, 1 чёрный, 2–8 спектр (см. AgentVisualColor); столбец опционален в старых файлах (как 0)";
 
       // Безусловные рефлексы
-      public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|influence_action_ids|command_pattern_ids|Моторные действия|ReflexChainID";
+      public const string GeneticReflexesFormat = "# Формат: ID|Level1|Level2|influence_action_ids|command_pattern_ids|Моторные действия|ReflexChainID|VisualColorId";
       public const string GeneticReflexesLevel1 = "# Level1: Интегральное базовое состояние гомеостаза: -1: 0: 1";
       public const string GeneticReflexesLevel2 = "# Level2: Контексты реагирования: id1,id2,id3";
       public const string GeneticReflexesInfluenceActionIds = "# influence_action_ids: воздействия с пульта оператора (InfluenceActions.dat), id1,id2,id3";
       public const string GeneticReflexesCommandPatternIds = "# command_pattern_ids: команды среды (CommandPhrases.dat), порядок важен: id1,id2,id3";
       public const string GeneticReflexesActions = "# Моторные действия: id1,id2,id3";
       public const string GeneticReflexesChain = "# ReflexChainID: ID цепочки рефлексов (0 если нет)";
+      public const string GeneticReflexesVisualColor =
+          "# VisualColorId: код зрительного канала (см. AgentVisualColor): 0 белый, 1 чёрный, 2–8 спектр; столбец опционален в старых файлах (как 0)";
 
       // Цепочки безусловных рефлексов
       public const string ReflexChainsFormat = "# Формат файла цепочек рефлексов";
