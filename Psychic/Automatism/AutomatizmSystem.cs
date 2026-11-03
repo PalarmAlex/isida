@@ -139,6 +139,22 @@ namespace ISIDA.Psychic.Automatism
       AutomatizmDeleted?.Invoke(automatizmId, isMassCleanup);
     }
 
+    /// <summary>
+    /// Событие создания нового автоматизма. Поднимается вне блокировки после успешного
+    /// добавления; при загрузке из файла (suppress-флаг _noWarningCreateShow) не поднимается.
+    /// Подписчики из UI (Velum) обязаны маршалировать на свой поток.
+    /// </summary>
+    public event Action<int> AutomatizmCreated;
+
+    /// <summary>
+    /// Вызывает событие создания автоматизма
+    /// </summary>
+    /// <param name="automatizmId">ID созданного автоматизма</param>
+    private void OnAutomatizmCreated(int automatizmId)
+    {
+      AutomatizmCreated?.Invoke(automatizmId);
+    }
+
     #endregion
 
     #region Константы и поля
@@ -271,6 +287,8 @@ namespace ISIDA.Psychic.Automatism
           return existing;
       }
 
+      Automatizm created = null;
+
       _lock.EnterWriteLock();
       try
       {
@@ -309,12 +327,28 @@ namespace ISIDA.Psychic.Automatism
         if (!_noWarningCreateShow)
           Logger.Info($"Создан новый автоматизм Id={automatizm.ID}");
 
-        return (id, automatizm);
+        created = automatizm;
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      // Событие вне write-lock (по образцу ConditionedReflexesSystem): подписчик может
+      // читать словари системы. Загрузка из файла (suppress) — не шумим.
+      if (created != null && !_noWarningCreateShow)
+      {
+        try
+        {
+          OnAutomatizmCreated(created.ID);
+        }
+        catch (Exception ex)
+        {
+          Logger.Error(ex.Message);
+        }
+      }
+
+      return (created.ID, created);
     }
 
     /// <summary>
