@@ -15,7 +15,20 @@ using static ISIDA.Psychic.VerbalBrocaImagesSystem;
 namespace ISIDA.Psychic
 {
   /// <summary>
-  /// Конвертер условных рефлексов в автоматизмы
+  /// Bootstrap-утилита для массового заполнения автоматизмов из справочника безусловных и условных рефлексов.
+  /// Вызывается ОДИН РАЗ при переходе на стадию 2 (через адаптер среды, например AIStudio) —
+  /// не входит в основной он-лайн цикл мышления симбионта.
+  /// <para>
+  /// В он-лайн-логике (на каждом пульсе) автоматизмы создаются тремя путями:
+  /// Pуть R — «селективный клон» по сработавшему рефлексу (включая цепочку),
+  /// Путь M — зеркальный автоматизм по связи InfluenceActionId → AdaptiveAction,
+  /// Путь P — случайная проба (Search/Play стили).
+  /// </para>
+  /// <para>
+  /// Метод <see cref="CloneAllConditionedReflexesToAutomatisms"/> — legacy-наследие Go-версии
+  /// («RunMakeAutomatizmsFromReflexes»), служит для первоначального заполнения словаря
+  /// автоматизмов перед началом он-лайн обучения. Не путать с он-лайн путём R.
+  /// </para>
   /// </summary>
   public sealed class ConditionedReflexToAutomatizmConverter : IDisposable
   {

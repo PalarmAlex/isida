@@ -300,6 +300,26 @@ namespace ISIDA.Psychic
           if (purposeGenetic.ActionImage != null)
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
         }
+        // Путь M (стадия 2): зеркальный автоматизм по моторной части стимула с пульта.
+        // Когда стимул содержит InfluenceAction, но рефлекса на него нет — мотор берётся
+        // из справочника AdaptiveActions по полю InfluenceActionId. Цепочка НЕ переносится:
+        // она нарастает обучением. Не конфликтует с путём B, так как проверяет наличие
+        // моторной части стимула (IsOperatorActionRepeatStimulus).
+        else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual &&
+                 AppGlobalState.TeachingMode && _mirrorAutomatizmService != null &&
+                 IsOperatorActionRepeatStimulus())
+        {
+          int nodeId = AppGlobalState.AutomatizmNodeId;
+          int stimulusImageId = AppGlobalState.CurrentStimulusActionsImageId;
+          if (nodeId > 0 && stimulusImageId > 0)
+          {
+            int mirrorId = _mirrorAutomatizmService.TryCreateMirrorFromInfluenceActions(nodeId, stimulusImageId);
+            if (mirrorId > 0)
+              atmz = _automatizmSystem.GetAutomatizmById(mirrorId);
+            else
+              Logger.Info("PurposeGeneticSystem: путь M — нет связи InfluenceActionId в AdaptiveActions");
+          }
+        }
         else if (!purposeGenetic.VeryActual &&
                  AppGlobalState.TeachingMode &&
                  AppGlobalState.EvolutionStage == 2 &&
@@ -308,20 +328,9 @@ namespace ISIDA.Psychic
                  _verbalBrocaImagesSystem != null &&
                  _sensorySystem?.VerbalChannel != null)
         {
-          // Path B: эхо-автоматизм по вербальному стимулу.
-          // Различаем чистую фразу (нормально — "привет - привет", учим эхо)
-          // и повтор действия оператора (стимул с моторной частью → не эхокаем).
-          // Признак — моторная часть ТЕКУЩЕГО стимула, а не статичный IsActive метрик среды
-          // (в AIStudio/Velum probe-EA активны постоянно как каналы восприятия).
-          bool isOperatorActionRepeat = IsOperatorActionRepeatStimulus();
-          if (!isOperatorActionRepeat)
-          {
-            atmz = TryCreateStage2EchoWithChainFromStimulusContext();
-          }
-          else
-          {
-            Logger.Info("PurposeGeneticSystem: skipping path B echo — current stimulus has motor part (operator action repetition)");
-          }
+          // Path B: эхо-автоматизм по вербальному стимулу (без моторной части).
+          // Моторная часть стимула обрабатывается выше, в пути M.
+          atmz = TryCreateStage2EchoWithChainFromStimulusContext();
         }
         else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual)
         {

@@ -321,6 +321,69 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Путь M (стадия 2): зеркальный автоматизм по моторной части текущего стимула с пульта.
+    /// Когда на текущем стимуле есть воздействия с пульта (InfluenceAction), но условного/безусловного
+    /// рефлекса на них не сработало, мотор берётся из справочника <see cref="AdaptiveActionsSystem"/>
+    /// по полю <see cref="AdaptiveActionsSystem.AdaptiveAction.InfluenceActionId"/> (имитация «зеркальных
+    /// нейронов»). Цепочка НЕ переносится: она нарастает обучением. Это отдельный канал реагирования,
+    /// не смешиваемый с клоном рефлекса (там мотор и цепочка — пара одного поведения).
+    /// </summary>
+    /// <param name="detectedNodeId">Узел дерева автоматизмов, соответствующий текущему контексту условий.</param>
+    /// <param name="stimulusActionsImageId">Образ действий текущего стимула с пульта (InfluenceAction в ActIdList).</param>
+    /// <returns>ID созданного эхо-автоматизма; 0 — если стадия не 2, контекст не задан или в справочнике нет связи триггер→мотор.</returns>
+    public int TryCreateMirrorFromInfluenceActions(int detectedNodeId, int stimulusActionsImageId)
+    {
+      if (AppGlobalState.EvolutionStage != 2)
+        return 0;
+      if (detectedNodeId <= 0 || stimulusActionsImageId <= 0)
+        return 0;
+      if (!ActionsImagesSystem.IsInitialized || !AdaptiveActionsSystem.IsInitialized)
+        return 0;
+
+      var img = ActionsImagesSystem.Instance.GetActionsImage(stimulusActionsImageId);
+      if (img == null || img.ActIdList == null || !img.ActIdList.Any())
+        return 0;
+
+      // Триггер (InfluenceAction с пульта) → мотор (AdaptiveAction) по полю InfluenceActionId.
+      List<int> adaptiveIds = AdaptiveActionsSystem.Instance.ConvertInfluenceActionIdsToAdaptiveActionIds(img.ActIdList);
+      if (adaptiveIds == null || adaptiveIds.Count == 0)
+        return 0; // нет связи в справочнике — зеркалить нечего
+
+      int stimulusVisual = img.VisualColorId;
+      if (!AgentVisualColor.IsValidCode(stimulusVisual))
+        stimulusVisual = AgentVisualColor.White;
+
+      // kind=1 — субъективное предположение (имитация), как в остальном зеркальном канале.
+      var (responseImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 1,
+          actIdList: adaptiveIds,
+          phraseIdList: img.PhraseIdList,
+          toneId: img.ToneId,
+          moodId: img.MoodId,
+          checkUnicum: true,
+          visualColorId: stimulusVisual,
+          commandPatternIdList: img.CommandPatternIdList?.ToList());
+      if (responseImageId <= 0)
+        return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        var (echoId, created) = _automatizmSystem.CreateNewAutomatizm(
+            detectedNodeId, responseImageId, true, AutomatizmConsolidationService.AutomatizmCreationRole.Echo);
+        if (created == null)
+          return 0;
+
+        created.Count = 0;
+        return echoId;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Сдвиг + эхо на стадии 3 по ответу оператора в окне ожидания.
     /// </summary>
     public int TryCreateMirrorFromPendingOperatorResponse()
