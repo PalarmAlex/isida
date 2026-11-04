@@ -350,11 +350,6 @@ namespace ISIDA.Common
     public OrientationReflexSystem OrientationReflex { get; internal set; }
 
     /// <summary>
-    /// Сессия наблюдения моторных действий оператора (механизм 2 стадии 2)
-    /// </summary>
-    public OperatorMotorObservationSession OperatorMotorObservationSession { get; internal set; }
-
-    /// <summary>
     /// Справочник типов ситуаций
     /// </summary>
     public Psychic.Understanding.SituationTypeSystem SituationTypeSystem { get; internal set; }
@@ -498,7 +493,6 @@ namespace ISIDA.Common
       SafeDispose(InfluenceActions, "InfluenceActions");
 SafeDispose(AutomatismExecution, "AutomatismExecution");
       SafeDispose(OrientationReflex, "OrientationReflex");
-      SafeDispose(OperatorMotorObservationSession, "OperatorMotorObservationSession");
       SafeDispose(InformationEnvironmentSystem, "InformationEnvironmentSystem");
       AgentSleepOrchestrator.Reset();
 
@@ -925,17 +919,6 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
             context.PurposeGeneticImageSystem);
         context.OrientationReflex = OrientationReflexSystem.Instance;
         context.OrientationReflex.SetDependencies(context.AutomatizmSystem, context.AutomatizmTree);
-
-        // Шаг 33: Сессия наблюдения моторных действий оператора (механизм 2 стадии 2)
-        initializationStep = 33;
-        OperatorMotorObservationSession.InitializeInstance(
-            context.AdaptiveActions,
-            context.ActionsImages,
-            context.AutomatizmSystem,
-            context.InfluenceActions,
-            context.InfluenceActionsImages,
-            context.AutomatizmTree);
-        context.OperatorMotorObservationSession = OperatorMotorObservationSession.Instance;
 
         // Шаг 34: Система управления цепочками автоматизмов
         initializationStep = 34;

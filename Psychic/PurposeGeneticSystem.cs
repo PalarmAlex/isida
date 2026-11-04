@@ -296,7 +296,6 @@ namespace ISIDA.Psychic
         // Селективный клон (путь A) — только со стадии 3.
         // На стадии 2 клонирование рефлексов в автоматизмы запрещено:
         // рефлексный и наблюдательный контуры — разные зоны реагирования.
-        // ObservationSession откроется при Bad + нет usable atmz и создаст atmz по мотору оператора.
         if ((purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
             && AppGlobalState.EvolutionStage >= 3)
         {
@@ -409,14 +408,6 @@ namespace ISIDA.Psychic
 
         if (purposeGenetic.VeryActual)
           return null;
-
-        // Приоритет ожидания: если сессия наблюдения активна — пропускаем случайную пробу.
-        // Оператор может показать полезное действие, нужно подождать.
-        if (OperatorMotorObservationSession.IsInitialized && OperatorMotorObservationSession.Instance.IsActive)
-        {
-          Logger.Info("TryCreateRandomProbeAutomatizm: session active — skipping random probe (priority to operator observation)");
-          return null;
-        }
 
         // Пауза перед случайной пробой: ждём, пока истечёт WaitingPeriodForActionsVal.
         // Это время ожидания ответа оператора — по сути пауза перед своими случайными действиями.

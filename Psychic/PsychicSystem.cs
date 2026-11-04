@@ -55,7 +55,7 @@ namespace ISIDA.Psychic
     private readonly MirrorAutomatizmService _mirrorAutomatizmService;
     private ThinkingCyclesSystem _thinkingCyclesSystem;
     private MentalAutomatizmSession _mentalAutomatizmSession;
-
+        
     #region Инициализация
 
     private static PsychicSystem _instance;
@@ -424,12 +424,6 @@ namespace ISIDA.Psychic
             }
           }
           _automatismExecutionService.ProcessAutomatizmChainsPulse(pulseCount);
-
-          // Механизм 2 стадии 2: ObservationSession — наблюдение моторики оператора
-          if (AppGlobalState.EvolutionStage == 2 && OperatorMotorObservationSession.IsInitialized)
-          {
-            ProcessOperatorMotorObservationSession(pulseCount);
-          }
 
           // Диспетчеризация циклов — только стадия 4+ (сброс для <4 уже в начале метода).
           if (AppGlobalState.EvolutionStage >= 4 && _thinkingCyclesSystem != null)
@@ -1842,178 +1836,6 @@ namespace ISIDA.Psychic
       }
 
       return 0;
-    }
-
-    /// <summary>
-    /// Механизм 2 стадии 2: сессия наблюдения моторных действий оператора.
-    /// Вызывается из ProcessPsychicPulse на каждом пульсе.
-    /// </summary>
-    private void ProcessOperatorMotorObservationSession(int pulseCount)
-    {
-      try
-      {
-        var session = OperatorMotorObservationSession.Instance;
-
-        // 1. Если сессия не активна — проверить, нужно ли открыть (rising-edge Bad)
-        if (!session.IsActive)
-        {
-          // Открываем только при переходе в Bad (rising-edge), а не при каждом пульсе в Bad.
-          // Это предотвращает ложные сессии при уже стабильно плохом состоянии.
-          bool focusInBad = AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
-          bool hasDominantParam = AppGlobalState.DominantParam > 0;
-
-          if (focusInBad && hasDominantParam)
-          {
-            // Проверяем, был ли предыдущий пульс не-Bad (rising-edge)
-            bool prevNotBad = !session.WasInBadZone; // На момент открытия сессии WasInBadZone=false
-            if (prevNotBad)
-            {
-              // Проверяем, есть ли usable automatizm в системе для доминирующего параметра.
-              // Проверяем по AutomatizmSystem (существующие atmz), а не по AdaptiveActionsSystem
-              // (активные моторы текущего пульса — они пусты в момент rising-edge).
-              bool hasUsableAutomatizm = false;
-              if (AutomatizmSystem.IsInitialized && ActionsImagesSystem.IsInitialized)
-              {
-                var allAtmz = AutomatizmSystem.Instance.GetAllAutomatizms();
-                var actionsImages = ActionsImagesSystem.Instance;
-                var adaptiveActions = AdaptiveActionsSystem.Instance;
-                var dominantParam = AppGlobalState.DominantParam;
-
-                if (allAtmz != null)
-                {
-                  hasUsableAutomatizm = allAtmz.Any(atmz =>
-                  {
-                    if (atmz.Usefulness < 0 || atmz.ActionsImageID <= 0) return false;
-                    var actImg = actionsImages.GetActionsImage(atmz.ActionsImageID);
-                    if (actImg?.ActIdList == null) return false;
-                    return actImg.ActIdList.Any(actId =>
-                    {
-                      var action = adaptiveActions.GetAdaptiveAction(actId);
-                      return action?.TargetGomeoParamIdArr?.Contains(dominantParam) == true;
-                    });
-                  });
-                }
-              }
-
-              if (!hasUsableAutomatizm)
-              {
-                session.OpenSession();
-              }
-            }
-          }
-          return;
-        }
-
-        // 2. Если сессия активна — проверить, ушёл ли focus из Bad (по focus-виталу, не по overall)
-        bool isFocusBad = IsFocusParameterBad(session.FocusParameterId);
-        if (session.FocusExitedBadZone(isFocusBad))
-        {
-          // Focus ушёл из Bad — создаём автоматизм по последнему зафиксированному мотору
-          int lastMotorPulse = session.LastMotorPulse;
-          if (lastMotorPulse > 0)
-          {
-            // Используем ID мотора (G_AD), записанный в сессии при RecordOperatorMotor.
-            // Это правильный actionId, а не ID probe-EA.
-            int actionId = session.LastMotorActionId;
-
-            if (actionId > 0)
-            {
-              int automatizmId = session.CreateAutomatizmFromMotor(actionId);
-              if (automatizmId > 0)
-              {
-                session.CloseSessionSuccessfully(automatizmId);
-                Logger.Info($"OperatorMotorObservationSession: created automatizm {automatizmId} after focus exit from Bad");
-                return;
-              }
-            }
-          }
-          session.CloseSessionTimeout();
-          return;
-        }
-
-        // 3. Проверить post-motor wait — истёк ли таймер
-        int waitDurationPulses = AppGlobalState.WaitingPeriodForActionsVal; // Используем существующий конфиг
-        if (session.IsPostMotorWaitExpired(waitDurationPulses))
-        {
-          // Таймаут — мотор не привёл к улучшению, закрываем сессию
-          session.CloseSessionTimeout();
-          Logger.Info($"OperatorMotorObservationSession: closed due to post-motor wait timeout");
-          return;
-        }
-
-        // 4. Проверить, был ли зафиксирован новый мотор от оператора
-        // Это происходит через RegisterOperatorResponse в MirrorAutomatizmService
-        // На этом пульсе проверяем, есть ли новый G_AD в активных действиях
-        CheckAndRecordOperatorMotor(session);
-      }
-      catch (Exception ex)
-      {
-        Logger.Error($"ProcessOperatorMotorObservationSession: {ex.Message}");
-      }
-    }
-
-    /// <summary>
-    /// Проверить и зафиксировать новый мотор от оператора в сессии наблюдения.
-    /// </summary>
-    private void CheckAndRecordOperatorMotor(OperatorMotorObservationSession session)
-    {
-      try
-      {
-        if (!session.IsActive)
-          return;
-
-        // Мотор оператора — G_AD, реально активированный в сессии (ActivationPulse > 0).
-        // Target-фильтр мягкий: если у действия заданы Target-параметры, оно должно относиться к focus;
-        // если Target не задан (среда Velum), мотор фиксируется по факту активации.
-        var allActions = AdaptiveActionsSystem.Instance.GetAllAdaptiveActions();
-        var newMotors = allActions.Where(a =>
-            a.ActivationPulse > 0 &&
-            a.ActivationPulse >= session.LastMotorPulse &&
-            (a.TargetGomeoParamIdArr == null ||
-             a.TargetGomeoParamIdArr.Count == 0 ||
-             a.TargetGomeoParamIdArr.Contains(session.FocusParameterId)));
-
-        foreach (var motor in newMotors)
-        {
-          // Записываем мотор в сессию
-          var probeActionIds = _influenceActionSystem.GetAllInfluenceActions()
-              .Where(ia => ia.IsActive)
-              .Select(ia => ia.Id)
-              .ToList();
-
-          session.RecordOperatorMotor(motor.Id, probeActionIds);
-          Logger.Info($"OperatorMotorObservationSession: recorded motor actionId={motor.Id} pulse={GlobalTimer.GlobalPulsCount}");
-        }
-      }
-      catch (Exception ex)
-      {
-        Logger.Error($"CheckAndRecordOperatorMotor: {ex.Message}");
-      }
-    }
-
-    /// <summary>
-    /// Состояние focus-параметра сессии наблюдения: true — параметр в зоне Bad.
-    /// Кредит сессии закрывается по focus-виталу, а не по общему состоянию гомеостаза.
-    /// Если параметр недоступен — используется общее состояние (безопасный fallback).
-    /// </summary>
-    /// <param name="focusParamId">ID focus-параметра гомеостаза (DominantParam).</param>
-    private bool IsFocusParameterBad(int focusParamId)
-    {
-      try
-      {
-        if (focusParamId > 0 && _gomeostasSystem != null)
-        {
-          var param = _gomeostasSystem.GetParameter(focusParamId);
-          if (param != null)
-            return param.CurrentState == GomeostasSystem.ParameterState.Bad;
-        }
-      }
-      catch (Exception ex)
-      {
-        Logger.Error($"IsFocusParameterBad: {ex.Message}");
-      }
-
-      return AppGlobalState.CurrentOverallState == AppGlobalState.HomeostasisState.Bad;
     }
 
     /// <summary>
