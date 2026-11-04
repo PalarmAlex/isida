@@ -311,17 +311,18 @@ namespace ISIDA.Psychic
                  _sensorySystem?.VerbalChannel != null)
         {
           // Path B: эхо-автоматизм по вербальному стимулу.
-          // Различаем вербальный echo без метрик (нормально — "привет - привет")
-          // и повтор действия оператора в среде с метриками (не нормально).
-          // Если есть активные probe-EA — это повтор действия оператора → пропускаем.
-          bool hasActiveProbeActions = HasActiveProbeActions();
-          if (!hasActiveProbeActions)
+          // Различаем чистую фразу (нормально — "привет - привет", учим эхо)
+          // и повтор действия оператора (стимул с моторной частью → не эхокаем).
+          // Признак — моторная часть ТЕКУЩЕГО стимула, а не статичный IsActive метрик среды
+          // (в AIStudio/Velum probe-EA активны постоянно как каналы восприятия).
+          bool isOperatorActionRepeat = IsOperatorActionRepeatStimulus();
+          if (!isOperatorActionRepeat)
           {
             atmz = TryCreateStage2EchoWithChainFromStimulusContext();
           }
           else
           {
-            Logger.Info("PurposeGeneticSystem: skipping path B echo — active probe actions detected (operator action repetition)");
+            Logger.Info("PurposeGeneticSystem: skipping path B echo — current stimulus has motor part (operator action repetition)");
           }
         }
         else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual)
@@ -527,34 +528,21 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
-    /// Проверяет, есть ли активные probe-EA (InfluenceAction с IsActive).
-    /// Используется для различения вербального echo (без метрик) и повторения действия оператора (с метриками).
+    /// Признак того, что текущий стимул с пульта — повтор действия оператора (а не чистая фраза).
+    /// Используется гейтом пути B на 2-й стадии: чистую вербальную фразу эхокаем, стимул
+    /// с моторной частью — нет.
+    /// <para>
+    /// Исторически гейт проверял статичный <c>IsActive</c> probe-EA метрик среды
+    /// (<see cref="InfluenceActionSystem"/>), но в AIStudio/Velum метрики активны постоянно
+    /// как каналы восприятия → гейт был истинен всегда и легитимное вербальное эхо не создавалось.
+    /// Корректный признак — моторная часть именно текущего стимула
+    /// (<see cref="AppGlobalState.CurrentStimulusActionIdList"/>), заполняемая в PsychicSystem.
+    /// </para>
     /// </summary>
-    private bool HasActiveProbeActions()
+    internal static bool IsOperatorActionRepeatStimulus()
     {
-      try
-      {
-        if (_influenceActionSystem == null)
-          return false;
-
-        // Проверяем, есть ли активные InfluenceAction (probe-EA)
-        // Если есть — значит оператор действует в среде с метриками → не создаём echo
-        var allInfluenceActions = _influenceActionSystem.GetAllInfluenceActions();
-        if (allInfluenceActions != null)
-        {
-          foreach (var ia in allInfluenceActions)
-          {
-            if (ia.IsActive)
-              return true;
-          }
-        }
-
-        return false;
-      }
-      catch
-      {
-        return false;
-      }
+      var motorPart = AppGlobalState.CurrentStimulusActionIdList;
+      return motorPart != null && motorPart.Count > 0;
     }
 
     /// <summary>
