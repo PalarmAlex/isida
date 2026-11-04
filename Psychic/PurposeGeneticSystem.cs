@@ -293,11 +293,9 @@ namespace ISIDA.Psychic
         var purposeGenetic = GetPurposeGeneticImage();
         Automatizm atmz = null;
         
-        // Селективный клон (путь A) — только со стадии 3.
-        // На стадии 2 клонирование рефлексов в автоматизмы запрещено:
-        // рефлексный и наблюдательный контуры — разные зоны реагирования.
+        // Селективный клон (путь A) — начиная со стадии 2.
         if ((purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
-            && AppGlobalState.EvolutionStage >= 3)
+            && AppGlobalState.EvolutionStage >= 2)
         {
           if (purposeGenetic.ActionImage != null)
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
@@ -607,9 +605,7 @@ namespace ISIDA.Psychic
               ActionsImage actionImage = null;
               (_, actionImage) = _actionsImagesSystem.CreateNewActionsImageWithIdNoLock(0, 0, actionIdList, null, 0, 0, true);
               purposeGenetic.ActionImage = actionImage;
-              // Селективный клон — только со стадии 3.
-              if (AppGlobalState.EvolutionStage >= 3)
-                atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
+              atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
             }
           }
         }
