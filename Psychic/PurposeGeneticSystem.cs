@@ -307,9 +307,9 @@ namespace ISIDA.Psychic
           return null;
         }
         
-        // Селективный клон (путь A) — начиная со стадии 2.
+        // Селективный клон (путь A) — только на стадии 2.
         if ((purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
-            && AppGlobalState.EvolutionStage >= 2)
+            && AppGlobalState.EvolutionStage == 2)
         {
           if (purposeGenetic.ActionImage != null)
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
