@@ -102,9 +102,22 @@ namespace ISIDA.Reflexes
         if (execResult.Success)
         {
           if (reflexId == -1)
-            ShortLogChannel.Write("Б/У рефлекс (по умолчанию)");
+          {
+            var defaultAction = _adaptiveActionsSystem.GetAdaptiveAction(_adaptiveActionsSystem.DefaultAdaptiveActionId);
+            var defaultName = defaultAction != null ? defaultAction.Name : "";
+            ShortLogChannel.Write(defaultName.Length > 0 ? $"Б/У рефлекс: {defaultName}" : "Б/У рефлекс (по умолчанию)");
+          }
           else
-            ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", $"ID {reflexId}, действий={actionIds.Count}");
+          {
+            // Резолвим ID адаптивных действий в имена
+            var actionNames = new List<string>();
+            foreach (var actionId in actionIds)
+            {
+              var action = _adaptiveActionsSystem.GetAdaptiveAction(actionId);
+              actionNames.Add(action != null ? action.Name : $"[{actionId}]");
+            }
+            ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", $"ID {reflexId}, действий={actionIds.Count}", $"[{string.Join(", ", actionNames)}]");
+          }
         }
 
         return execResult;

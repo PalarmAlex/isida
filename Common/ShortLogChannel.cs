@@ -113,6 +113,15 @@ namespace ISIDA.Common
     /// <summary>Токены активной сессии в порядке записи.</summary>
     private static List<ShortLogToken> _currentSessionTokens = new List<ShortLogToken>();
 
+    /// <summary>
+    /// Буфер записей текущего пульса: все <see cref="Write(string)"/>/<see cref="WriteBlock"/>
+    /// накапливаются здесь и объединяются в один токен на пульс при <see cref="FlushPulse"/>
+    /// (по образцу буферизации <see cref="ResearchLogger"/>). Каждая запись хранит свой номер
+    /// пульса, поэтому при запаздывании сброса подряд идущие записи одного пульса всё равно
+    /// группируются корректно, а соседние пульсы не склеиваются.
+    /// </summary>
+    private static List<(int Pulse, string Text)> _pulseBuffer = new List<(int Pulse, string Text)>();
+
     #endregion
 
     #region Запись
@@ -202,28 +211,88 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Создаёт токен под блокировкой, дописывает в сессию и рассылает подписчикам вне блокировки.
+    /// Кладёт текст в буфер текущего пульса под блокировкой; рассылка откладывается до
+    /// <see cref="FlushPulse"/> (или завершения сессии), чтобы все события одного пульса
+    /// ушли оператору одним токеном-блоком.
     /// </summary>
-    /// <param name="text">Готовый текст токена.</param>
+    /// <param name="text">Готовый текст записи.</param>
     private static void Emit(string text)
     {
-      ShortLogToken token;
-
       lock (_lock)
       {
         if (_currentSessionId == 0)
           return;
 
-        token = new ShortLogToken(
-            DateTime.Now.TimeOfDay,
-            text,
-            _currentSessionId,
-            GlobalTimer.GlobalPulsCount);
+        _pulseBuffer.Add((GlobalTimer.GlobalPulsCount, text ?? string.Empty));
+      }
+    }
 
-        _currentSessionTokens.Add(token);
+    /// <summary>
+    /// Сбрасывает буфер пульса: группирует подряд идущие записи с одинаковым номером пульса
+    /// в один токен, дописывает токены в сессию и рассылает их подписчикам вне блокировки.
+    /// </summary>
+    /// <remarks>
+    /// Вызывается в конце обработки пульса (<see cref="GlobalTimer"/> в <c>finally</c>
+    /// <c>ProcessAgentPulse</c>), а также при завершении/старте сессии, чтобы не потерять хвост.
+    /// Пустой буфер — ничего не делает (на пульсе без событий токен не создаётся).
+    /// </remarks>
+    public static void FlushPulse()
+    {
+      List<ShortLogToken> created;
+
+      lock (_lock)
+        created = FlushBufferLocked();
+
+      if (created == null)
+        return;
+
+      foreach (var token in created)
+        RaiseToken(token);
+    }
+
+    /// <summary>
+    /// Преобразует содержимое буфера в токены (группировка по пульсу), дописывает их в сессию.
+    /// Вызывать только под <c>lock (_lock)</c>.
+    /// </summary>
+    /// <returns>Созданные токены для рассылки; <c>null</c>, если буфер пуст или сессии нет
+    /// (в этом случае буфер просто очищается).</returns>
+    private static List<ShortLogToken> FlushBufferLocked()
+    {
+      if (_pulseBuffer.Count == 0)
+        return null;
+
+      if (_currentSessionId == 0)
+      {
+        _pulseBuffer.Clear();
+        return null;
       }
 
-      RaiseToken(token);
+      var created = new List<ShortLogToken>();
+      int i = 0;
+      while (i < _pulseBuffer.Count)
+      {
+        int pulse = _pulseBuffer[i].Pulse;
+        var sb = new StringBuilder();
+        while (i < _pulseBuffer.Count && _pulseBuffer[i].Pulse == pulse)
+        {
+          if (sb.Length > 0)
+            sb.Append('\n');
+          sb.Append(_pulseBuffer[i].Text);
+          i++;
+        }
+
+        var token = new ShortLogToken(
+            DateTime.Now.TimeOfDay,
+            sb.ToString(),
+            _currentSessionId,
+            pulse);
+
+        _currentSessionTokens.Add(token);
+        created.Add(token);
+      }
+
+      _pulseBuffer.Clear();
+      return created;
     }
 
     #endregion
@@ -244,8 +313,15 @@ namespace ISIDA.Common
       ShortLogToken[] previousTokens = null;
       int newSessionId;
 
+      // Буфер на входе обычно пуст: все пути остановки пульса (Stop, SafeStopWithAgentDeath,
+      // SafeStopWithError) зовут StopSession(), сбрасывающий буфер, а Reset() его очищает.
+      // Если же хвост остался (например, повторный Start без Stop), он группируется и уходит
+      // в закрываемую сессию через OnSessionCompleted — но БЕЗ live-рассылки OnToken:
+      // StartSession вызывается из GlobalTimer.Start() под lock (_timerLock), а подписчик UI
+      // может войти в тот же _timerLock обратно — прямая дорога к взаимной блокировке.
       lock (_lock)
       {
+        FlushBufferLocked();
         if (_currentSessionId != 0)
         {
           previousSessionId = _currentSessionId;
@@ -272,6 +348,10 @@ namespace ISIDA.Common
     {
       int sessionId;
       ShortLogToken[] tokens;
+
+      // Хвост последнего пульса (события, написанные после последнего FlushPulse из пульса)
+      // обязан попасть в завершаемую сессию, иначе оператор их не увидит.
+      FlushPulse();
 
       lock (_lock)
       {
@@ -323,6 +403,8 @@ namespace ISIDA.Common
     /// </remarks>
     public static void Reset()
     {
+      // Выгрузка движка: сессия закрывается без рассылки (подписчики вот-вот станут невалидны),
+      // поэтому буфер пульса просто отбрасывается, а не сбрасывается через FlushPulse.
       lock (_lock)
       {
         OnToken = null;
@@ -330,6 +412,7 @@ namespace ISIDA.Common
         OnSessionCompleted = null;
         _currentSessionId = 0;
         _currentSessionTokens = new List<ShortLogToken>();
+        _pulseBuffer.Clear();
         _sessionIdCounter = 0;
       }
     }

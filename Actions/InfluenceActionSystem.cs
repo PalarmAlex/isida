@@ -679,6 +679,17 @@ namespace ISIDA.Actions
       return new ReadOnlyCollection<GomeostasisInfluenceAction>(_influenceActions.Values.ToList());
     }
 
+    /// <summary>
+    /// Возвращает гомеостатическое воздействие по ID (для расшифровки ID в пультовом логе).
+    /// </summary>
+    /// <param name="actionId">ID воздействия.</param>
+    /// <returns>Воздействие или null, если ID отсутствует в справочнике.</returns>
+    public GomeostasisInfluenceAction GetInfluenceAction(int actionId)
+    {
+      _influenceActions.TryGetValue(actionId, out var action);
+      return action;
+    }
+
     /// <summary>Воздействия среды: непустой <see cref="GomeostasisInfluenceAction.ProbeKey"/>.</summary>
     public ReadOnlyCollection<GomeostasisInfluenceAction> GetEnvironmentInfluenceActions()
     {

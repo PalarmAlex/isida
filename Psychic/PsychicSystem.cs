@@ -680,13 +680,36 @@ namespace ISIDA.Psychic
 
         // Пультовой лог: стимул пришёл из любого канала (действие, фраза, команда, зрительный).
         // Пустые модальности не печатаются, чтобы токен не превращался в простыню нулей.
+        // ID резолвятся в имена из справочников (InfluenceActionSystem, VerbalChannel)
+        // в момент события — чтобы правка .dat не переписывала историю логов.
         var stimulusLines = new List<string>();
         if (actionIdList != null && actionIdList.Count > 0)
-          stimulusLines.Add($"действия: {string.Join(",", actionIdList)}");
+        {
+          // actionIdList — ID воздействий с пульта (InfluenceAction). Резолвим по справочнику
+          // воздействий; отсутствующий ID показываем как [id], чтобы не терялся факт стимула.
+          var actionNames = actionIdList
+              .Select(id => _influenceActionSystem.GetInfluenceAction(id)?.Name ?? $"[{id}]")
+              .ToList();
+          stimulusLines.Add($"действия: {string.Join(", ", actionNames)}");
+        }
         if (phraseIdList != null && phraseIdList.Count > 0)
-          stimulusLines.Add($"фразы: {string.Join(",", phraseIdList)}");
+        {
+          var phrases = phraseIdList
+              .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid))
+              .Where(s => !string.IsNullOrWhiteSpace(s))
+              .ToList();
+          if (phrases.Count > 0)
+            stimulusLines.Add($"фразы: {string.Join(", ", phrases)}");
+        }
         if (commandPatternIdList != null && commandPatternIdList.Count > 0)
-          stimulusLines.Add($"команды: {string.Join(",", commandPatternIdList)}");
+        {
+          var commands = commandPatternIdList
+              .Select(pid => _sensorySystem.CommandChannel.GetPhraseFromPhraseId(pid))
+              .Where(s => !string.IsNullOrWhiteSpace(s))
+              .ToList();
+          if (commands.Count > 0)
+            stimulusLines.Add($"команды: {string.Join(", ", commands)}");
+        }
         if (visualColorId != AgentVisualColor.White)
           stimulusLines.Add($"цвет: {AgentVisualColor.GetDisplayName(visualColorId)}");
         if (toneId != 0)

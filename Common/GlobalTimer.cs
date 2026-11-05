@@ -761,8 +761,21 @@ namespace ISIDA.Common
         }
         finally
         {
+          // Граница пульса для сокращённого лога: все события, написанные за этот пульс
+          // (включая те, что породил OnPulseCompleted у подписчиков UI), объединяются в один
+          // токен и уходят оператору. Пустой пульс токен не создаёт. Держим до Set() — иначе
+          // ClearSystems может разойтись с незакрытым хвостом.
+          try
+          {
+            ShortLogChannel.FlushPulse();
+          }
+          catch (Exception flushEx)
+          {
+            Logger.Warning($"ShortLogChannel.FlushPulse: {flushEx.Message}");
+          }
+
           // Пульс завершён (успешно, по раннему return или по исключению) — разрешаем
-          // выгрузке (ClearSystems) считать, что обращений к системам больше не будет.
+          // выгрузке (ClearSystems) счесть, что обращающий к системам больше не будет.
           _pulseCompletionSignal.Set();
         }
       }

@@ -48,6 +48,7 @@ namespace Isida.Tests
       int sid = ShortLogChannel.StartSession();
 
       ShortLogChannel.Write("hello");
+      ShortLogChannel.FlushPulse();
 
       var tokens = ShortLogChannel.GetCurrentSessionTokens();
       Assert.Single(tokens);
@@ -67,6 +68,7 @@ namespace Isida.Tests
       ShortLogChannel.StartSession();
 
       ShortLogChannel.Write("ID {0}, {1} (вес {2})", 42, "DXF", 3);
+      ShortLogChannel.FlushPulse();
 
       var tokens = ShortLogChannel.GetCurrentSessionTokens();
       Assert.Single(tokens);
@@ -74,10 +76,10 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// Один вызов форматированного <c>Write</c> = один токен.
+    /// Несколько записей на одном пульсе объединяются в один токен.
     /// </summary>
     [Fact]
-    public void Write_MultipleCalls_OneTokenEach()
+    public void Write_MultipleCallsOnSamePulse_GroupedIntoOneToken()
     {
       ShortLogChannel.Reset();
       ShortLogChannel.StartSession();
@@ -85,8 +87,11 @@ namespace Isida.Tests
       ShortLogChannel.Write("a");
       ShortLogChannel.Write("b");
       ShortLogChannel.Write("c");
+      ShortLogChannel.FlushPulse();
 
-      Assert.Equal(3, ShortLogChannel.GetCurrentSessionTokens().Length);
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Single(tokens);
+      Assert.Equal("a\nb\nc", tokens[0].Text);
     }
 
     /// <summary>
@@ -99,7 +104,9 @@ namespace Isida.Tests
       ShortLogChannel.StartSession();
 
       ShortLogChannel.WriteBlock("СТИМУЛ:", "Узел дерева автоматизмов: ID 15");
+      ShortLogChannel.FlushPulse();
       ShortLogChannel.WriteBlock("ОТВЕТ:", "Автоматизм: ID 3, Экспорт DXF (вес 2)");
+      ShortLogChannel.FlushPulse();
 
       var tokens = ShortLogChannel.GetCurrentSessionTokens();
       Assert.Equal(2, tokens.Length);
@@ -117,6 +124,7 @@ namespace Isida.Tests
       ShortLogChannel.StartSession();
 
       ShortLogChannel.WriteBlock("HEADER:");
+      ShortLogChannel.FlushPulse();
 
       var tokens = ShortLogChannel.GetCurrentSessionTokens();
       Assert.Single(tokens);
@@ -140,7 +148,7 @@ namespace Isida.Tests
 
       int second = ShortLogChannel.StartSession();
 
-      // Первая сессия закрыта событием со своим токеном.
+      // Первая сессия закрыта событием со своим токеном (FlushPulse вызван в StartSession).
       Assert.Equal(first, closedId);
       Assert.NotNull(closedTokens);
       Assert.Single(closedTokens);
@@ -154,6 +162,7 @@ namespace Isida.Tests
 
     /// <summary>
     /// <c>StopSession</c> возвращает токены в порядке записи и деактивирует сессию.
+    /// На одном пульсе все записи группируются в один токен.
     /// </summary>
     [Fact]
     public void StopSession_ReturnsTokensAndResets()
@@ -166,9 +175,9 @@ namespace Isida.Tests
 
       var tokens = ShortLogChannel.StopSession();
 
-      Assert.Equal(2, tokens.Length);
-      Assert.Equal("a", tokens[0].Text);
-      Assert.Equal("b", tokens[1].Text);
+      // Все записи на одном пульсе → один объединённый токен.
+      Assert.Single(tokens);
+      Assert.Equal("a\nb", tokens[0].Text);
       Assert.Equal(0, ShortLogChannel.CurrentSessionId);
     }
 
@@ -184,7 +193,7 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// Событие <c>OnToken</c> получает каждый записанный токен.
+    /// Событие <c>OnToken</c> получает каждый токен после <c>FlushPulse</c>.
     /// </summary>
     [Fact]
     public void OnToken_FiresOnWrite()
@@ -196,6 +205,7 @@ namespace Isida.Tests
       ShortLogChannel.OnToken += t => captured = t;
 
       ShortLogChannel.Write("event test");
+      ShortLogChannel.FlushPulse();
 
       Assert.NotNull(captured);
       Assert.Equal("event test", captured.Text);
@@ -238,9 +248,9 @@ namespace Isida.Tests
 
       Assert.Equal(sid, capturedId);
       Assert.NotNull(capturedTokens);
-      Assert.Equal(2, capturedTokens.Length);
-      Assert.Equal("tok1", capturedTokens[0].Text);
-      Assert.Equal("tok2", capturedTokens[1].Text);
+      // Все записи на одном пульсе → один объединённый токен.
+      Assert.Single(capturedTokens);
+      Assert.Equal("tok1\ntok2", capturedTokens[0].Text);
     }
 
     /// <summary>
@@ -253,6 +263,7 @@ namespace Isida.Tests
       ShortLogChannel.StartSession();
 
       ShortLogChannel.Write("строка 1\nстрока 2");
+      ShortLogChannel.FlushPulse();
 
       var tokens = ShortLogChannel.GetCurrentSessionTokens();
       Assert.Single(tokens);
@@ -284,7 +295,10 @@ namespace Isida.Tests
 
       ShortLogChannel.OnToken += t => throw new InvalidOperationException("subscriber fail");
 
-      var ex = Record.Exception(() => ShortLogChannel.Write("safe"));
+      var ex = Record.Exception(() => {
+        ShortLogChannel.Write("safe");
+        ShortLogChannel.FlushPulse();
+      });
 
       Assert.Null(ex);
       // Токен всё равно записан в сессию, несмотря на сбой подписчика.
