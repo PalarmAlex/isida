@@ -137,18 +137,33 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void GetAutomatizmByGeneticPurpose_Stage2_NoVerbalStimulus_EvenWithoutReflexFlag_CreatesClone()
+    public void GetAutomatizmByGeneticPurpose_Stage2_NoReflex_DoesNotCreateClone()
     {
-      // Скобка пути A: (VeryActual || FlgConditionReflexes || CurActiveVerbalId == 0).
-      // При отсутствии вербального стимула третья проверка истинна даже без флага рефлекса —
-      // на 2-й стадии клон всё равно обязан создаваться (гейт >= 3 это запрещал).
+      // Регресс бага №1: без повода на создании клон не порождается. Повод — опасная ситуация,
+      // рвущийся на выполнение безусловный рефлекс (CurrentGeneticReflexID > 0) либо признак
+      // условного (FlgConditionReflexes). Ранее скобка пути A «|| CurActiveVerbalId == 0»
+      // размыкала условие на любую голую смену контекста/метрики, порождая ложный автоматизм
+      // (сценарий «-60»: чистое отпускание метрики создавало автоматизм id=2 без триггера).
       AppGlobalState.FlgConditionReflexes = false;
       AppGlobalState.CurActiveVerbalId = 0;
-      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { _actionId });
+      InformationEnvironmentSystem.Instance.SetVeryActualSituation(false);
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int>());
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int>());
+      // Отключаем механизм 3 (случайную пробу) — у неё свои гейты (стили Поиск/Игра + пауза).
+      // После GlobalTimer.Reset() пульс = 0, а waitPeriod > 0 ⇒ пауза активна ⇒ проба пропускается.
+      // Иначе проба создала бы автоматизм и тест перестал бы изолированно проверять путь A.
+      int savedWaitPeriod = AppGlobalState.WaitingPeriodForActionsVal;
+      AppGlobalState.WaitingPeriodForActionsVal = 30;
+      try
+      {
+        var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
 
-      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
-
-      Assert.NotNull(atmz);
+        Assert.Null(atmz);
+      }
+      finally
+      {
+        AppGlobalState.WaitingPeriodForActionsVal = savedWaitPeriod;
+      }
     }
 
     [Fact]

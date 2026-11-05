@@ -306,10 +306,9 @@ namespace ISIDA.Psychic
           Logger.Info("GetAutomatizmByGeneticPurpose: смена условий без триггера — создание автоматизма пропущено");
           return null;
         }
-        
-        // Селективный клон (путь A) — только на стадии 2.
-        if ((purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)
-            && AppGlobalState.EvolutionStage == 2)
+        // Селективный клон (путь A) — начиная со стадии 2.
+        if ((purposeGenetic.VeryActual || AppGlobalState.CurrentGeneticReflexID > 0 || AppGlobalState.FlgConditionReflexes)
+            && AppGlobalState.EvolutionStage >= 2)
         {
           if (purposeGenetic.ActionImage != null)
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
