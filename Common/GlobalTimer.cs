@@ -218,6 +218,11 @@ namespace ISIDA.Common
         PulsationStateChanged?.Invoke();
         _isRunning = true;
 
+        // Одна сессия сокращённого лога = один цикл «вкл/выкл пульсации»: новый SessionId,
+        // клиент по нему очищает свой вывод. Рядом с PulsationStateChanged — та же семантика
+        // «пульсация запущена».
+        ShortLogChannel.StartSession();
+
         // Запуск таймера пульсации
         _timer = new Timer(TimerCallback, null, 0, Timeout.Infinite);
       }
@@ -242,6 +247,9 @@ namespace ISIDA.Common
       if (wasRunning)
       {
         OnPulsationStopped();
+        // Сессия сокращённого лога: одна сессия = один цикл пульсации.
+        ShortLogChannel.StopSession();
+
         // Уведомляем UI
         PulsationStateChanged?.Invoke();
         // Останавливаем таймеры (не уведомляем UI повторно)
@@ -302,6 +310,9 @@ namespace ISIDA.Common
         OnPulseStateChanged = null;
         OnPulseBrightnessChanged = null;
         PulsationStateChanged = null;
+
+        // Канал сокращённого лога: сброс сессий и подписок хоста (пересоздание контекста).
+        ShortLogChannel.Reset();
 
         Logger.Info("GlobalTimer: все системы очищены");
       }
@@ -419,6 +430,9 @@ namespace ISIDA.Common
       if (shouldStop)
       {
         OnPulsationStopped();
+        // Сессия сокращённого лога при аварийной остановке.
+        ShortLogChannel.StopSession();
+
         // Вызываем событие смерти симбионта
         OnPulseError?.Invoke("Симбионт умер");
 
@@ -448,6 +462,9 @@ namespace ISIDA.Common
       if (shouldStop)
       {
         OnPulsationStopped();
+        // Сессия сокращённого лога при аварийной остановке.
+        ShortLogChannel.StopSession();
+
         // Вызываем событие ошибки
         OnPulseError?.Invoke(errorMessage);
 
