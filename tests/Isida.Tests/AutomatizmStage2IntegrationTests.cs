@@ -122,22 +122,22 @@ namespace Isida.Tests
     #region Стартовая полезность по роли
 
     [Fact]
-    public void CreateNewAutomatizm_Stage2_DefaultRole_UsefulnessIsThree()
+    public void CreateNewAutomatizm_Stage2_DefaultRole_UsefulnessIsTwo()
     {
       var (id, automatizm) = NewAutomatizm();
 
       Assert.True(id > 0, "автоматизм не создан");
-      Assert.Equal(3, automatizm.Usefulness);
+      Assert.Equal(2, automatizm.Usefulness);
     }
 
     [Fact]
-    public void CreateNewAutomatizm_Stage2_ShiftRole_UsefulnessIsThree()
+    public void CreateNewAutomatizm_Stage2_ShiftRole_UsefulnessIsTwo()
     {
       var (id, automatizm) = NewAutomatizm(
           role: AutomatizmConsolidationService.AutomatizmCreationRole.Shift);
 
       Assert.True(id > 0);
-      Assert.Equal(3, automatizm.Usefulness);
+      Assert.Equal(2, automatizm.Usefulness);
     }
 
     [Fact]

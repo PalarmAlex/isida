@@ -213,7 +213,8 @@ namespace Isida.Tests
       Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
 
       // Полезность автоматизма не меняется (оценка по метрике не двигает Usefulness — только MarkOperatorRecognition).
-      Assert.Equal(3, Autom.GetAutomatizmById(id).Usefulness);
+      // Ожидание = стартовая полезность стадии 2 (Default-роль).
+      Assert.Equal(2, Autom.GetAutomatizmById(id).Usefulness);
     }
 
     #endregion

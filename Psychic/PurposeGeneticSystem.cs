@@ -286,12 +286,26 @@ namespace ISIDA.Psychic
     /// При VeryActual / FlgConditionReflexes / отсутствии вербального стимула — создаётся автоматизм по генетической цели.
     /// Иначе на 2-й стадии при наличии вербального стимула создаётся эхо-автоматизм с цепочкой (только если VeryActual == false).
     /// </summary>
-    public Automatizm GetAutomatizmByGeneticPurpose()
+    /// <param name="activationType">
+    /// Тип стимула из <see cref="PsychicSystem.SensorActivation"/>: 1 — смена условий, 2 — действие, 3 — фраза/команда.
+    /// При <c>activationType == 1</c> и неопасной ситуации создание запрещено: автоматизмы создаются только по
+    /// триггеру (вербальный/командный канал либо действие с пульта), а не на «голую» смену контекста.
+    /// Значение по умолчанию (2) сохраняет поведение прямых вызовов (тесты) — там повод на создании задан явно.
+    /// </param>
+    public Automatizm GetAutomatizmByGeneticPurpose(int activationType = 2)
     {
       try
       {
         var purposeGenetic = GetPurposeGeneticImage();
         Automatizm atmz = null;
+
+        // Смена условий (activationType == 1) — не триггер: клон/эхо/проба не создаются, кроме опасной ситуации
+        // (VeryActual), где реакция по гомеостатической цели оправдана без внешнего стимула.
+        if (activationType == 1 && !purposeGenetic.VeryActual)
+        {
+          Logger.Info("GetAutomatizmByGeneticPurpose: смена условий без триггера — создание автоматизма пропущено");
+          return null;
+        }
         
         // Селективный клон (путь A) — начиная со стадии 2.
         if ((purposeGenetic.VeryActual || AppGlobalState.FlgConditionReflexes || AppGlobalState.CurActiveVerbalId == 0)

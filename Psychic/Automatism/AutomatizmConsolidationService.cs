@@ -28,9 +28,9 @@ namespace ISIDA.Psychic.Automatism
       if (role == AutomatizmCreationRole.Echo)
         return 0;
       if (evolutionStage == 2)
-        return 3;
-      if (evolutionStage == 3)
         return 2;
+      if (evolutionStage == 3)
+        return 1;
       return 0;
     }
   }
