@@ -776,9 +776,7 @@ namespace ISIDA.Psychic
             }
 
             // ОР1/ОР2 — на каждый стимул (в т.ч. ответ оператора в окне ожидания); моторный выбор откладываем ниже.
-            // activationType передаётся в ОР1 → GetAutomatizmByGeneticPurpose: на смену условий (==1)
-            // создание автоматизма запрещено, только по триггеру (2/3) либо при VeryActual.
-            atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId, activationType);
+            atmz = _orientationReflexSystem.OrientationReflex(orientationAutomatizmId, currentEmotionId, actionsImageId);
 
             if (AppGlobalState.EvolutionStage == 3 && activationType >= 2 && hasVerbalPart)
             {

@@ -104,18 +104,16 @@ namespace ISIDA.Psychic
     #region Управление ориентировочным рефлексом
 
     /// <summary>
-    /// Ориентировочный рефлекс.
-    /// <paramref name="activationType"/> — тип стимула (1 — смена условий, 2 — действие, 3 — фраза/команда);
-    /// пробрасывается в ОР1, где на смене условий (==1) создание автоматизма запрещено.
+    /// Ориентировочный рефлекс
     /// </summary>
-    internal Automatizm OrientationReflex(int automatizmID, int currentEmotionId, int actionsImageId, int activationType = 2)
+    internal Automatizm OrientationReflex(int automatizmID, int currentEmotionId, int actionsImageId)
     {
       try
       {
         Automatizm atmtzm = null;
 
         if (automatizmID == 0)
-          atmtzm = OrientationReflex_1(currentEmotionId, actionsImageId, activationType);
+          atmtzm = OrientationReflex_1(currentEmotionId, actionsImageId);
         else
         {
           atmtzm = _automatizmSystem.GetAutomatizmById(automatizmID);
@@ -143,7 +141,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Ориентировочный рефлекс 1 уровня: нет автоматизма, нужно быстро создать его по гомеостатическим целям
     /// </summary>
-    internal Automatizm OrientationReflex_1(int currentEmotionId, int actionsImageId, int activationType = 2)
+    internal Automatizm OrientationReflex_1(int currentEmotionId, int actionsImageId)
     {
       try
       {
@@ -155,7 +153,7 @@ namespace ISIDA.Psychic
         if (_episodicMemorySystem != null)
           ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId, _understandingTreeSystem);
         if (AppGlobalState.EvolutionStage < 3)
-          atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose(activationType);
+          atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
         return atmz;
       }
