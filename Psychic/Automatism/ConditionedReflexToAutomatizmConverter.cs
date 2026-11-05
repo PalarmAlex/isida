@@ -364,6 +364,10 @@ namespace ISIDA.Psychic
           Logger.Info($"Автоматизм {automatizmId} связан с цепочкой {automatizmChainId}");
         }
 
+        ShortLogChannel.WriteBlock("УР → АВТОМАТИЗМ:",
+            $"Автоматизм ID={automatizm.ID}, полезность={automatizm.Usefulness}, " +
+            $"из УР ID={conditionedReflex.Id} (порядок {conditionedReflex.Order})");
+
         return (true, automatizmId, ConversionStatus.Created,
                 automatizmChainId > 0 ? "Автоматизм с цепочкой успешно создан" : "Автоматизм успешно создан");
       }

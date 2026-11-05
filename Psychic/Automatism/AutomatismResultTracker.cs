@@ -922,6 +922,8 @@ namespace ISIDA.Psychic
           int before = automatizm.Usefulness;
           automatizm.Usefulness += assessment;
           automatizm.Usefulness = AddUtils.Clamp(automatizm.Usefulness, -10, 10);
+          if (before != automatizm.Usefulness)
+            ShortLogChannel.Write("Автоматизм {0}: полезность {1} → {2}", automatizmId, before, automatizm.Usefulness);
           _automatizmSystem.AfterAutomatizmUsefulnessUpdated(automatizmId);
         }
       }

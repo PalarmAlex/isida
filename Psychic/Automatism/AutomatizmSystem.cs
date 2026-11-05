@@ -341,6 +341,9 @@ namespace ISIDA.Psychic.Automatism
         try
         {
           OnAutomatizmCreated(created.ID);
+          ShortLogChannel.WriteBlock("АВТОМАТИЗМ СОЗДАН:",
+              $"ID {created.ID}, ActionsImage={created.ActionsImageID}, " +
+              $"полезность={created.Usefulness}, ветка={created.BranchID}");
         }
         catch (Exception ex)
         {
@@ -446,6 +449,8 @@ namespace ISIDA.Psychic.Automatism
 
       try
       {
+        bool deleted = false;
+
         _lock.EnterWriteLock();
         try
         {
@@ -459,12 +464,17 @@ namespace ISIDA.Psychic.Automatism
               (AppGlobalState.EvolutionStage == 2 || AppGlobalState.EvolutionStage == 3))
           {
             DeleteAutomatizmWithCascadeNoLock(automatizmId);
+            deleted = true;
           }
         }
         finally
         {
           _lock.ExitWriteLock();
         }
+
+        // Токен пульта после снятия блокировки (ShortLogChannel синхронно зовёт UI-подписчика).
+        if (deleted)
+          ShortLogChannel.WriteBlock("АВТОМАТИЗМ УДАЛЁН:", $"ID {automatizmId}, полезность < 0");
       }
       catch (Exception ex)
       {

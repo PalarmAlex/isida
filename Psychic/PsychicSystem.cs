@@ -678,6 +678,23 @@ namespace ISIDA.Psychic
           _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
         AppGlobalState.UpdateLastPultStimulusPulse(PulseCount);
 
+        // Пультовой лог: стимул пришёл из любого канала (действие, фраза, команда, зрительный).
+        // Пустые модальности не печатаются, чтобы токен не превращался в простыню нулей.
+        var stimulusLines = new List<string>();
+        if (actionIdList != null && actionIdList.Count > 0)
+          stimulusLines.Add($"действия: {string.Join(",", actionIdList)}");
+        if (phraseIdList != null && phraseIdList.Count > 0)
+          stimulusLines.Add($"фразы: {string.Join(",", phraseIdList)}");
+        if (commandPatternIdList != null && commandPatternIdList.Count > 0)
+          stimulusLines.Add($"команды: {string.Join(",", commandPatternIdList)}");
+        if (visualColorId != AgentVisualColor.White)
+          stimulusLines.Add($"цвет: {AgentVisualColor.GetDisplayName(visualColorId)}");
+        if (toneId != 0)
+          stimulusLines.Add($"тон: {toneId}");
+        if (moodId != 0)
+          stimulusLines.Add($"настроение: {moodId}");
+        ShortLogChannel.WriteBlock("СТИМУЛ:", stimulusLines.ToArray());
+
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
             currentBaseId,
@@ -1525,12 +1542,14 @@ namespace ISIDA.Psychic
       if (AgentSleepOrchestrator.IsInitialized && AgentSleepOrchestrator.Instance.SuppressExternalMotor)
       {
         Logger.Info($"Автоматизм ID={automatizm.ID} не выполнен: сон (подавление моторики).");
+        ShortLogChannel.Write("Автоматизм {0} заблокирован: сон", automatizm.ID);
         return false;
       }
 
       if (AppGlobalState.HostEnvironmentDegraded)
       {
         Logger.Info($"Автоматизм ID={automatizm.ID} не выполнен: внешняя среда хоста в режиме деградации.");
+        ShortLogChannel.Write("Автоматизм {0} заблокирован: деградация среды", automatizm.ID);
         return false;
       }
 
@@ -1543,6 +1562,7 @@ namespace ISIDA.Psychic
       if (automatizm.Usefulness < 0)
       {
         Logger.Warning($"Автоматизм ID={automatizm.ID} заблокирован, отрицательная полезность");
+        ShortLogChannel.Write("Автоматизм {0} заблокирован: полезность {1}", automatizm.ID, automatizm.Usefulness);
         return false;
       }
 
@@ -1563,6 +1583,9 @@ namespace ISIDA.Psychic
         if (result.Success)
         {
           Logger.Info($"Запущен автоматизм ID: {automatizm.ID} для узла: {automatizm.BranchID}");
+          ShortLogChannel.WriteBlock("АВТОМАТИЗМ АКТИВИРОВАН:",
+              $"ID {automatizm.ID}, ActionsImage={automatizm.ActionsImageID}, " +
+              $"полезность={automatizm.Usefulness}, ветка={automatizm.BranchID}");
 
           // Период ожидания оценки оператора: только после фактической активации автоматизма (сброс таймера при каждом успешном запуске)
           //if (AppGlobalState.EvolutionStage >= 2)

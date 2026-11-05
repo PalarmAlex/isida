@@ -8,15 +8,10 @@ namespace ISIDA.Common
   /// Токен сокращённого лога — результат одного обращения к
   /// <see cref="M:ISIDA.Common.ShortLogChannel.Write(System.String)"/>
   /// (или <see cref="M:ISIDA.Common.ShortLogChannel.WriteBlock(System.String,System.String[])"/>).
-  /// Время добавляется движком автоматически, клиент его не формирует.
+  /// Номер пульса добавляется движком автоматически, клиент его не формирует.
   /// </summary>
   public sealed class ShortLogToken
   {
-    /// <summary>
-    /// Формат отображения времени токена: часы, минуты, секунды без дат.
-    /// </summary>
-    public const string TimeFormat = @"hh\:mm\:ss";
-
     /// <summary>Отступ строк блока внутри токена (две пробела, как в блоках «СТИМУЛ/ОТВЕТ»).</summary>
     public const string LineIndent = "  ";
 
@@ -50,12 +45,12 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Готовое для отображения представление токена: строка времени и текст блока.
+    /// Готовое для отображения представление токена: номер пульса и текст блока.
     /// </summary>
-    /// <returns>Текст вида «13:16:22» + перевод строки + содержимое токена.</returns>
+    /// <returns>Текст вида «№ пульса: ххх» + перевод строки + содержимое токена.</returns>
     public override string ToString()
     {
-      return $"{Time.Hours:D2}:{Time.Minutes:D2}:{Time.Seconds:D2}\n" + Text;
+      return $"№ пульса: {Pulse:D3}\n" + Text;
     }
   }
 

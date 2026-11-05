@@ -576,11 +576,15 @@ namespace ISIDA.Reflexes
                   existingReflex.Id,
                   GetEffectiveLearningRate(suppression, latentFactor, existingReflex.Order));
               Logger.Info($"Усилен (скорректирован конкурентом/латентным торможением) условный рефлекс ID={existingReflex.Id}");
+              ShortLogChannel.Write("УР усилён: ID={0}, крепость={1:F2}",
+                  existingReflex.Id, existingReflex.AssociationStrength);
             }
             else
             {
               _conditionedReflexes.StrengthenAssociation(existingReflex.Id);
               Logger.Info($"Усилен условный рефлекс ID={existingReflex.Id}");
+              ShortLogChannel.Write("УР усилён: ID={0}, крепость={1:F2}",
+                  existingReflex.Id, existingReflex.AssociationStrength);
             }
             DecayLatentInhibition(
                 conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
@@ -616,6 +620,9 @@ namespace ISIDA.Reflexes
         if (newReflexId > 0)
         {
           Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
+          ShortLogChannel.WriteBlock("УР СОЗДАН:",
+              $"ID {newReflexId}, уровень3={conditionedStimulus.StimulusImageId}, " +
+              $"от безусловного {unconditionedStimulus.GeneticReflexId}");
           if (suppression > 0f || latentFactor < 1f)
             _conditionedReflexes.StrengthenAssociationWithRate(
                 newReflexId, GetEffectiveLearningRate(suppression, latentFactor, order: 1));
@@ -851,6 +858,8 @@ namespace ISIDA.Reflexes
                 conditionedStimulus.StimulusImageId, conditionedStimulus.ToneId, conditionedStimulus.MoodId);
             Logger.Info($"Усилен вторичный условный рефлекс ID={existingReflex.Id} " +
                        $"(порядок {existingReflex.Order}) от условного {parentConditionedReflex.Id}");
+            ShortLogChannel.Write("УР усилён (порядок {0}): ID={1}, крепость={2:F2}",
+                existingReflex.Order, existingReflex.Id, existingReflex.AssociationStrength);
             return true;
           }
         }
@@ -881,6 +890,8 @@ namespace ISIDA.Reflexes
           Logger.Info($"Создан условный рефлекс {newOrder}-го порядка ID={newReflexId} " +
                      $"от условного {parentConditionedReflex.Id} " +
                      $"(безусловный источник: {parentConditionedReflex.SourceGeneticReflexId})");
+          ShortLogChannel.WriteBlock($"УР {newOrder}-ГО УРОВНЯ:",
+              $"ID {newReflexId}, от условного {parentConditionedReflex.Id}");
           if (suppression > 0f || latentFactor < 1f)
             _conditionedReflexes.StrengthenAssociationWithRate(
                 newReflexId, GetEffectiveLearningRate(suppression, latentFactor, newOrder));

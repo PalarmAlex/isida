@@ -97,7 +97,17 @@ namespace ISIDA.Reflexes
             return (false, $"Безусловный рефлекс {reflexId} не содержит действий");
         }
 
-        return ExecuteAdaptiveActions(actionIds, ActionActivationSource.GeneticReflex);
+        var execResult = ExecuteAdaptiveActions(actionIds, ActionActivationSource.GeneticReflex);
+
+        if (execResult.Success)
+        {
+          if (reflexId == -1)
+            ShortLogChannel.Write("Б/У рефлекс (по умолчанию)");
+          else
+            ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", $"ID {reflexId}, действий={actionIds.Count}");
+        }
+
+        return execResult;
       }
       catch (Exception ex)
       {

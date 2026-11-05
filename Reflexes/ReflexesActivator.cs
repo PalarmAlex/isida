@@ -617,6 +617,11 @@ namespace ISIDA.Reflexes
               lastWasConditioned = true;
 
               Logger.Info($"Условный рефлекс {conditionedReflexId} активировал действие безусловного {conditionedReflex.SourceGeneticReflexId}");
+
+              ShortLogChannel.WriteBlock("УР АКТИВИРОВАН:",
+                  $"ID {conditionedReflexId}, порядок {conditionedReflex.Order}, " +
+                  $"крепость={conditionedReflex.AssociationStrength:F2}, " +
+                  $"стимул={_activeCurTriggerStimulusID}");
             }
             }
           }

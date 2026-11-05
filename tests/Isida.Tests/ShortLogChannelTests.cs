@@ -260,16 +260,16 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// <c>ToString</c> токена даёт строку времени и текст блока.
+    /// <c>ToString</c> токена даёт номер пульса и текст блока.
     /// </summary>
     [Fact]
-    public void Token_ToString_HasTimeLineAndText()
+    public void Token_ToString_HasPulseLineAndText()
     {
-      var token = new ShortLogToken(new TimeSpan(13, 16, 22), "test text", 1, 0);
+      var token = new ShortLogToken(new TimeSpan(13, 16, 22), "test text", 1, 42);
 
       string s = token.ToString();
 
-      Assert.StartsWith("13:16:22", s);
+      Assert.Contains("№ пульса: 042", s);
       Assert.Contains("test text", s);
     }
 

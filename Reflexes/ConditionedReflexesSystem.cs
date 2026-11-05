@@ -995,6 +995,11 @@ namespace ISIDA.Reflexes
     /// </summary>
     public void ApplyPassiveDecay()
     {
+      // Сообщения пульта собираем под блокировкой, а рассылаем после её снятия:
+      // ShortLogChannel синхронно вызывает OnToken, и UI-подписчик мог бы читать
+      // эту же систему → LockRecursionException (конвенция «событие после блокировки»).
+      var pultMessages = new List<string>();
+
       _lock.EnterWriteLock();
       try
       {
@@ -1035,12 +1040,16 @@ namespace ISIDA.Reflexes
             reflex.AssociationStrength = _settings.MinAssociationStrength;
 
           Logger.Info($"Крепость у-рефлекса ID={reflex.Id} угашена пассивно: {oldStrength:F3} → {reflex.AssociationStrength:F3}");
+          pultMessages.Add($"УР забыт: ID={reflex.Id}, крепость {oldStrength:F2} → {reflex.AssociationStrength:F2}");
         }
       }
       finally
       {
         _lock.ExitWriteLock();
       }
+
+      foreach (var message in pultMessages)
+        ShortLogChannel.Write(message);
     }
 
     /// <summary>
@@ -1057,6 +1066,8 @@ namespace ISIDA.Reflexes
     /// </summary>
     public void RemoveExpiredReflexes()
     {
+      var pultMessages = new List<string>();
+
       _lock.EnterWriteLock();
       try
       {
@@ -1071,6 +1082,10 @@ namespace ISIDA.Reflexes
 
         foreach (var id in reflexesToRemove)
         {
+          // Снимок до удаления: после Remove(id) экземпляр недоступен, данных для токена не останется.
+          if (_conditionedReflexes.TryGetValue(id, out var expired))
+            pultMessages.Add($"УР УДАЛЁН: ID={id}, крепость={expired.AssociationStrength:F2}, протух (TTL/слабость)");
+
           _conditionedReflexes.Remove(id);
           _activeConditionedReflexes.RemoveAll(r => r.Id == id);
         }
@@ -1079,6 +1094,9 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+
+      foreach (var message in pultMessages)
+        ShortLogChannel.Write(message);
     }
 
     /// <summary>
@@ -1129,6 +1147,8 @@ namespace ISIDA.Reflexes
       if (stimulusImageId <= 0)
         return;
 
+      var pultMessages = new List<string>();
+
       _lock.EnterWriteLock();
       try
       {
@@ -1150,6 +1170,7 @@ namespace ISIDA.Reflexes
           float oldStrength = reflex.AssociationStrength;
           reflex.ApplyActiveExtinction(alphaExt);
           Logger.Info($"Крепость у-рефлекса ID={reflex.Id} угашена активным угасанием: {oldStrength:F3} → {reflex.AssociationStrength:F3}");
+          pultMessages.Add($"УР угасание: ID={reflex.Id}, крепость {oldStrength:F2} → {reflex.AssociationStrength:F2}");
 
           if (reflex.ShouldBeRemoved(now))
             reflexesToRemove.Add(reflex.Id);
@@ -1165,6 +1186,9 @@ namespace ISIDA.Reflexes
       {
         _lock.ExitWriteLock();
       }
+
+      foreach (var message in pultMessages)
+        ShortLogChannel.Write(message);
     }
 
     /// <summary>
