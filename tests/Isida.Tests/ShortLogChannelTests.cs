@@ -304,5 +304,107 @@ namespace Isida.Tests
       // Токен всё равно записан в сессию, несмотря на сбой подписчика.
       Assert.Single(ShortLogChannel.GetCurrentSessionTokens());
     }
+
+    /// <summary>
+    /// Идентичный предыдущему блок на следующем сбросе НЕ создаёт новый токен, а увеличивает
+    /// <see cref="ShortLogToken.RepeatCount"/> последнего (сжатие повторов).
+    /// </summary>
+    [Fact]
+    public void FlushPulse_IdenticalBlockOnNextFlush_CollapsedIntoRepeat()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", "ID 1, действий=1");
+      ShortLogChannel.FlushPulse();
+      ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", "ID 1, действий=1");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Single(tokens);
+      Assert.Equal(2, tokens[0].RepeatCount);
+    }
+
+    /// <summary>
+    /// Отличный от последнего блок остаётся отдельным токеном (сжатие трогает только повторы).
+    /// </summary>
+    [Fact]
+    public void FlushPulse_DifferentBlocks_NotCollapsed()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      ShortLogChannel.Write("a");
+      ShortLogChannel.FlushPulse();
+      ShortLogChannel.Write("b");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Equal(2, tokens.Length);
+      Assert.Equal(1, tokens[0].RepeatCount);
+      Assert.Equal(1, tokens[1].RepeatCount);
+    }
+
+    /// <summary>
+    /// Блок, разделённый иным токеном (A, B, A), НЕ схлопывается в повтор: сравнение идёт только
+    /// с последним токеном сессии, иначе терялась бы не-подряд идущая последовательность.
+    /// </summary>
+    [Fact]
+    public void FlushPulse_SameBlockAfterDifferentBlock_NotCollapsed()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      ShortLogChannel.Write("A");
+      ShortLogChannel.FlushPulse();
+      ShortLogChannel.Write("B");
+      ShortLogChannel.FlushPulse();
+      ShortLogChannel.Write("A");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Equal(3, tokens.Length);
+      Assert.All(tokens, t => Assert.Equal(1, t.RepeatCount));
+    }
+
+    /// <summary>
+    /// При повторе рассылается <see cref="ShortLogChannel.OnTokenUpdated"/> (тот же объект),
+    /// а не новый <see cref="ShortLogChannel.OnToken"/>.
+    /// </summary>
+    [Fact]
+    public void FlushPulse_Repeat_FiresOnTokenUpdated()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      int createdCount = 0;
+      ShortLogToken updated = null;
+      ShortLogChannel.OnToken += t => createdCount++;
+      ShortLogChannel.OnTokenUpdated += t => updated = t;
+
+      ShortLogChannel.Write("повтор");
+      ShortLogChannel.FlushPulse();
+      ShortLogChannel.Write("повтор");
+      ShortLogChannel.FlushPulse();
+
+      Assert.Equal(1, createdCount);
+      Assert.NotNull(updated);
+      Assert.Equal(2, updated.RepeatCount);
+    }
+
+    /// <summary>
+    /// <c>ToString</c> токена с повторами добавляет «×N» к номеру пульса.
+    /// </summary>
+    [Fact]
+    public void Token_ToString_ShowsRepeatCount()
+    {
+      var token = new ShortLogToken(new TimeSpan(13, 16, 22), "блок", 1, 5);
+      token.MarkRepeated(new TimeSpan(13, 17, 0), 18);
+
+      string s = token.ToString();
+
+      Assert.Contains("№ пульса: 018 ×2", s);
+      Assert.Contains("блок", s);
+    }
   }
 }

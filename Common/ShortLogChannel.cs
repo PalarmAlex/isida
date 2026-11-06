@@ -15,8 +15,8 @@ namespace ISIDA.Common
     /// <summary>Отступ строк блока внутри токена (две пробела, как в блоках «СТИМУЛ/ОТВЕТ»).</summary>
     public const string LineIndent = "  ";
 
-    /// <summary>Время создания токена движком.</summary>
-    public TimeSpan Time { get; }
+    /// <summary>Время создания токена движком (при повторах сдвигается на момент повтора).</summary>
+    public TimeSpan Time { get; private set; }
 
     /// <summary>
     /// Текст сообщения. Может содержать переносы строк — токен остаётся единым блоком.
@@ -26,8 +26,14 @@ namespace ISIDA.Common
     /// <summary>Идентификатор сессии, в которой создан токен.</summary>
     public int SessionId { get; }
 
-    /// <summary>Номер глобального пульса на момент создания токена (0 — пульсация ещё не шла).</summary>
-    public int Pulse { get; }
+    /// <summary>Номер глобального пульса последнего показа токена (0 — пульсация ещё не шла).</summary>
+    public int Pulse { get; private set; }
+
+    /// <summary>
+    /// Число показов блока подряд (1 — без повторов; &gt;1 — блок повторялся на соседних пульсах
+    /// без иных токенов между ними и был схлопнут каналом в один).
+    /// </summary>
+    public int RepeatCount { get; private set; } = 1;
 
     /// <summary>
     /// Создаёт токен сокращённого лога.
@@ -45,12 +51,29 @@ namespace ISIDA.Common
     }
 
     /// <summary>
-    /// Готовое для отображения представление токена: номер пульса и текст блока.
+    /// Отмечает повтор этого же блока на новом пульсе: сдвигает пульс/время на момент повтора
+    /// и увеличивает счётчик показов. Вызывается каналом при сжатии повторов.
     /// </summary>
-    /// <returns>Текст вида «№ пульса: ххх» + перевод строки + содержимое токена.</returns>
+    /// <param name="time">Время повтора, проставленное движком.</param>
+    /// <param name="pulse">Номер пульса повтора.</param>
+    internal void MarkRepeated(TimeSpan time, int pulse)
+    {
+      Time = time;
+      Pulse = pulse;
+      RepeatCount++;
+    }
+
+    /// <summary>
+    /// Готовое для отображения представление токена: номер пульса (и, при повторах, число показов)
+    /// и текст блока.
+    /// </summary>
+    /// <returns>
+    /// Текст вида «№ пульса: ххх» (+ «×N» при повторах) + перевод строки + содержимое токена.
+    /// </returns>
     public override string ToString()
     {
-      return $"№ пульса: {Pulse:D3}\n" + Text;
+      var repeat = RepeatCount > 1 ? $" ×{RepeatCount}" : string.Empty;
+      return $"№ пульса: {Pulse:D3}{repeat}\n" + Text;
     }
   }
 
@@ -86,6 +109,15 @@ namespace ISIDA.Common
     /// Новый токен сокращённого лога. Вызывается на потоке автора записи (обычно поток пульса).
     /// </summary>
     public static event Action<ShortLogToken> OnToken;
+
+    /// <summary>
+    /// Токен-повтор: на новом пульсе пришёл блок, текстово равный последнему в сессии.
+    /// Новый токен НЕ создаётся — вместо этого обновляется существующий (сдвиг пульса/времени,
+    /// рост <see cref="ShortLogToken.RepeatCount"/>) и рассылается этот же объект.
+    /// Клиенту следует перерисовать уже показанный блок (например, дописать «×N»), а не добавлять новый.
+    /// Вызывается на потоке автора записи, вне блокировки канала.
+    /// </summary>
+    public static event Action<ShortLogToken> OnTokenUpdated;
 
     /// <summary>
     /// Начало сессии: параметр — новый <c>SessionId</c>. Клиенту следует очистить свой вывод.
@@ -229,7 +261,9 @@ namespace ISIDA.Common
 
     /// <summary>
     /// Сбрасывает буфер пульса: группирует подряд идущие записи с одинаковым номером пульса
-    /// в один токен, дописывает токены в сессию и рассылает их подписчикам вне блокировки.
+    /// в один токен, схлопывает повторы (токен, текстово равный последнему в сессии, не
+    /// создаётся заново, а обновляет счётчик показов), дописывает токены в сессию и рассылает
+    /// их подписчикам вне блокировки.
     /// </summary>
     /// <remarks>
     /// Вызывается в конце обработки пульса (<see cref="GlobalTimer"/> в <c>finally</c>
@@ -239,35 +273,47 @@ namespace ISIDA.Common
     public static void FlushPulse()
     {
       List<ShortLogToken> created;
+      List<ShortLogToken> updated;
 
       lock (_lock)
-        created = FlushBufferLocked();
+        FlushBufferLocked(out created, out updated);
 
-      if (created == null)
-        return;
+      if (created != null)
+        foreach (var token in created)
+          RaiseToken(token);
 
-      foreach (var token in created)
-        RaiseToken(token);
+      if (updated != null)
+        foreach (var token in updated)
+          RaiseTokenUpdated(token);
     }
 
     /// <summary>
     /// Преобразует содержимое буфера в токены (группировка по пульсу), дописывает их в сессию.
+    /// Блок, текстово равный последнему токену сессии, считается повтором: новый токен не
+    /// создаётся, а последний получает <see cref="ShortLogToken.MarkRepeated"/> и попадает
+    /// в <paramref name="updated"/> (для рассылки <see cref="OnTokenUpdated"/>).
     /// Вызывать только под <c>lock (_lock)</c>.
     /// </summary>
-    /// <returns>Созданные токены для рассылки; <c>null</c>, если буфер пуст или сессии нет
-    /// (в этом случае буфер просто очищается).</returns>
-    private static List<ShortLogToken> FlushBufferLocked()
+    /// <param name="created">Созданные новые токены (рассылаются через <see cref="OnToken"/>);
+    /// <c>null</c>, если новых токенов нет.</param>
+    /// <param name="updated">Повторённые токены (рассылаются через <see cref="OnTokenUpdated"/>);
+    /// <c>null</c>, если повторов нет.</param>
+    private static void FlushBufferLocked(
+        out List<ShortLogToken> created,
+        out List<ShortLogToken> updated)
     {
+      created = null;
+      updated = null;
+
       if (_pulseBuffer.Count == 0)
-        return null;
+        return;
 
       if (_currentSessionId == 0)
       {
         _pulseBuffer.Clear();
-        return null;
+        return;
       }
 
-      var created = new List<ShortLogToken>();
       int i = 0;
       while (i < _pulseBuffer.Count)
       {
@@ -281,18 +327,33 @@ namespace ISIDA.Common
           i++;
         }
 
+        string text = sb.ToString();
+
+        // Сжатие повторов: identical к последнему токену сессии → не новый блок, а повтор
+        // (растёт RepeatCount, сдвигаются пульс/время). Сравниваем только с ПОСЛЕДНИМ:
+        // блок, разделённый иным токеном, уже не «повтор подряд» и остаётся отдельным.
+        var last = _currentSessionTokens.Count > 0
+            ? _currentSessionTokens[_currentSessionTokens.Count - 1]
+            : null;
+
+        if (last != null && string.Equals(last.Text, text, StringComparison.Ordinal))
+        {
+          last.MarkRepeated(DateTime.Now.TimeOfDay, pulse);
+          (updated ?? (updated = new List<ShortLogToken>())).Add(last);
+          continue;
+        }
+
         var token = new ShortLogToken(
             DateTime.Now.TimeOfDay,
-            sb.ToString(),
+            text,
             _currentSessionId,
             pulse);
 
         _currentSessionTokens.Add(token);
-        created.Add(token);
+        (created ?? (created = new List<ShortLogToken>())).Add(token);
       }
 
       _pulseBuffer.Clear();
-      return created;
     }
 
     #endregion
@@ -321,7 +382,10 @@ namespace ISIDA.Common
       // может войти в тот же _timerLock обратно — прямая дорога к взаимной блокировке.
       lock (_lock)
       {
-        FlushBufferLocked();
+        // Хвост буфера уходит в закрываемую сессию (через OnSessionCompleted), live-рассылка
+        // не делается (см. комментарий выше) — поэтому created/updated здесь отбрасываются.
+        List<ShortLogToken> discardedCreated, discardedUpdated;
+        FlushBufferLocked(out discardedCreated, out discardedUpdated);
         if (_currentSessionId != 0)
         {
           previousSessionId = _currentSessionId;
@@ -408,6 +472,7 @@ namespace ISIDA.Common
       lock (_lock)
       {
         OnToken = null;
+        OnTokenUpdated = null;
         OnSessionStarted = null;
         OnSessionCompleted = null;
         _currentSessionId = 0;
@@ -434,6 +499,23 @@ namespace ISIDA.Common
       catch (Exception ex)
       {
         Logger.Warning($"ShortLogChannel.OnToken: {ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Рассылает повторённый токен подписчикам, гася их исключения (сбой UI не должен
+    /// останавливать пульс).
+    /// </summary>
+    /// <param name="token">Повторённый токен (тот же объект, что был разослан ранее как новый).</param>
+    private static void RaiseTokenUpdated(ShortLogToken token)
+    {
+      try
+      {
+        OnTokenUpdated?.Invoke(token);
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"ShortLogChannel.OnTokenUpdated: {ex.Message}");
       }
     }
 

@@ -575,6 +575,76 @@ namespace ISIDA.Psychic
     }
 
     /// <summary>
+    /// Пишет в сокращённый лог блок «СТИМУЛ:» с модальностями пришедшего операторского стимула.
+    /// </summary>
+    /// <param name="actionIdList">список ID действий с пульта</param>
+    /// <param name="phraseIdList">список ID фраз с пульта</param>
+    /// <param name="commandPatternIdList">список ID паттернов команды с пульта</param>
+    /// <param name="visualColorId">Код зрительного канала (см. <see cref="AgentVisualColor"/>)</param>
+    /// <param name="toneId">ID тона сообщения</param>
+    /// <param name="moodId">ID настроения сообщения</param>
+    /// <remarks>
+    /// Вызывается из <see cref="SensorActivation"/> ДО проверки стадии эволюции: на стадиях 0–1
+    /// автоматизмы молчат, но рефлексы на стимул работают, и оператору видно связку
+    /// «СТИМУЛ → Б/У РЕФЛЕКС»; иначе на 1-й стадии лог пульта пустой.
+    /// Пустые модальности не печатаются, чтобы токен не превращался в простыню нулей.
+    /// ID резолвятся в имена из справочников (InfluenceActionSystem, VerbalChannel)
+    /// в момент события — чтобы правка .dat не переписывала историю логов.
+    /// Исключения гасятся: дефект резолвинга имён не должен ронять пульс.
+    /// </remarks>
+    private void WriteStimulusShortLog(
+      List<int> actionIdList,
+      List<int> phraseIdList,
+      List<int> commandPatternIdList,
+      int visualColorId,
+      int toneId,
+      int moodId)
+    {
+      try
+      {
+        var stimulusLines = new List<string>();
+        if (actionIdList != null && actionIdList.Count > 0)
+        {
+          // actionIdList — ID воздействий с пульта (InfluenceAction). Резолвим по справочнику
+          // воздействий; отсутствующий ID показываем как [id], чтобы не терялся факт стимула.
+          var actionNames = actionIdList
+              .Select(id => _influenceActionSystem.GetInfluenceAction(id)?.Name ?? $"[{id}]")
+              .ToList();
+          stimulusLines.Add($"действия: {string.Join(", ", actionNames)}");
+        }
+        if (phraseIdList != null && phraseIdList.Count > 0)
+        {
+          var phrases = phraseIdList
+              .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid))
+              .Where(s => !string.IsNullOrWhiteSpace(s))
+              .ToList();
+          if (phrases.Count > 0)
+            stimulusLines.Add($"фразы: {string.Join(", ", phrases)}");
+        }
+        if (commandPatternIdList != null && commandPatternIdList.Count > 0)
+        {
+          var commands = commandPatternIdList
+              .Select(pid => _sensorySystem.CommandChannel.GetPhraseFromPhraseId(pid))
+              .Where(s => !string.IsNullOrWhiteSpace(s))
+              .ToList();
+          if (commands.Count > 0)
+            stimulusLines.Add($"команды: {string.Join(", ", commands)}");
+        }
+        if (visualColorId != AgentVisualColor.White)
+          stimulusLines.Add($"цвет: {AgentVisualColor.GetDisplayName(visualColorId)}");
+        if (toneId != 0)
+          stimulusLines.Add($"тон: {toneId}");
+        if (moodId != 0)
+          stimulusLines.Add($"настроение: {moodId}");
+        ShortLogChannel.WriteBlock("СТИМУЛ:", stimulusLines.ToArray());
+      }
+      catch (Exception ex)
+      {
+        Logger.Warning($"ShortLogChannel «СТИМУЛ:»: {ex.Message}");
+      }
+    }
+
+    /// <summary>
     /// Активация по событиям с Пульта - основной метод
     /// </summary>
     /// <param name="activationType">Тип активации: 1-изменение условий, 2-действие, 3-фраза</param>
@@ -604,11 +674,13 @@ namespace ISIDA.Psychic
           visualColorId == AgentVisualColor.White)
         return false;
 
-      if (AppGlobalState.EvolutionStage < 2)
-        return false;
-
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
+
+      WriteStimulusShortLog(actionIdList, phraseIdList, commandPatternIdList, visualColorId, toneId, moodId);
+
+      if (AppGlobalState.EvolutionStage < 2)
+        return false;
 
       try
       {
@@ -678,45 +750,7 @@ namespace ISIDA.Psychic
           _thinkingCyclesSystem?.NotifyStimulus(PulseCount);
         AppGlobalState.UpdateLastPultStimulusPulse(PulseCount);
 
-        // Пультовой лог: стимул пришёл из любого канала (действие, фраза, команда, зрительный).
-        // Пустые модальности не печатаются, чтобы токен не превращался в простыню нулей.
-        // ID резолвятся в имена из справочников (InfluenceActionSystem, VerbalChannel)
-        // в момент события — чтобы правка .dat не переписывала историю логов.
-        var stimulusLines = new List<string>();
-        if (actionIdList != null && actionIdList.Count > 0)
-        {
-          // actionIdList — ID воздействий с пульта (InfluenceAction). Резолвим по справочнику
-          // воздействий; отсутствующий ID показываем как [id], чтобы не терялся факт стимула.
-          var actionNames = actionIdList
-              .Select(id => _influenceActionSystem.GetInfluenceAction(id)?.Name ?? $"[{id}]")
-              .ToList();
-          stimulusLines.Add($"действия: {string.Join(", ", actionNames)}");
-        }
-        if (phraseIdList != null && phraseIdList.Count > 0)
-        {
-          var phrases = phraseIdList
-              .Select(pid => _sensorySystem.VerbalChannel.GetPhraseFromPhraseId(pid))
-              .Where(s => !string.IsNullOrWhiteSpace(s))
-              .ToList();
-          if (phrases.Count > 0)
-            stimulusLines.Add($"фразы: {string.Join(", ", phrases)}");
-        }
-        if (commandPatternIdList != null && commandPatternIdList.Count > 0)
-        {
-          var commands = commandPatternIdList
-              .Select(pid => _sensorySystem.CommandChannel.GetPhraseFromPhraseId(pid))
-              .Where(s => !string.IsNullOrWhiteSpace(s))
-              .ToList();
-          if (commands.Count > 0)
-            stimulusLines.Add($"команды: {string.Join(", ", commands)}");
-        }
-        if (visualColorId != AgentVisualColor.White)
-          stimulusLines.Add($"цвет: {AgentVisualColor.GetDisplayName(visualColorId)}");
-        if (toneId != 0)
-          stimulusLines.Add($"тон: {toneId}");
-        if (moodId != 0)
-          stimulusLines.Add($"настроение: {moodId}");
-        ShortLogChannel.WriteBlock("СТИМУЛ:", stimulusLines.ToArray());
+        // Лог «СТИМУЛ:» уже записан в начале метода (до проверки стадии).
 
         Automatizm atmz = null;
         int automatizmNodeId = AutomatizmTreeActivation(
