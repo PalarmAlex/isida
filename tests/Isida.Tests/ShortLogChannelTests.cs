@@ -406,5 +406,67 @@ namespace Isida.Tests
       Assert.Contains("№ пульса: 018 ×2", s);
       Assert.Contains("блок", s);
     }
+
+    /// <summary>
+    /// <c>Write(text, join)</c> дописывает запись в конец ПРЕДЫДУЩЕЙ того же пульса через
+    /// заданный разделитель вместо перевода строки (разделитель задаёт, как ТЕКУЩАЯ запись
+    /// соединяется с предыдущей; <c>null</c> — с новой строки).
+    /// </summary>
+    [Fact]
+    public void Write_WithJoinSeparator_AppendsToPreviousLine()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      // Многострочный блок «АВТОМАТИЗМ СОЗДАН:» — одна запись (с переводом строки внутри).
+      ShortLogChannel.WriteBlock("АВТОМАТИЗМ СОЗДАН:", "ID 2, ActionsImage=5, полезность=0, ветка=14");
+      // Дописать к концу предыдущей записи через "; " → целевой формат оператора.
+      ShortLogChannel.Write("Эхо - Автоматизм", "; ");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Single(tokens);
+      Assert.Equal(
+          "АВТОМАТИЗМ СОЗДАН:\n  ID 2, ActionsImage=5, полезность=0, ветка=14; Эхо - Автоматизм",
+          tokens[0].Text);
+    }
+
+    /// <summary>
+    /// Разделитель игнорируется, если запись первая на пульсе (нет предыдущей).
+    /// </summary>
+    [Fact]
+    public void Write_WithJoinSeparator_FirstRecord_IsNormal()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      ShortLogChannel.Write("первая запись", "; ");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Single(tokens);
+      Assert.Equal("первая запись", tokens[0].Text);
+    }
+
+    /// <summary>
+    /// Разделитель применяется только в пределах одного пульса; разные пульсы — с новой строки.
+    /// </summary>
+    [Fact]
+    public void Write_WithJoinSeparator_CrossPulse_Resets()
+    {
+      ShortLogChannel.Reset();
+      ShortLogChannel.StartSession();
+
+      ShortLogChannel.Write("pulse A");
+      ShortLogChannel.FlushPulse();
+
+      ShortLogChannel.Write("pulse B", "; ");
+      ShortLogChannel.FlushPulse();
+
+      var tokens = ShortLogChannel.GetCurrentSessionTokens();
+      Assert.Equal(2, tokens.Length);
+      Assert.Equal("pulse A", tokens[0].Text);
+      Assert.Equal("pulse B", tokens[1].Text);
+    }
   }
 }

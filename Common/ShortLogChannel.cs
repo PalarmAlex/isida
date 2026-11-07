@@ -146,13 +146,20 @@ namespace ISIDA.Common
     private static List<ShortLogToken> _currentSessionTokens = new List<ShortLogToken>();
 
     /// <summary>
-    /// Буфер записей текущего пульса: все <see cref="Write(string)"/>/<see cref="WriteBlock"/>
+    /// Буфер записей текущего пульса: все <see cref="Write(string,string)"/>/<see cref="WriteBlock(System.String,System.String[])"/>
     /// накапливаются здесь и объединяются в один токен на пульс при <see cref="FlushPulse"/>
     /// (по образцу буферизации <see cref="ResearchLogger"/>). Каждая запись хранит свой номер
     /// пульса, поэтому при запаздывании сброса подряд идущие записи одного пульса всё равно
     /// группируются корректно, а соседние пульсы не склеиваются.
     /// </summary>
-    private static List<(int Pulse, string Text)> _pulseBuffer = new List<(int Pulse, string Text)>();
+    /// <remarks>
+    /// Поле <c>JoinSeparator</c> — разделитель для склейки этой записи с ПРЕДЫДУЩЕЙ в буфере:
+    /// <c>null</c> означает «с новой строки» (поведение по умолчанию), любое иное значение —
+    /// вставить этот разделитель между предыдущей и данной записью вместо перевода строки
+    /// (например <c>"; "</c> даёт «...ветка=14; Эхо - Автоматизм»).
+    /// </remarks>
+    private static List<(int Pulse, string Text, string JoinSeparator)> _pulseBuffer =
+        new List<(int Pulse, string Text, string JoinSeparator)>();
 
     #endregion
 
@@ -162,6 +169,13 @@ namespace ISIDA.Common
     /// Записывает один токен сокращённого лога. Время проставляется движком.
     /// </summary>
     /// <param name="text">Текст сообщения; переносы строк допустимы — всё уйдёт одним блоком.</param>
+    /// <param name="join">
+    /// Разделитель для склейки этой записи с ПРЕДЫДУЩЕЙ записью того же пульса. По умолчанию
+    /// <c>null</c> — запись идёт с новой строки (обычное поведение). Если задать значение
+    /// (например <c>"; "</c>), запись допишется в конец предыдущей через этот разделитель
+    /// вместо перевода строки: «...ветка=14; Эхо - Автоматизм». Если предыдущей записи в
+    /// пульсе нет (запись первая), разделитель игнорируется и текст пишется как обычно.
+    /// </param>
     /// <remarks>
     /// Вызов вне активной сессии (пульсация не запущена) молча игнорируется: сокращённый лог
     /// живёт только внутри цикла «вкл/выкл пульсации».
@@ -169,11 +183,13 @@ namespace ISIDA.Common
     /// <example>
     /// <code>
     /// ShortLogChannel.Write("Путь M (стадия 2)");
+    /// // дописать к предыдущему логу одной строкой:
+    /// ShortLogChannel.Write("Эхо - Автоматизм", "; ");
     /// </code>
     /// </example>
-    public static void Write(string text)
+    public static void Write(string text, string join = null)
     {
-      Emit(text ?? string.Empty);
+      Emit(text ?? string.Empty, join);
     }
 
     /// <summary>
@@ -203,7 +219,7 @@ namespace ISIDA.Common
         return;
       }
 
-      Emit(text);
+      Emit(text, null);
     }
 
     /// <summary>
@@ -239,7 +255,7 @@ namespace ISIDA.Common
         }
       }
 
-      Emit(sb.ToString());
+      Emit(sb.ToString(), null);
     }
 
     /// <summary>
@@ -248,14 +264,18 @@ namespace ISIDA.Common
     /// ушли оператору одним токеном-блоком.
     /// </summary>
     /// <param name="text">Готовый текст записи.</param>
-    private static void Emit(string text)
+    /// <param name="join">
+    /// Разделитель склейки с предыдущей записью того же пульса; <c>null</c> — с новой строки
+    /// (см. <see cref="Write(string,string)"/>).
+    /// </param>
+    private static void Emit(string text, string join)
     {
       lock (_lock)
       {
         if (_currentSessionId == 0)
           return;
 
-        _pulseBuffer.Add((GlobalTimer.GlobalPulsCount, text ?? string.Empty));
+        _pulseBuffer.Add((GlobalTimer.GlobalPulsCount, text ?? string.Empty, join));
       }
     }
 
@@ -322,7 +342,13 @@ namespace ISIDA.Common
         while (i < _pulseBuffer.Count && _pulseBuffer[i].Pulse == pulse)
         {
           if (sb.Length > 0)
-            sb.Append('\n');
+          {
+            // Запись с заданным разделителем дописывается в конец предыдущей той же строкой;
+            // разделитель привязан к ТЕКУЩЕЙ записи (её параметр join). Для первой записи
+            // пульса (sb пуст) разделитель не применяется — писать не к чему.
+            var join = _pulseBuffer[i].JoinSeparator;
+            sb.Append(join != null ? join : "\n");
+          }
           sb.Append(_pulseBuffer[i].Text);
           i++;
         }
