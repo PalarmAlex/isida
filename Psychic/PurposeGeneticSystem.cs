@@ -302,7 +302,7 @@ namespace ISIDA.Psychic
           if (purposeGenetic.ActionImage != null)
           {
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
-            if(atmz != null) ShortLogChannel.Write("Селективный клон", " ;");
+            if(atmz != null) ShortLogChannel.Write("Селективный клон", "; ");
           }
             
         }
@@ -323,7 +323,7 @@ namespace ISIDA.Psychic
             if (mirrorId > 0)
             {
               atmz = _automatizmSystem.GetAutomatizmById(mirrorId);
-              if (atmz != null) ShortLogChannel.Write("Зеркальный автоматизм", " ;");
+              if (atmz != null) ShortLogChannel.Write("Зеркальный автоматизм", "; ");
             }
             else
               Logger.Info("PurposeGeneticSystem: путь M — нет связи InfluenceActionId в AdaptiveActions");
@@ -340,13 +340,13 @@ namespace ISIDA.Psychic
           // Path B: эхо-автоматизм по вербальному стимулу (без моторной части).
           // Моторная часть стимула обрабатывается выше, в пути M.
           atmz = TryCreateStage2EchoWithChainFromStimulusContext();
-          if (atmz != null) ShortLogChannel.Write("Эхо - Автоматизм", " ;");
+          if (atmz != null) ShortLogChannel.Write("Эхо - Автоматизм", "; ");
         }
         else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual)
         {
           // Механизм 3 — случайная проба: Search/Play стили активны, нет usable atmz
           atmz = TryCreateRandomProbeAutomatizm(purposeGenetic);
-          if (atmz != null) ShortLogChannel.Write("Случайный Автоматизм", " ;");
+          if (atmz != null) ShortLogChannel.Write("Случайный Автоматизм", "; ");
         }
 
         return atmz;
