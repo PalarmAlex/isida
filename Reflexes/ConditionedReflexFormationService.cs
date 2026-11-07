@@ -621,7 +621,7 @@ namespace ISIDA.Reflexes
         {
           Logger.Info($"Создан условный рефлекс ID={newReflexId} от безусловного {unconditionedStimulus.GeneticReflexId}");
           ShortLogChannel.WriteBlock("УР СОЗДАН:",
-              $"ID {newReflexId}, уровень3={conditionedStimulus.StimulusImageId}, " +
+              $"ID {newReflexId}, уровень 3={conditionedStimulus.StimulusImageId}, " +
               $"от безусловного {unconditionedStimulus.GeneticReflexId}");
           if (suppression > 0f || latentFactor < 1f)
             _conditionedReflexes.StrengthenAssociationWithRate(

@@ -116,7 +116,7 @@ namespace ISIDA.Reflexes
               var action = _adaptiveActionsSystem.GetAdaptiveAction(actionId);
               actionNames.Add(action != null ? action.Name : $"[{actionId}]");
             }
-            ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", $"ID {reflexId}, действий={actionIds.Count}", $"[{string.Join(", ", actionNames)}]");
+            ShortLogChannel.WriteBlock("Б/У РЕФЛЕКС:", $"ID {reflexId}, действий={actionIds.Count}, [{string.Join(", ", actionNames)}]");
           }
         }
 
