@@ -198,6 +198,7 @@ namespace ISIDA.Psychic
         Phase = SleepPhase.Waking;
 
       Logger.Info($"Сон: начало сессии, фаза={Phase}, пульс={pulseCount}");
+      ShortLogChannel.Write($"Сон: начало, фаза {Phase}");
     }
 
     private void AdvancePhaseOrComplete(int pulseCount)
@@ -230,6 +231,7 @@ namespace ISIDA.Psychic
       Phase = next;
       PhasePulseIndex = 0;
       Logger.Info($"Сон: переход в фазу {Phase}");
+      ShortLogChannel.Write($"Сон: фаза {Phase}");
     }
 
     private void CompleteSessionWake(bool wasDangerWake)
@@ -243,6 +245,8 @@ namespace ISIDA.Psychic
         Logger.Info("Сон: завершение после тревоги.");
       else
         Logger.Info("Сон: естественное пробуждение.");
+
+      ShortLogChannel.Write(wasDangerWake ? "Сон: пробуждение (тревога)" : "Сон: пробуждение");
 
       TrySaveEpisodicAfterSleep();
     }

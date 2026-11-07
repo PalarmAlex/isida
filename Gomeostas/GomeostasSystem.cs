@@ -2518,6 +2518,7 @@ namespace ISIDA.Gomeostas
         {
           _agentState.EvolutionStage = stage;
           Logger.Info($"Стадия успешно изменена с {currentStage} на {stage}");
+          ShortLogChannel.Write($"Стадия гомеостаза: {stage}");
         }
         else
         {

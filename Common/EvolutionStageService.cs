@@ -186,6 +186,7 @@ namespace ISIDA.Common
         AppGlobalState.EvolutionStage = targetStage;
 
         Logger.Info($"Успешный переход на стадию {targetStage}");
+        ShortLogChannel.Write($"Стадия эволюции: {targetStage}");
         return EvolutionStageChangeResult.CreateSuccess(
             $"Стадия успешно изменена с {currentStage} на {targetStage}",
             targetStage,

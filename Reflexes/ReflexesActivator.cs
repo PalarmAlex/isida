@@ -726,6 +726,8 @@ namespace ISIDA.Reflexes
           _activeChainId = chainId;
           Logger.Info($"Цепочка рефлексов {chainId} активирована после рефлекса, " +
                  $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
+          ShortLogChannel.WriteBlock("ЦЕПОЧКА РЕФЛЕКСОВ АКТИВИРОВАНА:",
+              $"ID {chainId}, звено={firstChainLink.ID}, действие={firstChainLink.ActionId}");
 
           _researchLogger?.RegisterActiveChain(chainId, $"ReflexChain_{chainId}", "Reflex");
         }
@@ -806,6 +808,8 @@ namespace ISIDA.Reflexes
           _activeChainId = _pendingChainId;
           Logger.Info($"Отложенная цепочка рефлексов {_pendingChainId} активирована на пульсе {pulseCount}, " +
                      $"первое звено цепочки: {firstChainLink.ID}, действие: {firstChainLink.ActionId}");
+          ShortLogChannel.WriteBlock("ОТЛОЖЕННАЯ ЦЕПОЧКА АКТИВИРОВАНА:",
+              $"ID {_pendingChainId} на пульсе {pulseCount}, звено={firstChainLink.ID}, действие={firstChainLink.ActionId}");
 
           _researchLogger?.RegisterActiveChain(_pendingChainId, $"ReflexChain_{_pendingChainId}", "Reflex");
         }
@@ -865,6 +869,7 @@ namespace ISIDA.Reflexes
         _pendingChainBaseID = _activeCurBaseID;
         _pendingChainStyleID = _activeCurBaseStyleID;
         Logger.Info($"Цепочка рефлексов {chainId} запланирована к активации через {_reflexActionDuration} пульсов (на пульсе {pulseCount + _reflexActionDuration})");
+        ShortLogChannel.Write("Цепочка {0} запланирована через {1} пульсов", chainId, _reflexActionDuration);
       }
     }
 
@@ -1648,6 +1653,8 @@ namespace ISIDA.Reflexes
               StopCurrentReflexChainCore(pulseCount);
               Logger.Info($"Цепочка рефлексов {chain.ChainId} успешно завершена. " +
                          $"Выполнено действий в цепочке: {chain.CompletedActions.Count}");
+              ShortLogChannel.WriteBlock("ЦЕПОЧКА ЗАВЕРШЕНА:",
+                  $"ID {chain.ChainId}, действий={chain.CompletedActions.Count}");
 
               _researchLogger?.LogChainCompletion(chain.ChainId, pulseCount,
                                                   chain.CompletedActions.Count, finalEvaluation);

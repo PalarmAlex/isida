@@ -541,6 +541,8 @@ namespace ISIDA.Psychic
       if (decision.ActionsImageIdToAutomatize > 0 && _informationEnvironmentSystem != null)
       {
         Logger.Info($"Решение цикла мышления: создать и выполнить по образу действий id={decision.ActionsImageIdToAutomatize}");
+        ShortLogChannel.WriteBlock("МЫШЛЕНИЕ L1:",
+            $"Решение: создать и выполнить по образу действий ID {decision.ActionsImageIdToAutomatize}");
         var env = _informationEnvironmentSystem.CurrentInformationEnvironment;
         var nodeId = env?.UnresolvedNodeId ?? 0;
         if (nodeId > 0)
@@ -569,6 +571,7 @@ namespace ISIDA.Psychic
       if (decision.RequestParrotFromOperator)
       {
         Logger.Info("Решение цикла мышления: запрос подсказки у оператора (попугайство)");
+        ShortLogChannel.Write("Мышление L1: запрос подсказки у оператора (попугайство)");
         // В isida паррот на стадии 3 уже реализован как TryCreateInitialParrotAutomatizm, а на 4+ будет стратегия.
         return;
       }
@@ -1291,12 +1294,17 @@ namespace ISIDA.Psychic
       {
         Logger.Info(
             $"[ThinkingL2] узел={automatizmNodeId}, триггер-образ={actionsImageId}: правило не найдено ({ruleSrc}). Отрицательный опыт в эпизодике не подставляется как «лучшее» правило.");
+        ShortLogChannel.WriteBlock("МЫШЛЕНИЕ L2 (опыт):",
+            "Правило не найдено — подходящего опыта в эпизодике нет");
         SetUnresolvedAtLevel2Stub(automatizmNodeId, actionsImageId);
         return (false, null);
       }
 
       Logger.Info(
           $"[ThinkingL2] источник={ruleSrc}, правило: Trigger={rule.TriggerId}, Action={rule.ActionId}, Effect={rule.Effect}, IsTeacher={rule.IsTeacher}, Importence/оценка={rule.Importence}, Count={rule.Count}.");
+      ShortLogChannel.WriteBlock("МЫШЛЕНИЕ L2 (опыт):",
+          $"Вспомнил правило: триггер={rule.TriggerId}, действие={rule.ActionId}, " +
+          $"эффект={rule.Effect}, оценка={rule.Importence}, повторов={rule.Count}");
 
       var episodicAtmz = _automatizmSystem.GetMotorsAutomatizmListFromTreeId(automatizmNodeId)
         .FirstOrDefault(a => a.ActionsImageID == rule.ActionId);
@@ -1308,6 +1316,8 @@ namespace ISIDA.Psychic
       if (episodicAtmz != null && episodicAtmz.Usefulness >= 0)
       {
         Logger.Info($"[ThinkingL2] выполняется автоматизм по правилу id={episodicAtmz.ID}, полезность={episodicAtmz.Usefulness}.");
+        ShortLogChannel.WriteBlock("МЫШЛЕНИЕ L2 (правило):",
+            $"Автоматизм ID {episodicAtmz.ID}, полезность={episodicAtmz.Usefulness}");
         return (true, episodicAtmz);
       }
 
@@ -1336,6 +1346,8 @@ namespace ISIDA.Psychic
       // Ожидание оценки снимается после отложенной оценки в ProcessPsychicPulse / при отсутствии ID (TryScheduleDeferredOperatorEvaluationOnStimulus), до сюда не дублировать ForceStop.
 
       Logger.Info($"Уровень 2 не решён — проблема для циклов мышления. NodeId={nodeId}, ActionsImageId={actionsImageId}");
+      ShortLogChannel.WriteBlock("МЫШЛЕНИЕ L2:",
+          $"Не решено — проблема: узел={nodeId}, образ={actionsImageId}");
     }
 
     #endregion
@@ -2013,10 +2025,12 @@ namespace ISIDA.Psychic
       {
         AppGlobalState.RecordStimulusAgentEvent(AgentEventsCatalog.Codes.PassiveReprocessing);
         Logger.Info("Сон (фаза сновидения): фоновая переработка эпизодов через циклы мышления (DispatchCycles с isSleeping).");
+        ShortLogChannel.Write("Сон (сновидение): фоновая переработка эпизодов");
       }
       else
       {
         Logger.Info("Сон (глубокий): минимальная активность, без исполнения цепочек автоматизмов на пульсе.");
+        ShortLogChannel.Write("Сон (глубокий): минимальная активность");
       }
     }
 
