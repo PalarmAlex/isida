@@ -800,27 +800,11 @@ namespace ISIDA.Actions
       // Переснять «до»-снимок и перезапустить таймер ожидания через AutomatismResultTracker
       if (AutomatismResultTracker.IsInitialized)
       {
-        int automatizmId = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
-        if (automatizmId <= 0)
-        {
-          // Fallback: найти автоматизм, содержащий этот actionId
-          var atmzSystem = AutomatizmSystem.Instance;
-          var allAtmz = atmzSystem?.GetAllAutomatizms();
-          if (allAtmz != null)
-          {
-            var actionsImagesSystem = ActionsImagesSystem.Instance;
-            foreach (var atmz in allAtmz)
-            {
-              if (atmz == null) continue;
-              var img = actionsImagesSystem?.GetActionsImage(atmz.ActionsImageID);
-              if (img?.ActIdList != null && img.ActIdList.Contains(actionId))
-              {
-                automatizmId = atmz.ID;
-                break;
-              }
-            }
-          }
-        }
+        // Резолвинг: окно ожидания → активный автоматизм (если не просрочен) → 0.
+        // Fallback по ActIdList убран: NotifyMotorCompleted теперь отбрасывает вызовы,
+        // у которых нет незавершённого результата (EndPulse != 0), а ActIdList-резолвинг
+        // O(n) на каждом моторе — лишняя нагрузка.
+        int automatizmId = AppGlobalState.ResolveWaitingOperatorEvaluationAutomatizmId();
 
         if (automatizmId > 0)
           AutomatismResultTracker.Instance.NotifyMotorCompleted(automatizmId);

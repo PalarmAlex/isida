@@ -517,7 +517,21 @@ namespace ISIDA.Psychic
       try
       {
         var lastResult = GetLastResult(automatizmId);
-        var stateBefore = lastResult?.PreviousState ?? AppGlobalState.CurrentOverallState;
+
+        // Незавершённый результат = «е на что ждать реакции среды»: StartTracking не создавал
+        // окно (автоматизм не запускался этим путём) либо оно уже закрыто оценкой.
+        // Без этого окна завершение мотора открывало ФАНТОМНОЕ окно на чужом автоматизме
+        // (хост резолвит automatizmId по последнему открытому окну — см. AdaptiveActionsSystem.NotifyMotorCompleted),
+        // что и ломало отсчёт на пульте.
+        if (lastResult == null || lastResult.EndPulse != 0)
+        {
+          Logger.Info(
+              $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
+              $"пропущено (нет незавершённого результата, EndPulse={(lastResult == null ? -1 : lastResult.EndPulse)})");
+          return;
+        }
+
+        var stateBefore = lastResult.PreviousState;
         var stateAfter = AppGlobalState.CurrentOverallState;
 
         // Если состояние уже изменилось с момента запуска автоматизма — оценить немедленно и закрыть окно.
@@ -525,17 +539,28 @@ namespace ISIDA.Psychic
         // запишет в эпизодическую память и обновит статистику.
         if (stateBefore != stateAfter)
         {
-          if (lastResult != null)
-          {
-            lastResult.CurrentState = stateAfter;
-            lastResult.EndPulse = GlobalTimer.GlobalPulsCount;
-            FinishTracking(lastResult);
-          }
+          lastResult.CurrentState = stateAfter;
+          lastResult.EndPulse = GlobalTimer.GlobalPulsCount;
+          FinishTracking(lastResult);
+          UpdateAutomatizmUsefulness(automatizmId, lastResult.UsefulnessDelta);
 
           AppGlobalState.ResetWaitingForOperatorEvaluation();
           Logger.Info(
               $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
-              $"state={stateBefore}→{stateAfter} (оценка по метрике)");
+              $"state={stateBefore}→{stateAfter} delta={lastResult.UsefulnessDelta} (оценка по метрике)");
+          return;
+        }
+
+        // Окно этого же автоматизма ещё открыто и не истекло — НЕ перезапускать отсчёт.
+        // Иначе плотная моторика (несколько рецептов чаще, чем период ожидания) вечным
+        // перезапуском снимает дедлайн, и оценка по реакции среды никогда не наступает.
+        if (AppGlobalState.WaitingForOperatorEvaluation
+            && AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation == automatizmId
+            && AppGlobalState.WaitingPeriodCountdown > 0)
+        {
+          Logger.Info(
+              $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
+              $"state={stateAfter} окно уже открыто (осталось {AppGlobalState.WaitingPeriodCountdown}), отсчёт не перезапущен");
           return;
         }
 
@@ -556,6 +581,96 @@ namespace ISIDA.Psychic
       catch (Exception ex)
       {
         Logger.Error($"NotifyMotorCompleted: automatizmId={automatizmId} error={ex.Message}");
+      }
+    }
+
+    /// <summary>
+    /// Оценка запущенного автоматизма по реакции среды (дельта параметров/состояния), пока открыто
+    /// окно ожидания. Вызывается движком на каждом пульсе после пересчёта гомеостаза.
+    /// Без этого звена отпускание метрики не замечалось вообще: <see cref="AnalyzeResult"/> штатно
+    /// выполняется только при истечении окна или ответе оператора, а плотная моторика перезапускала окно.
+    /// </summary>
+    /// <returns><c>true</c>, если окно закрыто оценкой по среде.</returns>
+    public bool TryEvaluateWaitingByEnvironmentResponse()
+    {
+      if (!AppGlobalState.WaitingForOperatorEvaluation)
+        return false;
+
+      int automatizmId = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+      if (automatizmId <= 0)
+        return false;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        // Словарь читается напрямую: GetLastResult берёт read-lock, а ReaderWriterLockSlim
+        // в этом классе не рекурсивен — вложенный вызов под write-lock дал бы взаимоблокировку.
+        AutomatizmResult result;
+        if (!_lastAutomatizmResults.TryGetValue(automatizmId, out result))
+          return false;
+        if (result == null || result.EndPulse != 0 || result.RecognizedByOperator)
+          return false;
+
+        var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
+        var stateAfter = AppGlobalState.CurrentOverallState;
+
+        int assessment;
+        if (AppGlobalState.EvolutionStage >= 2
+            && AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId)
+            && snapshotBefore != null
+            && GomeostasSystem.IsInitialized)
+        {
+          assessment = GomeostasSystem.Instance.Calculator.ComputeOperatorAutomatizmAssessment(
+              snapshotBefore,
+              GomeostasSystem.Instance.GetAllParameters(),
+              focusParamId,
+              stateBefore,
+              stateAfter);
+        }
+        else
+        {
+          assessment = 0;
+          if (stateAfter > stateBefore)
+            assessment = 1;
+          else if (stateAfter < stateBefore)
+            assessment = -1;
+        }
+
+        // Среда ещё не отреагировала — окно остаётся открытым (оценка наступит по истечении или по ответу оператора).
+        if (assessment == 0)
+          return false;
+
+        result.CurrentState = stateAfter;
+        result.EndPulse = GlobalTimer.GlobalPulsCount;
+        result.UsefulnessDelta = assessment;
+        result.Result = assessment > 0
+            ? ExecutionResult.Success
+            : ExecutionResult.Error;
+
+        if (_episodicRulesService != null && result.ActionsImageId > 0)
+          _episodicRulesService.FixDirectRule(
+              result.StimulusImageId, result.ActionsImageId, assessment, AppGlobalState.PrevStimulsEffect);
+
+        UpdateStatistics(result);
+        AddHistoryRecord(result.AutomatizmId, result.Result, GetResultDescription(result));
+        UpdateAutomatizmUsefulness(automatizmId, assessment);
+
+        AppGlobalState.LastAutomatizmEvaluationTime = GlobalTimer.GlobalPulsCount;
+        AppGlobalState.ResetWaitingForOperatorEvaluation();
+
+        Logger.Info(
+            $"Оценка автоматизма ID={automatizmId} по реакции среды на пульсе {GlobalTimer.GlobalPulsCount}: " +
+            $"state={stateBefore}→{stateAfter}, дельта={assessment}, результат={result.Result}");
+        return true;
+      }
+      catch (Exception ex)
+      {
+        Logger.Error($"TryEvaluateWaitingByEnvironmentResponse: {ex.Message}");
+        return false;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
       }
     }
 

@@ -411,6 +411,21 @@ namespace ISIDA.Psychic
               EndOperatorEvaluationWait();
           }
 
+          // Оценка запущенного автоматизма по реакции среды (отпускание давления метрики).
+          // Обязана идти ДО гейта истечения окна: без этого звена дельта состояния вообще не
+          // анализировалась, пока окно открыто, — оценка наступала только по таймауту или по
+          // ответу оператора (см. случай 38).
+          if (AppGlobalState.WaitingForOperatorEvaluation)
+          {
+            int waitId = AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation;
+            if (_automatismResultTracker.TryEvaluateWaitingByEnvironmentResponse())
+            {
+              // TryEvaluateWaitingByEnvironmentResponse уже сбросил окно — берём ID до сброса.
+              if (_currentAutomatizmId == waitId)
+                ResetAutomatizmWaitingState();
+            }
+          }
+
           // Истечение окна ожидания без нового стимула с пульта (отложенная оценка не пересекается — она снимает ожидание только при совпадении id, см. выше).
           // IsEvaluationTime() ложен и на том же пульсе, что и LastRunAutomatizmPulsCount (timeSince==0) — это не истечение, а «ещё тот же пульс после стимула».
           // Не сбрасывать ожидание на этом пульсе: иначе сценарий/стимул в фазе до ProcessPsychicPulse уничтожает зеркало до ответа оператора на следующем пульсе.

@@ -212,9 +212,9 @@ namespace Isida.Tests
       // Окно закрыто.
       Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
 
-      // Полезность автоматизма не меняется (оценка по метрике не двигает Usefulness — только MarkOperatorRecognition).
-      // Ожидание = стартовая полезность стадии 2 (Default-роль).
-      Assert.Equal(2, Autom.GetAutomatizmById(id).Usefulness);
+      // Случай 38: реакция среды двигает полезность. Стартовая полезность стадии 2 (Default-роль) = 2,
+      // дельта Normal→Bad = −1 → 1.
+      Assert.Equal(1, Autom.GetAutomatizmById(id).Usefulness);
     }
 
     #endregion
@@ -356,6 +356,156 @@ namespace Isida.Tests
       }
 
       Assert.False(threw, "NotifyMotorCompleted должен молча игнорировать некорректные ID");
+    }
+
+    #endregion
+
+    #region Случай 38: не открывать фантомное окно на чужом автоматизме
+
+    [Fact]
+    public void NotifyMotorCompleted_NoOpenTracking_DoesNotOpenWindow()
+    {
+      // Автоматизм создан, но StartTracking не вызывался (нет незавершённого результата).
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1000);
+
+      var (id, _) = NewAutomatizm();
+
+      Tracker.NotifyMotorCompleted(id);
+
+      // Фантомное окно не открыто: реакции среды ждать не на что.
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(0, AppGlobalState.WaitingPeriodCountdown);
+    }
+
+    [Fact]
+    public void NotifyMotorCompleted_AlreadyFinishedResult_DoesNotReopenWindow()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1100);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Метрика отпустила ещё до завершения мотора — первая оценка закрывает окно.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+      Tracker.NotifyMotorCompleted(id);
+      Assert.True(result.EndPulse > 0, "Первый NotifyMotorCompleted должен завершить результат");
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+
+      // Повторный мотор того же автоматизма не должен открывать окно заново.
+      Tracker.NotifyMotorCompleted(id);
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    #endregion
+
+    #region Случай 38: повторный мотор того же автоматизма не перезапускает отсчёт
+
+    [Fact]
+    public void NotifyMotorCompleted_SameAutomatizmWindowAlreadyOpen_DoesNotRestartCountdown()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1200);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Первый мотор: состояние не изменилось → окно открыто, отсчёт стартовал.
+      Tracker.NotifyMotorCompleted(id);
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+      int firstRunPulse = AppGlobalState.LastRunAutomatizmPulsCount;
+
+      // Второй мотор того же автоматизма на том же пульсе → отсчёт НЕ перезапускается.
+      Tracker.NotifyMotorCompleted(id);
+      Assert.Equal(firstRunPulse, AppGlobalState.LastRunAutomatizmPulsCount);
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    #endregion
+
+    #region Случай 38: polling-оценка по реакции среды закрывает окно и двигает полезность
+
+    [Fact]
+    public void TryEvaluateWaitingByEnvironmentResponse_StateImproved_EvaluatesAndClosesWait()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1300);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Мотор завершился, состояние ещё не отреагировало → окно открыто.
+      Tracker.NotifyMotorCompleted(id);
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+
+      int usefulnessBefore = Autom.GetAutomatizmById(id).Usefulness;
+
+      // На следующем пульсе метрика отпустила: Bad → Normal.
+      SetGlobalPulse(1301);
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+
+      bool evaluated = Tracker.TryEvaluateWaitingByEnvironmentResponse();
+
+      Assert.True(evaluated, "Polling-оценка должна закрыть окно по дельте состояния");
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(1, result.UsefulnessDelta);
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Success, result.Result);
+      Assert.Equal(usefulnessBefore + 1, Autom.GetAutomatizmById(id).Usefulness);
+    }
+
+    [Fact]
+    public void TryEvaluateWaitingByEnvironmentResponse_StateUnchanged_KeepsWindowOpen()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1400);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      Tracker.NotifyMotorCompleted(id);
+
+      // Состояние не изменилось → polling ничего не оценивает, окно живо.
+      SetGlobalPulse(1401);
+      bool evaluated = Tracker.TryEvaluateWaitingByEnvironmentResponse();
+
+      Assert.False(evaluated);
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    [Fact]
+    public void TryEvaluateWaitingByEnvironmentResponse_NoWindow_ReturnsFalse()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+      SetGlobalPulse(1500);
+
+      Assert.False(Tracker.TryEvaluateWaitingByEnvironmentResponse());
+    }
+
+    #endregion
+
+    #region Случай 38: обратный отсчёт считается от глобального пульса, а не от числа UI-тиков
+
+    [Fact]
+    public void UpdateWaitingPeriodCountdown_CountsDownByGlobalPulse()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1600);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      Tracker.NotifyMotorCompleted(id);
+
+      int period = AppGlobalState.WaitingPeriodCountdown;
+      Assert.True(period > 0);
+
+      // Прошло 5 пульсов — остаток уменьшился ровно на 5, сколько бы UI-тиков ни случилось между ними.
+      SetGlobalPulse(1605);
+      AppGlobalState.UpdateWaitingPeriodCountdown();
+      Assert.Equal(period - 5, AppGlobalState.WaitingPeriodCountdown);
+
+      // UI-тик без движения пульса остаток не меняет.
+      AppGlobalState.UpdateWaitingPeriodCountdown();
+      Assert.Equal(period - 5, AppGlobalState.WaitingPeriodCountdown);
     }
 
     #endregion

@@ -1106,21 +1106,20 @@ public static class AppGlobalState
   }
 
   /// <summary>
-  /// Обновить обратный отсчет периода ожидания
+  /// Обновить обратный отсчет периода ожидания. Вызывается из UI-таймеров хостов (Velum/AIStudio)
+  /// для отображения: остаток считается от <see cref="GlobalTimer"/>, а не вычитанием единицы за тик,
+  /// иначе темп UI-таймера расходится с темпом пульса и отсчёт «провисает». Закрытие окна — за движком
+  /// (гейт истечения и polling-оценка в <see cref="ISIDA.Psychic.PsychicSystem.ProcessPsychicPulse"/>),
+  /// здесь состояние ожидания НЕ сбрасывается (см. случай 38).
   /// </summary>
   public static void UpdateWaitingPeriodCountdown()
   {
-    if (WaitingForOperatorEvaluation && WaitingPeriodCountdown > 0)
-    {
-      WaitingPeriodCountdown--;
+    if (!_waitingForOperatorEvaluation || LastRunAutomatizmPulsCount <= 0)
+      return;
 
-      // Если время вышло, сбрасываем ожидание
-      if (WaitingPeriodCountdown <= 0)
-      {
-        ResetWaitingForOperatorEvaluation();
-        Logger.Info("Период ожидания оценки оператора истек");
-      }
-    }
+    int remaining = GetEffectiveWaitingPeriodForActionsVal()
+        - (GlobalTimer.GlobalPulsCount - LastRunAutomatizmPulsCount);
+    WaitingPeriodCountdown = remaining > 0 ? remaining : 0;
   }
 
   /// <summary>
@@ -1151,6 +1150,30 @@ public static class AppGlobalState
     WaitingPeriodCountdown = 0;
     LastRunAutomatizmPulsCount = 0;
     _automatizmIdWaitingForOperatorEvaluation = 0;
+  }
+
+  /// <summary>
+  /// Резолвинг автоматизма, чей мотор завершился хостом: окно ожидания (если не просрочено) → активный
+  /// автоматизм (если не просрочено) → 0. <see cref="AutomatizmIdWaitingForOperatorEvaluation"/> не сбрасывается
+  /// по истечении окна, поэтому без проверки «окно живо» любой поздний мотор получает чужой автоматизм
+  /// (см. случай 38).
+  /// </summary>
+  /// <returns>Идентификатор автоматизма, либо 0, если привязать мотор не к чему.</returns>
+  public static int ResolveWaitingOperatorEvaluationAutomatizmId()
+  {
+    if (_waitingForOperatorEvaluation && IsEvaluationTime() && _automatizmIdWaitingForOperatorEvaluation > 0)
+      return _automatizmIdWaitingForOperatorEvaluation;
+
+    var (activeId, activePulse) = GetAutomatizmInfo();
+    if (activeId > 0 && activePulse > 0)
+    {
+      int period = GetEffectiveWaitingPeriodForActionsVal();
+      int timeSince = GlobalTimer.GlobalPulsCount - activePulse;
+      if (timeSince >= 0 && timeSince <= period)
+        return activeId;
+    }
+
+    return 0;
   }
 
   /// <summary>
