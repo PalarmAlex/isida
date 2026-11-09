@@ -72,7 +72,7 @@ namespace ISIDA.Common
     /// </returns>
     public override string ToString()
     {
-      var repeat = RepeatCount > 1 ? $" ×{RepeatCount}" : string.Empty;
+      var repeat = RepeatCount > 1 ? $"×{RepeatCount}" : string.Empty;
       return $"№ пульса: {Pulse:D3}{repeat}\n" + Text;
     }
   }
