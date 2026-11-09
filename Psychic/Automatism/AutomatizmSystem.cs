@@ -343,7 +343,7 @@ namespace ISIDA.Psychic.Automatism
           OnAutomatizmCreated(created.ID);
           ShortLogChannel.WriteBlock("АВТОМАТИЗМ СОЗДАН:",
               $"ID {created.ID}, ActionsImage={created.ActionsImageID}, " +
-              "полезность={created.Usefulness}, ветка={created.BranchID}");
+              "полезность=" + $"{created.Usefulness}, ветка={created.BranchID}");
         }
         catch (Exception ex)
         {
