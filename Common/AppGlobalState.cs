@@ -1015,7 +1015,7 @@ public static class AppGlobalState
     set => _waitingForOperatorEvaluation = value;
   }
 
-  /// <summary>Автоматизм, по которому ждём ответ оператора (снимок из <see cref="StartWaitingForOperatorEvaluation"/>).</summary>
+  /// <summary>Автоматизм, по которому ждём ответ оператора (снимок из <see cref="StartWaitingForOperatorEvaluation(int, int)"/>).</summary>
   public static int AutomatizmIdWaitingForOperatorEvaluation => _automatizmIdWaitingForOperatorEvaluation;
 
   /// <summary>
