@@ -1096,10 +1096,25 @@ public static class AppGlobalState
   /// </summary>
   public static void StartWaitingForOperatorEvaluation(int automatizmId)
   {
+    StartWaitingForOperatorEvaluation(automatizmId, GlobalTimer.GlobalPulsCount);
+  }
+
+  /// <summary>
+  /// Начать период ожидания оценки оператора с явным пульсом старта отсчёта.
+  /// Нужно, когда окно переоткрывается после сброса индикаторов: дедлайн должен считаться
+  /// от пульса запуска автоматизма, а не от текущего пульса.
+  /// </summary>
+  /// <param name="automatizmId">ID автоматизма, чей ответ ожидается.</param>
+  /// <param name="startPulse">Пульс, от которого отсчитывается окно (пульс запуска автоматизма).</param>
+  public static void StartWaitingForOperatorEvaluation(int automatizmId, int startPulse)
+  {
     WaitingForOperatorEvaluation = true;
     _automatizmIdWaitingForOperatorEvaluation = automatizmId > 0 ? automatizmId : 0;
-    LastRunAutomatizmPulsCount = GlobalTimer.GlobalPulsCount;
-    WaitingPeriodCountdown = GetEffectiveWaitingPeriodForActionsVal();
+    LastRunAutomatizmPulsCount = startPulse > 0 ? startPulse : GlobalTimer.GlobalPulsCount;
+
+    int elapsed = GlobalTimer.GlobalPulsCount - LastRunAutomatizmPulsCount;
+    int remaining = GetEffectiveWaitingPeriodForActionsVal() - elapsed;
+    WaitingPeriodCountdown = remaining > 0 ? remaining : 0;
 
     Logger.Info($"Начат период ожидания оценки оператора для автоматизма ID={automatizmId}, " +
                 $"длительность={WaitingPeriodCountdown} пульсов");
@@ -1142,6 +1157,17 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Активный автоматизм для привязки завершившегося мотора хостом: <see cref="AutomatizmInfoStillFresh"/>, но без
+  /// требования открытого окна ожидания. Нужен как страховка: окно могут закрыть сбросом индикаторов пульсации,
+  /// и тогда мотор остаётся без привязки к автоматизму (см. случай 39).
+  /// </summary>
+  public static int ResolveActiveAutomatizmIdForMotor()
+  {
+    var (activeId, activePulse) = GetAutomatizmInfo();
+    return AutomatizmInfoStillFresh(activeId, activePulse) ? activeId : 0;
+  }
+
+  /// <summary>
   /// Сбросить состояние ожидания оценки оператора
   /// </summary>
   public static void ResetWaitingForOperatorEvaluation()
@@ -1165,15 +1191,23 @@ public static class AppGlobalState
       return _automatizmIdWaitingForOperatorEvaluation;
 
     var (activeId, activePulse) = GetAutomatizmInfo();
-    if (activeId > 0 && activePulse > 0)
-    {
-      int period = GetEffectiveWaitingPeriodForActionsVal();
-      int timeSince = GlobalTimer.GlobalPulsCount - activePulse;
-      if (timeSince >= 0 && timeSince <= period)
-        return activeId;
-    }
+    if (AutomatizmInfoStillFresh(activeId, activePulse))
+      return activeId;
 
     return 0;
+  }
+
+  /// <summary>
+  /// Снимок активного автоматизма (см. <see cref="UpdateAutomatizmInfo"/>) ещё не просрочен: пульс запуска не в будущем
+  /// и не старше периода ожидания. Общий предикат для резолвинга мотора и его страховочного варианта.
+  /// </summary>
+  private static bool AutomatizmInfoStillFresh(int activeId, int activePulse)
+  {
+    if (activeId <= 0 || activePulse <= 0)
+      return false;
+
+    int timeSince = GlobalTimer.GlobalPulsCount - activePulse;
+    return timeSince >= 0 && timeSince <= GetEffectiveWaitingPeriodForActionsVal();
   }
 
   /// <summary>
@@ -1188,9 +1222,11 @@ public static class AppGlobalState
     int currentPulse = GlobalTimer.GlobalPulsCount;
     int timeSinceAutomatizm = currentPulse - LastRunAutomatizmPulsCount;
 
-    // Только если мы активно ждем и время в пределах ожидания
+    // Только если мы активно ждем и время в пределах ожидания.
+    // timeSince == 0 — «тот же пульс, что и запуск»: окно уже живо (мотор мог завершиться в этом же пульсе),
+    // поэтому граница включительная; истечение окна ловится отдельным гейтом timeSince > period.
     return timeSinceAutomatizm <= period &&
-           timeSinceAutomatizm > 0;
+           timeSinceAutomatizm >= 0;
   }
 
   /// <summary>

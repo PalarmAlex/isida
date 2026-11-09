@@ -1671,11 +1671,10 @@ namespace ISIDA.Psychic
               $"ID {automatizm.ID}, ActionsImage={automatizm.ActionsImageID}, " +
               $"полезность={automatizm.Usefulness}, ветка={automatizm.BranchID}");
 
-          // Период ожидания оценки оператора: только после фактической активации автоматизма (сброс таймера при каждом успешном запуске)
-          //if (AppGlobalState.EvolutionStage >= 2)
-          //{
-          //  AppGlobalState.StartWaitingForOperatorEvaluation(automatizm.ID);
-          //}
+          // Период ожидания оценки оператора: окно уже открыто внутри StartTracking от пульса запуска
+          // автоматизма (обслуживает и ответ оператора, и отклик среды). Здесь его переоткрывать нельзя —
+          // повторный StartWaitingForOperatorEvaluation отбрасывает отсчёт на полные N пульсов.
+          // Перезапуск отсчёта на завершении мотора («двойное ожидание») отсечён в NotifyMotorCompleted.
           _currentAutomatizmId = automatizm.ID;
         }
         else

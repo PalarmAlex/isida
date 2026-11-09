@@ -778,10 +778,14 @@ namespace ISIDA.Actions
 
     /// <summary>
     /// Сообщить хостом о завершении моторного выполнения действия.
-    /// Убирает действие из активных и переснимает «до»-снимок для оценки через дельту состояния.
+    /// Убирает действие из активных и фиксирует факт завершения мотора для оценки через дельту состояния.
     /// </summary>
     /// <param name="actionId">ID моторного действия, завершённого хостом.</param>
-    public void NotifyMotorCompleted(int actionId)
+    /// <param name="motorSkipped">
+    /// Действие фактически не выполнено (диалог закрыт без подтверждения оператора): результат
+    /// закрывается как <see cref="AutomatismResultTracker.ExecutionResult.Skipped"/> без ожидания среды.
+    /// </param>
+    public void NotifyMotorCompleted(int actionId, bool motorSkipped = false)
     {
       _lock.EnterWriteLock();
       try
@@ -797,7 +801,7 @@ namespace ISIDA.Actions
         _lock.ExitWriteLock();
       }
 
-      // Переснять «до»-снимок и перезапустить таймер ожидания через AutomatismResultTracker
+      // Зафиксировать завершение мотора в трекере (отсчёт окна не перезапускается)
       if (AutomatismResultTracker.IsInitialized)
       {
         // Резолвинг: окно ожидания → активный автоматизм (если не просрочен) → 0.
@@ -806,8 +810,13 @@ namespace ISIDA.Actions
         // O(n) на каждом моторе — лишняя нагрузка.
         int automatizmId = AppGlobalState.ResolveWaitingOperatorEvaluationAutomatizmId();
 
+        // Страховка: окно могли закрыть сбросом индикаторов, но снимок активного автоматизма ещё жив —
+        // тогда мотор привязывается к нему, и трекер закрывает результат нейтрально (случай 39).
+        if (automatizmId <= 0)
+          automatizmId = AppGlobalState.ResolveActiveAutomatizmIdForMotor();
+
         if (automatizmId > 0)
-          AutomatismResultTracker.Instance.NotifyMotorCompleted(automatizmId);
+          AutomatismResultTracker.Instance.NotifyMotorCompleted(automatizmId, motorSkipped);
         else
           Logger.Warning($"NotifyMotorCompleted: cannot resolve automatizmId for actionId={actionId}");
       }

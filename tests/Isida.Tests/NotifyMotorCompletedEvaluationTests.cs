@@ -148,7 +148,8 @@ namespace Isida.Tests
       var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
 
       Assert.Equal(AppGlobalState.HomeostasisState.Bad, result.PreviousState);
-      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+      // Окно ожидания открыто с пульса запуска автоматизма (обслуживает ответ оператора и отклик среды).
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
 
       // Моторика выполняется, метрика отпускает → состояние Well.
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Well;
@@ -219,39 +220,88 @@ namespace Isida.Tests
 
     #endregion
 
-    #region Состояние не изменилось — перезапуск ожидания
+    #region Состояние не изменилось — окно остаётся открытым, отсчёт не перезапускается
 
     [Fact]
-    public void NotifyMotorCompleted_StateUnchanged_RestartsWaitWindow()
+    public void NotifyMotorCompleted_StateUnchanged_KeepsWaitWindowOpen()
     {
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
       SetGlobalPulse(400);
 
       var (id, atmz) = NewAutomatizm();
-      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
 
-      // Состояние НЕ изменилось.
-      Tracker.NotifyMotorCompleted(id);
-
-      // Таймер ожидания перезапущен.
+      // Окно открыто с момента запуска автоматизма (обслуживает и ответ оператора, и отклик среды).
       Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
       Assert.Equal(id, AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation);
+
+      // Состояние НЕ изменилось.
+      SetGlobalPulse(405);
+      Tracker.NotifyMotorCompleted(id);
+
+      // Окно живо, мотор отмечен, отсчёт НЕ перезапущен (дедлайн остался с пульса запуска).
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(id, AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation);
+      Assert.Equal(400, AppGlobalState.LastRunAutomatizmPulsCount);
+      Assert.Equal(405, result.MotorCompletedPulse);
       Assert.True(AppGlobalState.WaitingPeriodCountdown > 0);
     }
 
     [Fact]
-    public void NotifyMotorCompleted_StateUnchanged_WaitPeriodIsFullDuration()
+    public void NotifyMotorCompleted_StateUnchanged_DoesNotResetDeadlineToFullDuration()
     {
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
       SetGlobalPulse(500);
 
       var (id, atmz) = NewAutomatizm();
       Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      int startPulse = GlobalTimer.GlobalPulsCount;
 
+      // Оператор долго думал и выполнил действие на 20-м пульсе окна.
+      SetGlobalPulse(startPulse + 20);
       Tracker.NotifyMotorCompleted(id);
 
-      // Длительность ожидания — по умолчанию 30 пульсов (если из конфига не переопределено).
-      Assert.True(AppGlobalState.WaitingPeriodCountdown > 0);
+      // Дедлайн остаётся от пульса запуска, а не «ещё 30 пульсов от мотора».
+      Assert.Equal(startPulse, AppGlobalState.LastRunAutomatizmPulsCount);
+    }
+
+    [Fact]
+    public void NotifyMotorCompleted_WindowExpiredWhileMotorRan_ClosesAsSkipped()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+      SetGlobalPulse(550);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Оператор провозился дольше окна — мотор завершился после дедлайна.
+      SetGlobalPulse(550 + 31);
+      Tracker.NotifyMotorCompleted(id);
+
+      // Окно истекло, действия не было: нейтральный исход независимо от длительности
+      // (WaitingForResponse здесь означал бы «оператор ещё отвечает», чего уже нет).
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Skipped, result.Result);
+      Assert.Equal(0, result.UsefulnessDelta);
+      Assert.True(result.EndPulse > 0);
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    [Fact]
+    public void NotifyMotorCompleted_OperatorCancelledDialog_ClosesAsSkippedWithoutWaiting()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(560);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Диалог закрыт без выполнения действия: действия не было — оценивать нечего.
+      Tracker.NotifyMotorCompleted(id, motorSkipped: true);
+
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Skipped, result.Result);
+      Assert.Equal(0, result.UsefulnessDelta);
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(0, AppGlobalState.WaitingPeriodCountdown);
     }
 
     #endregion
@@ -259,7 +309,7 @@ namespace Isida.Tests
     #region Порядок состояний: Normal → Normal (без изменений)
 
     [Fact]
-    public void NotifyMotorCompleted_NormalToNormal_RestartsWaitWindow()
+    public void NotifyMotorCompleted_NormalToNormal_KeepsWaitWindowOpen()
     {
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
       SetGlobalPulse(600);
@@ -279,7 +329,7 @@ namespace Isida.Tests
     #region Well → Well (без изменений)
 
     [Fact]
-    public void NotifyMotorCompleted_WellToWell_RestartsWaitWindow()
+    public void NotifyMotorCompleted_WellToWell_KeepsWaitWindowOpen()
     {
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Well;
       SetGlobalPulse(700);
@@ -412,11 +462,13 @@ namespace Isida.Tests
       Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
 
       // Первый мотор: состояние не изменилось → окно открыто, отсчёт стартовал.
+      SetGlobalPulse(1200);
       Tracker.NotifyMotorCompleted(id);
       Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
       int firstRunPulse = AppGlobalState.LastRunAutomatizmPulsCount;
 
       // Второй мотор того же автоматизма на том же пульсе → отсчёт НЕ перезапускается.
+      SetGlobalPulse(1200);
       Tracker.NotifyMotorCompleted(id);
       Assert.Equal(firstRunPulse, AppGlobalState.LastRunAutomatizmPulsCount);
       Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
@@ -436,6 +488,7 @@ namespace Isida.Tests
       var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
 
       // Мотор завершился, состояние ещё не отреагировало → окно открыто.
+      SetGlobalPulse(1300);
       Tracker.NotifyMotorCompleted(id);
       Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
 
@@ -462,6 +515,7 @@ namespace Isida.Tests
 
       var (id, atmz) = NewAutomatizm();
       Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      SetGlobalPulse(1400);
       Tracker.NotifyMotorCompleted(id);
 
       // Состояние не изменилось → polling ничего не оценивает, окно живо.
@@ -481,6 +535,86 @@ namespace Isida.Tests
       Assert.False(Tracker.TryEvaluateWaitingByEnvironmentResponse());
     }
 
+    [Fact]
+    public void TryEvaluateWaitingByEnvironmentResponse_MotorNotCompleted_ReturnsFalse()
+    {
+      // Диалог ещё открыт: среда не могла отреагировать на действие, которого не было.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1550);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Постороннее «улучшение» состояния при незавершённом моторе не должно давать оценку.
+      SetGlobalPulse(1551);
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+
+      Assert.False(Tracker.TryEvaluateWaitingByEnvironmentResponse());
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    #endregion
+
+    #region Случай 39: окно ожидания восстановлено после сброса индикаторов пульсации
+
+    [Fact]
+    public void NotifyMotorCompleted_WindowLost_ReopensWindowForCompletedMotor()
+    {
+      // Сценарий из логов 2026-11-09: StartTracking сработал, но окно ожидания закрыто сбросом
+      // (ResetAutomatizmInfo / ResetWaitingForOperatorEvaluation), хост резолвит мотор по активному
+      // автоматизму — и раньше получал 0 («cannot resolve automatizmId»), оценки не было вовсе.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(1700);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Окно потеряно, снимок активного автоматизма ещё жив (пульс тот же).
+      AppGlobalState.ResetWaitingForOperatorEvaluation();
+      Assert.Equal(id, AppGlobalState.ResolveActiveAutomatizmIdForMotor());
+
+      // Мотор завершился, состояние пока не отреагировало → окно должно быть переоткрыто на этом автоматизме.
+      SetGlobalPulse(1701);
+      int resolved = AppGlobalState.ResolveActiveAutomatizmIdForMotor();
+      Assert.Equal(id, resolved);
+      bool windowReopened = Tracker.NotifyMotorCompleted(resolved);
+      Assert.True(windowReopened,
+          $"window={AppGlobalState.WaitingForOperatorEvaluation}, id={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation} (expected {id}), lastRun={AppGlobalState.LastRunAutomatizmPulsCount}, pulse={GlobalTimer.GlobalPulsCount}, endPulse={Tracker.GetLastResult(id)?.EndPulse}, motorPulse={Tracker.GetLastResult(id)?.MotorCompletedPulse}, result={Tracker.GetLastResult(id)?.Result}, start={Tracker.GetLastResult(id)?.StartPulse}, stage={AppGlobalState.EvolutionStage}");
+      // Снимок активного автоматизма обновляем на текущий пульс, чтобы резолвинг привязал
+      // последующие моторы к тому же автоматизму.
+      AppGlobalState.UpdateAutomatizmInfo(id, GlobalTimer.GlobalPulsCount);
+
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation,
+          $"window={AppGlobalState.WaitingForOperatorEvaluation}, id={AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation} (expected {id}), lastRun={AppGlobalState.LastRunAutomatizmPulsCount}, pulse={GlobalTimer.GlobalPulsCount}, endPulse={Tracker.GetLastResult(id)?.EndPulse}, motorPulse={Tracker.GetLastResult(id)?.MotorCompletedPulse}, result={Tracker.GetLastResult(id)?.Result}, start={Tracker.GetLastResult(id)?.StartPulse}, stage={AppGlobalState.EvolutionStage}");
+      int usefulnessBefore = Autom.GetAutomatizmById(id).Usefulness;
+      SetGlobalPulse(1702);
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+
+      Assert.True(Tracker.TryEvaluateWaitingByEnvironmentResponse());
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(usefulnessBefore + 1, Autom.GetAutomatizmById(id).Usefulness);
+    }
+
+    [Fact]
+    public void ResolveActiveAutomatizmIdForMotor_StaleSnapshot_ReturnsZero()
+    {
+      // Просроченный снимок активного автоматизма не должен привязывать мотор к чужому автоматизму.
+      // Период отсчитывается от пульса StartTracking: резолвинг берёт эффективное значение (30 пульсов,
+      // когда настройка не применена), поэтому границу проверяем именно по нему.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+      SetGlobalPulse(1800);
+
+      var (id, atmz) = NewAutomatizm();
+      Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      int startPulse = GlobalTimer.GlobalPulsCount;
+
+      SetGlobalPulse(startPulse + 30);
+      Assert.Equal(id, AppGlobalState.ResolveActiveAutomatizmIdForMotor());
+
+      SetGlobalPulse(startPulse + 31);
+      Assert.Equal(0, AppGlobalState.ResolveActiveAutomatizmIdForMotor());
+    }
+
     #endregion
 
     #region Случай 38: обратный отсчёт считается от глобального пульса, а не от числа UI-тиков
@@ -493,6 +627,7 @@ namespace Isida.Tests
 
       var (id, atmz) = NewAutomatizm();
       Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+      SetGlobalPulse(1600);
       Tracker.NotifyMotorCompleted(id);
 
       int period = AppGlobalState.WaitingPeriodCountdown;

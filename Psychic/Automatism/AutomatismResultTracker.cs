@@ -180,6 +180,19 @@ namespace ISIDA.Psychic
       /// Время реакции оператора (в пульсах)
       /// </summary>
       public int OperatorResponseTime { get; set; }
+
+      /// <summary>
+      /// Пульс фактического завершения мотора хостом (0 — мотор ещё не завершался).
+      /// До этого момента оценка по реакции среды не выполняется: среда не могла отреагировать на
+      /// действие, которого ещё не было (диалог открыт, оператор ничего не нажал).
+      /// </summary>
+      public int MotorCompletedPulse { get; set; }
+
+      /// <summary>
+      /// Хост сообщил, что действие в моторе фактически не выполнено (диалог закрыт без подтверждения).
+      /// Такой результат оценивается как <see cref="ExecutionResult.Skipped"/> без ожидания отклика среды.
+      /// </summary>
+      public bool MotorSkippedByOperator { get; set; }
     }
 
     /// <summary>
@@ -491,6 +504,14 @@ namespace ISIDA.Psychic
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
         AppGlobalState.UpdateAutomatizmInfo(automatizmId, GlobalTimer.GlobalPulsCount);
 
+        // Окно ожидания открывается здесь, а не у вызывающего кода: StartTracking — единственная точка,
+        // где фиксируется пульс запуска, и хост обязан уметь привязать завершившийся мотор к окну
+        // (ResolveWaitingOperatorEvaluationAutomatizmId). Отсчёт идёт от пульса запуска автоматизма.
+        if (AppGlobalState.EvolutionStage >= 2)
+          AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
+        else
+          AppGlobalState.ResetWaitingForOperatorEvaluation();
+
         Logger.Info($"Начато отслеживание автоматизма ID={automatizmId}, ветка={branchId}");
 
         return trackingResult;
@@ -503,22 +524,31 @@ namespace ISIDA.Psychic
 
     /// <summary>
     /// Сообщить от хоста о завершении моторного выполнения автоматизма.
-    /// Если к моменту завершения мотора состояние гомеостаза уже изменилось относительно снимка «до автоматизма»
-    /// — немедленно оценить результат по дельте и закрыть окно ожидания.
-    /// Если состояние ещё не отреагировало — перезапустить таймер ожидания, пока метрика не откликнется.
-    /// Вызывается хостом адаптера после фактического завершения рецепта/диалога SW.
+    /// Окно ожидания открыто с момента запуска автоматизма и обслуживает ДВЕ задачи: ответ оператора
+    /// (стимул с пульта в пределах окна) и отклик среды. Завершение мотора отсчёт НЕ перезапускает —
+    /// иначе «оператор думал 29 пульсов, потом нажал экспорт» превращалось бы в новые полные 30 пульсов.
+    /// Здесь только фиксируется факт завершения мотора (без него оценка по среде запрещена) и выполняются
+    /// ранние исходы: действие не выполнено оператором или среда уже отреагировала.
     /// </summary>
     /// <param name="automatizmId">ID автоматизма, мотор которого завершён.</param>
-    public void NotifyMotorCompleted(int automatizmId)
+    /// <param name="motorSkipped">
+    /// Хост сообщает, что действие фактически не выполнено (диалог закрыт без подтверждения).
+    /// Такой результат оценивается как <see cref="ExecutionResult.Skipped"/> сразу, без ожидания среды.
+    /// </param>
+    /// <returns>
+    /// <c>true</c>, если окно ожидания открыто на этом автоматизме и отсчёт теперь обслуживает
+    /// и ответ среды (мотор отмечен завершённым).
+    /// </returns>
+    public bool NotifyMotorCompleted(int automatizmId, bool motorSkipped = false)
     {
       if (automatizmId <= 0)
-        return;
+        return false;
 
       try
       {
         var lastResult = GetLastResult(automatizmId);
 
-        // Незавершённый результат = «е на что ждать реакции среды»: StartTracking не создавал
+        // Незавершённый результат = «не на что ждать реакции среды»: StartTracking не создавал
         // окно (автоматизм не запускался этим путём) либо оно уже закрыто оценкой.
         // Без этого окна завершение мотора открывало ФАНТОМНОЕ окно на чужом автоматизме
         // (хост резолвит automatizmId по последнему открытому окну — см. AdaptiveActionsSystem.NotifyMotorCompleted),
@@ -528,11 +558,23 @@ namespace ISIDA.Psychic
           Logger.Info(
               $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
               $"пропущено (нет незавершённого результата, EndPulse={(lastResult == null ? -1 : lastResult.EndPulse)})");
-          return;
+          return false;
         }
+
+        lastResult.MotorCompletedPulse = GlobalTimer.GlobalPulsCount;
+        lastResult.MotorSkippedByOperator = motorSkipped;
 
         var stateBefore = lastResult.PreviousState;
         var stateAfter = AppGlobalState.CurrentOverallState;
+
+        // Оператор закрыл диалог, ничего не выполнив: действия не было — оценивать нечего.
+        // Окно закрывается сразу (без 30 пульсов ожидания) с нейтральным исходом.
+        if (motorSkipped)
+        {
+          CloseResultAsSkipped(lastResult, automatizmId, stateBefore, stateAfter,
+              "действие не выполнено (диалог закрыт без подтверждения)");
+          return false;
+        }
 
         // Если состояние уже изменилось с момента запуска автоматизма — оценить немедленно и закрыть окно.
         // Переиспользуем FinishTracking: он сам выставит CurrentState, вызовет AnalyzeResult,
@@ -545,43 +587,80 @@ namespace ISIDA.Psychic
           UpdateAutomatizmUsefulness(automatizmId, lastResult.UsefulnessDelta);
 
           AppGlobalState.ResetWaitingForOperatorEvaluation();
+          ShortLogChannel.WriteBlock("ОЦЕНКА АВТОМАТИЗМА:",
+              $"ID {automatizmId}, по метрике на завершении мотора, дельта={lastResult.UsefulnessDelta}, состояние {stateBefore}→{stateAfter}");
           Logger.Info(
               $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
               $"state={stateBefore}→{stateAfter} delta={lastResult.UsefulnessDelta} (оценка по метрике)");
-          return;
+          return false;
         }
 
-        // Окно этого же автоматизма ещё открыто и не истекло — НЕ перезапускать отсчёт.
-        // Иначе плотная моторика (несколько рецептов чаще, чем период ожидания) вечным
-        // перезапуском снимает дедлайн, и оценка по реакции среды никогда не наступает.
-        if (AppGlobalState.WaitingForOperatorEvaluation
-            && AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation == automatizmId
-            && AppGlobalState.WaitingPeriodCountdown > 0)
+        // Дедлайн окна уже истёк, пока шёл мотор: ждать нечего, закрываем нейтрально.
+        // Если окно потеряно сбросом индикаторов пульсации (случай 39), проверка по глобальному
+        // состоянию ожидания бессмысленна — дедлайн сверяем с пульсом запуска самого автоматизма.
+        bool windowLost = !AppGlobalState.WaitingForOperatorEvaluation;
+        if (!windowLost && !AppGlobalState.IsOperatorResponseWithinWaitingWindow())
         {
+          CloseResultAsSkipped(lastResult, automatizmId, stateBefore, stateAfter,
+              "окно ожидания истекло, пока выполнялся мотор");
+          return false;
+        }
+
+        // Окно могли закрыть сбросом индикаторов пульсации (случай 39): StartTracking окно открыл,
+        // результат ещё жив, но WaitingForOperatorEvaluation уже снят. Переоткрываем окно на этом
+        // автоматизме, чтобы polling-оценка по среде работала, — но от исходного дедлайна (пульса
+        // запуска автоматизма), а не от полного периода заново.
+        if (!AppGlobalState.WaitingForOperatorEvaluation)
+        {
+          AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId, lastResult.StartPulse);
           Logger.Info(
               $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
-              $"state={stateAfter} окно уже открыто (осталось {AppGlobalState.WaitingPeriodCountdown}), отсчёт не перезапущен");
-          return;
+              $"окно было сброшено, переоткрыто от пульса запуска {lastResult.StartPulse}");
         }
 
-        // Состояние ещё не изменилось — перезапустить снимок и таймер ожидания.
-        AppGlobalState.StateBeforeOperatorImpact = stateAfter;
-
-        if (AppGlobalState.EvolutionStage >= 2)
-          CaptureOperatorEvaluationParameterSnapshot();
-        else
-          AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
-
-        AppGlobalState.StartWaitingForOperatorEvaluation(automatizmId);
-
+        // Отсчёт НЕ перезапускаем: окно продолжает тикать с пульса запуска автоматизма,
+        // теперь уже с разрешённой оценкой по реакции среды (см. TryEvaluateWaitingByEnvironmentResponse).
         Logger.Info(
             $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
-            $"state={stateAfter} (ожидание реакции метрики)");
+            $"state={stateAfter} мотор завершён, ожидание реакции метрики (осталось {AppGlobalState.WaitingPeriodCountdown})");
+        return true;
       }
       catch (Exception ex)
       {
         Logger.Error($"NotifyMotorCompleted: automatizmId={automatizmId} error={ex.Message}");
+        return false;
       }
+    }
+
+    /// <summary>
+    /// Закрыть незавершённый результат нейтральным исходом (<see cref="ExecutionResult.Skipped"/>)
+    /// без оценки по среде: действия фактически не было либо окно ожидания истекло.
+    /// </summary>
+    private void CloseResultAsSkipped(
+        AutomatizmResult result,
+        int automatizmId,
+        AppGlobalState.HomeostasisState stateBefore,
+        AppGlobalState.HomeostasisState stateAfter,
+        string reason)
+    {
+      result.CurrentState = stateAfter;
+      result.EndPulse = GlobalTimer.GlobalPulsCount;
+      result.UsefulnessDelta = 0;
+      result.Result = ExecutionResult.Skipped;
+      FinishTracking(result);
+
+      // FinishTracking → AnalyzeResult мог заменить нейтральный исход на WaitingForResponse
+      // по длительности окна. Для уже закрытого окна это неверно: ответа уже не будет.
+      result.UsefulnessDelta = 0;
+      result.Result = ExecutionResult.Skipped;
+
+      AppGlobalState.ResetWaitingForOperatorEvaluation();
+
+      ShortLogChannel.WriteBlock("ОЦЕНКА АВТОМАТИЗМА:",
+          $"ID {automatizmId}, без оценки — {reason}, состояние {stateBefore}→{stateAfter}");
+      Logger.Info(
+          $"NotifyMotorCompleted: automatizmId={automatizmId} pulse={GlobalTimer.GlobalPulsCount} " +
+          $"state={stateBefore}→{stateAfter} (без оценки: {reason})");
     }
 
     /// <summary>
@@ -609,6 +688,12 @@ namespace ISIDA.Psychic
         if (!_lastAutomatizmResults.TryGetValue(automatizmId, out result))
           return false;
         if (result == null || result.EndPulse != 0 || result.RecognizedByOperator)
+          return false;
+
+        // Оценка по среде допустима только после фактического завершения мотора: пока диалог открыт,
+        // среда не могла отреагировать на действие, которого ещё не было. Без этого гейта окно
+        // закрывалось бы «улучшением» по посторонней причине ещё до выполнения рецепта.
+        if (result.MotorCompletedPulse <= 0)
           return false;
 
         var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
@@ -658,6 +743,8 @@ namespace ISIDA.Psychic
         AppGlobalState.LastAutomatizmEvaluationTime = GlobalTimer.GlobalPulsCount;
         AppGlobalState.ResetWaitingForOperatorEvaluation();
 
+        ShortLogChannel.WriteBlock("ОЦЕНКА АВТОМАТИЗМА:",
+            $"ID {automatizmId}, по реакции среды, дельта={assessment}, состояние {stateBefore}→{stateAfter}");
         Logger.Info(
             $"Оценка автоматизма ID={automatizmId} по реакции среды на пульсе {GlobalTimer.GlobalPulsCount}: " +
             $"state={stateBefore}→{stateAfter}, дельта={assessment}, результат={result.Result}");
@@ -1037,8 +1124,11 @@ namespace ISIDA.Psychic
           int before = automatizm.Usefulness;
           automatizm.Usefulness += assessment;
           automatizm.Usefulness = AddUtils.Clamp(automatizm.Usefulness, -10, 10);
-          if (before != automatizm.Usefulness)
-            ShortLogChannel.Write("Автоматизм {0}: полезность {1} → {2}", automatizmId, before, automatizm.Usefulness);
+          // Факт оценки пишем всегда: при дельте 0 или у границы шкалы строки «полезность X → X» нет,
+          // и по короткому логу нельзя понять, оценивался автоматизм или нет (эвристика E43).
+          ShortLogChannel.Write("Автоматизм {0}: полезность {1} → {2} (дельта {3}{4})",
+              automatizmId, before, automatizm.Usefulness, assessment,
+              before == automatizm.Usefulness ? ", без изменения" : string.Empty);
           _automatizmSystem.AfterAutomatizmUsefulnessUpdated(automatizmId);
         }
       }
