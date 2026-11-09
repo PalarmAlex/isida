@@ -125,7 +125,13 @@ namespace ISIDA.Gomeostas
         result = vitalScore > 0 ? 1 : -1;
       else
         result = overallAssess;
- 
+
+      // Штраф — строго за ухудшение интегрального состояния (переход в «Плохо»).
+      // Падение значения параметра при «Хорошо → Норма» или при неизменной «Норме» —
+      // это нормализация/фоновое затухание, а не вред от автоматизма: полезность не снижаем.
+      if (result < 0 && !AppGlobalState.IsStateWorsening(overallBefore, overallAfter))
+        result = 0;
+
       return result;
     }
 
@@ -133,7 +139,7 @@ namespace ISIDA.Gomeostas
     {
       if (after > before)
         return 1;
-      if (after < before)
+      if (AppGlobalState.IsStateWorsening(before, after))
         return -1;
       return 0;
     }

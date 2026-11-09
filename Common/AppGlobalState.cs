@@ -751,6 +751,20 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Ухудшение интегрального состояния: переход в «Плохо» из любого другого.
+  /// Возврат из «Хорошо» в «Норму» — нормализация (устойчивое состояние), а не ухудшение:
+  /// штрафовать автоматизм за то, что среда успокоилась, нельзя. Единая точка для всех
+  /// контуров оценки полезности (калькулятор, трекер, психика), иначе слои разойдутся.
+  /// </summary>
+  /// <param name="stateBefore">Состояние до воздействия.</param>
+  /// <param name="stateAfter">Состояние после воздействия.</param>
+  /// <returns><c>true</c> — состояние ухудшилось.</returns>
+  public static bool IsStateWorsening(HomeostasisState stateBefore, HomeostasisState stateAfter)
+  {
+    return stateAfter == HomeostasisState.Bad && stateBefore != HomeostasisState.Bad;
+  }
+
+  /// <summary>
   /// Текущее интегральное состояние симбионта
   /// </summary>
   public static HomeostasisState CurrentOverallState

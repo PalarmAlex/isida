@@ -389,6 +389,35 @@ namespace Isida.Tests
 
     #endregion
 
+    #region Well → Normal (нормализация, не ухудшение)
+
+    /// <summary>
+    /// Регрессия: возврат из «Хорошо» в «Норму» не должен снижать полезность автоматизма.
+    /// Раньше `Well(1) → Normal(0)` трактовалось как «ухудшение» → `-1`, что ломало
+    /// автоматизмы, исправившие ситуацию и вернувшие систему в устойчивое состояние.
+    /// </summary>
+    [Fact]
+    public void NotifyMotorCompleted_WellToNormal_NoPenalty()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Well;
+      SetGlobalPulse(2000);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Среда успокоилась: Well → Normal.
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+
+      Tracker.NotifyMotorCompleted(id);
+
+      // Нормализация: без штрафа, окно закрыто.
+      Assert.Equal(0, result.UsefulnessDelta);
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Skipped, result.Result);
+      Assert.False(AppGlobalState.WaitingForOperatorEvaluation);
+    }
+
+    #endregion
+
     #region Invalid ID
 
     [Fact]

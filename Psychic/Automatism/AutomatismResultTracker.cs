@@ -717,7 +717,7 @@ namespace ISIDA.Psychic
           assessment = 0;
           if (stateAfter > stateBefore)
             assessment = 1;
-          else if (stateAfter < stateBefore)
+          else if (AppGlobalState.IsStateWorsening(stateBefore, stateAfter))
             assessment = -1;
         }
 
@@ -953,7 +953,11 @@ namespace ISIDA.Psychic
         return;
       }
 
-      // Анализ изменения состояния гомеостаза
+      // Анализ изменения состояния гомеостаза.
+      // Возврат из «Хорошо» в «Норму» — это нормализация, а не ухудшение:
+      // автоматизм не должен получать штраф, если его действие убрало «Хорошо» и система
+      // вернулась в устойчивое состояние «Норма». Ухудшением считаем только переход
+      // «Норма → Плохо» (и «Хорошо → Плохо» — но это уже покрывается текущим кодом).
       if (result.PreviousState != result.CurrentState)
       {
         // Состояние улучшилось
@@ -962,11 +966,16 @@ namespace ISIDA.Psychic
           result.UsefulnessDelta = 1;
           result.Result = ExecutionResult.Success;
         }
-        // Состояние ухудшилось
-        else if (result.CurrentState < result.PreviousState)
+        // Ухудшение: только переход в «Плохо». «Хорошо» → «Норма» — нормализация, не штраф.
+        else if (AppGlobalState.IsStateWorsening(result.PreviousState, result.CurrentState))
         {
           result.UsefulnessDelta = -1;
           result.Result = ExecutionResult.Error;
+        }
+        else
+        {
+          result.UsefulnessDelta = 0;
+          result.Result = ExecutionResult.Skipped;
         }
       }
       else

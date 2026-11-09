@@ -96,9 +96,27 @@ namespace Isida.Tests
       var valuesBefore = new Dictionary<int, float> { { 1, 50f } };
       var current = new List<ParameterData> { Param(1, 40f, -5, vital: true) };
 
+      // Интегральное состояние не ухудшилось (Normal→Normal), значит это не вред от автоматизма,
+      // а нормализация/фоновое затухание: полезность не снижаем.
+      // См. случай: «Хорошо → Норма» не считается ухудшением.
       int result = calc.ComputeOperatorAutomatizmAssessment(
           valuesBefore, current, 0,
           AppGlobalState.HomeostasisState.Normal, AppGlobalState.HomeostasisState.Normal);
+
+      Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void ComputeOperatorAutomatizmAssessment_VitalWorsening_WithOverallWorsening_ReturnsMinusOne()
+    {
+      var calc = new HomeostasisCalculator();
+      var valuesBefore = new Dictionary<int, float> { { 1, 50f } };
+      var current = new List<ParameterData> { Param(1, 40f, -5, vital: true) };
+
+      // Интегральное состояние действительно ухудшилось — штраф применяется.
+      int result = calc.ComputeOperatorAutomatizmAssessment(
+          valuesBefore, current, 0,
+          AppGlobalState.HomeostasisState.Normal, AppGlobalState.HomeostasisState.Bad);
 
       Assert.Equal(-1, result);
     }
