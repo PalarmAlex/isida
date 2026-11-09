@@ -211,17 +211,65 @@ namespace Isida.Tests
 
     #endregion
 
-    #region Отрицательная полезность → удаление на стадии 2
+    // Автоматизм никогда не удаляется из-за полезности: при Usefulness < 0 он только
+    // блокируется (не исполняется и игнорируется при поиске по дереву), оставаясь в реестре.
+    #region Отрицательная полезность → блокировка, но не удаление
 
     [Fact]
-    public void AfterUsefulnessUpdated_NegativeUsefulness_DeletesAtStage2()
+    public void AfterUsefulnessUpdated_NegativeUsefulness_KeepsAutomatizmAtStage2()
     {
       var (id, automatizm) = NewAutomatizm();
 
       automatizm.Usefulness = -1;
       Autom.AfterAutomatizmUsefulnessUpdated(id);
 
-      Assert.Null(Autom.GetAutomatizmById(id));
+      Assert.NotNull(Autom.GetAutomatizmById(id));
+      Assert.Equal(-1, automatizm.Usefulness);
+    }
+
+    [Fact]
+    public void AfterUsefulnessUpdated_NegativeUsefulness_KeepsAutomatizmAtStage3()
+    {
+      var (id, automatizm) = NewAutomatizm();
+      AppGlobalState.EvolutionStage = 3;
+      try
+      {
+        automatizm.Usefulness = -1;
+        Autom.AfterAutomatizmUsefulnessUpdated(id);
+
+        Assert.NotNull(Autom.GetAutomatizmById(id));
+      }
+      finally
+      {
+        AppGlobalState.EvolutionStage = 2;
+      }
+    }
+
+    [Fact]
+    public void AfterUsefulnessUpdated_NegativeUsefulness_IsIgnoredByNodeSearch()
+    {
+      int branch = Engine.NextSeed();
+      var (_, automatizm) = NewAutomatizm(branch);
+
+      automatizm.Usefulness = -1;
+
+      // Поиск по дереву не должен выдавать заблокированный автоматизм.
+      Assert.Null(Autom.GetAutomatizmFromNodeId(branch));
+    }
+
+    [Fact]
+    public void AfterUsefulnessUpdated_NegativeUsefulness_StaffIsDemotedButNotDeleted()
+    {
+      int branch = Engine.NextSeed();
+      var (id, staff) = NewAutomatizm(branch);
+      Autom.SetAutomatizmBelief(staff, 2);
+
+      staff.Usefulness = -1;
+      Autom.AfterAutomatizmUsefulnessUpdated(id);
+
+      // Штатность снята, сам автоматизм жив.
+      Assert.NotEqual(2, staff.Belief);
+      Assert.NotNull(Autom.GetAutomatizmById(id));
     }
 
     [Fact]

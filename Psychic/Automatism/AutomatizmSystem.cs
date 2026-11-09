@@ -449,8 +449,6 @@ namespace ISIDA.Psychic.Automatism
 
       try
       {
-        bool deleted = false;
-
         _lock.EnterWriteLock();
         try
         {
@@ -459,110 +457,16 @@ namespace ISIDA.Psychic.Automatism
 
           int branchId = automatizm.BranchID;
           ReconcileStaffAfterNegativeUsefulnessNoLock(branchId);
-
-          if (automatizm.Usefulness < 0 &&
-              (AppGlobalState.EvolutionStage == 2 || AppGlobalState.EvolutionStage == 3))
-          {
-            DeleteAutomatizmWithCascadeNoLock(automatizmId);
-            deleted = true;
-          }
         }
         finally
         {
           _lock.ExitWriteLock();
         }
-
-        // Токен пульта после снятия блокировки (ShortLogChannel синхронно зовёт UI-подписчика).
-        if (deleted)
-          ShortLogChannel.WriteBlock("АВТОМАТИЗМ УДАЛЁН:", $"ID {automatizmId}, полезность < 0");
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
       }
-    }
-
-    /// <summary>
-    /// Удаляет автоматизм и неиспользуемую цепочку (стадии 2–3). Вызывать под блокировкой записи.
-    /// </summary>
-    private void DeleteAutomatizmWithCascadeNoLock(int id)
-    {
-      if (!_automatizmsById.TryGetValue(id, out var automatizm))
-        return;
-
-      int chainId = automatizm.NextID;
-      DeleteAutomatizmCoreNoLock(id);
-
-      if (chainId > 0 && !IsChainReferencedByOtherAutomatizmsNoLock(chainId, 0))
-      {
-        try
-        {
-          _automatizmChainsSystem?.RemoveAutomatizmChainNoBlock(chainId, silent: true);
-        }
-        catch (Exception ex)
-        {
-          Logger.Warning($"Не удалось удалить цепочку {chainId} при очистке автоматизма: {ex.Message}");
-        }
-      }
-    }
-
-    private bool IsChainReferencedByOtherAutomatizmsNoLock(int chainId, int exceptAutomatizmId)
-    {
-      foreach (var a in _automatizmsById.Values)
-      {
-        if (a.ID == exceptAutomatizmId)
-          continue;
-        if (a.NextID == chainId)
-          return true;
-      }
-      return false;
-    }
-
-    private void DeleteAutomatizmCoreNoLock(int id)
-    {
-      if (!_automatizmsById.TryGetValue(id, out var automatizm))
-        return;
-
-      _automatizmsById.Remove(id);
-      _automatizmSuccessFromId.Remove(id);
-      _unicumBranchActionsToId.Remove((automatizm.BranchID, automatizm.ActionsImageID));
-
-      if (_automatizmBelief2FromTreeNodeId.TryGetValue(automatizm.BranchID, out var belief2Cached) &&
-          belief2Cached != null && belief2Cached.ID == automatizm.ID)
-      {
-        _automatizmBelief2FromTreeNodeId.Remove(automatizm.BranchID);
-        foreach (var kvp in _automatizmsById)
-        {
-          if (kvp.Value.BranchID == automatizm.BranchID && kvp.Value.Belief == 2)
-          {
-            _automatizmBelief2FromTreeNodeId[automatizm.BranchID] = kvp.Value;
-            break;
-          }
-        }
-      }
-
-      if (automatizm.BranchID > 1000000 && automatizm.BranchID < 2000000)
-      {
-        var imgId = automatizm.BranchID - 1000000;
-        if (_automatizmFromActionId.ContainsKey(imgId))
-        {
-          _automatizmFromActionId[imgId].Remove(automatizm);
-          if (_automatizmFromActionId[imgId].Count == 0)
-            _automatizmFromActionId.Remove(imgId);
-        }
-      }
-      else if (automatizm.BranchID > 2000000)
-      {
-        var imgId = automatizm.BranchID - 2000000;
-        if (_automatizmFromPhraseId.ContainsKey(imgId))
-        {
-          _automatizmFromPhraseId[imgId].Remove(automatizm);
-          if (_automatizmFromPhraseId[imgId].Count == 0)
-            _automatizmFromPhraseId.Remove(imgId);
-        }
-      }
-
-      OnAutomatizmDeleted(id);
     }
 
     /// <summary>

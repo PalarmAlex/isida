@@ -68,11 +68,14 @@ namespace ISIDA.Common
     /// и текст блока.
     /// </summary>
     /// <returns>
-    /// Текст вида «№ пульса: ххх» (+ «×N» при повторах) + перевод строки + содержимое токена.
+    /// Текст вида «№ пульса: ххх» (+ « ×N» при повторах) + перевод строки + содержимое токена.
+    /// Пробел перед «×» обязателен: клиентские парсеры первой строки (AIStudio
+    /// <c>ScenarioReportHtmlBuilder.AppendEventLogToken</c>) отрезают суффикс, только если после
+    /// числа встретили пробел, иначе «×N» в отчёте молча теряется.
     /// </returns>
     public override string ToString()
     {
-      var repeat = RepeatCount > 1 ? $"×{RepeatCount}" : string.Empty;
+      var repeat = RepeatCount > 1 ? $" ×{RepeatCount}" : string.Empty;
       return $"№ пульса: {Pulse:D3}{repeat}\n" + Text;
     }
   }

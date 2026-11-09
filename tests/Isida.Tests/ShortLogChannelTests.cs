@@ -282,6 +282,10 @@ namespace Isida.Tests
 
       Assert.Contains("№ пульса: 042", s);
       Assert.Contains("test text", s);
+
+      // Без повтора суффикса «×N» и хвостового пробела быть не должно: парсер заголовка
+      // в отчёте сценария по пробелу отделяет номер пульса от суффикса.
+      Assert.StartsWith("№ пульса: 042\n", s, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -405,6 +409,11 @@ namespace Isida.Tests
 
       Assert.Contains("№ пульса: 018 ×2", s);
       Assert.Contains("блок", s);
+
+      // Ровно один пробел между номером пульса и суффиксом повтора: AIStudio
+      // (ScenarioReportHtmlBuilder.AppendEventLogToken) ищет «×» только после пробела
+      // за цифрами, без него «×N» терялся в отчёте.
+      Assert.StartsWith("№ пульса: 018 ×2\n", s, StringComparison.Ordinal);
     }
 
     /// <summary>
