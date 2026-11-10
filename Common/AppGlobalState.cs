@@ -765,6 +765,36 @@ public static class AppGlobalState
   }
 
   /// <summary>
+  /// Единственная точка оценки автоматизма (−1 / 0 / +1). Все контуры (калькулятор гомеостаза,
+  /// трекер результатов, психика) обязаны спрашивать оценку здесь, иначе слои разойдутся.
+  /// <para>Правила:</para>
+  /// <list type="bullet">
+  /// <item>состояние выросло (Плохо→Норма/Хорошо, Норма→Хорошо) — успех (+1) независимо от параметров;</item>
+  /// <item>падение в «Плохо» — неуспех (−1) независимо от параметров;</item>
+  /// <item>осталось «Плохо» — решает динамика параметров: лучше → успех, без изменений или хуже → неуспех.
+  /// Автоматизм, не вытащивший систему из «Плохо», проблему не решил;</item>
+  /// <item>осталось «Норма»/«Хорошо» либо «Хорошо»→«Норма» (нормализация) — оценка не меняется (0).</item>
+  /// </list>
+  /// </summary>
+  /// <param name="stateBefore">Интегральное состояние до выполнения автоматизма.</param>
+  /// <param name="stateAfter">Интегральное состояние после выполнения автоматизма.</param>
+  /// <param name="parameterDelta">Знак изменения значимых параметров: +1 лучше, −1 хуже, 0 нет значимых изменений.</param>
+  /// <returns>−1 — полезность уменьшить, 0 — оставить, +1 — увеличить.</returns>
+  public static int AssessAutomatizmOutcome(
+      HomeostasisState stateBefore,
+      HomeostasisState stateAfter,
+      int parameterDelta)
+  {
+    if (stateAfter > stateBefore)
+      return 1;
+    if (IsStateWorsening(stateBefore, stateAfter))
+      return -1;
+    if (stateBefore == HomeostasisState.Bad)
+      return parameterDelta > 0 ? 1 : -1;
+    return 0;
+  }
+
+  /// <summary>
   /// Текущее интегральное состояние симбионта
   /// </summary>
   public static HomeostasisState CurrentOverallState

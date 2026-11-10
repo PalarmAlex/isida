@@ -90,7 +90,7 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void ComputeOperatorAutomatizmAssessment_VitalWorsening_ReturnsMinusOne()
+    public void ComputeOperatorAutomatizmAssessment_VitalWorsening_WithoutOverallWorsening_NoPenalty()
     {
       var calc = new HomeostasisCalculator();
       var valuesBefore = new Dictionary<int, float> { { 1, 50f } };
@@ -122,7 +122,27 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void ComputeOperatorAutomatizmAssessment_VitalImproving_ReturnsPlusOne()
+    public void ComputeOperatorAutomatizmAssessment_VitalImproving_KeepsNormalStateUnchanged()
+    {
+      var calc = new HomeostasisCalculator();
+      var valuesBefore = new Dictionary<int, float> { { 1, 40f } };
+      var current = new List<ParameterData> { Param(1, 55f, -5, vital: true) };
+
+      // Состояние «Норма → Норма»: улучшение параметров внутри устойчивого состояния
+      // оценку не меняет — иначе автоматизм получал бы плюсы за фоновое движение.
+      int result = calc.ComputeOperatorAutomatizmAssessment(
+          valuesBefore, current, 0,
+          AppGlobalState.HomeostasisState.Normal, AppGlobalState.HomeostasisState.Normal);
+
+      Assert.Equal(0, result);
+    }
+
+    /// <summary>
+    /// «Осталось Плохо», но параметры улучшились — автоматизм полезен (+1).
+    /// Интегральное состояние ещё не перескочило в «Норму», однако динамика положительная.
+    /// </summary>
+    [Fact]
+    public void ComputeOperatorAutomatizmAssessment_StillBadButImproving_ReturnsPlusOne()
     {
       var calc = new HomeostasisCalculator();
       var valuesBefore = new Dictionary<int, float> { { 1, 40f } };
@@ -130,9 +150,27 @@ namespace Isida.Tests
 
       int result = calc.ComputeOperatorAutomatizmAssessment(
           valuesBefore, current, 0,
-          AppGlobalState.HomeostasisState.Normal, AppGlobalState.HomeostasisState.Normal);
+          AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad);
 
       Assert.Equal(1, result);
+    }
+
+    /// <summary>
+    /// «Осталось Плохо» без значимых изменений параметров — автоматизм проблему не решил (−1).
+    /// Кейс сценария 10: полезность не должна «зависать» без оценки.
+    /// </summary>
+    [Fact]
+    public void ComputeOperatorAutomatizmAssessment_StillBadNoChange_ReturnsMinusOne()
+    {
+      var calc = new HomeostasisCalculator();
+      var valuesBefore = new Dictionary<int, float> { { 1, 50f } };
+      var current = new List<ParameterData> { Param(1, 50f, -5, vital: true) };
+
+      int result = calc.ComputeOperatorAutomatizmAssessment(
+          valuesBefore, current, 0,
+          AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad);
+
+      Assert.Equal(-1, result);
     }
 
     // ---------- AnyVitalParameterInHarmfulZone / IsParameterInBadZone ----------

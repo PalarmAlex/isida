@@ -1862,11 +1862,7 @@ namespace ISIDA.Psychic
       }
       else
       {
-        assessment = 0;
-        if (stateAfter > stateBefore)
-          assessment = 1;
-        else if (stateAfter < stateBefore)
-          assessment = -1;
+        assessment = AppGlobalState.AssessAutomatizmOutcome(stateBefore, stateAfter, parameterDelta: 0);
       }
 
       int responseTime = PulseCount - lastRunPulseForResponseTime;

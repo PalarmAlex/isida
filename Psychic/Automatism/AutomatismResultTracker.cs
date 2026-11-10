@@ -193,6 +193,16 @@ namespace ISIDA.Psychic
       /// Такой результат оценивается как <see cref="ExecutionResult.Skipped"/> без ожидания отклика среды.
       /// </summary>
       public bool MotorSkippedByOperator { get; set; }
+
+      /// <summary>
+      /// Снимок значений параметров гомеостаза на момент запуска <em>этого</em> автоматизма.
+      /// Хранится в самом результате, а не только в глобальном состоянии: иначе оценка завершающегося
+      /// автоматизма могла посчитать дельту по снимку следующего запущенного.
+      /// </summary>
+      public IReadOnlyDictionary<int, float> ParameterValuesBefore { get; set; }
+
+      /// <summary>Фокусный параметр снимка <see cref="ParameterValuesBefore"/> (0 — не задан).</summary>
+      public int FocusParameterIdBefore { get; set; }
     }
 
     /// <summary>
@@ -406,15 +416,16 @@ namespace ISIDA.Psychic
 
     /// <summary>
     /// Снимок значений параметров и фокус (доминирующий параметр) для оценки ответа оператора по дельте, а не только по интегральному состоянию.
+    /// Возвращает снимок, чтобы тот же набор «до» сохранился в самом результате автоматизма.
     /// </summary>
-    private static void CaptureOperatorEvaluationParameterSnapshot()
+    private static (IReadOnlyDictionary<int, float> Values, int FocusId) CaptureOperatorEvaluationParameterSnapshot()
     {
       try
       {
         if (!GomeostasSystem.IsInitialized)
         {
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
-          return;
+          return (null, 0);
         }
 
         var go = GomeostasSystem.Instance;
@@ -422,7 +433,7 @@ namespace ISIDA.Psychic
         if (parameters == null || parameters.Count == 0)
         {
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
-          return;
+          return (null, 0);
         }
 
         var dict = new Dictionary<int, float>(parameters.Count);
@@ -433,11 +444,13 @@ namespace ISIDA.Psychic
         int focusId = dominant.dominantParam?.Id ?? 0;
 
         AppGlobalState.SetOperatorEvaluationParameterSnapshot(dict, focusId);
+        return (dict, focusId);
       }
       catch (Exception ex)
       {
         Logger.Error(ex.Message);
         AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
+        return (null, 0);
       }
     }
 
@@ -499,9 +512,15 @@ namespace ISIDA.Psychic
         _lastAutomatizmResults[automatizmId] = trackingResult;
         AppGlobalState.StateBeforeOperatorImpact = AppGlobalState.CurrentOverallState;
         if (AppGlobalState.EvolutionStage >= 2)
-          CaptureOperatorEvaluationParameterSnapshot();
+        {
+          var (values, focusId) = CaptureOperatorEvaluationParameterSnapshot();
+          trackingResult.ParameterValuesBefore = values;
+          trackingResult.FocusParameterIdBefore = focusId;
+        }
         else
+        {
           AppGlobalState.SetOperatorEvaluationParameterSnapshot(null, 0);
+        }
         AppGlobalState.UpdateAutomatizmInfo(automatizmId, GlobalTimer.GlobalPulsCount);
 
         // Окно ожидания открывается здесь, а не у вызывающего кода: StartTracking — единственная точка,
@@ -696,32 +715,39 @@ namespace ISIDA.Psychic
         if (result.MotorCompletedPulse <= 0)
           return false;
 
-        var stateBefore = AppGlobalState.StateBeforeOperatorImpact;
+        // Состояние «до» берём из самого результата: глобальный StateBeforeOperatorImpact мог быть
+        // перезаписан запуском следующего автоматизма на том же пульсе.
+        var stateBefore = result.PreviousState;
         var stateAfter = AppGlobalState.CurrentOverallState;
 
-        int assessment;
-        if (AppGlobalState.EvolutionStage >= 2
-            && AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var snapshotBefore, out int focusParamId)
-            && snapshotBefore != null
-            && GomeostasSystem.IsInitialized)
+        int parameterDelta = 0;
+        bool hasSnapshot = false;
+        var valuesBefore = result.ParameterValuesBefore;
+        int focusParamId = result.FocusParameterIdBefore;
+        if (valuesBefore == null
+            && AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var globalSnapshot, out int globalFocusId))
         {
-          assessment = GomeostasSystem.Instance.Calculator.ComputeOperatorAutomatizmAssessment(
-              snapshotBefore,
-              GomeostasSystem.Instance.GetAllParameters(),
-              focusParamId,
-              stateBefore,
-              stateAfter);
+          valuesBefore = globalSnapshot;
+          focusParamId = globalFocusId;
         }
-        else
+
+        if (valuesBefore != null && valuesBefore.Count > 0 && GomeostasSystem.IsInitialized)
         {
-          assessment = 0;
-          if (stateAfter > stateBefore)
-            assessment = 1;
-          else if (AppGlobalState.IsStateWorsening(stateBefore, stateAfter))
-            assessment = -1;
+          parameterDelta = GomeostasSystem.Instance.Calculator.ComputeAutomatizmParameterDelta(
+              valuesBefore,
+              GomeostasSystem.Instance.GetAllParameters(),
+              focusParamId);
+          hasSnapshot = true;
         }
 
         // Среда ещё не отреагировала — окно остаётся открытым (оценка наступит по истечении или по ответу оператора).
+        // Признак отсутствия сигнала: состояние не изменилось и значимых дельт параметров нет. Иначе
+        // «осталось Плохо без улучшения» закрывало бы окно штрафом на первом же пульсе после мотора.
+        if (stateBefore == stateAfter && (!hasSnapshot || parameterDelta == 0))
+          return false;
+
+        int assessment = AppGlobalState.AssessAutomatizmOutcome(stateBefore, stateAfter, parameterDelta);
+
         if (assessment == 0)
           return false;
 
@@ -953,34 +979,43 @@ namespace ISIDA.Psychic
         return;
       }
 
-      // Анализ изменения состояния гомеостаза.
-      // Возврат из «Хорошо» в «Норму» — это нормализация, а не ухудшение:
-      // автоматизм не должен получать штраф, если его действие убрало «Хорошо» и система
-      // вернулась в устойчивое состояние «Норма». Ухудшением считаем только переход
-      // «Норма → Плохо» (и «Хорошо → Плохо» — но это уже покрывается текущим кодом).
-      if (result.PreviousState != result.CurrentState)
+      // Анализ изменения состояния гомеостаза — по единой таблице оценки автоматизма.
+      // «Хорошо» → «Норма» — нормализация, а не ухудшение; «Плохо» → «Плохо» без улучшения
+      // параметров — неуспех: автоматизм проблему не решил.
+      // Снимок «до» — из самого результата: глобальный мог быть перезаписан следующим запуском.
+      int parameterDelta = 0;
+      var valuesBefore = result.ParameterValuesBefore;
+      int focusParamId = result.FocusParameterIdBefore;
+      if (valuesBefore == null
+          && AppGlobalState.TryGetOperatorEvaluationParameterSnapshot(out var globalSnapshot, out int globalFocusId))
       {
-        // Состояние улучшилось
-        if (result.CurrentState > result.PreviousState)
-        {
-          result.UsefulnessDelta = 1;
-          result.Result = ExecutionResult.Success;
-        }
-        // Ухудшение: только переход в «Плохо». «Хорошо» → «Норма» — нормализация, не штраф.
-        else if (AppGlobalState.IsStateWorsening(result.PreviousState, result.CurrentState))
-        {
-          result.UsefulnessDelta = -1;
-          result.Result = ExecutionResult.Error;
-        }
-        else
-        {
-          result.UsefulnessDelta = 0;
-          result.Result = ExecutionResult.Skipped;
-        }
+        valuesBefore = globalSnapshot;
+        focusParamId = globalFocusId;
+      }
+
+      if (valuesBefore != null && valuesBefore.Count > 0 && GomeostasSystem.IsInitialized)
+      {
+        parameterDelta = GomeostasSystem.Instance.Calculator.ComputeAutomatizmParameterDelta(
+            valuesBefore,
+            GomeostasSystem.Instance.GetAllParameters(),
+            focusParamId);
+      }
+
+      int outcome = AppGlobalState.AssessAutomatizmOutcome(
+          result.PreviousState, result.CurrentState, parameterDelta);
+
+      if (outcome > 0)
+      {
+        result.UsefulnessDelta = 1;
+        result.Result = ExecutionResult.Success;
+      }
+      else if (outcome < 0)
+      {
+        result.UsefulnessDelta = -1;
+        result.Result = ExecutionResult.Error;
       }
       else
       {
-        // Состояние не изменилось
         result.UsefulnessDelta = 0;
 
         // Проверяем, было ли ожидание ответа оператора

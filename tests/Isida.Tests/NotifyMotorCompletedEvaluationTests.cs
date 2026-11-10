@@ -418,6 +418,107 @@ namespace Isida.Tests
 
     #endregion
 
+    #region Случай 42: «осталось Плохо» — неуспех автоматизма
+
+    /// <summary>
+    /// Сценарий 10, шаги 5–6: автоматизм запущен при «Плохо», после мотора состояние
+    /// по-прежнему «Плохо» и параметры не сдвинулись. Окно НЕ закрывается штрафом сразу —
+    /// среда ещё может отреагировать; но по истечении окна это неуспех (−1), а не «без изменений».
+    /// </summary>
+    [Fact]
+    public void NotifyMotorCompleted_BadToBad_NoSignal_KeepsWindowOpen()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(3000);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      SetGlobalPulse(3001);
+      Tracker.NotifyMotorCompleted(id);
+
+      Assert.True(AppGlobalState.WaitingForOperatorEvaluation);
+      Assert.Equal(id, AppGlobalState.AutomatizmIdWaitingForOperatorEvaluation);
+      Assert.Equal(0, result.UsefulnessDelta);
+    }
+
+    /// <summary>
+    /// Та же ситуация после истечения окна (<see cref="AutomatismResultTracker.FinishTracking"/>):
+    /// «Плохо» → «Плохо» без улучшения параметров = Error и дельта −1.
+    /// </summary>
+    [Fact]
+    public void FinishTracking_BadToBad_NoSignal_EvaluatesError()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(3100);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      SetGlobalPulse(3105);
+      Tracker.FinishTracking(result);
+
+      Assert.Equal(-1, result.UsefulnessDelta);
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Error, result.Result);
+      Assert.Equal(AppGlobalState.HomeostasisState.Bad, result.CurrentState);
+    }
+
+    /// <summary>
+    /// «Плохо» → «Плохо», но параметры улучшились — успех (+1): автоматизм двинул систему к норме,
+    /// даже если интегральное состояние ещё не перескочило.
+    /// </summary>
+    [Fact]
+    public void FinishTracking_BadToBad_WithParameterImprovement_EvaluatesSuccess()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
+      SetGlobalPulse(3200);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      // Снимок «до» с заведомо худшим значением, текущее — лучше.
+      // Параметр из CreateParameterAndGad избыток-ориентированный (Speed=+1): улучшение — это снижение значения.
+      result.ParameterValuesBefore = new Dictionary<int, float> { { _paramId, 90f } };
+      result.FocusParameterIdBefore = _paramId;
+      SetParameterValue(_paramId, 10f);
+
+      SetGlobalPulse(3205);
+      Tracker.FinishTracking(result);
+
+      Assert.Equal(1, result.UsefulnessDelta);
+      Assert.Equal(AutomatismResultTracker.ExecutionResult.Success, result.Result);
+    }
+
+    /// <summary>«Норма» → «Норма» — оценка не меняется (0), даже при движении параметров.</summary>
+    [Fact]
+    public void FinishTracking_NormalToNormal_NoChange()
+    {
+      AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Normal;
+      SetGlobalPulse(3300);
+
+      var (id, atmz) = NewAutomatizm();
+      var result = Tracker.StartTracking(id, atmz.BranchID, atmz.ActionsImageID);
+
+      result.ParameterValuesBefore = new Dictionary<int, float> { { _paramId, 10f } };
+      result.FocusParameterIdBefore = _paramId;
+      SetParameterValue(_paramId, 90f);
+
+      SetGlobalPulse(3305);
+      Tracker.FinishTracking(result);
+
+      Assert.Equal(0, result.UsefulnessDelta);
+      Assert.NotEqual(AutomatismResultTracker.ExecutionResult.Error, result.Result);
+    }
+
+    /// <summary>Присваивает значение параметра гомеостаза по ID (сеттер значения недоступен напрямую).</summary>
+    private static void SetParameterValue(int paramId, float value)
+    {
+      var param = GomeostasSystem.Instance.GetAllParameters().First(p => p.Id == paramId);
+      param.Value = value;
+    }
+
+    #endregion
+
     #region Invalid ID
 
     [Fact]

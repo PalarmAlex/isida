@@ -65,10 +65,11 @@ namespace ISIDA.Gomeostas
     }
 
     /// <summary>
-    /// Оценка ответа оператора (−1 / 0 / +1) по изменению жизненных параметров между снимком «до» и текущими значениями,
-    /// с запасным вариантом по интегральному состоянию, если дельты незначимы.
-    /// Если знак изменения фокусного параметра противоречит интегральному состоянию, а совокупность жизненных
-    /// параметров не даёт сигнала (<c>vitalScore==0</c>), используется интегральная оценка.
+    /// Оценка выполнения автоматизма (−1 / 0 / +1) по изменению жизненных параметров между снимком «до»
+    /// и текущими значениями и по интегральному состоянию. Решение принимает единая точка
+    /// <see cref="AppGlobalState.AssessAutomatizmOutcome"/>: здесь только считается знак дельты параметров.
+    /// Приоритет у совокупности жизненных параметров (устойчива к шуму одного канала), фокусный параметр
+    /// используется, когда витальные не дали сигнала.
     /// </summary>
     public int ComputeOperatorAutomatizmAssessment(
         IReadOnlyDictionary<int, float> valuesBefore,
@@ -77,19 +78,22 @@ namespace ISIDA.Gomeostas
         AppGlobalState.HomeostasisState overallBefore,
         AppGlobalState.HomeostasisState overallAfter)
     {
-      if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
-      {
-        int r = AssessmentFromOverallStates(overallBefore, overallAfter);
-        return r;
-      }
+      int parameterDelta = ComputeAutomatizmParameterDelta(valuesBefore, currentParameters, focusParameterId);
+      return AppGlobalState.AssessAutomatizmOutcome(overallBefore, overallAfter, parameterDelta);
+    }
 
-      int? focusSigned = null;
-      if (focusParameterId > 0 && valuesBefore.TryGetValue(focusParameterId, out float beforeFocus))
-      {
-        var curFocus = currentParameters.FirstOrDefault(p => p.Id == focusParameterId);
-        if (curFocus != null)
-          focusSigned = TrySignedParameterDelta(beforeFocus, curFocus);
-      }
+    /// <summary>
+    /// Знак изменения значимых параметров за окно автоматизма (−1 / 0 / +1) для
+    /// <see cref="AppGlobalState.AssessAutomatizmOutcome"/>: приоритет у совокупности жизненных параметров
+    /// (устойчива к шуму одного канала), фокусный параметр — только когда витальные не дали сигнала.
+    /// </summary>
+    public int ComputeAutomatizmParameterDelta(
+        IReadOnlyDictionary<int, float> valuesBefore,
+        IList<ParameterData> currentParameters,
+        int focusParameterId)
+    {
+      if (valuesBefore == null || valuesBefore.Count == 0 || currentParameters == null || currentParameters.Count == 0)
+        return 0;
 
       int vitalScore = 0;
       foreach (var p in currentParameters)
@@ -105,42 +109,16 @@ namespace ISIDA.Gomeostas
           vitalScore--;
       }
 
-      int overallAssess = AssessmentFromOverallStates(overallBefore, overallAfter);
+      if (vitalScore != 0)
+        return Math.Sign(vitalScore);
 
-      int result;
-      // Фокусный параметр может дать заметную дельту по одному каналу (шум/доминанта),
-      // тогда как интегральное состояние уже отражает суммарный эффект ответа оператора.
-      // При отсутствии сигнала по совокупности жизненных (vitalScore==0) не наказываем автоматизм
-      // знаком фокуса, если интеграл явно в противоположную сторону (Normal→Well и т.п.).
-      if (focusSigned.HasValue && focusSigned.Value != 0)
+      if (focusParameterId > 0 && valuesBefore.TryGetValue(focusParameterId, out float beforeFocus))
       {
-        if (vitalScore == 0 && overallAssess != 0 &&
-            Math.Sign(overallAssess) != Math.Sign(focusSigned.Value))
-
-          result = overallAssess;
-        else
-          result = focusSigned.Value;
+        var curFocus = currentParameters.FirstOrDefault(p => p.Id == focusParameterId);
+        if (curFocus != null)
+          return TrySignedParameterDelta(beforeFocus, curFocus) ?? 0;
       }
-      else if (vitalScore != 0)
-        result = vitalScore > 0 ? 1 : -1;
-      else
-        result = overallAssess;
 
-      // Штраф — строго за ухудшение интегрального состояния (переход в «Плохо»).
-      // Падение значения параметра при «Хорошо → Норма» или при неизменной «Норме» —
-      // это нормализация/фоновое затухание, а не вред от автоматизма: полезность не снижаем.
-      if (result < 0 && !AppGlobalState.IsStateWorsening(overallBefore, overallAfter))
-        result = 0;
-
-      return result;
-    }
-
-    private static int AssessmentFromOverallStates(AppGlobalState.HomeostasisState before, AppGlobalState.HomeostasisState after)
-    {
-      if (after > before)
-        return 1;
-      if (AppGlobalState.IsStateWorsening(before, after))
-        return -1;
       return 0;
     }
 
