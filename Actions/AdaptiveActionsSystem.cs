@@ -158,6 +158,12 @@ namespace ISIDA.Actions
     /// </summary>
     public int InfluenceActionId { get; set; }
 
+    /// <summary>
+    /// ID паттерна Command-канала (CommandPhrases.dat / PhraseTree VerbalSensorChannel), привязанного к действию. 0 = нет связи.
+    /// В UI отображается как пустое поле. Одиночный токен (в отличие от списков в рефлексах/образах).
+    /// </summary>
+    public int CommandPatternId { get; set; }
+
       private int _vigor = 5;
 
       /// <summary>
@@ -481,6 +487,7 @@ namespace ISIDA.Actions
     /// <param name="strictValidation">Флаг строгой проверки параметров. При значении true — выбрасывает исключение при выходе значений за допустимые пределы (-10..+10)</param>
     /// <param name="Vigor">Интенсивность действия [1...10], по умолчанию = 5</param>
     /// <param name="influenceActionId">ID связанного действия с пульта (InfluenceAction) для отзеркаливания. 0 = нет связи.</param>
+    /// <param name="commandPatternId">ID паттерна Command-канала (CommandPhrases.dat). 0 = нет связи.</param>
     /// <exception cref="ArgumentException">Выбрасывается при пустом или null имени действия</exception>
     /// <exception cref="ArgumentOutOfRangeException">Выбрасывается при строгой проверке и недопустимых значениях в влияниях или затратах (вне диапазона -10..+10)</exception>
     public (int ActionId, string[] Warnings) AddAction(
@@ -490,7 +497,8 @@ namespace ISIDA.Actions
         List<int> targetGomeoParamIdArr = null,
         bool strictValidation = false,
         int Vigor = 5,
-        int influenceActionId = 0)
+        int influenceActionId = 0,
+        int commandPatternId = 0)
     {
       if (AppGlobalState.EvolutionStage > 0)
         throw new InvalidOperationException("Работа с моторными действиями разрешена только в стадии 0");
@@ -508,6 +516,7 @@ namespace ISIDA.Actions
         TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>(),
         Vigor = Vigor,
         InfluenceActionId = influenceActionId,
+        CommandPatternId = commandPatternId,
         ActionsSystem = this
       };
 
@@ -540,7 +549,8 @@ namespace ISIDA.Actions
           Vigor = Vigor,
           AntagonistActions = antagonistActions ?? new List<int>(),
           TargetGomeoParamIdArr = targetGomeoParamIdArr ?? new List<int>(),
-          InfluenceActionId = influenceActionId
+          InfluenceActionId = influenceActionId,
+          CommandPatternId = commandPatternId
         };
 
         _actions.Add(newId, action);
@@ -1069,6 +1079,13 @@ namespace ISIDA.Actions
                 action.InfluenceActionId = influenceActionId;
             }
 
+            // 8-е поле опционально в старых файлах (как пусто = 0)
+            if (parts.Length >= 8 && !string.IsNullOrWhiteSpace(parts[7]))
+            {
+              if (int.TryParse(parts[7].Trim(), out int commandPatternId) && commandPatternId >= 0)
+                action.CommandPatternId = commandPatternId;
+            }
+
             _actions[action.Id] = action;
             if (action.Id > _lastActionId)
               _lastActionId = action.Id;
@@ -1082,7 +1099,8 @@ namespace ISIDA.Actions
                 FileHeaders.ActionsFormat,
                 FileHeaders.ActionsAntagonists,
                 FileHeaders.TargetParameters,
-                FileHeaders.ActionsInfluenceActionId
+                FileHeaders.ActionsInfluenceActionId,
+                FileHeaders.ActionsCommandPatternId
             };
           File.WriteAllLines(path, lines);
 
@@ -1133,7 +1151,8 @@ namespace ISIDA.Actions
           FileHeaders.ActionsFormat,
           FileHeaders.ActionsAntagonists,
           FileHeaders.TargetParameters,
-          FileHeaders.ActionsInfluenceActionId
+          FileHeaders.ActionsInfluenceActionId,
+          FileHeaders.ActionsCommandPatternId
         };
 
         foreach (var action in _actions.Values.OrderBy(a => a.Id))
@@ -1145,10 +1164,10 @@ namespace ISIDA.Actions
           lines.Add($"{action.Id}|{action.Name}|{action.Description}|" +
             $"{action.Vigor}|" +
             $"{string.Join(",", action.AntagonistActions)}|" +
-            $"{targetParams}|{action.InfluenceActionId}");
+            $"{targetParams}|{action.InfluenceActionId}|{action.CommandPatternId}");
         }
 
-        var minLinesCount = 4;
+        var minLinesCount = 5;
         if (lines.Count == 3)
           minLinesCount = 3;
 

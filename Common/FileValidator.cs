@@ -78,10 +78,11 @@ namespace ISIDA.Common
       public const string EnvironmentPressureRulesInfluences = "# Influences: paramId1:effect1;paramId2:effect2";
 
       // Моторные действия
-      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId";
+      public const string ActionsFormat = "# Формат: ID|Имя|Описание|Интенсивность|Антагонисты|Target параметры|InfluenceActionId|CommandPatternId";
       public const string ActionsAntagonists = "# Антагонисты: id1,id2,id3";
       public const string TargetParameters = "# Target параметры: id1,id2,id3";
       public const string ActionsInfluenceActionId = "# InfluenceActionId: 0=нет связи, иначе ID действия с пульта для отзеркаливания";
+      public const string ActionsCommandPatternId = "# CommandPatternId: 0=нет связи, иначе ID паттерна Command-канала (CommandPhrases.dat); столбец опционален в старых файлах (как пусто)";
 
       // Стили поведения
       public const string StylesFormat = "# Формат: ID|Имя|Описание|Антагонисты";
@@ -554,6 +555,13 @@ namespace ISIDA.Common
         if (parts.Length >= 7 && !string.IsNullOrWhiteSpace(parts[6]))
         {
           if (!int.TryParse(parts[6], out int influenceActionId) || influenceActionId < 0)
+            return false;
+        }
+
+        // 8-е поле (CommandPatternId) опционально в старых файлах; если задано — целое >= 0
+        if (parts.Length >= 8 && !string.IsNullOrWhiteSpace(parts[7]))
+        {
+          if (!int.TryParse(parts[7], out int commandPatternId) || commandPatternId < 0)
             return false;
         }
 

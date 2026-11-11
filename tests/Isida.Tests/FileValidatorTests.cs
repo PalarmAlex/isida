@@ -58,6 +58,40 @@ namespace Isida.Tests
     }
 
     [Fact]
+    public void IsValidActionsFile_WithCommandPatternId_True()
+    {
+      // 8-е поле CommandPatternId задано
+      var lines = new List<string> { "1|Шаг|описание|5|2|1,3|0|7" };
+
+      Assert.True(FileValidator.IsValidActionsFile(lines));
+    }
+
+    [Fact]
+    public void IsValidActionsFile_WithoutCommandPatternId_True()
+    {
+      // Старый файл без 8-го поля (CommandPatternId опционален)
+      var lines = new List<string> { "1|Шаг|описание|5|2|1,3|0" };
+
+      Assert.True(FileValidator.IsValidActionsFile(lines));
+    }
+
+    [Fact]
+    public void IsValidActionsFile_CommandPatternIdNegative_False()
+    {
+      var lines = new List<string> { "1|Шаг|описание|5|2|1,3|0|-5" };
+
+      Assert.False(FileValidator.IsValidActionsFile(lines));
+    }
+
+    [Fact]
+    public void IsValidActionsFile_CommandPatternIdNotNumber_False()
+    {
+      var lines = new List<string> { "1|Шаг|описание|5|2|1,3|0|abc" };
+
+      Assert.False(FileValidator.IsValidActionsFile(lines));
+    }
+
+    [Fact]
     public void IsValidGeneticReflexesFile_ValidRow_True()
     {
       var lines = new List<string> { "1|-1|2,3|4|5|6|0" };
