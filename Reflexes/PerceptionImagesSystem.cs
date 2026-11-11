@@ -465,6 +465,35 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
+    /// Каскадно удаляет указанный actionId из InfluenceActionsList всех образов восприятия.
+    /// Вызывается при удалении триггера воздействия для освобождения связи.
+    /// </summary>
+    /// <param name="actionId">ID удаляемого воздействия с пульта.</param>
+    /// <returns>Число изменённых образов.</returns>
+    public int RemoveInfluenceActionFromAllImages(int actionId)
+    {
+      if (actionId <= 0) return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        int changed = 0;
+        foreach (var image in _perceptionImages.Values)
+        {
+          if (image.InfluenceActionsList != null && image.InfluenceActionsList.Remove(actionId))
+          {
+            changed++;
+          }
+        }
+        return changed;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Очищает все образы восприятия
     /// </summary>
     public void ClearAllPerceptionImages()

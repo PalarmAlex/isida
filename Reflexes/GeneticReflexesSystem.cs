@@ -22,7 +22,6 @@ namespace ISIDA.Reflexes
   public sealed class GeneticReflexesSystem : IDisposable
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
-    private readonly InfluenceActionSystem _influenceActionSystem;
     private readonly AdaptiveActionsSystem _adaptiveActionsSystem;
     private ReflexChainsSystem _reflexChainsSystem;
     private bool _disposed = false;
@@ -139,13 +138,11 @@ namespace ISIDA.Reflexes
         string dataFolderPath = null)
     {
       _gomeostas = gomeostas ?? throw new ArgumentNullException(nameof(gomeostas));
-      _influenceActionSystem = InfluenceActionSystem.Instance;
       _adaptiveActionsSystem = AdaptiveActionsSystem.Instance;
 
       _reflexesFolderPath = IsidaDataPaths.ResolveReflexesFolder(dataFolderPath);
 
       _gomeostas.StyleDeleted += OnStyleDeleted;
-      _influenceActionSystem.InfluenceActionDeleted += OnInfluenceActionDeleted;
       _adaptiveActionsSystem.AdaptiveActionDeleted += OnAdaptiveActionDeleted;
 
       try
@@ -828,26 +825,32 @@ namespace ISIDA.Reflexes
     }
 
     /// <summary>
-    /// Обработчик удаления воздействия из системы воздействий
+    /// Проверяет, используется ли воздействие как пусковой триггер хотя бы в одном
+    /// безусловном рефлексе (<see cref="GeneticReflex.InfluenceActionIds"/>).
     /// </summary>
-    private void OnInfluenceActionDeleted(int actionId)
+    /// <remarks>
+    /// Каскадно эти коды НЕ вычищаются: удаление триггера сделало бы рефлекс недостижимым
+    /// (изменился бы его ключ условий и привязка к узлу дерева), поэтому удаление блокируется.
+    /// </remarks>
+    /// <param name="actionId">ID проверяемого воздействия</param>
+    /// <returns>True, если воздействие является триггером хотя бы одного б/у рефлекса</returns>
+    public bool IsInfluenceActionIdUsedAsTrigger(int actionId)
     {
-      _lock.EnterWriteLock();
+      if (actionId <= 0)
+        return false;
+
+      _lock.EnterReadLock();
       try
       {
-        if (_geneticReflexes == null) return;
+        if (_geneticReflexes == null)
+          return false;
 
-        // Удаляем ссылки на воздействие из всех рефлексов
-        foreach (var reflex in _geneticReflexes.Values)
-        {
-          // Удаляем из InfluenceActionIds (внешние воздействия с пульта)
-          if (reflex.InfluenceActionIds.Contains(actionId))
-            reflex.InfluenceActionIds.Remove(actionId);
-        }
+        return _geneticReflexes.Values.Any(
+            r => r?.InfluenceActionIds != null && r.InfluenceActionIds.Contains(actionId));
       }
       finally
       {
-        _lock.ExitWriteLock();
+        _lock.ExitReadLock();
       }
     }
 
@@ -1475,9 +1478,6 @@ namespace ISIDA.Reflexes
         // Отписываемся от событий других систем
         if (_gomeostas != null)
           _gomeostas.StyleDeleted -= OnStyleDeleted;
-
-        if (_influenceActionSystem != null)
-          _influenceActionSystem.InfluenceActionDeleted -= OnInfluenceActionDeleted;
 
         if (_adaptiveActionsSystem != null)
           _adaptiveActionsSystem.AdaptiveActionDeleted -= OnAdaptiveActionDeleted;

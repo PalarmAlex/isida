@@ -279,6 +279,38 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Каскадно удаляет ID воздействия из списков действий всех образов действий
+    /// (используется при удалении триггера-воздействия).
+    /// </summary>
+    /// <param name="actionId">ID воздействия, удаляемый из образов</param>
+    /// <returns>Число изменённых образов</returns>
+    public int RemoveInfluenceActionFromAllImages(int actionId)
+    {
+      if (actionId <= 0)
+        return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        int changed = 0;
+        foreach (var image in _actionsImages.Values)
+        {
+          if (image?.ActIdList == null)
+            continue;
+
+          if (image.ActIdList.Remove(actionId))
+            changed++;
+        }
+
+        return changed;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Очищает все образы действий
     /// </summary>
     public void ClearAllActionsImages()

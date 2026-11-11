@@ -1,6 +1,6 @@
-using ISIDA.Psychic.Automatism;
 using ISIDA.Common;
 using ISIDA.Gomeostas;
+using ISIDA.Psychic.Automatism;
 using ISIDA.Reflexes;
 using System;
 using System.Collections.Generic;
@@ -22,6 +22,8 @@ namespace ISIDA.Actions
   {
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private PerceptionImagesSystem _perceptionImagesSystem;
+    private InfluenceActionsImagesSystem _influenceActionsImagesSystem;
+    private GeneticReflexesSystem _geneticReflexesSystem;
     private bool _disposed = false;
     private readonly GomeostasSystem _gomeostas;
 
@@ -47,6 +49,23 @@ namespace ISIDA.Actions
     public void SetPerceptionImagesSystem(PerceptionImagesSystem perceptionImagesSystem)
     {
       _perceptionImagesSystem = perceptionImagesSystem ?? throw new ArgumentNullException(nameof(perceptionImagesSystem));
+    }
+
+    /// <summary>
+    /// Устанавливает систему образов действий с пульта
+    /// </summary>
+    public void SetInfluenceActionsImagesSystem(InfluenceActionsImagesSystem influenceActionsImagesSystem)
+    {
+      _influenceActionsImagesSystem = influenceActionsImagesSystem ?? throw new ArgumentNullException(nameof(influenceActionsImagesSystem));
+    }
+
+    /// <summary>
+    /// Устанавливает систему безусловных рефлексов — нужна, чтобы не давать удалить
+    /// воздействие, пока оно стоит пусковым триггером рефлекса.
+    /// </summary>
+    public void SetGeneticReflexesSystem(GeneticReflexesSystem geneticReflexesSystem)
+    {
+      _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
     }
 
     /// <summary>
@@ -307,7 +326,9 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Удаляет гомеостатическое воздействие по указанному ID
+    /// Удаляет гомеостатическое воздействие по указанному ID.
+    /// Следы воздействия в образах (восприятия и образах действий) вычищаются каскадно,
+    /// а не блокируют удаление; блокируется только связь отзеркаливания в моторных действиях.
     /// </summary>
     /// <param name="actionId">ID удаляемого воздействия</param>
     /// <returns>True, если воздействие было успешно удалено, иначе False</returns>
@@ -322,17 +343,19 @@ namespace ISIDA.Actions
         if (!_influenceActions.ContainsKey(actionId))
           return false;
 
-        if (IsActionUsedInPerceptionImages(actionId))
-        {
-          var actionName = _influenceActions[actionId].Name;
-          throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется в образах восприятия и не может быть удалено");
-        }
-
         if (AdaptiveActionsSystem.IsInitialized &&
             AdaptiveActionsSystem.Instance.IsInfluenceActionIdUsedForMirroring(actionId))
         {
           var actionName = _influenceActions[actionId].Name;
           throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется для отзеркаливания в действиях симбионта и не может быть удалено");
+        }
+
+        // Блокируем удаление, если воздействие стоит триггером в безусловном рефлексе.
+        if (_geneticReflexesSystem != null &&
+            _geneticReflexesSystem.IsInfluenceActionIdUsedAsTrigger(actionId))
+        {
+          var actionName = _influenceActions[actionId].Name;
+          throw new InvalidOperationException($"Воздействие '{actionName}' (ID: {actionId}) используется как пусковой триггер в безусловных рефлексах и не может быть удалено");
         }
 
         bool removed = _influenceActions.Remove(actionId);
@@ -346,6 +369,10 @@ namespace ISIDA.Actions
             action.AntagonistInfluences.Remove(actionId);
           }
         }
+
+        // Каскад: вычищаем ID из образов, иначе валидация при сохранении не даст записать файлы.
+        CascadeRemoveFromImages(actionId);
+
         InfluenceActionDeleted?.Invoke(actionId);
 
         return removed;
@@ -357,30 +384,36 @@ namespace ISIDA.Actions
     }
 
     /// <summary>
-    /// Проверяет, используется ли воздействие в каких-либо образах PerceptionImage
+    /// Каскадно удаляет ID воздействия из образов восприятия и образов действий,
+    /// а также сбрасывает зависящие от них пусковые образы стимулов.
     /// </summary>
-    /// <param name="actionId">ID проверяемого воздействия</param>
-    /// <returns>True если воздействие используется, иначе False</returns>
-    private bool IsActionUsedInPerceptionImages(int actionId)
+    /// <param name="actionId">ID удалённого воздействия</param>
+    private void CascadeRemoveFromImages(int actionId)
     {
-      try
+      int perceptionChanged = 0;
+      if (_perceptionImagesSystem != null && PerceptionImagesSystem.IsInitialized)
       {
-        if (_perceptionImagesSystem == null || !PerceptionImagesSystem.IsInitialized)
-          return false;
-
-        var perceptionImages = _perceptionImagesSystem.GetAllPerceptionImagesList();
-        foreach (var image in perceptionImages)
-        {
-          if (image.InfluenceActionsList != null && image.InfluenceActionsList.Contains(actionId))
-            return true;
-        }
-
-        return false;
+        perceptionChanged = _perceptionImagesSystem.RemoveInfluenceActionFromAllImages(actionId);
+        if (perceptionChanged > 0 &&
+            !(_perceptionImagesSystem.SavePerceptionImages().Success))
+          Logger.Warning($"RemoveAction: не удалось сохранить образы восприятия после очистки ID {actionId}");
       }
-      catch (Exception ex)
+
+      int actionsImagesChanged = 0;
+      if (_influenceActionsImagesSystem != null && InfluenceActionsImagesSystem.IsInitialized)
       {
-        Logger.Error(ex.Message);
-        return true;
+        actionsImagesChanged = _influenceActionsImagesSystem.RemoveInfluenceActionFromAllImages(actionId);
+        if (actionsImagesChanged > 0 &&
+            !(_influenceActionsImagesSystem.SaveInfluenceActionsImages().Success))
+          Logger.Warning($"RemoveAction: не удалось сохранить образы действий после очистки ID {actionId}");
+      }
+
+      // Изменённые образы больше не равны прежним пусковым стимулам — сбрасываем кэши,
+      // чтобы на следующем предъявлении образ был пересоздан по актуальному составу.
+      if (perceptionChanged > 0)
+      {
+        ActiveCurTriggerStimulusID = 0;
+        ActiveCurReflexTriggerStimulusID = 0;
       }
     }
 

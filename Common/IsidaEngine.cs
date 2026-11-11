@@ -687,6 +687,9 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         InfluenceActionsImagesSystem.InitializeInstance(config.DataFolder);
         context.InfluenceActionsImages = InfluenceActionsImagesSystem.Instance;
 
+        // Вторичная инициализация: InfluenceActionSystem → InfluenceActionsImagesSystem
+        context.InfluenceActions.SetInfluenceActionsImagesSystem(context.InfluenceActionsImages);
+
         // Шаг 7: Сенсорная система
         initializationStep = 7;
         SensorySystem.InitializeInstance(context.Gomeostas, config.DataFolder);
@@ -698,6 +701,10 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         initializationStep = 8;
         GeneticReflexesSystem.InitializeInstance(context.Gomeostas, config.DataFolder);
         context.GeneticReflexes = GeneticReflexesSystem.Instance;
+
+        // Влияния (шаг 5) раньше рефлексов (шаг 8), поэтому связь «не удалять EA,
+        // пока он стоит триггером в б/у рефлексе» ставляется здесь, вторичной инициализацией.
+        context.InfluenceActions.SetGeneticReflexesSystem(context.GeneticReflexes);
 
         // Шаг 9: Система цепочек рефлексов
         initializationStep = 9;

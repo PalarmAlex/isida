@@ -53,6 +53,8 @@ namespace Isida.Tests
       AppGlobalState.EvolutionStage = 0;
       GeneticReflexesSystem.InitializeInstance(GomeostasSystem.Instance, DataDir);
       SeedReferenceGeneticReflex();
+      // Как в IsidaEngine (шаг 8): удаление EA, стоящего триггером в б/у рефлексе, блокируется.
+      InfluenceActionSystem.Instance.SetGeneticReflexesSystem(GeneticReflexesSystem.Instance);
       PerceptionImagesSystem.InitializeInstance(GomeostasSystem.Instance, GeneticReflexesSystem.Instance);
       GomeostasSystem.Instance.SetPerceptionImagesSystem(PerceptionImagesSystem.Instance);
       ConditionedReflexesSystem.InitializeInstance(
@@ -198,6 +200,9 @@ namespace Isida.Tests
     /// </summary>
     public int SeedStyleId { get; private set; }
 
+    /// <summary>ID эталонного моторного действия — корректный <c>adaptiveActions</c> для тестового UR.</summary>
+    public int SeedAdaptiveActionId { get; private set; }
+
     /// <summary>
     /// Создаёт минимальный эталонный UR: стиль гомеостаза + моторное действие + рефлекс
     /// (только в стадии 0). Идемпотентен: повторный вызов ничего не добавляет.
@@ -213,6 +218,7 @@ namespace Isida.Tests
           1, new System.Collections.Generic.List<int> { styleId }, null, null,
           new System.Collections.Generic.List<int> { actionId });
       SeedStyleId = styleId;
+      SeedAdaptiveActionId = actionId;
       SeedGeneticReflexId = reflexId;
     }
 
