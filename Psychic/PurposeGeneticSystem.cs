@@ -293,27 +293,46 @@ namespace ISIDA.Psychic
       try
       {
         var purposeGenetic = GetPurposeGeneticImage();
+        if (purposeGenetic == null)
+        {
+          // Причина уже в логе (Logger.Error внутри GetPurposeGeneticImage) — здесь только факт пропуска.
+          Logger.Info("GetAutomatizmByGeneticPurpose: не получен образ цели — выбор автоматизма пропущен");
+          return null;
+        }
+
         Automatizm atmz = null;
 
         // Селективный клон (путь A) — начиная со стадии 2.
-        if ((purposeGenetic.VeryActual || AppGlobalState.CurrentGeneticReflexID > 0 || AppGlobalState.FlgConditionReflexes)
-            && AppGlobalState.EvolutionStage >= 2)
+        // Поводов три и они разнородны: опасная ситуация, рвущийся на выполнение безусловный
+        // рефлекс либо признак условного. Сам факт повода закрывает остальные пути (приоритет A),
+        // даже если клон в итоге не создан (например, у G_AD нет рецепта).
+        bool hasCloneTrigger = purposeGenetic.VeryActual
+            || AppGlobalState.CurrentGeneticReflexID > 0
+            || AppGlobalState.FlgConditionReflexes;
+
+        if (hasCloneTrigger && AppGlobalState.EvolutionStage >= 2)
         {
           if (purposeGenetic.ActionImage != null)
           {
             atmz = CreateAutomatizmByGeneticPurpose(purposeGenetic);
-            if(atmz != null) ShortLogChannel.Write("Селективный клон", "; ");
+            if (atmz != null) ShortLogChannel.Write("Селективный клон", "; ");
           }
-            
+          return atmz;
         }
-        // Путь M (стадия 2): зеркальный автоматизм по моторной части стимула с пульта.
+
+        // Остальные пути существуют только на 2-й стадии. !VeryActual здесь гарантирован:
+        // при VeryActual выше уже сработал бы путь A, поэтому повторять эту проверку
+        // в каждой ветке не нужно.
+        if (AppGlobalState.EvolutionStage != 2)
+          return null;
+
+        // Путь M: зеркальный автоматизм по моторной части стимула с пульта.
         // Когда стимул содержит InfluenceAction, но рефлекса на него нет — мотор берётся
         // из справочника AdaptiveActions по полю InfluenceActionId. Цепочка НЕ переносится:
         // она нарастает обучением. Не конфликтует с путём B, так как проверяет наличие
         // моторной части стимула (IsOperatorActionRepeatStimulus).
-        else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual &&
-                 AppGlobalState.TeachingMode && _mirrorAutomatizmService != null &&
-                 IsOperatorActionRepeatStimulus())
+        if (AppGlobalState.TeachingMode && _mirrorAutomatizmService != null &&
+            IsOperatorActionRepeatStimulus())
         {
           int nodeId = AppGlobalState.AutomatizmNodeId;
           int stimulusImageId = AppGlobalState.CurrentStimulusActionsImageId;
@@ -329,9 +348,7 @@ namespace ISIDA.Psychic
               Logger.Info("PurposeGeneticSystem: путь M — нет связи InfluenceActionId в AdaptiveActions");
           }
         }
-        else if (!purposeGenetic.VeryActual &&
-                 AppGlobalState.TeachingMode &&
-                 AppGlobalState.EvolutionStage == 2 &&
+        else if (AppGlobalState.TeachingMode &&
                  AppGlobalState.CurActiveVerbalId != 0 &&
                  _mirrorAutomatizmService != null &&
                  _verbalBrocaImagesSystem != null &&
@@ -342,7 +359,7 @@ namespace ISIDA.Psychic
           atmz = TryCreateStage2EchoWithChainFromStimulusContext();
           if (atmz != null) ShortLogChannel.Write("Эхо - Автоматизм", "; ");
         }
-        else if (AppGlobalState.EvolutionStage == 2 && !purposeGenetic.VeryActual)
+        else
         {
           // Механизм 3 — случайная проба: Search/Play стили активны, нет usable atmz
           atmz = TryCreateRandomProbeAutomatizm(purposeGenetic);
@@ -422,6 +439,7 @@ namespace ISIDA.Psychic
     {
       try
       {
+        // Эволюция и VeryActual уже проверены в вызывающем методе, но оставляем для безопасности.
         if (AppGlobalState.EvolutionStage != 2)
           return null;
 
