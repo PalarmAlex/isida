@@ -929,7 +929,11 @@ namespace ISIDA.Psychic
                 AppGlobalState.CurStimulusImageId = actionsImageId;
                 RefreshExtremImportanceForCurrentStimulus(actionsImageId);
                 ApplyStage3MirrorContextBeforeExecute(atmz, automatizmNodeId, deferredOperatorEvalScheduledThisStimulus);
-                return ExecuteAutomatizm(atmz);
+                // Эхо командного канала: действие в моторе есть (для рецепта), но при первичном
+                // попугайском запуске VELUM не должен его диспатчить (иначе — задвоение команды).
+                // Только этот запуск помечается как комментарий; штатный запуск выученного сдвига
+                // идёт обычным источником и выполняет рецепт.
+                return ExecuteAutomatizm(atmz, echoCommentary: hasCommandPart);
               }
             }
           }
@@ -1618,7 +1622,7 @@ namespace ISIDA.Psychic
     /// <summary>
     /// Выполнение автоматизма
     /// </summary>
-    private bool ExecuteAutomatizm(Automatizm automatizm)
+    private bool ExecuteAutomatizm(Automatizm automatizm, bool echoCommentary = false)
     {
       if (automatizm == null)
         return false;
@@ -1662,7 +1666,7 @@ namespace ISIDA.Psychic
             automatizm.BranchID,
             automatizm.ActionsImageID);
 
-        var result = _automatismExecutionService.ExecuteAutomatizmWithChains(automatizm.ID);
+        var result = _automatismExecutionService.ExecuteAutomatizmWithChains(automatizm.ID, echoCommentary);
 
         if (result.Success)
         {

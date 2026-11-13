@@ -213,7 +213,7 @@ namespace ISIDA.Psychic.Automatism
     /// <summary>
     /// Выполняет автоматизм по его ID
     /// </summary>
-    private (bool Success, string ErrorMessage) ExecuteAutomatizm(int automatizmId)
+    private (bool Success, string ErrorMessage) ExecuteAutomatizm(int automatizmId, bool echoCommentary = false)
     {
       try
       {
@@ -255,6 +255,12 @@ namespace ISIDA.Psychic.Automatism
           ? ActionActivationSource.AutomatizmVerbalResponse
           : ActionActivationSource.Automatizm;
 
+        // Эхо-комментарий стадии 3: действие присутствует (для рецепта), но VELUM не должен его диспатчить —
+        // источник помечается специально, RecipeDispatcher пропускает выполнение рецепта. Фраза-комментарий
+        // при этом отображается штатно (тон/настроение идут через actionImageIdForToneMood, не через источник).
+        if (echoCommentary)
+          activationSource = ActionActivationSource.AutomatizmEchoCommentary;
+
         int actionImageIdForToneMood = isVerbalResponse ? automatizm.ActionsImageID : 0;
         return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId, actionImageIdForToneMood);
       }
@@ -269,14 +275,14 @@ namespace ISIDA.Psychic.Automatism
     /// Момент отложенного старта цепочки привязывается к <see cref="GlobalTimer.GlobalPulsCount"/> (а не к устаревшему
     /// <c>PulseCount</c> психики), т.к. сценарий может вызвать активацию до <c>ProcessPsychicPulse</c> на том же пульсе.
     /// </summary>
-    public (bool Success, string ErrorMessage, bool ChainActivated) ExecuteAutomatizmWithChains(int automatizmId)
+    public (bool Success, string ErrorMessage, bool ChainActivated) ExecuteAutomatizmWithChains(int automatizmId, bool echoCommentary = false)
     {
       int chainSchedulePulse = GlobalTimer.GlobalPulsCount;
 
       StopCurrentAutomatizmChain(chainSchedulePulse);
       _pendingChainActivation = null;
 
-      var result = ExecuteAutomatizm(automatizmId);
+      var result = ExecuteAutomatizm(automatizmId, echoCommentary);
 
       if (!result.Success)
         return (false, result.ErrorMessage, false);

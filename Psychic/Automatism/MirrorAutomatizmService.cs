@@ -1,6 +1,7 @@
 ﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Reflexes;
+using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -64,6 +65,10 @@ namespace ISIDA.Psychic.Automatism
     public static bool CanMirrorStimulusParts(bool hasVerbalPart, bool hasCommandPart, bool hasNonVerbalPart)
     {
       if (hasVerbalPart || hasCommandPart)
+        return true;
+      // Стадия 3 (обучение наблюдением): зеркалим и чисто моторный стимул с пульта —
+      // иначе на действие с пульта эхо/сдвиг не создаются, отрабатывают только рефлексы.
+      if (hasNonVerbalPart && AppGlobalState.EvolutionStage == 3)
         return true;
       if (hasNonVerbalPart && (AppGlobalState.TeachingMode || AppGlobalState.ObservationMode))
         return true;
@@ -567,24 +572,55 @@ namespace ISIDA.Psychic.Automatism
       var img = ActionsImagesSystem.Instance.GetActionsImage(stimulusActionsImageId);
       if (img == null) return stimulusActionsImageId;
 
-      if (img.ActIdList == null || !img.ActIdList.Any())
+      bool hasAct = img.ActIdList != null && img.ActIdList.Any();
+      bool hasCommand = img.CommandPatternIdList != null && img.CommandPatternIdList.Any();
+      // Чистая фраза (без воздействий и команд) — зеркалить нечего, оставляем образ как есть.
+      if (!hasAct && !hasCommand)
         return stimulusActionsImageId;
 
-      if (!AdaptiveActionsSystem.IsInitialized)
-        return stimulusActionsImageId;
+      List<int> adaptiveIds = new List<int>();
+      if (hasAct && AdaptiveActionsSystem.IsInitialized)
+      {
+        adaptiveIds = AdaptiveActionsSystem.Instance.ConvertInfluenceActionIdsToAdaptiveActionIds(img.ActIdList);
+        if (adaptiveIds == null) adaptiveIds = new List<int>();
+      }
 
-      List<int> adaptiveIds = AdaptiveActionsSystem.Instance.ConvertInfluenceActionIdsToAdaptiveActionIds(img.ActIdList);
-      if (adaptiveIds == null) adaptiveIds = new List<int>();
+      // Вариант 1: мотор эхо ПОЛУЧАЕТ реальное адаптив-действие командного канала (связь
+      // CommandPatternId→AdaptiveActionId). Это нужно, чтобы к автоматизму прицепился рецепт
+      // (в VELUM рецепт ищется по AdaptiveActionId). Сама команда в commandPatternIdList мотора
+      // НЕ кладётся — иначе адаптер среагировал бы на неё напрямую. Защита от задвоения на уровне
+      // диспатча: при запуске эхо действие активируется источником AutomatizmEchoCommentary, и
+      // RecipeDispatcher пропускает выполнение рецепта (агент лишь «комментирует» действие оператора).
+      if (hasCommand && AdaptiveActionsSystem.IsInitialized)
+      {
+        foreach (int motorId in AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(img.CommandPatternIdList))
+          if (!adaptiveIds.Contains(motorId)) adaptiveIds.Add(motorId);
+      }
+
+      // Вербальное эхо-комментарий «Выполнено sw:{id}» — чтобы оператор видел, что агент отреагировал
+      // на команду, не повторяя её. Фраза остаётся даже при наличии мотора.
+      List<int> phraseIds = img.PhraseIdList?.ToList() ?? new List<int>();
+      if (hasCommand && SensorySystem.IsInitialized && SensorySystem.Instance.VerbalChannel != null)
+      {
+        foreach (int cmdId in img.CommandPatternIdList)
+        {
+          var recognized = SensorySystem.Instance.VerbalChannel
+              .RecognizeText($"Выполнено sw:{cmdId}", authoritativeWrite: true);
+          if (recognized != null)
+            foreach (int pid in recognized)
+              if (!phraseIds.Contains(pid)) phraseIds.Add(pid);
+        }
+      }
 
       var (newId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
         kind: 1,
         actIdList: adaptiveIds,
-        phraseIdList: img.PhraseIdList,
+        phraseIdList: phraseIds,
         toneId: img.ToneId,
         moodId: img.MoodId,
         checkUnicum: true,
         visualColorId: img.VisualColorId,
-        commandPatternIdList: img.CommandPatternIdList?.ToList());
+        commandPatternIdList: new List<int>());
       return newId > 0 ? newId : stimulusActionsImageId;
     }
   }

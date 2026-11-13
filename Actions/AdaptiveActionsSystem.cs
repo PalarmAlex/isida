@@ -247,7 +247,13 @@ namespace ISIDA.Actions
       /// <summary>
       /// Вербальный ответ, выполненный автоматизмом
       /// </summary>
-      AutomatizmVerbalResponse = 4
+      AutomatizmVerbalResponse = 4,
+
+      /// <summary>
+      /// Эхо-комментарий на стадии 3: действие есть (для рецепта), но диспатч в VELUM должен быть пропущен —
+      /// агент лишь «комментирует» действие оператора, не выполняя его повторно.
+      /// </summary>
+      AutomatizmEchoCommentary = 5
     }
 
     private readonly Dictionary<int, AdaptiveAction> _actions = new Dictionary<int, AdaptiveAction>();
@@ -399,6 +405,65 @@ namespace ISIDA.Actions
       try
       {
         return _actions.Values.FirstOrDefault(a => a.InfluenceActionId == influenceActionId);
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Возвращает моторное действие с указанным <see cref="AdaptiveAction.CommandPatternId"/> (связь для отзеркаливания команды).
+    /// При 1:N (несколько действий ссылаются на один паттерн команды) выбор детерминирован — берётся действие с минимальным ID.
+    /// </summary>
+    /// <param name="commandPatternId">ID паттерна Command-канала (CommandPhrases.dat).</param>
+    /// <returns>AdaptiveAction или null, если связи нет.</returns>
+    public AdaptiveAction GetAdaptiveActionByCommandPatternId(int commandPatternId)
+    {
+      if (commandPatternId <= 0) return null;
+      _lock.EnterReadLock();
+      try
+      {
+        return _actions.Values
+            .Where(a => a.CommandPatternId == commandPatternId)
+            .OrderBy(a => a.Id)
+            .FirstOrDefault();
+      }
+      finally
+      {
+        _lock.ExitReadLock();
+      }
+    }
+
+    /// <summary>
+    /// Преобразует список ID паттернов команды (Command-канал) в ID моторных действий (AdaptiveAction)
+    /// по полю CommandPatternId. Если для паттерна нет связи — ID пропускается. Дубли схлопываются.
+    /// </summary>
+    public List<int> ConvertCommandPatternIdsToAdaptiveActionIds(List<int> commandPatternIds)
+    {
+      if (commandPatternIds == null || !commandPatternIds.Any())
+        return new List<int>();
+
+      var result = new List<int>();
+      foreach (int cmdId in commandPatternIds)
+      {
+        var adaptive = GetAdaptiveActionByCommandPatternId(cmdId);
+        if (adaptive != null && !result.Contains(adaptive.Id))
+          result.Add(adaptive.Id);
+      }
+      return result;
+    }
+
+    /// <summary>
+    /// Проверяет, используется ли ID паттерна команды в каком-либо AdaptiveAction для отзеркаливания.
+    /// </summary>
+    public bool IsCommandPatternIdUsedForMirroring(int commandPatternId)
+    {
+      if (commandPatternId <= 0) return false;
+      _lock.EnterReadLock();
+      try
+      {
+        return _actions.Values.Any(a => a.CommandPatternId == commandPatternId);
       }
       finally
       {
