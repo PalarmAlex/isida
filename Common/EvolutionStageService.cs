@@ -245,6 +245,21 @@ namespace ISIDA.Common
         // не очищались бы (ClearThinkingCyclesWhenStageFourDataCleared не зовётся).
         // Дублирующий вызов при clearThrough == 4 безвреден: ClearAllCycles уже делает тот же сброс в начале.
         _psychicSystem?.ClearThinkingCyclesExperienceMemory();
+
+        // Глобальный счётчик пульсов — статический, не обнуляется очисткой справочников.
+        // Без сброса GlobalPulsCount между повторными прогонами одного и того же сценария
+        // он накапливается и после порога (по умолчанию 30) позволяет «Случайной пробе» в
+        // PurposeGeneticImageSystem.TryCreateRandomProbeAutomatizm проскочить там, где в чистом
+        // состоянии должна быть пауза. Также обнуление пульса предотвращает «зависание» окон
+        // ожидания (IsEvaluationTime, AutomatizmInfoStillFresh), которые считают
+        // timeSince = GlobalPulsCount − LastRunAutomatizmPulsCount: если пульс обнулился, а
+        // LastRunAutomatizmPulsCount остался от прошлого прогона, timeSince становится отрицательным.
+        GlobalTimer.Reset();
+
+        // Сброс пульсовых индикаторов, зависящих от GlobalPulsCount.
+        // Нужно, чтобы окна ожидания и цепочки не «переживали» сброс счёта пульсов.
+        AppGlobalState.ResetWaitingForOperatorEvaluation();
+        AppGlobalState.ClearPulseIndicators();
       }
       finally
       {
