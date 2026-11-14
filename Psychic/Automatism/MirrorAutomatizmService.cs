@@ -11,7 +11,7 @@ namespace ISIDA.Psychic.Automatism
 {
   /// <summary>
   /// Сервис отзеркаливания автоматизмов (стадии 2–4+).
-  /// Стадия 3: диалоговое зеркало без флага Teacher; стадии 2 и 4+: запись только при <see cref="AppGlobalState.TeachingMode"/>.
+  /// Стадия 3: диалоговое зеркало без флага Teacher; стадия 2: всегда; стадии 4+: запись только при <see cref="AppGlobalState.TeachingMode"/>.
   /// </summary>
   public sealed class MirrorAutomatizmService : IDisposable
   {
@@ -47,14 +47,14 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Можно ли записывать отзеркаливание на текущей стадии (Teacher на 2/4+, ст.3 всегда).
+    /// Можно ли записывать отзеркаливание на текущей стадии (стадия 2/3 всегда, ст.4+ — Teacher).
     /// </summary>
     public static bool IsMirrorRecordingAllowedForStage()
     {
       int stage = AppGlobalState.EvolutionStage;
-      if (stage == 3)
+      if (stage == 2 || stage == 3)
         return true;
-      if (stage == 2 || stage >= 4)
+      if (stage >= 4)
         return AppGlobalState.TeachingMode;
       return false;
     }
@@ -191,7 +191,7 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
-    /// Эхо-автоматизм на 2-й стадии (только при TeachingMode, кроме bootstrap).
+    /// Эхо-автоматизм на 2-й стадии (всегда, кроме bootstrap с принудительным пропуском TeachingGate).
     /// </summary>
     public int TryCreateStage2EchoWithChain(
       int detectedNodeId,
@@ -203,8 +203,6 @@ namespace ISIDA.Psychic.Automatism
       bool bypassTeachingGate = false)
     {
       if (AppGlobalState.EvolutionStage != 2)
-        return 0;
-      if (!bypassTeachingGate && !AppGlobalState.TeachingMode)
         return 0;
       if (detectedNodeId <= 0 || fullStimulusActionsImageId <= 0)
         return 0;

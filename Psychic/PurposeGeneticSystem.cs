@@ -331,8 +331,8 @@ namespace ISIDA.Psychic
         // из справочника AdaptiveActions по полю InfluenceActionId. Цепочка НЕ переносится:
         // она нарастает обучением. Не конфликтует с путём B, так как проверяет наличие
         // моторной части стимула (IsOperatorActionRepeatStimulus).
-        if (AppGlobalState.TeachingMode && _mirrorAutomatizmService != null &&
-            IsOperatorActionRepeatStimulus())
+        // На 2-й стадии зеркаление без привязки к TeachingMode (как на 3-й стадии).
+        if (_mirrorAutomatizmService != null && IsOperatorActionRepeatStimulus())
         {
           int nodeId = AppGlobalState.AutomatizmNodeId;
           int stimulusImageId = AppGlobalState.CurrentStimulusActionsImageId;
@@ -348,14 +348,14 @@ namespace ISIDA.Psychic
               Logger.Info("PurposeGeneticSystem: путь M — нет связи InfluenceActionId в AdaptiveActions");
           }
         }
-        else if (AppGlobalState.TeachingMode &&
-                 AppGlobalState.CurActiveVerbalId != 0 &&
+        else if (AppGlobalState.CurActiveVerbalId != 0 &&
                  _mirrorAutomatizmService != null &&
                  _verbalBrocaImagesSystem != null &&
                  _sensorySystem?.VerbalChannel != null)
         {
           // Path B: эхо-автоматизм по вербальному стимулу (без моторной части).
           // Моторная часть стимула обрабатывается выше, в пути M.
+          // На 2-й стадии зеркаление без привязки к TeachingMode (как на 3-й стадии).
           atmz = TryCreateStage2EchoWithChainFromStimulusContext();
           if (atmz != null) ShortLogChannel.Write("Эхо - Автоматизм", "; ");
         }
