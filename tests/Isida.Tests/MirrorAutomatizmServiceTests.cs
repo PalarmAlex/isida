@@ -22,6 +22,9 @@ namespace Isida.Tests
     private readonly int _actionId;
     private readonly int _influenceActionId;
     private readonly int _nonMirrorActionId;
+    private readonly int _commandPatternId;
+    private readonly int _commandMirrorActionId;
+    private readonly int _nonCommandMirrorActionId;
     private readonly int _paramId;
     private readonly MirrorAutomatizmService _mirrorService;
     private readonly AutomatizmSystem _autom;
@@ -50,6 +53,16 @@ namespace Isida.Tests
         // Временное действие без InfluenceActionId (для проверки отсутствия связи).
         (_nonMirrorActionId, _) = AdaptiveActionsSystem.Instance.AddAction(
             "Не зеркальное действие", "", Vigor: 5);
+
+        // Командный канал: действие со связью CommandPatternId (зеркальное по команде).
+        // Уникальный ID паттерна команды, не пересекается с seed.
+        _commandPatternId = Engine.NextSeed();
+        (_commandMirrorActionId, _) = AdaptiveActionsSystem.Instance.AddAction(
+            "Командное зеркальное действие", "", targetGomeoParamIdArr: new List<int> { _paramId },
+            Vigor: 5, commandPatternId: _commandPatternId);
+        // Действие без связи CommandPatternId (для проверки отсутствия командной связи).
+        (_nonCommandMirrorActionId, _) = AdaptiveActionsSystem.Instance.AddAction(
+            "Не командное действие", "", Vigor: 5);
       }
       finally
       {
@@ -308,6 +321,222 @@ namespace Isida.Tests
 
       Assert.Single(result);
       Assert.Contains(_actionId, result);
+    }
+
+    #endregion
+
+    #region Путь M-команда: TryCreateMirrorFromCommandPattern
+
+    [Fact]
+    public void TryCreateMirrorFromCommandPattern_NoCommandPatternId_ReturnsZero()
+    {
+      int result = _mirrorService.TryCreateMirrorFromCommandPattern(
+          AppGlobalState.AutomatizmNodeId, Engine.NextSeed());
+      Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void TryCreateMirrorFromCommandPattern_WithCommandPatternId_CreatesAutomatizm()
+    {
+      var actionsImgSys = ActionsImagesSystem.Instance;
+      var (stimulusImageId, _) = actionsImgSys.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _commandPatternId });
+      Assert.True(stimulusImageId > 0);
+
+      int result = _mirrorService.TryCreateMirrorFromCommandPattern(
+          AppGlobalState.AutomatizmNodeId, stimulusImageId);
+
+      Assert.True(result > 0);
+      var atmz = _autom.GetAutomatizmById(result);
+      Assert.NotNull(atmz);
+      Assert.Equal(0, atmz.Usefulness);
+      Assert.Equal(0, atmz.Count);
+      Assert.Equal(0, atmz.NextID);
+      var atmzImg = ActionsImagesSystem.Instance.GetActionsImage(atmz.ActionsImageID);
+      Assert.NotNull(atmzImg);
+      Assert.Contains(_commandMirrorActionId, atmzImg.ActIdList);
+      // commandPatternIdList ответа должен быть пустым — команда развёрнута в мотор.
+      Assert.Empty(atmzImg.CommandPatternIdList);
+    }
+
+    [Fact]
+    public void TryCreateMirrorFromCommandPattern_StageNot2_ReturnsZero()
+    {
+      AppGlobalState.EvolutionStage = 3;
+
+      var actionsImgSys = ActionsImagesSystem.Instance;
+      var (stimulusImageId, _) = actionsImgSys.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _commandPatternId });
+
+      int result = _mirrorService.TryCreateMirrorFromCommandPattern(
+          AppGlobalState.AutomatizmNodeId, stimulusImageId);
+
+      Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public void TryCreateMirrorFromCommandPattern_NoMirrorLink_ReturnsZero()
+    {
+      var actionsImgSys = ActionsImagesSystem.Instance;
+      var (stimulusImageId, _) = actionsImgSys.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _nonCommandMirrorActionId });
+
+      int result = _mirrorService.TryCreateMirrorFromCommandPattern(
+          AppGlobalState.AutomatizmNodeId, stimulusImageId);
+
+      Assert.Equal(0, result);
+    }
+
+    #endregion
+
+    #region Путь M-команда в GetAutomatizmByGeneticPurpose
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_PathCommand_CreatesAutomatizmFromCommandMirror()
+    {
+      // Путь A: (VeryActual || FlgConditionReflexes || CurActiveVerbalId == 0)
+      // Нужно, чтобы CurActiveVerbalId > 0, иначе путь A сработает.
+      AppGlobalState.CurActiveVerbalId = Engine.NextSeed();
+      AppGlobalState.FlgConditionReflexes = false;
+
+      // Путь M (InfluenceAction) не сработает: CurrentStimulusActionIdList пуст.
+      AppGlobalState.CurrentStimulusActionIdList = new List<int>();
+
+      // Путь M-команда: создаём образ с CommandPatternIdList.
+      var (stimulusImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _commandPatternId });
+      AppGlobalState.CurrentStimulusActionsImageId = stimulusImageId;
+
+      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+      Assert.NotNull(atmz);
+      Assert.Equal(0, atmz.Usefulness);
+      Assert.Equal(0, atmz.NextID);
+      var atmzImg = ActionsImagesSystem.Instance.GetActionsImage(atmz.ActionsImageID);
+      Assert.NotNull(atmzImg);
+      Assert.Contains(_commandMirrorActionId, atmzImg.ActIdList);
+      // commandPatternIdList ответа пуст — команда развёрнута в мотор.
+      Assert.Empty(atmzImg.CommandPatternIdList);
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_PathCommand_NoMirrorLink_ReturnsNull()
+    {
+      AppGlobalState.CurActiveVerbalId = Engine.NextSeed();
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.CurrentStimulusActionIdList = new List<int>();
+
+      var (stimulusImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int>(),
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _nonCommandMirrorActionId });
+      AppGlobalState.CurrentStimulusActionsImageId = stimulusImageId;
+
+      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+      Assert.Null(atmz);
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_PriorityInfluenceAction_OverCommand()
+    {
+      // Приоритет InfluenceActionId над CommandPatternId:
+      // если есть и то, и другое — срабатывает путь M (InfluenceAction),
+      // путь M-команда (else if) не проверяется.
+      AppGlobalState.CurActiveVerbalId = Engine.NextSeed();
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.CurrentStimulusActionIdList = new List<int> { _influenceActionId };
+
+      // Образ содержит и ActIdList, и CommandPatternIdList.
+      var (stimulusImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 0,
+          actIdList: new List<int> { _influenceActionId },
+          phraseIdList: null,
+          toneId: 0,
+          moodId: 0,
+          checkUnicum: true,
+          commandPatternIdList: new List<int> { _commandPatternId });
+      AppGlobalState.CurrentStimulusActionsImageId = stimulusImageId;
+
+      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+      Assert.NotNull(atmz);
+      var atmzImg = ActionsImagesSystem.Instance.GetActionsImage(atmz.ActionsImageID);
+      Assert.NotNull(atmzImg);
+      // Должен сработать путь M (InfluenceAction), а не путь M-команда.
+      Assert.Contains(_actionId, atmzImg.ActIdList);
+    }
+
+    #endregion
+
+    #region Конвертация CommandPatternId → AdaptiveActionId
+
+    [Fact]
+    public void ConvertCommandPatternIdsToAdaptiveActionIds_WithLink_ReturnsCorrectIds()
+    {
+      var result = AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(
+          new List<int> { _commandPatternId });
+
+      Assert.Single(result);
+      Assert.Contains(_commandMirrorActionId, result);
+    }
+
+    [Fact]
+    public void ConvertCommandPatternIdsToAdaptiveActionIds_NoLink_ReturnsEmpty()
+    {
+      var result = AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(
+          new List<int> { _nonCommandMirrorActionId });
+
+      Assert.Empty(result);
+    }
+
+    [Fact]
+    public void ConvertCommandPatternIdsToAdaptiveActionIds_Mixed_ReturnsOnlyLinked()
+    {
+      var result = AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(
+          new List<int> { _commandPatternId, _nonCommandMirrorActionId });
+
+      Assert.Single(result);
+      Assert.Contains(_commandMirrorActionId, result);
+    }
+
+    [Fact]
+    public void ConvertCommandPatternIdsToAdaptiveActionIds_Duplicates_Squashed()
+    {
+      // Два одинаковых ID паттерна — результат должен содержать одно действие.
+      var result = AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(
+          new List<int> { _commandPatternId, _commandPatternId });
+
+      Assert.Single(result);
+      Assert.Contains(_commandMirrorActionId, result);
     }
 
     #endregion

@@ -348,6 +348,26 @@ namespace ISIDA.Psychic
               Logger.Info("PurposeGeneticSystem: путь M — нет связи InfluenceActionId в AdaptiveActions");
           }
         }
+        // Путь M-команда: зеркальный автоматизм по командному стимулу (CommandPatternId).
+        // Запускается, когда нет моторной части (InfluenceActionId), но есть командная часть
+        // (CommandPatternIdList) в текущем образе стимула. Приоритет InfluenceActionId над
+        // CommandPatternId обеспечивается else-if структурой.
+        else if (_mirrorAutomatizmService != null && HasCurrentCommandStimulus())
+        {
+          int nodeId = AppGlobalState.AutomatizmNodeId;
+          int stimulusImageId = AppGlobalState.CurrentStimulusActionsImageId;
+          if (nodeId > 0 && stimulusImageId > 0)
+          {
+            int mirrorId = _mirrorAutomatizmService.TryCreateMirrorFromCommandPattern(nodeId, stimulusImageId);
+            if (mirrorId > 0)
+            {
+              atmz = _automatizmSystem.GetAutomatizmById(mirrorId);
+              if (atmz != null) ShortLogChannel.Write("Зеркальный автоматизм (команда)", "; ");
+            }
+            else
+              Logger.Info("PurposeGeneticSystem: путь M-команда — нет связи CommandPatternId в AdaptiveActions");
+          }
+        }
         else if (AppGlobalState.CurActiveVerbalId != 0 &&
                  _mirrorAutomatizmService != null &&
                  _verbalBrocaImagesSystem != null &&
@@ -579,6 +599,22 @@ namespace ISIDA.Psychic
     {
       var motorPart = AppGlobalState.CurrentStimulusActionIdList;
       return motorPart != null && motorPart.Count > 0;
+    }
+
+    /// <summary>
+    /// Признак того, что текущий стимул с пульта содержит командную часть (Command-канал).
+    /// Используется гейтом командного зеркалирования на 2-й стадии: если в текущем образе
+    /// действий есть непустой <see cref="ActionsImagesSystem.ActionsImage.CommandPatternIdList"/>.
+    /// </summary>
+    internal bool HasCurrentCommandStimulus()
+    {
+      if (_actionsImagesSystem == null)
+        return false;
+      int imageId = AppGlobalState.CurrentStimulusActionsImageId;
+      if (imageId <= 0)
+        return false;
+      var img = _actionsImagesSystem.GetActionsImage(imageId);
+      return img != null && img.CommandPatternIdList != null && img.CommandPatternIdList.Count > 0;
     }
 
     /// <summary>

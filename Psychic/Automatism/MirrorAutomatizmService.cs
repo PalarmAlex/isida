@@ -387,6 +387,72 @@ namespace ISIDA.Psychic.Automatism
     }
 
     /// <summary>
+    /// Путь M-команда (стадия 2): зеркальный автоматизм по командной части текущего стимула с пульта.
+    /// Когда на текущем стимуле есть паттерны Command-канала (CommandPatternId), но моторной части
+    /// (InfluenceAction) нет и рефлекса на команду не сработало, мотор берётся из справочника
+    /// <see cref="AdaptiveActionsSystem"/> по полю <see cref="AdaptiveActionsSystem.AdaptiveAction.CommandPatternId"/>
+    /// (имитация «зеркальных нейронов», аналогично пути по InfluenceActionId). Цепочка НЕ переносится:
+    /// она нарастает обучением. Приоритет InfluenceActionId над CommandPatternId обеспечивается вызывающим
+    /// кодом (этот путь запускается только когда моторной части нет).
+    /// </summary>
+    /// <param name="detectedNodeId">Узел дерева автоматизмов, соответствующий текущему контексту условий.</param>
+    /// <param name="stimulusActionsImageId">Образ действий текущего стимула с пульта (CommandPatternId в CommandPatternIdList).</param>
+    /// <returns>ID созданного эхо-автоматизма; 0 — если стадия не 2, контекст не задан или в справочнике нет связи команда→мотор.</returns>
+    public int TryCreateMirrorFromCommandPattern(int detectedNodeId, int stimulusActionsImageId)
+    {
+      if (AppGlobalState.EvolutionStage != 2)
+        return 0;
+      if (detectedNodeId <= 0 || stimulusActionsImageId <= 0)
+        return 0;
+      if (!ActionsImagesSystem.IsInitialized || !AdaptiveActionsSystem.IsInitialized)
+        return 0;
+
+      var img = ActionsImagesSystem.Instance.GetActionsImage(stimulusActionsImageId);
+      if (img == null || img.CommandPatternIdList == null || !img.CommandPatternIdList.Any())
+        return 0;
+
+      // Команда (Command-канал с пульта) → мотор (AdaptiveAction) по полю CommandPatternId.
+      List<int> adaptiveIds = AdaptiveActionsSystem.Instance.ConvertCommandPatternIdsToAdaptiveActionIds(img.CommandPatternIdList);
+      if (adaptiveIds == null || adaptiveIds.Count == 0)
+        return 0; // нет связи в справочнике — зеркалить нечего
+
+      int stimulusVisual = img.VisualColorId;
+      if (!AgentVisualColor.IsValidCode(stimulusVisual))
+        stimulusVisual = AgentVisualColor.White;
+
+      // kind=1 — субъективное предположение (имитация), как в остальном зеркальном канале.
+      // commandPatternIdList ответа = пусто: команда уже развёрнута в мотор (adaptiveIds),
+      // копировать её как команду нельзя — иначе адаптер отреагирует на неё повторно (см. случай 44).
+      var (responseImageId, _) = ActionsImagesSystem.Instance.CreateNewActionsImage(
+          kind: 1,
+          actIdList: adaptiveIds,
+          phraseIdList: img.PhraseIdList,
+          toneId: img.ToneId,
+          moodId: img.MoodId,
+          checkUnicum: true,
+          visualColorId: stimulusVisual,
+          commandPatternIdList: new List<int>());
+      if (responseImageId <= 0)
+        return 0;
+
+      _lock.EnterWriteLock();
+      try
+      {
+        var (echoId, created) = _automatizmSystem.CreateNewAutomatizm(
+            detectedNodeId, responseImageId, true, AutomatizmConsolidationService.AutomatizmCreationRole.Echo);
+        if (created == null)
+          return 0;
+
+        created.Count = 0;
+        return echoId;
+      }
+      finally
+      {
+        _lock.ExitWriteLock();
+      }
+    }
+
+    /// <summary>
     /// Сдвиг + эхо на стадии 3 по ответу оператора в окне ожидания.
     /// </summary>
     public int TryCreateMirrorFromPendingOperatorResponse()
