@@ -661,15 +661,23 @@ namespace ISIDA.Psychic.Automatism
           if (!adaptiveIds.Contains(motorId)) adaptiveIds.Add(motorId);
       }
 
-      // Вербальное эхо-комментарий «Выполнено sw:{id}» — чтобы оператор видел, что агент отреагировал
+      // Вербальное эхо-комментарий «Выполнено sw:N» — чтобы оператор видел, что агент отреагировал
       // на команду, не повторяя её. Фраза остаётся даже при наличии мотора.
+      // ВАЖНО: cmdId — это внутренний ID записи дерева фраз CommandChannel (CommandPatternIdList),
+      // а НЕ код команды SolidWorks. Прямая подстановка «sw:{cmdId}» даёт неверный код (например для
+      // команды sw:2 запись в справочнике имеет id=3 → печаталось «sw:3»). Резолвим ID записи обратно
+      // в человекочитаемый токен («sw:2») через GetPhraseFromPhraseId и строим фразу по нему.
       List<int> phraseIds = img.PhraseIdList?.ToList() ?? new List<int>();
-      if (hasCommand && SensorySystem.IsInitialized && SensorySystem.Instance.VerbalChannel != null)
+      if (hasCommand && SensorySystem.IsInitialized
+          && SensorySystem.Instance.CommandChannel != null
+          && SensorySystem.Instance.VerbalChannel != null)
       {
         foreach (int cmdId in img.CommandPatternIdList)
         {
+          string commandToken = SensorySystem.Instance.CommandChannel.GetPhraseFromPhraseId(cmdId);
+          if (string.IsNullOrWhiteSpace(commandToken)) continue;
           var recognized = SensorySystem.Instance.VerbalChannel
-              .RecognizeText($"Выполнено sw:{cmdId}", authoritativeWrite: true);
+              .RecognizeText($"Выполнено {commandToken}", authoritativeWrite: true);
           if (recognized != null)
             foreach (int pid in recognized)
               if (!phraseIds.Contains(pid)) phraseIds.Add(pid);
