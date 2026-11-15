@@ -265,17 +265,19 @@ namespace ISIDA.Psychic
     /// </summary>
     public List<int> GetActiveAdaptiveActionsOfReflexes()
     {
-      if (AppGlobalState.EvolutionStage < 3)
+      // Моторы сработавших рефлексов читаются на любой стадии (не только < 3): на стадии 3
+      // селективный клон (путь A) обязан получить мотор условного/безусловного, иначе вместо него
+      // в цель попадает DefaultAdaptiveActionId (в Velum — G_AD без рецепта). Если рефлексов на этом
+      // пульсе нет — списки пусты (сброс в ResetStates), возвращается пусто и вызывающий код
+      // подставляет дефолт, как и раньше.
+      var conditionActionsIdArr = (List<int>)AppGlobalState.ConditionedReflexesActions;
+      if (conditionActionsIdArr != null && conditionActionsIdArr.Count > 0)
+        return conditionActionsIdArr;
+      else
       {
-        var conditionActionsIdArr = (List<int>)AppGlobalState.ConditionedReflexesActions;
-        if (conditionActionsIdArr != null && conditionActionsIdArr.Count > 0)
-          return conditionActionsIdArr;
-        else
-        {
-          var geneticActionsIdArr = (List<int>)AppGlobalState.GeneticReflexesActions;
-          if (geneticActionsIdArr != null && geneticActionsIdArr.Count > 0)
-            return geneticActionsIdArr;
-        }
+        var geneticActionsIdArr = (List<int>)AppGlobalState.GeneticReflexesActions;
+        if (geneticActionsIdArr != null && geneticActionsIdArr.Count > 0)
+          return geneticActionsIdArr;
       }
 
       return new List<int>();

@@ -207,5 +207,138 @@ namespace Isida.Tests
     }
 
     #endregion
+
+    #region Стадия 3: условный рефлекс обязан дать клон с мотором (регресс бага «только вербальная часть»)
+
+    /// <summary>
+    /// Создаёт на стадии 0 действие G_AD с целевым параметром (имеет recipe-слот).
+    /// </summary>
+    private int CreateActionWithRecipe()
+    {
+      int stage = AppGlobalState.EvolutionStage;
+      AppGlobalState.EvolutionStage = 0;
+      try
+      {
+        var (paramId, _) = GomeostasSystem.Instance.AddParameter(
+            "Тест-параметр-ст3-" + Engine.NextSeed(), "", 50f, 50, 50, 1);
+        var (actionId, _) = AdaptiveActionsSystem.Instance.AddAction(
+            "Тест-G_AD-ст3-" + Engine.NextSeed(), "", targetGomeoParamIdArr: new List<int> { paramId }, Vigor: 5);
+        return actionId;
+      }
+      finally
+      {
+        AppGlobalState.EvolutionStage = stage;
+      }
+    }
+
+    /// <summary>
+    /// Создаёт на стадии 0 действие G_AD без целевого параметра (нет recipe-слота).
+    /// </summary>
+    private int CreateActionWithoutRecipe()
+    {
+      int stage = AppGlobalState.EvolutionStage;
+      AppGlobalState.EvolutionStage = 0;
+      try
+      {
+        var (actionId, _) = AdaptiveActionsSystem.Instance.AddAction(
+            "Тест-G_AD-без-рецепта-ст3-" + Engine.NextSeed(), "", targetGomeoParamIdArr: new List<int>(), Vigor: 5);
+        return actionId;
+      }
+      finally
+      {
+        AppGlobalState.EvolutionStage = stage;
+      }
+    }
+
+    [Fact]
+    public void GetActiveAdaptiveActionsOfReflexes_Stage3_ConditionalMotor_IsReturned()
+    {
+      // Корень №1: на 3-й стадии GetActiveAdaptiveActionsOfReflexes обязан вернуть мотор условного,
+      // иначе путь A подставит DefaultAdaptiveActionId (в Velum — G_AD без рецепта).
+      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { _actionId });
+
+      var actions = PurposeGeneticImageSystem.Instance.GetActiveAdaptiveActionsOfReflexes();
+
+      Assert.Contains(_actionId, actions);
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_Stage3_ConditionalReflex_CreatesCloneWithConditionalMotor()
+    {
+      // Корень: на 3-й стадии при сработавшем условном клон обязан взять мотор условного (с рецептом),
+      // а не дефолт-действие. Дефолт намеренно ставим БЕЗ рецепта — до фикса путь A резолвил дефолт
+      // и отбраковывал клон («no recipe slots») → Assert.NotNull падал. С фиксом берётся мотор условного.
+      int motorWithRecipe = CreateActionWithRecipe();
+      int defaultNoRecipe = CreateActionWithoutRecipe();
+
+      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.DefaultAdaptiveActionId = defaultNoRecipe;
+      AppGlobalState.FlgConditionReflexes = true;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { motorWithRecipe });
+
+      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+      Assert.NotNull(atmz);
+      Assert.NotNull(Autom.GetAutomatizmById(atmz.ID));
+    }
+
+    [Fact]
+    public void OrientationReflex1_Stage3_WithConditionalFlag_CreatesClone()
+    {
+      // Гейт ОР1: на 3-й стадии при признаке условного ОР1 обязан вызвать путь A (иначе создаётся
+      // вербальный попугай-эхо без мотора). Мотор условного — с рецептом, чтобы клон прошёл проверку.
+      EnsureOrientationSystem();
+      int motorWithRecipe = CreateActionWithRecipe();
+
+      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.FlgConditionReflexes = true;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { motorWithRecipe });
+
+      var atmz = OrientationReflexSystem.Instance.OrientationReflex_1(0, 0);
+
+      Assert.NotNull(atmz);
+    }
+
+    [Fact]
+    public void OrientationReflex1_Stage3_CleanPhrase_WithoutConditionalFlag_ReturnsNull()
+    {
+      // Регресс: без условного на чистой фразе ОР1 на 3-й стадии НЕ должен вызывать путь A
+      // (диалоговое зеркало/попугай обрабатывается ниже в PsychicSystem). Иначе ломается штатный диалог.
+      EnsureOrientationSystem();
+
+      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int>());
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int>());
+      InformationEnvironmentSystem.Instance.SetVeryActualSituation(false);
+
+      var atmz = OrientationReflexSystem.Instance.OrientationReflex_1(0, 0);
+
+      Assert.Null(atmz);
+    }
+
+    #endregion
+
+    #region Инфраструктура: ОР1
+
+    /// <summary>Идемпотентно поднимает <see cref="OrientationReflexSystem"/> поверх фикстуры.</summary>
+    private void EnsureOrientationSystem()
+    {
+      EnsureAutomatismSystems();
+      EnsurePurposeSystem();
+      if (!OrientationReflexSystem.IsInitialized)
+      {
+        OrientationReflexSystem.InitializeInstance(
+            InformationEnvironmentSystem.Instance,
+            PurposeGeneticImageSystem.Instance);
+      }
+      if (!OrientationReflexSystem.Instance.AreDependenciesSet)
+        OrientationReflexSystem.Instance.SetDependencies(
+            AutomatizmSystem.Instance,
+            AutomatizmTreeSystem.Instance);
+    }
+
+    #endregion
   }
 }

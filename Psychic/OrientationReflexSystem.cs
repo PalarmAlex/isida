@@ -152,7 +152,12 @@ namespace ISIDA.Psychic
         _informationEnvironmentSystem.GetCurrentInformationEnvironment(currentEmotionId, actionsImageId);
         if (_episodicMemorySystem != null)
           ObjectImportanceService.UpdateExtremImportanceObject(_episodicMemorySystem, _informationEnvironmentSystem, actionsImageId, _understandingTreeSystem);
-        if (AppGlobalState.EvolutionStage < 3)
+        // Стадия < 3 — путь A (селективный клон рефлекса) всегда. На стадии 3 — только когда на этом
+        // стимуле реально отобран условный рефлекс (FlgConditionReflexes): иначе вместо мотора
+        // безусловного-источника создавался бы вербальный попугай-эхо (моторная часть терялась).
+        // При отсутствии условного (чистый диалог) здесь null → штатное зеркало/попугай ниже.
+        if (AppGlobalState.EvolutionStage < 3 ||
+            (AppGlobalState.EvolutionStage == 3 && AppGlobalState.FlgConditionReflexes))
           atmz = _purposeGeneticImageSystem.GetAutomatizmByGeneticPurpose();
 
         return atmz;
