@@ -11,7 +11,7 @@ namespace Isida.Tests
   /// <list type="bullet">
   /// <item>состояние выросло — успех (+1) независимо от параметров;</item>
   /// <item>падение в «Плохо» — неуспех (−1) независимо от параметров;</item>
-  /// <item>осталось «Плохо» — решает динамика параметров (лучше → +1, иначе −1);</item>
+  /// <item>осталось «Плохо» — решает динамика параметров (лучше → +1, хуже → −1, без изменений → 0);</item>
   /// <item>«Норма»/«Хорошо» без роста и «Хорошо»→«Норма» — оценка не меняется (0).</item>
   /// </list>
   /// </summary>
@@ -24,7 +24,7 @@ namespace Isida.Tests
     [Theory]
     // ---------- было «Плохо» ----------
     [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad, Worse, -1)]
-    [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad, Same, -1)]
+    [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad, Same, 0)]
     [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad, Better, 1)]
     [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Normal, Worse, 1)]
     [InlineData(AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Normal, Same, 1)]
@@ -95,12 +95,12 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// «Осталось Плохо» — решает динамика параметров: без улучшения это неуспех,
-    /// даже если интегральное состояние формально не изменилось (случай 42, сценарий 10).
+    /// «Осталось Плохо» — решает динамика параметров: улучшение → +1, ухудшение → −1,
+    /// без изменений → нейтрально (0).
     /// </summary>
     [Theory]
     [InlineData(-1, -1)]
-    [InlineData(0, -1)]
+    [InlineData(0, 0)]
     [InlineData(1, 1)]
     public void AssessAutomatizmOutcome_StillBad_DependsOnParameterDelta(int parameterDelta, int expected)
     {

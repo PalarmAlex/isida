@@ -156,11 +156,11 @@ namespace Isida.Tests
     }
 
     /// <summary>
-    /// «Осталось Плохо» без значимых изменений параметров — автоматизм проблему не решил (−1).
-    /// Кейс сценария 10: полезность не должна «зависать» без оценки.
+    /// «Осталось Плохо» без значимых изменений параметров — нейтрально (0).
+    /// Без изменений — не ухудшение, оценка не меняется.
     /// </summary>
     [Fact]
-    public void ComputeOperatorAutomatizmAssessment_StillBadNoChange_ReturnsMinusOne()
+    public void ComputeOperatorAutomatizmAssessment_StillBadNoChange_ReturnsZero()
     {
       var calc = new HomeostasisCalculator();
       var valuesBefore = new Dictionary<int, float> { { 1, 50f } };
@@ -170,7 +170,7 @@ namespace Isida.Tests
           valuesBefore, current, 0,
           AppGlobalState.HomeostasisState.Bad, AppGlobalState.HomeostasisState.Bad);
 
-      Assert.Equal(-1, result);
+      Assert.Equal(0, result);
     }
 
     // ---------- AnyVitalParameterInHarmfulZone / IsParameterInBadZone ----------

@@ -444,10 +444,10 @@ namespace Isida.Tests
 
     /// <summary>
     /// Та же ситуация после истечения окна (<see cref="AutomatismResultTracker.FinishTracking"/>):
-    /// «Плохо» → «Плохо» без улучшения параметров = Error и дельта −1.
+    /// «Плохо» → «Плохо» без изменения параметров = нейтрально (0), не штраф.
     /// </summary>
     [Fact]
-    public void FinishTracking_BadToBad_NoSignal_EvaluatesError()
+    public void FinishTracking_BadToBad_NoSignal_IsNeutral()
     {
       AppGlobalState.CurrentOverallState = AppGlobalState.HomeostasisState.Bad;
       SetGlobalPulse(3100);
@@ -458,8 +458,8 @@ namespace Isida.Tests
       SetGlobalPulse(3105);
       Tracker.FinishTracking(result);
 
-      Assert.Equal(-1, result.UsefulnessDelta);
-      Assert.Equal(AutomatismResultTracker.ExecutionResult.Error, result.Result);
+      Assert.Equal(0, result.UsefulnessDelta);
+      Assert.NotEqual(AutomatismResultTracker.ExecutionResult.Error, result.Result);
       Assert.Equal(AppGlobalState.HomeostasisState.Bad, result.CurrentState);
     }
 

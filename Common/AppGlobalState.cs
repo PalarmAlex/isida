@@ -771,8 +771,7 @@ public static class AppGlobalState
   /// <list type="bullet">
   /// <item>состояние выросло (Плохо→Норма/Хорошо, Норма→Хорошо) — успех (+1) независимо от параметров;</item>
   /// <item>падение в «Плохо» — неуспех (−1) независимо от параметров;</item>
-  /// <item>осталось «Плохо» — решает динамика параметров: лучше → успех, без изменений или хуже → неуспех.
-  /// Автоматизм, не вытащивший систему из «Плохо», проблему не решил;</item>
+   /// <item>осталось «Плохо» — решает динамика параметров: лучше → успех (+1), хуже → неуспех (−1), без изменений → нейтрально (0);</item>
   /// <item>осталось «Норма»/«Хорошо» либо «Хорошо»→«Норма» (нормализация) — оценка не меняется (0).</item>
   /// </list>
   /// </summary>
@@ -790,7 +789,7 @@ public static class AppGlobalState
     if (IsStateWorsening(stateBefore, stateAfter))
       return -1;
     if (stateBefore == HomeostasisState.Bad)
-      return parameterDelta > 0 ? 1 : -1;
+      return parameterDelta > 0 ? 1 : (parameterDelta < 0 ? -1 : 0);
     return 0;
   }
 
