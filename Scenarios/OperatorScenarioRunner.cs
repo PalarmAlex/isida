@@ -38,6 +38,17 @@ namespace ISIDA.Scenarios
 
     /// <summary>Количество глобальных пульсов, прошедших за время прогона.</summary>
     public int ElapsedPulses { get; set; }
+
+    /// <summary>
+    /// Локальное время старта прогона (момент <c>Start</c>). Потребитель (генератор отчёта) отсекает
+    /// им хвосты предыдущего прогона: предзапуск обнуляет глобальный счётчик пульсов
+    /// (<see cref="GlobalTimer.Reset"/>), поэтому записи старого прогона получают те же номера пульсов,
+    /// что и нового, и без временной границы склеиваются в один снапшот по пульсу.
+    /// </summary>
+    public DateTime RunStartLocal { get; set; }
+
+    /// <summary>Локальное время конца прогона (момент <c>Complete</c>). Верхняя граница окна прогона (см. <see cref="RunStartLocal"/>).</summary>
+    public DateTime RunEndLocal { get; set; }
   }
 
   /// <summary>Выполнение сценария оператора по событиям пульса.</summary>
@@ -53,6 +64,8 @@ namespace ISIDA.Scenarios
     private int _lastExecutedStepPulse;
     private bool _pendingSuccessCompletion;
     private Stopwatch _runStopwatch;
+    // Локальное время старта прогона — для временной границы окна прогона в отчёте (см. OperatorScenarioCompletedEventArgs.RunStartLocal).
+    private DateTime _runStartLocal;
 
     /// <summary>Истина, пока сценарий ожидает пульсы.</summary>
     public bool IsRunning => _running;
@@ -114,6 +127,7 @@ namespace ISIDA.Scenarios
           : _anchorPulse + 1;
       _lastExecutedStepPulse = 0;
       _pendingSuccessCompletion = false;
+      _runStartLocal = DateTime.Now;
       _runStopwatch = Stopwatch.StartNew();
       _running = true;
       // До первого шага сбросить «висящее» ожидание оценки/зеркало с ручной сессии — иначе первый стимул не получает ОР+эхо (блок по WaitingForOperatorEvaluation).
@@ -317,6 +331,12 @@ namespace ISIDA.Scenarios
           $"[Finish] success={e.Success} userAbort={e.AbortedByUser} pulsStop={e.AbortedByPulsationStop} lastВнутрПульс={e.LastExecutedPulseWithinScenario} anchor={_anchorPulse} elapsed={e.ElapsedWallTime.TotalSeconds:F2}s pulses={e.ElapsedPulses} err={e.ErrorMessage ?? ""}");
       e.Document = _doc;
       e.AnchorGlobalPulse = _anchorPulse;
+      // Окно прогона по локальному времени — для отсечения хвостов предыдущих прогонов в отчёте
+      // (предзапуск обнуляет глобальный пульс, из-за чего номера пульсов разных прогонов совпадают).
+      // Complete вызывается после полной обработки последнего пульса (LogSystemState + Flush),
+      // поэтому DateTime.Now здесь гарантированно покрывает все записи лога текущего прогона.
+      e.RunStartLocal = _runStartLocal;
+      e.RunEndLocal = DateTime.Now;
       _running = false;
       _doc = null;
       _runStopwatch = null;
