@@ -1040,7 +1040,8 @@ namespace ISIDA.Reflexes
             reflex.AssociationStrength = _settings.MinAssociationStrength;
 
           Logger.Info($"Крепость у-рефлекса ID={reflex.Id} угашена пассивно: {oldStrength:F3} → {reflex.AssociationStrength:F3}");
-          pultMessages.Add($"УР забыт: ID={reflex.Id}, крепость {oldStrength:F2} → {reflex.AssociationStrength:F2}");
+          if(reflex.AssociationStrength < _settings.ActivationThreshold)
+            pultMessages.Add($"УР забыт: ID={reflex.Id}, крепость {oldStrength:F2} → {reflex.AssociationStrength:F2}");
         }
       }
       finally
