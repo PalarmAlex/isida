@@ -127,9 +127,6 @@ namespace ISIDA.Scenarios
               return $"ID={ep.ActionId} не является воздействием метрики среды (шаг {row.StepIndex}, пульс {row.PulseWithinScenario}).";
           }
         }
-
-        if (row.ResetWaitingPeriod && stageForFeatureRules < 3)
-          return "Сброс времени ожидания доступен со стадии развития 3.";
       }
 
       var ordered = doc.Lines.OrderBy(r => r.StepIndex).ToList();
