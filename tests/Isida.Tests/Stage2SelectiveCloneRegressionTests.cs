@@ -4,6 +4,7 @@ using ISIDA.Common;
 using ISIDA.Gomeostas;
 using ISIDA.Psychic;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Reflexes;
 using Xunit;
 
 namespace Isida.Tests
@@ -73,6 +74,9 @@ namespace Isida.Tests
             AutomatizmSystem.Instance,
             AdaptiveActionsSystem.Instance);
       }
+      // Селективный клон (путь A) читает Level3 сработавшего б/у рефлекса через
+      // GeneticReflexesSystem — в обход IsidaEngine ссылку подключаем явно.
+      PurposeGeneticImageSystem.Instance.SetGeneticReflexesSystem(GeneticReflexesSystem.Instance);
     }
 
     /// <summary>На стадии 0 заводит параметр гомеостаза и G_AD, нацеленный на него.</summary>
@@ -167,17 +171,18 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void GetAutomatizmByGeneticPurpose_Stage3_StillCreatesClone()
+    public void GetAutomatizmByGeneticPurpose_Stage3_PathAClosed_DoesNotCreateClone()
     {
-      // Регресс не должен сузить клон до ровно 2-й стадии: на 3-й и выше он работал и раньше.
-      // На стадии >= 3 источник действий цели — генетические рефлексы (см. GetActiveAdaptiveActionsOfReflexes).
+      // Селективный клон (путь A) живёт ТОЛЬКО на 2-й стадии: на 3-й путь A закрыт гейтом
+      // EvolutionStage == 2, даже при наличии повода (здесь — признак условного). Ниже блока A
+      // идёт «if (EvolutionStage != 2) return null», поэтому на 3-й возвращается null.
       AppGlobalState.EvolutionStage = 3;
       AppGlobalState.FlgConditionReflexes = true;
       AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int> { _actionId }, geneticReflexId: Engine.SeedGeneticReflexId);
 
       var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
 
-      Assert.NotNull(atmz);
+      Assert.Null(atmz);
     }
 
     [Fact]
@@ -204,6 +209,124 @@ namespace Isida.Tests
       var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
 
       Assert.Null(atmz);
+    }
+
+    #endregion
+
+    #region Путь A: клон по безусловному рефлексу только при наличии триггера Level3 (EA/Command)
+
+    /// <summary>Создаёт на стадии 0 безусловный рефлекс (с Level3=EA либо без него).</summary>
+    private int CreateGeneticReflex(int influenceActionId)
+    {
+      int stage = AppGlobalState.EvolutionStage;
+      AppGlobalState.EvolutionStage = 0;
+      try
+      {
+        // Уникальный стиль: ключ дубля б/у рефлекса (Level1|Level2|EA|Command|VisualColor) не
+        // учитывает мотор, поэтому без своего стиля рефлекс без EA столкнулся бы с эталонным.
+        var (styleId, _) = GomeostasSystem.Instance.AddBehaviorStyle(
+            "Тест-стиль-клон-" + Engine.NextSeed(), "");
+        var influenceIds = influenceActionId > 0
+            ? new List<int> { influenceActionId }
+            : null;
+        var (reflexId, _) = GeneticReflexesSystem.Instance.AddGeneticReflex(
+            1, new List<int> { styleId }, influenceIds, null,
+            new List<int> { _actionId });
+        Assert.True(reflexId > 0, "Б/у рефлекс не создан");
+        return reflexId;
+      }
+      finally
+      {
+        AppGlobalState.EvolutionStage = 2;
+      }
+    }
+
+    /// <summary>Создаёт внешнее воздействие (EA) на стадии 0.</summary>
+    private int CreateInfluenceAction()
+    {
+      int stage = AppGlobalState.EvolutionStage;
+      AppGlobalState.EvolutionStage = 0;
+      try
+      {
+        var (id, _) = InfluenceActionSystem.Instance.AddInfluenceAction(
+            "Тест-EA-клон-" + Engine.NextSeed(), "Воздействие для теста Level3", null, null);
+        Assert.True(id > 0, "EA не создан");
+        return id;
+      }
+      finally
+      {
+        AppGlobalState.EvolutionStage = stage;
+      }
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_Stage2_GeneticReflexWithoutLevel3_DoesNotCreateClone()
+    {
+      // Регресс мусорных автоматизмов: б/у рефлекс без триггера Level3 (ни EA, ни Command) отобран
+      // только по состоянию/стилям — клонировать его в автоматизм нельзя.
+      int reflexNoLevel3 = CreateGeneticReflex(influenceActionId: 0);
+
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.CurActiveVerbalId = 0;
+      InformationEnvironmentSystem.Instance.SetVeryActualSituation(false);
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int>());
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int> { _actionId }, geneticReflexId: reflexNoLevel3);
+      // Отключаем случайную пробу, чтобы изолированно проверить именно путь A.
+      int savedWaitPeriod = AppGlobalState.WaitingPeriodForActionsVal;
+      AppGlobalState.WaitingPeriodForActionsVal = 30;
+      try
+      {
+        var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+        Assert.Null(atmz);
+      }
+      finally
+      {
+        AppGlobalState.WaitingPeriodForActionsVal = savedWaitPeriod;
+      }
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_Stage2_GeneticReflexWithLevel3_CreatesClone()
+    {
+      // Б/у рефлекс с Level3 (EA) — валидный повод: клон создаётся с мотором рефлекса (имеет recipe).
+      int ea = CreateInfluenceAction();
+      int reflexWithLevel3 = CreateGeneticReflex(influenceActionId: ea);
+
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.CurActiveVerbalId = 0;
+      InformationEnvironmentSystem.Instance.SetVeryActualSituation(false);
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int>());
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int> { _actionId }, geneticReflexId: reflexWithLevel3);
+
+      var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+      Assert.NotNull(atmz);
+      Assert.NotNull(Autom.GetAutomatizmById(atmz.ID));
+    }
+
+    [Fact]
+    public void GetAutomatizmByGeneticPurpose_Stage2_VeryActual_CreatesCloneEvenWithoutReflexLevel3()
+    {
+      // Опасная ситуация — самостоятельный повод: Level3 у б/у рефлекса не требуется
+      // (иначе сломается реакция на опасность). Рефлекс намеренно без EA/Command.
+      int reflexNoLevel3 = CreateGeneticReflex(influenceActionId: 0);
+
+      AppGlobalState.FlgConditionReflexes = false;
+      AppGlobalState.CurActiveVerbalId = 0;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int>());
+      AppGlobalState.UpdateGlobalGeneticReflexesActions(new List<int> { _actionId }, geneticReflexId: reflexNoLevel3);
+      InformationEnvironmentSystem.Instance.SetVeryActualSituation(true);
+      try
+      {
+        var atmz = PurposeGeneticImageSystem.Instance.GetAutomatizmByGeneticPurpose();
+
+        Assert.NotNull(atmz);
+      }
+      finally
+      {
+        InformationEnvironmentSystem.Instance.SetVeryActualSituation(false);
+      }
     }
 
     #endregion
@@ -251,28 +374,16 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void GetActiveAdaptiveActionsOfReflexes_Stage3_ConditionalMotor_IsReturned()
+    public void GetAutomatizmByGeneticPurpose_Stage2_ConditionalReflex_CreatesCloneWithConditionalMotor()
     {
-      // Корень №1: на 3-й стадии GetActiveAdaptiveActionsOfReflexes обязан вернуть мотор условного,
-      // иначе путь A подставит DefaultAdaptiveActionId (в Velum — G_AD без рецепта).
-      AppGlobalState.EvolutionStage = 3;
-      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { _actionId });
-
-      var actions = PurposeGeneticImageSystem.Instance.GetActiveAdaptiveActionsOfReflexes();
-
-      Assert.Contains(_actionId, actions);
-    }
-
-    [Fact]
-    public void GetAutomatizmByGeneticPurpose_Stage3_ConditionalReflex_CreatesCloneWithConditionalMotor()
-    {
-      // Корень: на 3-й стадии при сработавшем условном клон обязан взять мотор условного (с рецептом),
-      // а не дефолт-действие. Дефолт намеренно ставим БЕЗ рецепта — до фикса путь A резолвил дефолт
-      // и отбраковывал клон («no recipe slots») → Assert.NotNull падал. С фиксом берётся мотор условного.
+      // Регресс случая 46 (перенесён на 2-ю стадию, т.к. путь A теперь только на 2-й):
+      // при сработавшем условном клон обязан взять мотор условного (с рецептом), а не дефолт.
+      // Дефолт намеренно БЕЗ рецепта — иначе путь A резолвил бы дефолт и отбраковывал клон
+      // («no recipe slots») → Assert.NotNull падал. С корректным резолвом берётся мотор условного.
       int motorWithRecipe = CreateActionWithRecipe();
       int defaultNoRecipe = CreateActionWithoutRecipe();
 
-      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.EvolutionStage = 2;
       AppGlobalState.DefaultAdaptiveActionId = defaultNoRecipe;
       AppGlobalState.FlgConditionReflexes = true;
       AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { motorWithRecipe });
@@ -284,14 +395,28 @@ namespace Isida.Tests
     }
 
     [Fact]
-    public void OrientationReflex1_Stage3_WithConditionalFlag_CreatesClone()
+    public void GetActiveAdaptiveActionsOfReflexes_ConditionalMotor_IsReturned()
     {
-      // Гейт ОР1: на 3-й стадии при признаке условного ОР1 обязан вызвать путь A (иначе создаётся
-      // вербальный попугай-эхо без мотора). Мотор условного — с рецептом, чтобы клон прошёл проверку.
+      // Корень случая 46: GetActiveAdaptiveActionsOfReflexes обязан вернуть мотор условного,
+      // иначе путь A подставит DefaultAdaptiveActionId (в Velum — G_AD без рецепта).
+      // Читается на любой стадии, поэтому проверяем независимо от гейта клона.
+      AppGlobalState.EvolutionStage = 2;
+      AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { _actionId });
+
+      var actions = PurposeGeneticImageSystem.Instance.GetActiveAdaptiveActionsOfReflexes();
+
+      Assert.Contains(_actionId, actions);
+    }
+
+    [Fact]
+    public void OrientationReflex1_Stage2_WithConditionalFlag_CreatesClone()
+    {
+      // Гейт ОР1 (случай 46, перенесён на 2-ю стадию): при признаке условного ОР1 обязан вызвать
+      // путь A (иначе создаётся вербальный попугай-эхо без мотора). Мотор условного — с рецептом.
       EnsureOrientationSystem();
       int motorWithRecipe = CreateActionWithRecipe();
 
-      AppGlobalState.EvolutionStage = 3;
+      AppGlobalState.EvolutionStage = 2;
       AppGlobalState.FlgConditionReflexes = true;
       AppGlobalState.UpdateGlobalConditionedReflexesActions(new List<int> { motorWithRecipe });
 

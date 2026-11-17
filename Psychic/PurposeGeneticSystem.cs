@@ -1,6 +1,7 @@
 ﻿﻿﻿﻿using ISIDA.Actions;
 using ISIDA.Common;
 using ISIDA.Psychic.Automatism;
+using ISIDA.Reflexes;
 using ISIDA.Sensors;
 using System;
 using System.Collections.Generic;
@@ -27,6 +28,7 @@ namespace ISIDA.Psychic
     private MirrorAutomatizmService _mirrorAutomatizmService;
     private VerbalBrocaImagesSystem _verbalBrocaImagesSystem;
     private SensorySystem _sensorySystem;
+    private GeneticReflexesSystem _geneticReflexesSystem;
     private readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private bool _disposed = false;
     private int oldAutomatizmId = 0;
@@ -133,6 +135,16 @@ namespace ISIDA.Psychic
     public void SetInfluenceActionSystem(InfluenceActionSystem influenceActionSystem)
     {
       _influenceActionSystem = influenceActionSystem ?? throw new ArgumentNullException(nameof(influenceActionSystem));
+    }
+
+    /// <summary>
+    /// Устанавливает GeneticReflexesSystem для проверки наличия триггера Level3 (EA/Command)
+    /// у безусловного рефлекса перед селективным клонированием (путь A).
+    /// </summary>
+    /// <param name="geneticReflexesSystem">Система безусловных рефлексов.</param>
+    public void SetGeneticReflexesSystem(GeneticReflexesSystem geneticReflexesSystem)
+    {
+      _geneticReflexesSystem = geneticReflexesSystem ?? throw new ArgumentNullException(nameof(geneticReflexesSystem));
     }
 
     /// <summary>
@@ -304,15 +316,23 @@ namespace ISIDA.Psychic
 
         Automatizm atmz = null;
 
-        // Селективный клон (путь A) — начиная со стадии 2.
+        // Селективный клон (путь A) — только на стадии 2.
         // Поводов три и они разнородны: опасная ситуация, рвущийся на выполнение безусловный
         // рефлекс либо признак условного. Сам факт повода закрывает остальные пути (приоритет A),
         // даже если клон в итоге не создан (например, у G_AD нет рецепта).
-        bool hasCloneTrigger = purposeGenetic.VeryActual
-            || AppGlobalState.CurrentGeneticReflexID > 0
-            || AppGlobalState.FlgConditionReflexes;
+        // Повод по безусловному рефлексу признаётся только если у него есть триггер Level3
+        // (EA/Command): рефлекс, отобранный лишь по состоянию (Level1) и стилям (Level2), без
+        // пускового стимула клонировать нельзя — это мусорные автоматизмы. У условного Level3
+        // есть по построению (это его пусковой образ), поэтому признак условного не проверяется.
+        bool hasGeneticTrigger = AppGlobalState.CurrentGeneticReflexID > 0 && FiredGeneticReflexHasLevel3();
+        if (AppGlobalState.CurrentGeneticReflexID > 0 && !hasGeneticTrigger)
+          Logger.Info(
+              "GetAutomatizmByGeneticPurpose: б/у рефлекс ID=" + AppGlobalState.CurrentGeneticReflexID +
+              " без триггера Level3 (EA/Command) — не является поводом для селективного клона");
+        bool hasConditionedTrigger = AppGlobalState.FlgConditionReflexes;
+        bool hasCloneTrigger = purposeGenetic.VeryActual || hasGeneticTrigger || hasConditionedTrigger;
 
-        if (hasCloneTrigger && AppGlobalState.EvolutionStage >= 2)
+        if (hasCloneTrigger && AppGlobalState.EvolutionStage == 2)
         {
           if (purposeGenetic.ActionImage != null)
           {
@@ -395,6 +415,28 @@ namespace ISIDA.Psychic
         Logger.Error(ex.Message);
         return null;
       }
+    }
+
+    /// <summary>
+    /// Проверяет, есть ли у текущего сработавшего безусловного рефлекса триггер Level3
+    /// (внешние воздействия EA либо паттерны Command-канала). Рефлекс, отобранный только по
+    /// состоянию (Level1) и стилям (Level2), без пускового стимула не имеет и не должен
+    /// клонироваться в автоматизм. Если ссылка на систему рефлексов не задана или рефлекс
+    /// не найден — считаем Level3 отсутствующим (консервативно, чтобы не плодить мусор).
+    /// </summary>
+    /// <returns>true, если у сработавшего б/у рефлекса есть хотя бы один EA или Command-паттерн.</returns>
+    private bool FiredGeneticReflexHasLevel3()
+    {
+      if (_geneticReflexesSystem == null)
+        return false;
+
+      var reflex = _geneticReflexesSystem.GetGeneticReflex(AppGlobalState.CurrentGeneticReflexID);
+      if (reflex == null)
+        return false;
+
+      bool hasInfluence = reflex.InfluenceActionIds != null && reflex.InfluenceActionIds.Count > 0;
+      bool hasCommand = reflex.CommandPatternIds != null && reflex.CommandPatternIds.Count > 0;
+      return hasInfluence || hasCommand;
     }
 
     /// <summary>
@@ -749,8 +791,10 @@ namespace ISIDA.Psychic
         int moodId = purposeGenetic.ActionImage.MoodId;
 
         // На стадии 2 при действиях от безусловного рефлекса клонируем цепочку, если есть
+        // (цепочка — улучшение клона; без поднятого конвертера клон создаётся без неё).
         int automatizmChainId = 0;
-        if (AppGlobalState.EvolutionStage == 2 && AppGlobalState.CurrentGeneticReflexID > 0)
+        if (AppGlobalState.EvolutionStage == 2 && AppGlobalState.CurrentGeneticReflexID > 0
+            && _conditionedReflexToAutomatizm != null)
         {
           var chainResult = _conditionedReflexToAutomatizm.CreateAutomatizmChainFromGeneticReflex(
               AppGlobalState.CurrentGeneticReflexID, branchID);

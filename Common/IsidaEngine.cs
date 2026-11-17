@@ -907,6 +907,10 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         // Устанавливаем InfluenceActionSystem для проверки активных probe-Ea.
         context.PurposeGeneticImageSystem.SetInfluenceActionSystem(context.InfluenceActions);
 
+        // Устанавливаем GeneticReflexesSystem для проверки наличия Level3 (EA/Command) у
+        // сработавшего б/у рефлекса перед селективным клонированием (путь A).
+        context.PurposeGeneticImageSystem.SetGeneticReflexesSystem(context.GeneticReflexes);
+
         // Шаг 30: Класс для загрузки автоматизмов из файла
         initializationStep = 30;
         AutomatizmFileLoader.InitializeInstance(config.BootDataFolder);
