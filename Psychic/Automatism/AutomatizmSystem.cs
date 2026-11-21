@@ -280,6 +280,23 @@ namespace ISIDA.Psychic.Automatism
       if (actionsImageId == 0)
         return (0, null);
 
+      // Явные учительские воздействия (поощрить / наказать): если хотя бы один ID настроен (>0),
+      // создавать автоматизм по этому триггеру не разрешаем — это учительская команда, а не триггер для обучения.
+      if (AppGlobalState.TeacherRewardInfluenceId > 0 || AppGlobalState.TeacherPunishInfluenceId > 0)
+      {
+        if (AppGlobalState.CurrentStimulusActionIdList != null)
+        {
+          foreach (int actionId in AppGlobalState.CurrentStimulusActionIdList)
+          {
+            if (AppGlobalState.IsTeacherInfluenceId(actionId))
+            {
+              Logger.Info($"CreateNewAutomatizm: пропущен (учительское воздействие) actionId={actionId}");
+              return (0, null);
+            }
+          }
+        }
+      }
+
       if (checkUnicum)
       {
         var existing = CheckUnicumMotorsAutomatizm(branchId, actionsImageId);

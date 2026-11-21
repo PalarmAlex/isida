@@ -746,6 +746,21 @@ namespace ISIDA.Psychic
 
       try
       {
+        // Проверка: текущий триггер с пульта не является явным учительским воздействием.
+        // Если кнопка «поощрить/наказать» настроена (>0) и текущий мотор совпадает —
+        // автоматизм не создаём.
+        if (AppGlobalState.CurrentStimulusActionIdList != null)
+        {
+          foreach (int actionId in AppGlobalState.CurrentStimulusActionIdList)
+          {
+            if (AppGlobalState.IsTeacherInfluenceId(actionId))
+            {
+              Logger.Info($"Пропущен клон (учительское воздействие): actionId={actionId}, образ={purposeGenetic.ActionImage.Id}");
+              return null;
+            }
+          }
+        }
+
         // Проверка: G_AD должен иметь recipe slots (настраиваемые параметры).
         // Если для G_AD нет рецепта — не клонируем, так как это без адаптивной ценности.
         var aArr = purposeGenetic.ActionImage.ActIdList;

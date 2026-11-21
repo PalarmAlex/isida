@@ -1530,4 +1530,47 @@ public static class AppGlobalState
   }
 
   #endregion
+
+  #region Явные учительские воздействия (поощрить / наказать)
+
+  private static int _teacherRewardInfluenceId;
+  private static int _teacherPunishInfluenceId;
+
+  /// <summary>ID воздействия «поощрить» (0 = не настроено). Движок исключает его из создания автоматизмов.</summary>
+  public static int TeacherRewardInfluenceId => _teacherRewardInfluenceId;
+
+  /// <summary>ID воздействия «наказать» (0 = не настроено). Движок исключает его из создания автоматизмов.</summary>
+  public static int TeacherPunishInfluenceId => _teacherPunishInfluenceId;
+
+  /// <summary>
+  /// Установить явные учительские воздействия (поощрить / наказать).
+  /// 0 = не настроено (по умолчанию, автоматизмы создаются по всем триггерам).
+  /// </summary>
+  public static void SetTeacherInfluenceIds(int rewardInfluenceId, int punishInfluenceId)
+  {
+    _lock.EnterWriteLock();
+    try
+    {
+      _teacherRewardInfluenceId = rewardInfluenceId;
+      _teacherPunishInfluenceId = punishInfluenceId;
+    }
+    finally { _lock.ExitWriteLock(); }
+  }
+
+  /// <summary>
+  /// Проверяет, является ли заданный actionId одним из явных учительских воздействий.
+  /// Возвращает true, если actionId совпадает с настроенным поощрением или наказанием (и он > 0).
+  /// </summary>
+  public static bool IsTeacherInfluenceId(int actionId)
+  {
+    _lock.EnterReadLock();
+    try
+    {
+      return (actionId > 0 && actionId == _teacherRewardInfluenceId) ||
+             (actionId > 0 && actionId == _teacherPunishInfluenceId);
+    }
+    finally { _lock.ExitReadLock(); }
+  }
+
+  #endregion
 }

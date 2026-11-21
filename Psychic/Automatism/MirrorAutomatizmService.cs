@@ -347,6 +347,17 @@ namespace ISIDA.Psychic.Automatism
       if (img == null || img.ActIdList == null || !img.ActIdList.Any())
         return 0;
 
+      // Явное учительское воздействие (поощрить/наказать) не зеркалим: по нему создавался
+      // бы бессмысленный автоматизм. Если хотя бы один триггер стимула — учительский, пропускаем путь M.
+      foreach (int actionId in img.ActIdList)
+      {
+        if (AppGlobalState.IsTeacherInfluenceId(actionId))
+        {
+          Logger.Info($"Путь M пропущен (учительское воздействие): actionId={actionId}, образ={stimulusActionsImageId}");
+          return 0;
+        }
+      }
+
       // Триггер (InfluenceAction с пульта) → мотор (AdaptiveAction) по полю InfluenceActionId.
       List<int> adaptiveIds = AdaptiveActionsSystem.Instance.ConvertInfluenceActionIdsToAdaptiveActionIds(img.ActIdList);
       if (adaptiveIds == null || adaptiveIds.Count == 0)
