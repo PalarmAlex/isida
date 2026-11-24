@@ -98,7 +98,7 @@ namespace ISIDA.Common
       public const string PropertiesIsDead = "IsDead|";
 
       // Образы действий симбионта для психики
-      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID|CommandPatternIdList";
+      public const string ActionsImagesFormat = "# ID|ActIdList|PhraseIdList|ToneID|MoodID|Kind|VisualColorID|CommandPatternIdList|Params";
       public const string ActionsImagesActIdList = "# ActIdList: ID образа действий с Пульта (через запятую)";
       public const string ActionsImagesPhraseIdList = "# PhraseIdList: ID фраз (через запятую)";
       public const string ActionsImagesToneId = "# ToneID: ID тона сообщения: -1=Вялый, 0=Нормальный, 1=Повышенный";
@@ -106,6 +106,7 @@ namespace ISIDA.Common
       public const string ActionsImagesKind = "# Kind: 0=объективное действие, 1=субъективное предположение";
       public const string ActionsImagesVisualColorId = "# VisualColorID: зрительный канал (AgentVisualColor): 0=белый, 1=чёрный, 2–8=спектр; при отсутствии столбца в старых файлах подразумевается 0";
       public const string ActionsImagesCommandPatternIdList = "# CommandPatternIdList: ID паттернов CommandChannel PhraseTree (через запятую); столбец опционален в старых файлах (как пусто)";
+      public const string ActionsImagesParams = "# Params: параметры моторного действия key1=value1;key2=value2; столбец опционален в старых файлах (как пусто)";
 
       // Образы действий с пульта для психики
       public const string InfluenceActionsImagesFormat = "# ID|ActIdList";
@@ -184,6 +185,11 @@ namespace ISIDA.Common
       // Справочник типов тем
       public const string ThemeTypesFormat = "# Формат: Id|Description|DefaultWeight|AllowedInfoFuncIds";
       public const string ThemeTypesDesc = "# Id: идентификатор типа темы (1–20), Description: описание, DefaultWeight: вес по умолчанию (обязательно >0), AllowedInfoFuncIds: список Id через запятую (пусто = без ограничений)";
+
+      // Справочник типов параметров моторных действий
+      public const string ActionParamTypesFormat = "# Формат: Id|Name|Type";
+      public const string ActionParamTypesNameDesc = "# Name: имя параметра (ключ, по которому хост ищет тип); регистронезависимо";
+      public const string ActionParamTypesTypeDesc = "# Type: text/number/int/bool/enum/date; пусто = text";
 
       // Образы целей
       public const string PurposeImagesFormat = "# Формат: ID|Target|MoodId|EmotionId|SituationId";
@@ -1002,6 +1008,21 @@ namespace ISIDA.Common
           {
             if (visualColorId < 0 || visualColorId > 8)
               return false;
+          }
+        }
+
+        // Params (опционально для старых файлов): формат key1=value1;key2=value2.
+        // Допустим пусто; каждая непустая пара обязана содержать «=» с непустым ключом.
+        if (parts.Length > 8 && !string.IsNullOrWhiteSpace(parts[8]))
+        {
+          foreach (var pair in parts[8].Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+          {
+            var trimmedPair = pair.Trim();
+            if (trimmedPair.Length == 0)
+              continue;
+            int eq = trimmedPair.IndexOf('=');
+            if (eq <= 0)
+              return false; // нет ключа — некорректный параметр
           }
         }
 
@@ -1951,6 +1972,63 @@ namespace ISIDA.Common
         if (!int.TryParse(p[0], out int id) || id < 1) return false;
         if (string.IsNullOrWhiteSpace(p[1])) return false;
         if (!int.TryParse(p[2], out int defaultWeight) || defaultWeight < 1) return false;
+      }
+      return true;
+    }
+
+    #endregion
+
+    #region IsValidActionParamTypesFile
+
+    /// <summary>
+    /// Допустимые типы параметров моторных действий (справочник <c>action_param_types.dat</c>).
+    /// </summary>
+    private static readonly HashSet<string> ValidActionParamTypes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+          "text", "number", "int", "bool", "enum", "date"
+        };
+
+    /// <summary>Проверяет валидность файла справочника типов параметров моторных действий по пути.</summary>
+    public static bool IsValidActionParamTypesFile(string filePath)
+    {
+      if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return false;
+      try
+      {
+        return IsValidActionParamTypesFile(File.ReadLines(filePath).ToList());
+      }
+      catch
+      {
+        return false;
+      }
+    }
+
+    /// <summary>
+    /// Проверяет валидность содержимого файла справочника типов параметров моторных действий.
+    /// Формат: Id|Name|Type (3-е поле опционально, пусто = text). Id ≥ 0, Name непустой,
+    /// Type ∈ {text, number, int, bool, enum, date}.
+    /// </summary>
+    public static bool IsValidActionParamTypesFile(IEnumerable<string> lines)
+    {
+      if (lines == null) return false;
+      var list = lines.ToList();
+      if (list.Count < 1) return false;
+
+      foreach (var line in list)
+      {
+        var t = line?.Trim();
+        if (string.IsNullOrWhiteSpace(t) || t.StartsWith("#")) continue;
+        var p = t.Split('|');
+        if (p.Length < 2) return false;
+        if (!int.TryParse(p[0], out int id) || id < 0) return false;
+        if (string.IsNullOrWhiteSpace(p[1])) return false;
+
+        // 3-е поле (тип) опционально; если задано — должно быть из допустимого набора.
+        if (p.Length >= 3 && !string.IsNullOrWhiteSpace(p[2]))
+        {
+          if (!ValidActionParamTypes.Contains(p[2].Trim())) return false;
+        }
       }
       return true;
     }

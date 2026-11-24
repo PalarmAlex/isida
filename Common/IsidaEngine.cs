@@ -290,6 +290,11 @@ namespace ISIDA.Common
     public ActionsImagesSystem ActionsImages { get; internal set; }
 
     /// <summary>
+    /// Справочник типов параметров моторных действий
+    /// </summary>
+    public Psychic.ActionParamTypesSystem ActionParamTypesSystem { get; internal set; }
+
+    /// <summary>
     /// Система образов действий Оператора
     /// </summary>
     public InfluenceActionsImagesSystem InfluenceActionsImages { get; internal set; }
@@ -476,6 +481,8 @@ namespace ISIDA.Common
       SafeDispose(AutomatizmTree, "AutomatizmTree");
       SafeDispose(PurposeGeneticImageSystem, "PurposeGeneticImageSystem");
       SafeDispose(ActionsImages, "ActionsImages");
+      if (Psychic.ActionParamTypesSystem.IsInitialized)
+        SafeDispose(Psychic.ActionParamTypesSystem.Instance, "ActionParamTypesSystem");
       SafeDispose(InfluenceActionsImages, "InfluenceActionsImages");
       SafeDispose(ReflexesActivator, "ReflexesActivator");
       SafeDispose(ReflexExecution, "ReflexExecution");
@@ -799,6 +806,11 @@ SafeDispose(AutomatismExecution, "AutomatismExecution");
         initializationStep = 18;
         ActionsImagesSystem.InitializeInstance(config.DataFolder);
         context.ActionsImages = ActionsImagesSystem.Instance;
+
+        // Шаг 18a: Справочник типов параметров моторных действий (paramId → type)
+        initializationStep = 18;
+        Psychic.ActionParamTypesSystem.InitializeInstance(config.DataFolder);
+        context.ActionParamTypesSystem = Psychic.ActionParamTypesSystem.Instance;
 
         // Шаг 19: Система дерева автоматизмов
         initializationStep = 19;

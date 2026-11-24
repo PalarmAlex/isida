@@ -140,6 +140,15 @@ namespace ISIDA.Psychic.Automatism
       /// Код зрительного канала сцены при стимуле/ответе (<see cref="AgentVisualColor"/>). 0 — белый (нейтральный).
       /// </summary>
       public int VisualColorId { get; set; }
+
+      /// <summary>
+      /// Параметры моторного действия (ключ → значение).
+      /// <para>
+      /// Используются для передачи параметров в среду-хост (Velum, AIStudio)
+      /// при исполнении рецепта. Пустой словарь означает отсутствие параметров.
+      /// </para>
+      /// </summary>
+      public Dictionary<string, string> Params { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     #endregion
@@ -459,7 +468,8 @@ namespace ISIDA.Psychic.Automatism
     int toneId,
     int moodId,
     int visualColorId,
-    bool checkUnicum)
+    bool checkUnicum,
+    Dictionary<string, string> @params = null)
     {
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
@@ -472,7 +482,7 @@ namespace ISIDA.Psychic.Automatism
 
       if (checkUnicum)
       {
-        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId);
+        var existing = CheckUnicumActionsImageNoLock(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, @params);
         if (existing.Image != null)
           return existing;
       }
@@ -493,23 +503,29 @@ namespace ISIDA.Psychic.Automatism
         CommandPatternIdList = commandPatternIdList?.ToList() ?? new List<int>(),
         ToneId = toneId,
         MoodId = moodId,
-        VisualColorId = visualColorId
+        VisualColorId = visualColorId,
+        Params = @params != null ? new Dictionary<string, string>(@params, StringComparer.OrdinalIgnoreCase) : new Dictionary<string, string>()
       };
 
       _actionsImages[newId] = image;
-      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId)] = newId;
+      _unicumActionsImageKeyToId[ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, @params)] = newId;
       if (checkUnicum)
         Logger.Info($"Создан новый образ ID={newId}");
 
       return (newId, image);
     }
 
-    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, List<int> commandPatternIdList, int toneId, int moodId, int visualColorId)
+    private static string ActionsImageUnicumKey(int kind, List<int> actIdList, List<int> phraseIdList, List<int> commandPatternIdList, int toneId, int moodId, int visualColorId, Dictionary<string, string> @params = null)
     {
       string actKey = actIdList == null || actIdList.Count == 0 ? "" : string.Join(",", actIdList.OrderBy(x => x));
       string phraseKey = phraseIdList == null || phraseIdList.Count == 0 ? "" : string.Join(",", phraseIdList.OrderBy(x => x));
       string commandKey = commandPatternIdList == null || commandPatternIdList.Count == 0 ? "" : string.Join(",", commandPatternIdList.OrderBy(x => x));
-      return $"{kind}_{toneId}_{moodId}_{visualColorId}_{actKey}_{phraseKey}_{commandKey}";
+      // Параметры входят в ключ: разные значения → разные образы (эпизодическая память различает сценарии).
+      // Пустой/отсутствующий словарь → пустой сегмент, ключ совпадает со старым (обратная совместимость).
+      string paramsKey = @params == null || @params.Count == 0
+          ? ""
+          : string.Join(",", @params.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).Select(kv => kv.Key + "=" + kv.Value));
+      return $"{kind}_{toneId}_{moodId}_{visualColorId}_{actKey}_{phraseKey}_{commandKey}_{paramsKey}";
     }
 
     /// <summary>
@@ -599,12 +615,13 @@ namespace ISIDA.Psychic.Automatism
         List<int> commandPatternIdList,
         int toneId,
         int moodId,
-        int visualColorId)
+        int visualColorId,
+        Dictionary<string, string> @params = null)
     {
       if (!AgentVisualColor.IsValidCode(visualColorId))
         visualColorId = AgentVisualColor.White;
 
-      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId);
+      string key = ActionsImageUnicumKey(kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, @params);
       if (_unicumActionsImageKeyToId.TryGetValue(key, out int existingId) &&
           _actionsImages.TryGetValue(existingId, out var existingImg))
         return (existingId, existingImg);
@@ -632,6 +649,13 @@ namespace ISIDA.Psychic.Automatism
 
         if (v.VisualColorId != visualColorId)
           continue;
+
+        // Сравниваем параметры (если оба не пустые и не совпадают — не дубликат)
+        if (@params != null && @params.Count > 0)
+        {
+          if (v.Params == null || v.Params.Count == 0 || !AddUtils.DictEquals(@params, v.Params))
+            continue; // параметры не совпали — это новый образ
+        }
 
         _unicumActionsImageKeyToId[key] = kvp.Key;
         return (kvp.Key, v);
@@ -714,7 +738,8 @@ namespace ISIDA.Psychic.Automatism
             FileValidator.FileHeaders.ActionsImagesMoodId,
             FileValidator.FileHeaders.ActionsImagesKind,
             FileValidator.FileHeaders.ActionsImagesVisualColorId,
-            FileValidator.FileHeaders.ActionsImagesCommandPatternIdList
+            FileValidator.FileHeaders.ActionsImagesCommandPatternIdList,
+            FileValidator.FileHeaders.ActionsImagesParams
           };
 
           File.WriteAllLines(filePath, lines);
@@ -773,8 +798,11 @@ namespace ISIDA.Psychic.Automatism
 
             var commandPatternIdList = parts.Length > 7 ? AddUtils.ParseIntList(parts[7]) : new List<int>();
 
+            // 9-е поле (Params) опционально в старых файлах (как пусто)
+            var @params = parts.Length > 8 ? AddUtils.ParseParams(parts[8]) : null;
+
             // При загрузке из файла НЕ проверяем уникальность - должны сохранить все записи как есть
-            CreateActionsImageCore(id, kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, false);
+            CreateActionsImageCore(id, kind, actIdList, phraseIdList, commandPatternIdList, toneId, moodId, visualColorId, false, @params);
           }
         }
         finally
@@ -820,7 +848,8 @@ namespace ISIDA.Psychic.Automatism
           FileValidator.FileHeaders.ActionsImagesMoodId,
           FileValidator.FileHeaders.ActionsImagesKind,
           FileValidator.FileHeaders.ActionsImagesVisualColorId,
-          FileValidator.FileHeaders.ActionsImagesCommandPatternIdList
+          FileValidator.FileHeaders.ActionsImagesCommandPatternIdList,
+          FileValidator.FileHeaders.ActionsImagesParams
         };
 
         foreach (var kvp in _actionsImages.OrderBy(x => x.Key))
@@ -837,12 +866,13 @@ namespace ISIDA.Psychic.Automatism
           line += $"{v.MoodId}|";
           line += $"{v.Kind}|";
           line += $"{v.VisualColorId}|";
-          line += AddUtils.IntListToString(v.CommandPatternIdList);
+          line += AddUtils.IntListToString(v.CommandPatternIdList) + "|";
+          line += AddUtils.ParamsToString(v.Params);
 
           lines.Add(line);
         }
 
-        var minLinesCount = lines.Count == 8 ? 8 : 9;
+        var minLinesCount = lines.Count == 9 ? 9 : 10;
         var result = FileValidator.SafeSaveFile(
             GetActionsImagesFilePath(),
             lines,

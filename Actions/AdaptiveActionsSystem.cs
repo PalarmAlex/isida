@@ -124,6 +124,17 @@ namespace ISIDA.Actions
       public int ActivationPulse { get; set; } = 0;
 
       /// <summary>
+      /// Параметры моторного действия, перенесённые из образа (<see cref="Psychic.Automatism.ActionsImagesSystem.ActionsImage.Params"/>)
+      /// при активации. Хост-среда (Velum) читает их как стартовые значения рецепта.
+      /// <para>
+      /// Это состояние активного исполнения (как <see cref="ActivationSource"/>), а не неизменяемое поле реестра:
+      /// перезаписывается при каждой активации и не сохраняется в <c>AdaptiveActions.dat</c>.
+      /// Пустой словарь означает отсутствие параметров.
+      /// </para>
+      /// </summary>
+      public Dictionary<string, string> Params { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+      /// <summary>
       /// Уникальный идентификатор действия
       /// </summary>
       public int Id { get; set; }
@@ -794,6 +805,21 @@ namespace ISIDA.Actions
     /// <exception cref="KeyNotFoundException">Выбрасывается если действие не найдено</exception>
     public bool ApplyAction(int actionId, int phraseId = 0, int actionImageIdForToneMood = 0)
     {
+      return ApplyAction(actionId, phraseId, actionImageIdForToneMood, null);
+    }
+
+    /// <summary>
+    /// Применяет указанное действие с параметрами из образа моторного действия.
+    /// </summary>
+    /// <param name="actionId">ID применяемого действия</param>
+    /// <param name="phraseId">ID фразы, по умолчанию 0</param>
+    /// <param name="actionImageIdForToneMood">ID образа действий автоматизма для отображения тона/настроения</param>
+    /// <param name="imageParams">Параметры из <see cref="Psychic.Automatism.ActionsImagesSystem.ActionsImage.Params"/>;
+    /// null = не обновлять (оставить текущие).</param>
+    /// <returns>True, если действие было успешно применено</returns>
+    /// <exception cref="KeyNotFoundException">Выбрасывается если действие не найдено</exception>
+    public bool ApplyAction(int actionId, int phraseId, int actionImageIdForToneMood, Dictionary<string, string> imageParams)
+    {
       _lock.EnterWriteLock();
       try
       {
@@ -842,6 +868,13 @@ namespace ISIDA.Actions
           _activeActionPhrases[actionId] = phraseId;
         if (phraseId != 0 && actionImageIdForToneMood > 0)
           _activeActionPhrasesImageId[actionId] = actionImageIdForToneMood;
+
+        // Переносим параметры образа в активное действие.
+        // Всегда перезаписываем: imageParams==null/пусто → пустой словарь, чтобы хост не увидел
+        // устаревшие параметры от предыдущей активации (опущенный параметр = отсутствие ключа).
+        action.Params = imageParams != null && imageParams.Count > 0
+            ? new Dictionary<string, string>(imageParams, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         return true;
       }

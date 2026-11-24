@@ -262,7 +262,7 @@ namespace ISIDA.Psychic.Automatism
           activationSource = ActionActivationSource.AutomatizmEchoCommentary;
 
         int actionImageIdForToneMood = isVerbalResponse ? automatizm.ActionsImageID : 0;
-        return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId, actionImageIdForToneMood);
+        return ExecuteAdaptiveActions(actionIds, activationSource, automatizmId, phraseId, actionImageIdForToneMood, actionsImage.Params);
       }
       catch (Exception ex)
       {
@@ -315,12 +315,15 @@ namespace ISIDA.Psychic.Automatism
     /// <param name="automatizmId">ID автоматизма (0 для цепочек)</param>
     /// <param name="phraseId">ID фразы при вербальном ответе</param>
     /// <param name="actionImageIdForToneMood">ID образа действий автоматизма для отображения тона/настроения (при вербальном ответе)</param>
+    /// <param name="imageParams">Параметры из образа действий (<see cref="ActionsImagesSystem.ActionsImage.Params"/>);
+    /// переносятся в активное действие для хоста-среды. null = без параметров.</param>
     public (bool Success, string ErrorMessage) ExecuteAdaptiveActions(
         List<int> actionIds,
         ActionActivationSource activationSource,
         int automatizmId = 0,
         int phraseId = 0,
-        int actionImageIdForToneMood = 0)
+        int actionImageIdForToneMood = 0,
+        Dictionary<string, string> imageParams = null)
     {
       if (actionIds == null || !actionIds.Any())
         return (false, "Нет действий для выполнения");
@@ -347,7 +350,7 @@ namespace ISIDA.Psychic.Automatism
             action.ActivationPulse = GlobalTimer.GlobalPulsCount;
           }
 
-          bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId, actionImageIdForToneMood);
+          bool applied = _adaptiveActionsSystem.ApplyAction(actionId, phraseId, actionImageIdForToneMood, imageParams);
           if (applied)
           {
             successfulActions.Add(actionId);
@@ -547,7 +550,8 @@ namespace ISIDA.Psychic.Automatism
           activationSource,
           0,
           phraseId,
-          actionImageIdForToneMood);
+          actionImageIdForToneMood,
+          actionsImage.Params);
 
       if (!result.Success)
       {

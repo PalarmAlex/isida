@@ -111,5 +111,82 @@ namespace ISIDA.Common
     {
       return Math.Max(min, Math.Min(max, value));
     }
+
+    /// <summary>
+    /// Сравнивает два словаря строк на равенство (порядок ключей не важен, ключи регистронезависимы).
+    /// <para>null и пустой словарь считаются равными.</para>
+    /// </summary>
+    public static bool DictEquals(Dictionary<string, string> d1, Dictionary<string, string> d2)
+    {
+      bool empty1 = d1 == null || d1.Count == 0;
+      bool empty2 = d2 == null || d2.Count == 0;
+      if (empty1 && empty2)
+        return true;
+      if (empty1 || empty2)
+        return false;
+      if (d1.Count != d2.Count)
+        return false;
+
+      foreach (var kvp in d1)
+      {
+        if (!d2.TryGetValue(kvp.Key, out string other))
+          return false;
+        if (!string.Equals(kvp.Value, other, StringComparison.Ordinal))
+          return false;
+      }
+      return true;
+    }
+
+    /// <summary>Разделитель пар «ключ=значение» внутри одного столбца параметров.</summary>
+    private const char ParamsPairSeparator = ';';
+    /// <summary>Разделитель ключа и значения внутри пары.</summary>
+    private const char ParamsKeyValueSeparator = '=';
+
+    /// <summary>
+    /// Сериализует словарь параметров в строку столбца формата <c>key1=value1;key2=value2</c>.
+    /// Ключи сортируются регистронезависимо для детерминированной записи. Пустой/null → пустая строка.
+    /// </summary>
+    public static string ParamsToString(Dictionary<string, string> @params)
+    {
+      if (@params == null || @params.Count == 0)
+        return string.Empty;
+
+      return string.Join(
+          ParamsPairSeparator.ToString(),
+          @params
+              .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+              .Select(kv => kv.Key + ParamsKeyValueSeparator + (kv.Value ?? string.Empty)));
+    }
+
+    /// <summary>
+    /// Разбирает строку столбца параметров формата <c>key1=value1;key2=value2</c> в словарь
+    /// (регистронезависимые ключи). Пустая/null строка → пустой словарь. Записи без ключа пропускаются.
+    /// Значение может содержать «=» (разделяется по первому вхождению).
+    /// </summary>
+    public static Dictionary<string, string> ParseParams(string paramsStr)
+    {
+      var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+      if (string.IsNullOrWhiteSpace(paramsStr))
+        return result;
+
+      foreach (var pair in paramsStr.Split(new[] { ParamsPairSeparator }, StringSplitOptions.RemoveEmptyEntries))
+      {
+        var trimmed = pair.Trim();
+        if (trimmed.Length == 0)
+          continue;
+
+        int eq = trimmed.IndexOf(ParamsKeyValueSeparator);
+        if (eq <= 0)
+          continue; // нет ключа — пропускаем
+
+        string key = trimmed.Substring(0, eq).Trim();
+        if (key.Length == 0)
+          continue;
+
+        string value = trimmed.Substring(eq + 1);
+        result[key] = value;
+      }
+      return result;
+    }
   }
 }
